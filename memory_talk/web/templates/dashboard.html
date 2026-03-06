@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>memory-talk - Streaming Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-tertiary: #0f3460;
+            --accent: #e94560;
+            --text-primary: #eaeaea;
+            --text-secondary: #a0a0a0;
+            --success: #4ade80;
+            --warning: #fbbf24;
+            --error: #f87171;
+            --running: #60a5fa;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-secondary);
+            padding: 16px 24px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header h1::before {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .header-stats {
+            display: flex;
+            gap: 24px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        /* Main content */
+        .main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Sidebar - Source List */
+        .sidebar {
+            width: 320px;
+            background: var(--bg-secondary);
+            border-right: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .source-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .source-item {
+            padding: 16px;
+            margin-bottom: 8px;
+            background: var(--bg-primary);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .source-item:hover {
+            border-color: rgba(255,255,255,0.2);
+        }
+
+        .source-item.selected {
+            border-color: var(--accent);
+            background: rgba(233, 69, 96, 0.1);
+        }
+
+        .source-name {
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .source-status {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            text-transform: uppercase;
+            font-weight: 500;
+        }
+
+        .source-status.running {
+            background: rgba(96, 165, 250, 0.2);
+            color: var(--running);
+        }
+
+        .source-status.stopped {
+            background: rgba(160, 160, 160, 0.2);
+            color: var(--text-secondary);
+        }
+
+        .source-status.error {
+            background: rgba(248, 113, 113, 0.2);
+            color: var(--error);
+        }
+
+        .source-metrics {
+            display: flex;
+            gap: 16px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        /* Detail Panel */
+        .detail-panel {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-secondary);
+        }
+
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .detail-header {
+            margin-bottom: 24px;
+        }
+
+        .detail-title {
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .detail-subtitle {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .metric-card {
+            background: var(--bg-secondary);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .metric-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .metric-value {
+            font-size: 32px;
+            font-weight: 600;
+        }
+
+        .metric-value.success { color: var(--success); }
+        .metric-value.warning { color: var(--warning); }
+        .metric-value.error { color: var(--error); }
+
+        /* Timeline */
+        .timeline {
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .timeline-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .timeline-item {
+            display: flex;
+            gap: 16px;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .timeline-item:last-child {
+            border-bottom: none;
+        }
+
+        .timeline-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-top: 4px;
+            flex-shrink: 0;
+        }
+
+        .timeline-dot.running { background: var(--running); }
+        .timeline-dot.stopped { background: var(--text-secondary); }
+        .timeline-dot.error { background: var(--error); }
+
+        .timeline-content {
+            flex: 1;
+        }
+
+        .timeline-time {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .timeline-message {
+            margin-top: 4px;
+        }
+
+        /* Footer */
+        .footer {
+            background: var(--bg-secondary);
+            padding: 12px 24px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            font-size: 12px;
+            color: var(--text-secondary);
+            display: flex;
+            justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>memory-talk</h1>
+        <div class="header-stats">
+            <div class="stat-item">
+                <div class="stat-value" id="total-conversations">-</div>
+                <div class="stat-label">Conversations</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="total-messages">-</div>
+                <div class="stat-label">Messages</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-value" id="active-sources">-</div>
+                <div class="stat-label">Active Sources</div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main">
+        <aside class="sidebar">
+            <div class="sidebar-header">Sources</div>
+            <div class="source-list" id="source-list">
+                <!-- Source items will be populated by JS -->
+            </div>
+        </aside>
+
+        <section class="detail-panel" id="detail-panel">
+            <div class="empty-state">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p>Select a source to view details</p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <span>Version 0.1.0</span>
+        <span>memory-talk - Streaming Data Platform</span>
+    </footer>
+
+    <script>
+        let selectedSource = null;
+
+        async function fetchStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+
+                document.getElementById('total-conversations').textContent = data.total_conversations;
+                document.getElementById('total-messages').textContent = data.total_messages;
+                document.getElementById('active-sources').textContent = data.sources.filter(s => s.status === 'running').length;
+            } catch (e) {
+                console.error('Failed to fetch status:', e);
+            }
+        }
+
+        async function fetchSources() {
+            try {
+                const response = await fetch('/api/sources');
+                const sources = await response.json();
+
+                const sourceList = document.getElementById('source-list');
+                sourceList.innerHTML = '';
+
+                if (sources.length === 0) {
+                    sourceList.innerHTML = '<div style="padding: 16px; color: var(--text-secondary); text-align: center;">No sources configured</div>';
+                    return;
+                }
+
+                sources.forEach(source => {
+                    const item = document.createElement('div');
+                    item.className = `source-item ${selectedSource === source.name ? 'selected' : ''}`;
+                    item.onclick = () => selectSource(source.name);
+
+                    item.innerHTML = `
+                        <div class="source-name">
+                            <span>${source.name}</span>
+                            <span class="source-status ${source.status}">${source.status}</span>
+                        </div>
+                        <div class="source-metrics">
+                            <span>${source.messages_synced} messages</span>
+                            <span>${formatTime(source.last_sync_time)}</span>
+                        </div>
+                    `;
+                    sourceList.appendChild(item);
+                });
+            } catch (e) {
+                console.error('Failed to fetch sources:', e);
+            }
+        }
+
+        function formatTime(timestamp) {
+            if (!timestamp) return 'Never';
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString();
+        }
+
+        async function selectSource(name) {
+            selectedSource = name;
+            fetchSources(); // Re-render to show selection
+
+            try {
+                const response = await fetch('/api/sources');
+                const sources = await response.json();
+                const source = sources.find(s => s.name === name);
+
+                if (!source) return;
+
+                const panel = document.getElementById('detail-panel');
+                panel.innerHTML = `
+                    <div class="detail-header">
+                        <div class="detail-title">${source.name}</div>
+                        <div class="detail-subtitle">Streaming Data Source</div>
+                    </div>
+
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-label">Status</div>
+                            <div class="metric-value ${source.status === 'running' ? 'success' : source.status === 'error' ? 'error' : ''}">${source.status}</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Messages Synced</div>
+                            <div class="metric-value">${source.messages_synced}</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-label">Last Sync</div>
+                            <div class="metric-value" style="font-size: 18px;">${formatTime(source.last_sync_time)}</div>
+                        </div>
+                    </div>
+
+                    <div class="timeline">
+                        <div class="timeline-title">Activity Log</div>
+                        <div class="timeline-item">
+                            <div class="timeline-dot ${source.status}"></div>
+                            <div class="timeline-content">
+                                <div class="timeline-time">${formatTime(source.last_sync_time)}</div>
+                                <div class="timeline-message">${source.status === 'running' ? 'Source is running and syncing data' : source.status === 'error' ? source.error_message || 'Source encountered an error' : 'Source is stopped'}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } catch (e) {
+                console.error('Failed to fetch source details:', e);
+            }
+        }
+
+        // Initial fetch
+        fetchStatus();
+        fetchSources();
+
+        // Refresh every 5 seconds
+        setInterval(() => {
+            fetchStatus();
+            fetchSources();
+            if (selectedSource) {
+                selectSource(selectedSource);
+            }
+        }, 5000);
+    </script>
+</body>
+</html>

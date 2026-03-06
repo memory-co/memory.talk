@@ -36,23 +36,13 @@ Extract and store conversation data from various chat platforms (ChatGPT, Gemini
 
 ### Installation
 
-**Python (recommended):**
-
 ```bash
 # Install server and CLI
-pip install -e ./server-py
-pip install -e ./cli-py
+pip install -e ./server
+pip install -e ./cli
 
 # Or use the combined package
 pip install talk-memory
-```
-
-**Node.js:**
-
-```bash
-# Install dependencies
-cd server-node && npm install && npm run build
-cd ../cli-node && npm install && npm run build
 ```
 
 ### Usage
@@ -153,10 +143,6 @@ GET /api/conversations/<platform>/<session_id>
 ```
 GET /api/search?q=kubernetes
 ```
-
-## Web UI
-
-Open `web/index.html` in a browser to use the graphical interface.
 
 ## License
 
