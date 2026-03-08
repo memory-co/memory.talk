@@ -327,9 +327,9 @@
 
     <main class="main">
         <aside class="sidebar">
-            <div class="sidebar-header">Sources</div>
-            <div class="source-list" id="source-list">
-                <!-- Source items will be populated by JS -->
+            <div class="sidebar-header">Conversations</div>
+            <div class="source-list" id="conversation-list">
+                <!-- Conversation items will be populated by JS -->
             </div>
         </aside>
 
@@ -349,7 +349,7 @@
     </footer>
 
     <script>
-        let selectedSource = null;
+        let selectedConversation = null;
 
         async function fetchStatus() {
             try {
@@ -364,106 +364,146 @@
             }
         }
 
-        async function fetchSources() {
+        async function fetchConversations() {
             try {
-                const response = await fetch('/api/sources');
-                const sources = await response.json();
+                const response = await fetch('/api/conversations');
+                const conversations = await response.json();
 
-                const sourceList = document.getElementById('source-list');
-                sourceList.innerHTML = '';
+                const list = document.getElementById('conversation-list');
+                list.innerHTML = '';
 
-                if (sources.length === 0) {
-                    sourceList.innerHTML = '<div style="padding: 16px; color: var(--text-secondary); text-align: center;">No sources configured</div>';
+                if (conversations.length === 0) {
+                    list.innerHTML = '<div style="padding: 16px; color: var(--text-secondary); text-align: center;">No conversations</div>';
                     return;
                 }
 
-                sources.forEach(source => {
+                conversations.forEach(conv => {
                     const item = document.createElement('div');
-                    item.className = `source-item ${selectedSource === source.name ? 'selected' : ''}`;
-                    item.onclick = () => selectSource(source.name);
+                    item.className = `source-item ${selectedConversation && selectedConversation.platform === conv.platform && selectedConversation.session_id === conv.session_id ? 'selected' : ''}`;
+                    item.onclick = () => selectConversation(conv.platform, conv.session_id);
 
                     item.innerHTML = `
                         <div class="source-name">
-                            <span>${source.name}</span>
-                            <span class="source-status ${source.status}">${source.status}</span>
+                            <span>${conv.title || conv.session_id}</span>
+                            <span class="source-status">${conv.platform}</span>
                         </div>
                         <div class="source-metrics">
-                            <span>${source.messages_synced} messages</span>
-                            <span>${formatTime(source.last_sync_time)}</span>
+                            <span>${conv.message_count} messages</span>
+                            <span>${formatTime(conv.updated_at)}</span>
                         </div>
                     `;
-                    sourceList.appendChild(item);
+                    list.appendChild(item);
                 });
             } catch (e) {
-                console.error('Failed to fetch sources:', e);
+                console.error('Failed to fetch conversations:', e);
             }
         }
 
         function formatTime(timestamp) {
             if (!timestamp) return 'Never';
             const date = new Date(timestamp);
-            return date.toLocaleTimeString();
+            return date.toLocaleString();
         }
 
-        async function selectSource(name) {
-            selectedSource = name;
-            fetchSources(); // Re-render to show selection
+        async function selectConversation(platform, sessionId) {
+            selectedConversation = { platform, session_id: sessionId };
+            fetchConversations(); // Re-render to show selection
 
             try {
-                const response = await fetch('/api/sources');
-                const sources = await response.json();
-                const source = sources.find(s => s.name === name);
+                const response = await fetch(`/api/conversations/${platform}/${sessionId}`);
+                const data = await response.json();
 
-                if (!source) return;
+                const metadata = data.metadata;
+                const messages = data.messages;
 
                 const panel = document.getElementById('detail-panel');
+
+                // Build messages HTML
+                const messagesHtml = messages.map(msg => `
+                    <div class="timeline-item">
+                        <div class="timeline-dot ${msg.role === 'user' ? 'running' : msg.role === 'assistant' ? 'stopped' : ''}"></div>
+                        <div class="timeline-content">
+                            <div class="timeline-time">
+                                <span style="font-weight: 600;">${msg.role}</span>
+                                <span>${formatTime(msg.timestamp)}</span>
+                            </div>
+                            <div class="timeline-message">${escapeHtml(msg.content)}</div>
+                        </div>
+                    </div>
+                `).join('');
+
+                // Build participants HTML
+                const participantsHtml = metadata.participants.map(p =>
+                    `<span class="source-status">${p.name} (${p.role})</span>`
+                ).join(' ');
+
                 panel.innerHTML = `
                     <div class="detail-header">
-                        <div class="detail-title">${source.name}</div>
-                        <div class="detail-subtitle">Streaming Data Source</div>
+                        <button onclick="showEmptyState()" style="background: transparent; border: 1px solid rgba(255,255,255,0.2); color: var(--text-secondary); padding: 8px 16px; border-radius: 6px; cursor: pointer; margin-bottom: 16px;">← Back</button>
+                        <div class="detail-title">${escapeHtml(metadata.title || metadata.session_id)}</div>
+                        <div class="detail-subtitle">Platform: ${metadata.platform} | Session: ${metadata.session_id}</div>
                     </div>
 
                     <div class="metrics-grid">
                         <div class="metric-card">
-                            <div class="metric-label">Status</div>
-                            <div class="metric-value ${source.status === 'running' ? 'success' : source.status === 'error' ? 'error' : ''}">${source.status}</div>
+                            <div class="metric-label">Messages</div>
+                            <div class="metric-value">${metadata.message_count}</div>
                         </div>
                         <div class="metric-card">
-                            <div class="metric-label">Messages Synced</div>
-                            <div class="metric-value">${source.messages_synced}</div>
+                            <div class="metric-label">Created</div>
+                            <div class="metric-value" style="font-size: 18px;">${formatTime(metadata.created_at)}</div>
                         </div>
                         <div class="metric-card">
-                            <div class="metric-label">Last Sync</div>
-                            <div class="metric-value" style="font-size: 18px;">${formatTime(source.last_sync_time)}</div>
+                            <div class="metric-label">Updated</div>
+                            <div class="metric-value" style="font-size: 18px;">${formatTime(metadata.updated_at)}</div>
                         </div>
                     </div>
 
+                    <div style="margin-bottom: 16px;">
+                        <div class="metric-label" style="margin-bottom: 8px;">Participants</div>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">${participantsHtml}</div>
+                    </div>
+
                     <div class="timeline">
-                        <div class="timeline-title">Activity Log</div>
-                        <div class="timeline-item">
-                            <div class="timeline-dot ${source.status}"></div>
-                            <div class="timeline-content">
-                                <div class="timeline-time">${formatTime(source.last_sync_time)}</div>
-                                <div class="timeline-message">${source.status === 'running' ? 'Source is running and syncing data' : source.status === 'error' ? source.error_message || 'Source encountered an error' : 'Source is stopped'}</div>
-                            </div>
-                        </div>
+                        <div class="timeline-title">Messages</div>
+                        ${messagesHtml}
                     </div>
                 `;
             } catch (e) {
-                console.error('Failed to fetch source details:', e);
+                console.error('Failed to fetch conversation details:', e);
             }
+        }
+
+        function showEmptyState() {
+            selectedConversation = null;
+            fetchConversations();
+            const panel = document.getElementById('detail-panel');
+            panel.innerHTML = `
+                <div class="empty-state">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <p>Select a conversation to view details</p>
+                </div>
+            `;
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         // Initial fetch
         fetchStatus();
-        fetchSources();
+        fetchConversations();
 
         // Refresh every 5 seconds
         setInterval(() => {
             fetchStatus();
-            fetchSources();
-            if (selectedSource) {
-                selectSource(selectedSource);
+            fetchConversations();
+            if (selectedConversation) {
+                selectConversation(selectedConversation.platform, selectedConversation.session_id);
             }
         }, 5000);
     </script>
