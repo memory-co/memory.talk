@@ -1,12 +1,11 @@
-"""Storage implementation for memory-talk."""
+"""Storage implementation for memory-talk using DuckDB."""
 import hashlib
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-import yaml
+import duckdb
 
 from memory_talk.models import (
     ConversationMetadata,
@@ -17,7 +16,7 @@ from memory_talk.models import (
 
 
 class Storage:
-    """Storage engine for conversation data."""
+    """Storage engine for conversation data using DuckDB."""
 
     def __init__(self, base_path: Optional[Path] = None):
         """Initialize storage.
@@ -28,18 +27,57 @@ class Storage:
         if base_path is None:
             base_path = Path.home() / ".talk-memory"
         self.base_path = base_path
-        self.conversations_dir = base_path / "conversations"
         self.blobs_dir = base_path / "blobs"
-        self._ensure_directories()
+        self.db_path = base_path / "memory.duckdb"
 
-    def _ensure_directories(self):
-        """Ensure storage directories exist."""
-        self.conversations_dir.mkdir(parents=True, exist_ok=True)
+        # Ensure directories exist
         self.blobs_dir.mkdir(parents=True, exist_ok=True)
+        self.base_path.mkdir(parents=True, exist_ok=True)
 
-    def _get_conversation_dir(self, platform: str, session_id: str) -> Path:
-        """Get the directory for a conversation."""
-        return self.conversations_dir / platform / session_id
+        # Connect to DuckDB
+        self.conn = duckdb.connect(str(self.db_path))
+        self._init_schema()
+
+    def _init_schema(self):
+        """Initialize database schema."""
+        # Create conversations table
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS conversations (
+                session_id VARCHAR,
+                platform VARCHAR,
+                title VARCHAR,
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP,
+                participants JSON,
+                message_count INTEGER,
+                PRIMARY KEY (session_id, platform)
+            )
+        """)
+
+        # Create messages table
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                uuid VARCHAR,
+                parent_uuid VARCHAR,
+                platform VARCHAR,
+                session_id VARCHAR,
+                role VARCHAR,
+                content VARCHAR,
+                timestamp TIMESTAMP,
+                attachments JSON,
+                PRIMARY KEY (uuid, platform)
+            )
+        """)
+
+        # Create indexes for better query performance
+        self.conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_messages_session
+            ON messages(session_id, platform)
+        """)
+        self.conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_messages_content
+            ON messages(content)
+        """)
 
     def save_conversation(
         self,
@@ -56,53 +94,57 @@ class Storage:
             messages: List of messages
             metadata: Additional metadata
         """
-        conv_dir = self._get_conversation_dir(platform, session_id)
-        conv_dir.mkdir(parents=True, exist_ok=True)
-
-        meta_path = conv_dir / "meta.yaml"
-        messages_path = conv_dir / "messages.jsonl"
-
-        # Build metadata
-        now = metadata.get("created_at", messages[0].timestamp if messages else None)
+        # Determine timestamps
+        now = metadata.get("created_at", messages[0].timestamp if messages else datetime.now())
         if isinstance(now, str):
             now = datetime.fromisoformat(now.replace("Z", "+00:00"))
 
         title = metadata.get("title", f"Conversation {session_id}")
         participants = metadata.get("participants", [])
+        participants_json = json.dumps([p.model_dump() for p in participants])
 
-        meta = ConversationMetadata(
-            session_id=session_id,
-            platform=platform,
-            title=title,
-            created_at=now,
-            updated_at=now,
-            participants=participants,
-            message_count=len(messages),
-        )
+        # Check if conversation exists
+        existing = self.conn.execute("""
+            SELECT message_count FROM conversations
+            WHERE session_id = ? AND platform = ?
+        """, [session_id, platform]).fetchone()
 
-        # Save metadata
-        with open(meta_path, "w") as f:
-            yaml.dump(meta.model_dump(mode="json"), f)
+        if existing:
+            # Update existing conversation
+            existing_count = existing[0]
+            self.conn.execute("""
+                UPDATE conversations
+                SET title = ?, updated_at = ?, participants = ?, message_count = ?
+                WHERE session_id = ? AND platform = ?
+            """, [title, now, participants_json, existing_count + len(messages), session_id, platform])
+        else:
+            # Insert new conversation
+            self.conn.execute("""
+                INSERT INTO conversations (session_id, platform, title, created_at, updated_at, participants, message_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, [session_id, platform, title, now, now, participants_json, len(messages)])
 
-        # Load existing messages for deduplication
-        existing_uuids = set()
-        if messages_path.exists():
-            with open(messages_path) as f:
-                for line in f:
-                    msg = json.loads(line)
-                    existing_uuids.add(msg.get("uuid"))
-
-        # Save messages (deduplicate by uuid)
-        with open(messages_path, "a") as f:
-            for msg in messages:
-                if msg.uuid not in existing_uuids:
-                    f.write(msg.model_dump_json() + "\n")
-                    existing_uuids.add(msg.uuid)
-
-        # Update message count in metadata
-        meta.message_count = len(existing_uuids)
-        with open(meta_path, "w") as f:
-            yaml.dump(meta.model_dump(mode="json"), f)
+        # Insert new messages (skip duplicates)
+        for msg in messages:
+            attachments_json = json.dumps([a.model_dump() for a in msg.attachments])
+            try:
+                self.conn.execute("""
+                    INSERT OR IGNORE INTO messages
+                    (uuid, parent_uuid, platform, session_id, role, content, timestamp, attachments)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, [
+                    msg.uuid,
+                    msg.parent_uuid,
+                    platform,
+                    session_id,
+                    msg.role,
+                    msg.content,
+                    msg.timestamp,
+                    attachments_json,
+                ])
+            except Exception:
+                # Skip duplicate
+                pass
 
     def save_blob(
         self,
@@ -146,39 +188,31 @@ class Storage:
         Returns:
             List of conversation summaries
         """
+        if platform:
+            rows = self.conn.execute("""
+                SELECT session_id, platform, title, created_at, updated_at, message_count
+                FROM conversations
+                WHERE platform = ?
+                ORDER BY updated_at DESC
+            """, [platform]).fetchall()
+        else:
+            rows = self.conn.execute("""
+                SELECT session_id, platform, title, created_at, updated_at, message_count
+                FROM conversations
+                ORDER BY updated_at DESC
+            """).fetchall()
+
         results = []
-
-        base = self.conversations_dir if platform is None else self.conversations_dir / platform
-
-        if not base.exists():
-            return results
-
-        for platform_dir in [base] if platform else base.iterdir():
-            if not platform_dir.is_dir():
-                continue
-            platform_name = platform_dir.name
-
-            for session_dir in platform_dir.iterdir():
-                if not session_dir.is_dir():
-                    continue
-
-                meta_path = session_dir / "meta.yaml"
-                if not meta_path.exists():
-                    continue
-
-                with open(meta_path) as f:
-                    meta_dict = yaml.safe_load(f)
-
-                results.append(ConversationSummary(
-                    session_id=meta_dict.get("session_id", session_dir.name),
-                    platform=platform_name,
-                    title=meta_dict.get("title", ""),
-                    created_at=meta_dict.get("created_at", ""),
-                    updated_at=meta_dict.get("updated_at", ""),
-                    message_count=meta_dict.get("message_count", 0),
-                ))
-
-        return sorted(results, key=lambda x: x.updated_at, reverse=True)
+        for row in rows:
+            results.append(ConversationSummary(
+                session_id=row[0],
+                platform=row[1],
+                title=row[2],
+                created_at=row[3],
+                updated_at=row[4],
+                message_count=row[5],
+            ))
+        return results
 
     def get_conversation(
         self,
@@ -194,23 +228,53 @@ class Storage:
         Returns:
             Tuple of (metadata, messages) or None if not found
         """
-        conv_dir = self._get_conversation_dir(platform, session_id)
-        meta_path = conv_dir / "meta.yaml"
-        messages_path = conv_dir / "messages.jsonl"
+        # Get conversation metadata
+        row = self.conn.execute("""
+            SELECT session_id, platform, title, created_at, updated_at, participants, message_count
+            FROM conversations
+            WHERE session_id = ? AND platform = ?
+        """, [session_id, platform]).fetchone()
 
-        if not meta_path.exists():
+        if not row:
             return None
 
-        with open(meta_path) as f:
-            meta_dict = yaml.safe_load(f)
+        participants = json.loads(row[5]) if row[5] else []
+        from memory_talk.models import Participant
+        participants_obj = [Participant(**p) for p in participants]
+
+        meta = ConversationMetadata(
+            session_id=row[0],
+            platform=row[1],
+            title=row[2],
+            created_at=row[3],
+            updated_at=row[4],
+            participants=participants_obj,
+            message_count=row[6],
+        )
+
+        # Get messages
+        message_rows = self.conn.execute("""
+            SELECT uuid, parent_uuid, role, content, timestamp, attachments
+            FROM messages
+            WHERE session_id = ? AND platform = ?
+            ORDER BY timestamp ASC
+        """, [session_id, platform]).fetchall()
 
         messages = []
-        if messages_path.exists():
-            with open(messages_path) as f:
-                for line in f:
-                    messages.append(Message.model_validate_json(line))
+        for msg_row in message_rows:
+            attachments = json.loads(msg_row[5]) if msg_row[5] else []
+            from memory_talk.models import Attachment
+            attachments_obj = [Attachment(**a) for a in attachments]
 
-        meta = ConversationMetadata(**meta_dict)
+            messages.append(Message(
+                uuid=msg_row[0],
+                parent_uuid=msg_row[1],
+                role=msg_row[2],
+                content=msg_row[3],
+                timestamp=msg_row[4],
+                attachments=attachments_obj,
+            ))
+
         return meta, messages
 
     def search(self, query: str) -> list[SearchResult]:
@@ -222,47 +286,25 @@ class Storage:
         Returns:
             List of matching messages with context
         """
+        # Use LIKE for content search
+        rows = self.conn.execute("""
+            SELECT m.content, m.timestamp, c.session_id, c.platform, c.title
+            FROM messages m
+            JOIN conversations c ON m.session_id = c.session_id AND m.platform = c.platform
+            WHERE LOWER(m.content) LIKE LOWER(?)
+            ORDER BY m.timestamp DESC
+        """, [f"%{query}%"]).fetchall()
+
         results = []
-
-        if not self.conversations_dir.exists():
-            return results
-
-        for platform_dir in self.conversations_dir.iterdir():
-            if not platform_dir.is_dir():
-                continue
-
-            for session_dir in platform_dir.iterdir():
-                if not session_dir.is_dir():
-                    continue
-
-                meta_path = session_dir / "meta.yaml"
-                messages_path = session_dir / "messages.jsonl"
-
-                if not meta_path.exists():
-                    continue
-
-                with open(meta_path) as f:
-                    meta_dict = yaml.safe_load(f)
-
-                title = meta_dict.get("title", "")
-                session_id = meta_dict.get("session_id", session_dir.name)
-                platform = platform_dir.name
-
-                if messages_path.exists():
-                    with open(messages_path) as f:
-                        for line in f:
-                            msg = json.loads(line)
-                            content = msg.get("content", "")
-                            if query.lower() in content.lower():
-                                results.append(SearchResult(
-                                    session_id=session_id,
-                                    platform=platform,
-                                    title=title,
-                                    matched_message=content[:200],
-                                    timestamp=msg.get("timestamp", ""),
-                                ))
-
-        return sorted(results, key=lambda x: x.timestamp, reverse=True)
+        for row in rows:
+            results.append(SearchResult(
+                session_id=row[2],
+                platform=row[3],
+                title=row[4],
+                matched_message=row[0][:200],
+                timestamp=row[1],
+            ))
+        return results
 
     def get_stats(self) -> tuple[int, int]:
         """Get total conversations and messages count.
@@ -270,28 +312,12 @@ class Storage:
         Returns:
             Tuple of (total_conversations, total_messages)
         """
-        total_conversations = 0
-        total_messages = 0
+        conv_count = self.conn.execute("""
+            SELECT COUNT(*) FROM conversations
+        """).fetchone()[0]
 
-        if not self.conversations_dir.exists():
-            return total_conversations, total_messages
+        msg_count = self.conn.execute("""
+            SELECT COUNT(*) FROM messages
+        """).fetchone()[0]
 
-        for platform_dir in self.conversations_dir.iterdir():
-            if not platform_dir.is_dir():
-                continue
-
-            for session_dir in platform_dir.iterdir():
-                if not session_dir.is_dir():
-                    continue
-
-                meta_path = session_dir / "meta.yaml"
-                if not meta_path.exists():
-                    continue
-
-                with open(meta_path) as f:
-                    meta_dict = yaml.safe_load(f)
-
-                total_conversations += 1
-                total_messages += meta_dict.get("message_count", 0)
-
-        return total_conversations, total_messages
+        return conv_count, msg_count

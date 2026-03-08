@@ -1,10 +1,8 @@
 """Unit tests for storage module."""
-import json
 from datetime import datetime
 from pathlib import Path
 
 import pytest
-import yaml
 
 from memory_talk.models import Message
 from memory_talk.storage import Storage
@@ -17,8 +15,9 @@ class TestStorage:
         """Test that Storage creates necessary directories on init."""
         storage = Storage(base_path=temp_dir)
 
-        assert storage.conversations_dir.exists()
+        assert storage.base_path.exists()
         assert storage.blobs_dir.exists()
+        assert storage.db_path.exists()
 
     def test_save_conversation(self, storage, sample_messages):
         """Test saving a conversation."""
@@ -29,14 +28,12 @@ class TestStorage:
             metadata={"title": "Test Chat"},
         )
 
-        conv_dir = storage._get_conversation_dir("test-platform", "session-001")
-        assert conv_dir.exists()
-
-        meta_path = conv_dir / "meta.yaml"
-        assert meta_path.exists()
-
-        messages_path = conv_dir / "messages.jsonl"
-        assert messages_path.exists()
+        # Verify data was saved by retrieving it
+        result = storage.get_conversation("test-platform", "session-001")
+        assert result is not None
+        metadata, messages = result
+        assert metadata.title == "Test Chat"
+        assert len(messages) == 2
 
     def test_save_conversation_updates_metadata(self, storage, sample_messages):
         """Test that metadata is correctly saved."""
@@ -47,16 +44,14 @@ class TestStorage:
             metadata={"title": "My Chat"},
         )
 
-        conv_dir = storage._get_conversation_dir("test-platform", "session-001")
-        meta_path = conv_dir / "meta.yaml"
+        result = storage.get_conversation("test-platform", "session-001")
+        assert result is not None
+        metadata, messages = result
 
-        with open(meta_path) as f:
-            meta = yaml.safe_load(f)
-
-        assert meta["title"] == "My Chat"
-        assert meta["platform"] == "test-platform"
-        assert meta["session_id"] == "session-001"
-        assert meta["message_count"] == 2
+        assert metadata.title == "My Chat"
+        assert metadata.platform == "test-platform"
+        assert metadata.session_id == "session-001"
+        assert metadata.message_count == 2
 
     def test_save_conversation_deduplication(self, storage):
         """Test that duplicate messages are not saved."""
@@ -84,13 +79,10 @@ class TestStorage:
         )
 
         # Should only have one message
-        conv_dir = storage._get_conversation_dir("test-platform", "session-001")
-        messages_path = conv_dir / "messages.jsonl"
-
-        with open(messages_path) as f:
-            lines = f.readlines()
-
-        assert len(lines) == 1
+        result = storage.get_conversation("test-platform", "session-001")
+        assert result is not None
+        _, messages = result
+        assert len(messages) == 1
 
     def test_list_conversations_empty(self, storage):
         """Test listing conversations when none exist."""
