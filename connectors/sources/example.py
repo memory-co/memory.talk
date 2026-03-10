@@ -1,6 +1,6 @@
 """Example sync source - demonstrates how to create a sync source."""
 import time
-from sources.base import Source, SourceConfig
+from connectors.base import Source, SourceConfig
 
 
 class ExampleSource(Source):

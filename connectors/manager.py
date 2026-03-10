@@ -4,7 +4,7 @@ import pkgutil
 from pathlib import Path
 from typing import Optional
 
-from sources.base import Source, SourceConfig
+from connectors.base import Source, SourceConfig
 
 
 class SourceManager:
@@ -16,29 +16,29 @@ class SourceManager:
         self._discover_sources()
 
     def _discover_sources(self):
-        """Discover and load sources from the sources directory."""
-        sources_path = Path(__file__).parent / "sources"
+        """Discover and load connectors from the connectors directory."""
+        connectors_path = Path(__file__).parent / "sources"
 
-        if not sources_path.exists():
+        if not connectors_path.exists():
             return
 
-        # Import the sources package
+        # Import the connectors package
         try:
             import sys
-            sources_package = str(Path(__file__).parent.name)
+            connectors_package = str(Path(__file__).parent.name)
 
             # Add parent to path to enable imports
             parent = str(Path(__file__).parent.parent)
             if parent not in sys.path:
                 sys.path.insert(0, parent)
 
-            # Discover modules in sources/sources/
-            for _, module_name, _ in pkgutil.iter_modules([str(sources_path)]):
+            # Discover modules in connectors/sources/
+            for _, module_name, _ in pkgutil.iter_modules([str(connectors_path)]):
                 if module_name.startswith("_"):
                     continue
 
                 try:
-                    module = importlib.import_module(f"sources.sources.{module_name}")
+                    module = importlib.import_module(f"connectors.sources.{module_name}")
 
                     # Find Source subclasses in the module
                     for attr_name in dir(module):
