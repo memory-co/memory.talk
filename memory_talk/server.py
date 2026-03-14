@@ -11,6 +11,32 @@ from memory_talk.api import router, set_source_manager
 from memory_talk.web.app import SourceManager
 
 
+def _init_default_subjects():
+    """Initialize default subjects if they don't exist."""
+    from memory_talk.models import Subject
+    from memory_talk.storage import Storage
+
+    storage = Storage()
+
+    default_subjects = [
+        Subject(
+            id="human-default",
+            name="Human User",
+            metadata={"description": "Default human user"},
+        ),
+        Subject(
+            id="ai-assistant",
+            name="AI Assistant",
+            metadata={"description": "Default AI assistant"},
+        ),
+    ]
+
+    for subject in default_subjects:
+        existing = storage.get_subject(subject.id)
+        if existing is None:
+            storage.create_subject(subject)
+
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     app = FastAPI(
@@ -34,6 +60,9 @@ def create_app() -> FastAPI:
 
     # Include API routes
     app.include_router(router)
+
+    # Initialize default subjects
+    _init_default_subjects()
 
     # Setup templates
     templates = Jinja2Templates(directory=Path(__file__).parent / "web" / "templates")

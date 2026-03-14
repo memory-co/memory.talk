@@ -17,6 +17,8 @@ class Message(BaseModel):
     uuid: str
     parent_uuid: Optional[str] = None
     role: str
+    subject_id: Optional[str] = None
     content: str
     timestamp: datetime
     attachments: list[Attachment] = Field(default_factory=list)
+    metadata: dict = Field(default_factory=dict)

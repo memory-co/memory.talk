@@ -12,6 +12,7 @@ from memory_talk.models import (
     ConversationSummary,
     Message,
     SearchResult,
+    Subject,
 )
 
 
@@ -54,6 +55,17 @@ class Storage:
             )
         """)
 
+        # Create subjects table
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS subjects (
+                id VARCHAR PRIMARY KEY,
+                name VARCHAR NOT NULL,
+                metadata JSON,
+                created_at TIMESTAMP,
+                updated_at TIMESTAMP
+            )
+        """)
+
         # Create messages table
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS messages (
@@ -62,9 +74,11 @@ class Storage:
                 platform VARCHAR,
                 session_id VARCHAR,
                 role VARCHAR,
+                subject_id VARCHAR REFERENCES subjects(id),
                 content VARCHAR,
                 timestamp TIMESTAMP,
                 attachments JSON,
+                metadata JSON,
                 PRIMARY KEY (uuid, platform)
             )
         """)
@@ -127,20 +141,23 @@ class Storage:
         # Insert new messages (skip duplicates)
         for msg in messages:
             attachments_json = json.dumps([a.model_dump() for a in msg.attachments])
+            metadata_json = json.dumps(msg.metadata)
             try:
                 self.conn.execute("""
                     INSERT OR IGNORE INTO messages
-                    (uuid, parent_uuid, platform, session_id, role, content, timestamp, attachments)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (uuid, parent_uuid, platform, session_id, role, subject_id, content, timestamp, attachments, metadata)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, [
                     msg.uuid,
                     msg.parent_uuid,
                     platform,
                     session_id,
                     msg.role,
+                    msg.subject_id,
                     msg.content,
                     msg.timestamp,
                     attachments_json,
+                    metadata_json,
                 ])
             except Exception:
                 # Skip duplicate
@@ -254,7 +271,7 @@ class Storage:
 
         # Get messages
         message_rows = self.conn.execute("""
-            SELECT uuid, parent_uuid, role, content, timestamp, attachments
+            SELECT uuid, parent_uuid, role, subject_id, content, timestamp, attachments, metadata
             FROM messages
             WHERE session_id = ? AND platform = ?
             ORDER BY timestamp ASC
@@ -262,7 +279,8 @@ class Storage:
 
         messages = []
         for msg_row in message_rows:
-            attachments = json.loads(msg_row[5]) if msg_row[5] else []
+            attachments = json.loads(msg_row[6]) if msg_row[6] else []
+            metadata = json.loads(msg_row[7]) if msg_row[7] else {}
             from memory_talk.models import Attachment
             attachments_obj = [Attachment(**a) for a in attachments]
 
@@ -270,9 +288,11 @@ class Storage:
                 uuid=msg_row[0],
                 parent_uuid=msg_row[1],
                 role=msg_row[2],
-                content=msg_row[3],
-                timestamp=msg_row[4],
+                subject_id=msg_row[3],
+                content=msg_row[4],
+                timestamp=msg_row[5],
                 attachments=attachments_obj,
+                metadata=metadata,
             ))
 
         return meta, messages
@@ -321,3 +341,132 @@ class Storage:
         """).fetchone()[0]
 
         return conv_count, msg_count
+
+    def list_subjects(self) -> list[Subject]:
+        """List all subjects.
+
+        Returns:
+            List of subjects
+        """
+        rows = self.conn.execute("""
+            SELECT id, name, metadata, created_at, updated_at
+            FROM subjects
+            ORDER BY name ASC
+        """).fetchall()
+
+        results = []
+        for row in rows:
+            results.append(Subject(
+                id=row[0],
+                name=row[1],
+                metadata=json.loads(row[2]) if row[2] else {},
+                created_at=row[3],
+                updated_at=row[4],
+            ))
+        return results
+
+    def get_subject(self, subject_id: str) -> Optional[Subject]:
+        """Get a subject by ID.
+
+        Args:
+            subject_id: Subject ID
+
+        Returns:
+            Subject or None if not found
+        """
+        row = self.conn.execute("""
+            SELECT id, name, metadata, created_at, updated_at
+            FROM subjects
+            WHERE id = ?
+        """, [subject_id]).fetchone()
+
+        if not row:
+            return None
+
+        return Subject(
+            id=row[0],
+            name=row[1],
+            metadata=json.loads(row[2]) if row[2] else {},
+            created_at=row[3],
+            updated_at=row[4],
+        )
+
+    def create_subject(self, subject: Subject) -> Subject:
+        """Create a new subject.
+
+        Args:
+            subject: Subject to create
+
+        Returns:
+            Created subject
+        """
+        now = datetime.now()
+        metadata_json = json.dumps(subject.metadata)
+
+        self.conn.execute("""
+            INSERT INTO subjects (id, name, metadata, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, [subject.id, subject.name, metadata_json, now, now])
+
+        return Subject(
+            id=subject.id,
+            name=subject.name,
+            metadata=subject.metadata,
+            created_at=now,
+            updated_at=now,
+        )
+
+    def update_subject(self, subject: Subject) -> Optional[Subject]:
+        """Update an existing subject.
+
+        Args:
+            subject: Subject to update
+
+        Returns:
+            Updated subject or None if not found
+        """
+        existing = self.get_subject(subject.id)
+        if not existing:
+            return None
+
+        now = datetime.now()
+        metadata_json = json.dumps(subject.metadata)
+
+        self.conn.execute("""
+            UPDATE subjects
+            SET name = ?, metadata = ?, updated_at = ?
+            WHERE id = ?
+        """, [subject.name, metadata_json, now, subject.id])
+
+        return Subject(
+            id=subject.id,
+            name=subject.name,
+            metadata=subject.metadata,
+            created_at=existing.created_at,
+            updated_at=now,
+        )
+
+    def delete_subject(self, subject_id: str) -> bool:
+        """Delete a subject.
+
+        Args:
+            subject_id: Subject ID to delete
+
+        Returns:
+            True if deleted, False if not found
+        """
+        existing = self.get_subject(subject_id)
+        if not existing:
+            return False
+
+        # Set subject_id to NULL for messages referencing this subject
+        self.conn.execute("""
+            UPDATE messages SET subject_id = NULL WHERE subject_id = ?
+        """, [subject_id])
+
+        # Delete the subject
+        self.conn.execute("""
+            DELETE FROM subjects WHERE id = ?
+        """, [subject_id])
+
+        return True

@@ -1,7 +1,7 @@
 """Memory Talk API package."""
 from fastapi import APIRouter
 
-from memory_talk.api import conversations, ingest, search, sources, status
+from memory_talk.api import conversations, ingest, search, sources, status, subjects
 
 router = APIRouter()
 router.include_router(ingest.router)
@@ -9,6 +9,7 @@ router.include_router(conversations.router)
 router.include_router(search.router)
 router.include_router(sources.router)
 router.include_router(status.router)
+router.include_router(subjects.router)
 
 # Global source manager (will be set by web app)
 source_manager = None

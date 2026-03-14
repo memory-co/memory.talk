@@ -9,6 +9,51 @@ router = APIRouter()
 storage = Storage()
 
 
+def match_subject_id(message: Message) -> str | None:
+    """Match a subject ID based on message role and metadata.
+
+    Matching rules:
+    - role="user" → subject_id = "human-default"
+    - role="assistant" + model in metadata → subject_id = f"ai-{model}"
+    - has tool_name in metadata → subject_id = f"tool-{tool_name}"
+
+    Args:
+        message: Message to match
+
+    Returns:
+        Subject ID or None if no match
+    """
+    role = message.role
+    metadata = message.metadata
+
+    # User/human messages
+    if role == "user":
+        return "human-default"
+
+    # Assistant messages - check for model info
+    if role == "assistant":
+        model = metadata.get("model")
+        if model:
+            # Normalize model name for subject ID
+            model_id = model.replace(" ", "-").replace(".", "-").lower()
+            return f"ai-{model_id}"
+
+        # Check for tool usage
+        tool_name = metadata.get("tool_name")
+        if tool_name:
+            return f"tool-{tool_name}"
+
+        # Default assistant subject
+        return "ai-assistant"
+
+    # Tool messages
+    tool_name = metadata.get("tool_name")
+    if tool_name:
+        return f"tool-{tool_name}"
+
+    return None
+
+
 @router.post("/api/ingest")
 async def ingest_conversation(request: IngestRequest) -> JSONResponse:
     """Ingest conversation data.
@@ -23,6 +68,11 @@ async def ingest_conversation(request: IngestRequest) -> JSONResponse:
     messages = request.messages
     if messages and isinstance(messages[0], dict):
         messages = [Message(**msg) for msg in request.messages]
+
+    # Match subjects for messages
+    for msg in messages:
+        if msg.subject_id is None:
+            msg.subject_id = match_subject_id(msg)
 
     storage.save_conversation(
         platform=request.platform,
