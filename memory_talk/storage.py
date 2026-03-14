@@ -1,6 +1,7 @@
 """Storage implementation for memory-talk using DuckDB."""
 import hashlib
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -8,7 +9,6 @@ from typing import Optional
 import duckdb
 
 from memory_talk.models import (
-    ConversationMetadata,
     ConversationSummary,
     Message,
     SearchResult,
@@ -26,7 +26,12 @@ class Storage:
             base_path: Base directory for storing data. Defaults to ~/.talk-memory/
         """
         if base_path is None:
-            base_path = Path.home() / ".talk-memory"
+            # Check environment variable first
+            env_path = os.environ.get("MEMORY_TALK_DATA_DIR")
+            if env_path:
+                base_path = Path(env_path)
+            else:
+                base_path = Path.home() / ".talk-memory"
         self.base_path = base_path
         self.blobs_dir = base_path / "blobs"
         self.db_path = base_path / "memory.duckdb"
@@ -231,57 +236,66 @@ class Storage:
             ))
         return results
 
-    def get_conversation(
+    def get_messages(
         self,
-        platform: str,
-        session_id: str,
-    ) -> Optional[tuple[ConversationMetadata, list[Message]]]:
-        """Get a specific conversation.
+        platform: Optional[str] = None,
+        session_id: Optional[str] = None,
+        role: Optional[str] = None,
+        subject_id: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[int, list[Message]]:
+        """Get messages with filtering and pagination.
 
         Args:
-            platform: Platform name
-            session_id: Session ID
+            platform: Optional platform filter
+            session_id: Optional session ID filter
+            role: Optional role filter (user/assistant)
+            subject_id: Optional subject ID filter
+            limit: Number of messages per page
+            offset: Offset for pagination
 
         Returns:
-            Tuple of (metadata, messages) or None if not found
+            Tuple of (total_count, messages)
         """
-        # Get conversation metadata
-        row = self.conn.execute("""
-            SELECT session_id, platform, title, created_at, updated_at, participants, message_count
-            FROM conversations
-            WHERE session_id = ? AND platform = ?
-        """, [session_id, platform]).fetchone()
+        conditions = []
+        params = []
 
-        if not row:
-            return None
+        if platform is not None:
+            conditions.append("platform = ?")
+            params.append(platform)
+        if session_id is not None:
+            conditions.append("session_id = ?")
+            params.append(session_id)
+        if role is not None:
+            conditions.append("role = ?")
+            params.append(role)
+        if subject_id is not None:
+            conditions.append("subject_id = ?")
+            params.append(subject_id)
 
-        participants = json.loads(row[5]) if row[5] else []
-        from memory_talk.models import Participant
-        participants_obj = [Participant(**p) for p in participants]
+        where_clause = (" WHERE " + " AND ".join(conditions)) if conditions else ""
 
-        meta = ConversationMetadata(
-            session_id=row[0],
-            platform=row[1],
-            title=row[2],
-            created_at=row[3],
-            updated_at=row[4],
-            participants=participants_obj,
-            message_count=row[6],
-        )
+        # Get total count
+        total = self.conn.execute(
+            f"SELECT COUNT(*) FROM messages{where_clause}", params
+        ).fetchone()[0]
 
-        # Get messages
-        message_rows = self.conn.execute("""
-            SELECT uuid, parent_uuid, role, subject_id, content, timestamp, attachments, metadata
-            FROM messages
-            WHERE session_id = ? AND platform = ?
+        # Get paginated messages
+        message_rows = self.conn.execute(
+            f"""SELECT uuid, parent_uuid, role, subject_id, content, timestamp, attachments, metadata
+            FROM messages{where_clause}
             ORDER BY timestamp ASC
-        """, [session_id, platform]).fetchall()
+            LIMIT ? OFFSET ?""",
+            params + [limit, offset],
+        ).fetchall()
+
+        from memory_talk.models import Attachment
 
         messages = []
         for msg_row in message_rows:
             attachments = json.loads(msg_row[6]) if msg_row[6] else []
             metadata = json.loads(msg_row[7]) if msg_row[7] else {}
-            from memory_talk.models import Attachment
             attachments_obj = [Attachment(**a) for a in attachments]
 
             messages.append(Message(
@@ -295,7 +309,7 @@ class Storage:
                 metadata=metadata,
             ))
 
-        return meta, messages
+        return total, messages
 
     def search(self, query: str) -> list[SearchResult]:
         """Search conversations.

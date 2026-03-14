@@ -1,7 +1,7 @@
 """Conversations API endpoints."""
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from memory_talk.storage import Storage
 
@@ -23,26 +23,27 @@ async def list_conversations(platform: Optional[str] = None) -> list[dict]:
     return [conv.model_dump(mode="json") for conv in conversations]
 
 
-@router.get("/api/conversations/{platform}/{session_id}")
-async def get_conversation(
-    platform: str,
-    session_id: str,
+@router.get("/api/messages")
+async def get_messages(
+    platform: Optional[str] = None,
+    session_id: Optional[str] = None,
+    role: Optional[str] = None,
+    subject_id: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
 ) -> dict:
-    """Get a specific conversation.
-
-    Args:
-        platform: Platform name
-        session_id: Session ID
-
-    Returns:
-        Conversation data
-    """
-    result = storage.get_conversation(platform, session_id)
-    if result is None:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-
-    metadata, messages = result
+    """Get messages with filtering and pagination."""
+    total, messages = storage.get_messages(
+        platform=platform,
+        session_id=session_id,
+        role=role,
+        subject_id=subject_id,
+        limit=limit,
+        offset=offset,
+    )
     return {
-        "metadata": metadata.model_dump(mode="json"),
+        "total": total,
+        "limit": limit,
+        "offset": offset,
         "messages": [msg.model_dump(mode="json") for msg in messages],
     }

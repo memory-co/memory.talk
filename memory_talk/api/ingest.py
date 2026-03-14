@@ -2,7 +2,7 @@
 from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 
-from memory_talk.models import IngestRequest, Message
+from memory_talk.models import IngestRequest, Message, Subject
 from memory_talk.storage import Storage
 
 router = APIRouter()
@@ -54,6 +54,43 @@ def match_subject_id(message: Message) -> str | None:
     return None
 
 
+def ensure_subjects_exist(messages: list[Message]) -> None:
+    """Ensure all subjects referenced in messages exist.
+
+    This creates any missing subjects before saving messages,
+    since the messages table has a foreign key constraint on subject_id.
+
+    Args:
+        messages: List of messages to check for subject references
+    """
+    subject_ids = set()
+    for msg in messages:
+        if msg.subject_id:
+            subject_ids.add(msg.subject_id)
+
+    for subject_id in subject_ids:
+        # Check if subject already exists
+        existing = storage.get_subject(subject_id)
+        if existing is None:
+            # Create new subject
+            name = subject_id
+            if subject_id.startswith("ai-"):
+                name = f"AI ({subject_id[3:]})"
+            elif subject_id.startswith("tool-"):
+                name = f"Tool ({subject_id[5:]})"
+
+            subject = Subject(
+                id=subject_id,
+                name=name,
+                metadata={"source": "auto-created"},
+            )
+            try:
+                storage.create_subject(subject)
+            except Exception:
+                # Subject may have been created by another request
+                pass
+
+
 @router.post("/api/ingest")
 async def ingest_conversation(request: IngestRequest) -> JSONResponse:
     """Ingest conversation data.
@@ -73,6 +110,9 @@ async def ingest_conversation(request: IngestRequest) -> JSONResponse:
     for msg in messages:
         if msg.subject_id is None:
             msg.subject_id = match_subject_id(msg)
+
+    # Ensure all referenced subjects exist before saving
+    ensure_subjects_exist(messages)
 
     storage.save_conversation(
         platform=request.platform,
