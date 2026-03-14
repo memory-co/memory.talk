@@ -108,7 +108,7 @@ def export_session(jsonl_path: Path, session_id: str, project_path: str) -> bool
 
     payload = {
         "platform": PLATFORM,
-        "session_id": session_id,
+        "conversation_id": session_id,
         "messages": messages,
         "metadata": {
             "title": f"Claude Code - {project_path}",
@@ -117,7 +117,7 @@ def export_session(jsonl_path: Path, session_id: str, project_path: str) -> bool
     }
 
     try:
-        response = requests.post(f"{API_URL}/api/ingest", json=payload, timeout=30)
+        response = requests.post(f"{API_URL}/api/v1/ingest", json=payload, timeout=30)
         if response.status_code == 200:
             return True
         else:
@@ -136,7 +136,7 @@ def export_all_sessions():
 
     # Check API availability
     try:
-        response = requests.get(f"{API_URL}/api/status", timeout=5)
+        response = requests.get(f"{API_URL}/api/v1/status", timeout=5)
         if response.status_code != 200:
             print(f"API error: {response.status_code}")
             sys.exit(1)

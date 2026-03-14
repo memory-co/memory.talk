@@ -49,14 +49,14 @@ class Storage:
         # Create conversations table
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS conversations (
-                session_id VARCHAR,
+                conversation_id VARCHAR,
                 platform VARCHAR,
                 title VARCHAR,
                 created_at TIMESTAMP,
                 updated_at TIMESTAMP,
                 participants JSON,
                 message_count INTEGER,
-                PRIMARY KEY (session_id, platform)
+                PRIMARY KEY (conversation_id, platform)
             )
         """)
 
@@ -65,11 +65,23 @@ class Storage:
             CREATE TABLE IF NOT EXISTS subjects (
                 id VARCHAR PRIMARY KEY,
                 name VARCHAR NOT NULL,
+                match VARCHAR,
+                priority INTEGER DEFAULT 0,
                 metadata JSON,
                 created_at TIMESTAMP,
                 updated_at TIMESTAMP
             )
         """)
+
+        # Migration: add match/priority columns if they don't exist
+        try:
+            self.conn.execute("ALTER TABLE subjects ADD COLUMN match VARCHAR")
+        except Exception:
+            pass  # Column already exists
+        try:
+            self.conn.execute("ALTER TABLE subjects ADD COLUMN priority INTEGER DEFAULT 0")
+        except Exception:
+            pass  # Column already exists
 
         # Create messages table
         self.conn.execute("""
@@ -77,7 +89,7 @@ class Storage:
                 uuid VARCHAR,
                 parent_uuid VARCHAR,
                 platform VARCHAR,
-                session_id VARCHAR,
+                conversation_id VARCHAR,
                 role VARCHAR,
                 subject_id VARCHAR REFERENCES subjects(id),
                 content VARCHAR,
@@ -90,18 +102,19 @@ class Storage:
 
         # Create indexes for better query performance
         self.conn.execute("""
-            CREATE INDEX IF NOT EXISTS idx_messages_session
-            ON messages(session_id, platform)
+            CREATE INDEX IF NOT EXISTS idx_messages_conversation
+            ON messages(conversation_id, platform)
         """)
         self.conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_messages_content
             ON messages(content)
         """)
 
+
     def save_conversation(
         self,
         platform: str,
-        session_id: str,
+        conversation_id: str,
         messages: list[Message],
         metadata: dict,
     ) -> None:
@@ -109,7 +122,7 @@ class Storage:
 
         Args:
             platform: Platform name (e.g., 'chatgpt')
-            session_id: Unique session identifier
+            conversation_id: Unique conversation identifier
             messages: List of messages
             metadata: Additional metadata
         """
@@ -118,15 +131,15 @@ class Storage:
         if isinstance(now, str):
             now = datetime.fromisoformat(now.replace("Z", "+00:00"))
 
-        title = metadata.get("title", f"Conversation {session_id}")
+        title = metadata.get("title", f"Conversation {conversation_id}")
         participants = metadata.get("participants", [])
         participants_json = json.dumps([p.model_dump() for p in participants])
 
         # Check if conversation exists
         existing = self.conn.execute("""
             SELECT message_count FROM conversations
-            WHERE session_id = ? AND platform = ?
-        """, [session_id, platform]).fetchone()
+            WHERE conversation_id = ? AND platform = ?
+        """, [conversation_id, platform]).fetchone()
 
         if existing:
             # Update existing conversation
@@ -134,14 +147,14 @@ class Storage:
             self.conn.execute("""
                 UPDATE conversations
                 SET title = ?, updated_at = ?, participants = ?, message_count = ?
-                WHERE session_id = ? AND platform = ?
-            """, [title, now, participants_json, existing_count + len(messages), session_id, platform])
+                WHERE conversation_id = ? AND platform = ?
+            """, [title, now, participants_json, existing_count + len(messages), conversation_id, platform])
         else:
             # Insert new conversation
             self.conn.execute("""
-                INSERT INTO conversations (session_id, platform, title, created_at, updated_at, participants, message_count)
+                INSERT INTO conversations (conversation_id, platform, title, created_at, updated_at, participants, message_count)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, [session_id, platform, title, now, now, participants_json, len(messages)])
+            """, [conversation_id, platform, title, now, now, participants_json, len(messages)])
 
         # Insert new messages (skip duplicates)
         for msg in messages:
@@ -150,13 +163,13 @@ class Storage:
             try:
                 self.conn.execute("""
                     INSERT OR IGNORE INTO messages
-                    (uuid, parent_uuid, platform, session_id, role, subject_id, content, timestamp, attachments, metadata)
+                    (uuid, parent_uuid, platform, conversation_id, role, subject_id, content, timestamp, attachments, metadata)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, [
                     msg.uuid,
                     msg.parent_uuid,
                     platform,
-                    session_id,
+                    conversation_id,
                     msg.role,
                     msg.subject_id,
                     msg.content,
@@ -212,14 +225,14 @@ class Storage:
         """
         if platform:
             rows = self.conn.execute("""
-                SELECT session_id, platform, title, created_at, updated_at, message_count
+                SELECT conversation_id, platform, title, created_at, updated_at, message_count
                 FROM conversations
                 WHERE platform = ?
                 ORDER BY updated_at DESC
             """, [platform]).fetchall()
         else:
             rows = self.conn.execute("""
-                SELECT session_id, platform, title, created_at, updated_at, message_count
+                SELECT conversation_id, platform, title, created_at, updated_at, message_count
                 FROM conversations
                 ORDER BY updated_at DESC
             """).fetchall()
@@ -227,7 +240,7 @@ class Storage:
         results = []
         for row in rows:
             results.append(ConversationSummary(
-                session_id=row[0],
+                conversation_id=row[0],
                 platform=row[1],
                 title=row[2],
                 created_at=row[3],
@@ -236,10 +249,48 @@ class Storage:
             ))
         return results
 
+    def get_conversation(
+        self,
+        platform: str,
+        conversation_id: str,
+    ) -> Optional[tuple[ConversationSummary, list[Message]]]:
+        """Get a conversation by platform and conversation ID.
+
+        Args:
+            platform: Platform name
+            conversation_id: Conversation ID
+
+        Returns:
+            Tuple of (ConversationSummary, messages) or None if not found
+        """
+        # Get conversation metadata
+        row = self.conn.execute("""
+            SELECT conversation_id, platform, title, created_at, updated_at, message_count
+            FROM conversations
+            WHERE conversation_id = ? AND platform = ?
+        """, [conversation_id, platform]).fetchone()
+
+        if not row:
+            return None
+
+        metadata = ConversationSummary(
+            conversation_id=row[0],
+            platform=row[1],
+            title=row[2],
+            created_at=row[3],
+            updated_at=row[4],
+            message_count=row[5],
+        )
+
+        # Get all messages for this conversation
+        _, messages = self.get_messages(platform=platform, conversation_id=conversation_id, limit=10000)
+
+        return (metadata, messages)
+
     def get_messages(
         self,
         platform: Optional[str] = None,
-        session_id: Optional[str] = None,
+        conversation_id: Optional[str] = None,
         role: Optional[str] = None,
         subject_id: Optional[str] = None,
         limit: int = 50,
@@ -249,7 +300,7 @@ class Storage:
 
         Args:
             platform: Optional platform filter
-            session_id: Optional session ID filter
+            conversation_id: Optional conversation ID filter
             role: Optional role filter (user/assistant)
             subject_id: Optional subject ID filter
             limit: Number of messages per page
@@ -264,9 +315,9 @@ class Storage:
         if platform is not None:
             conditions.append("platform = ?")
             params.append(platform)
-        if session_id is not None:
-            conditions.append("session_id = ?")
-            params.append(session_id)
+        if conversation_id is not None:
+            conditions.append("conversation_id = ?")
+            params.append(conversation_id)
         if role is not None:
             conditions.append("role = ?")
             params.append(role)
@@ -322,9 +373,9 @@ class Storage:
         """
         # Use LIKE for content search
         rows = self.conn.execute("""
-            SELECT m.content, m.timestamp, c.session_id, c.platform, c.title
+            SELECT m.content, m.timestamp, c.conversation_id, c.platform, c.title
             FROM messages m
-            JOIN conversations c ON m.session_id = c.session_id AND m.platform = c.platform
+            JOIN conversations c ON m.conversation_id = c.conversation_id AND m.platform = c.platform
             WHERE LOWER(m.content) LIKE LOWER(?)
             ORDER BY m.timestamp DESC
         """, [f"%{query}%"]).fetchall()
@@ -332,7 +383,7 @@ class Storage:
         results = []
         for row in rows:
             results.append(SearchResult(
-                session_id=row[2],
+                conversation_id=row[2],
                 platform=row[3],
                 title=row[4],
                 matched_message=row[0][:200],
@@ -363,7 +414,7 @@ class Storage:
             List of subjects
         """
         rows = self.conn.execute("""
-            SELECT id, name, metadata, created_at, updated_at
+            SELECT id, name, match, priority, metadata, created_at, updated_at
             FROM subjects
             ORDER BY name ASC
         """).fetchall()
@@ -373,9 +424,37 @@ class Storage:
             results.append(Subject(
                 id=row[0],
                 name=row[1],
-                metadata=json.loads(row[2]) if row[2] else {},
-                created_at=row[3],
-                updated_at=row[4],
+                match=row[2],
+                priority=row[3] if row[3] is not None else 0,
+                metadata=json.loads(row[4]) if row[4] else {},
+                created_at=row[5],
+                updated_at=row[6],
+            ))
+        return results
+
+    def list_subjects_with_match(self) -> list[Subject]:
+        """List subjects that have a match expression, ordered by priority.
+
+        Returns:
+            List of subjects with match expressions, ordered by priority DESC
+        """
+        rows = self.conn.execute("""
+            SELECT id, name, match, priority, metadata, created_at, updated_at
+            FROM subjects
+            WHERE match IS NOT NULL AND match != ''
+            ORDER BY priority DESC, name ASC
+        """).fetchall()
+
+        results = []
+        for row in rows:
+            results.append(Subject(
+                id=row[0],
+                name=row[1],
+                match=row[2],
+                priority=row[3] if row[3] is not None else 0,
+                metadata=json.loads(row[4]) if row[4] else {},
+                created_at=row[5],
+                updated_at=row[6],
             ))
         return results
 
@@ -389,7 +468,7 @@ class Storage:
             Subject or None if not found
         """
         row = self.conn.execute("""
-            SELECT id, name, metadata, created_at, updated_at
+            SELECT id, name, match, priority, metadata, created_at, updated_at
             FROM subjects
             WHERE id = ?
         """, [subject_id]).fetchone()
@@ -400,9 +479,11 @@ class Storage:
         return Subject(
             id=row[0],
             name=row[1],
-            metadata=json.loads(row[2]) if row[2] else {},
-            created_at=row[3],
-            updated_at=row[4],
+            match=row[2],
+            priority=row[3] if row[3] is not None else 0,
+            metadata=json.loads(row[4]) if row[4] else {},
+            created_at=row[5],
+            updated_at=row[6],
         )
 
     def create_subject(self, subject: Subject) -> Subject:
@@ -416,15 +497,19 @@ class Storage:
         """
         now = datetime.now()
         metadata_json = json.dumps(subject.metadata)
+        match = subject.match
+        priority = subject.priority
 
         self.conn.execute("""
-            INSERT INTO subjects (id, name, metadata, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, [subject.id, subject.name, metadata_json, now, now])
+            INSERT INTO subjects (id, name, match, priority, metadata, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, [subject.id, subject.name, match, priority, metadata_json, now, now])
 
         return Subject(
             id=subject.id,
             name=subject.name,
+            match=subject.match,
+            priority=subject.priority,
             metadata=subject.metadata,
             created_at=now,
             updated_at=now,
@@ -448,13 +533,15 @@ class Storage:
 
         self.conn.execute("""
             UPDATE subjects
-            SET name = ?, metadata = ?, updated_at = ?
+            SET name = ?, match = ?, priority = ?, metadata = ?, updated_at = ?
             WHERE id = ?
-        """, [subject.name, metadata_json, now, subject.id])
+        """, [subject.name, subject.match, subject.priority, metadata_json, now, subject.id])
 
         return Subject(
             id=subject.id,
             name=subject.name,
+            match=subject.match,
+            priority=subject.priority,
             metadata=subject.metadata,
             created_at=existing.created_at,
             updated_at=now,
@@ -484,3 +571,48 @@ class Storage:
         """, [subject_id])
 
         return True
+
+    def delete_conversations(
+        self,
+        platform: str,
+        conversation_id: Optional[str] = None,
+    ) -> int:
+        """Delete conversations.
+
+        Args:
+            platform: Platform name
+            conversation_id: Optional conversation ID. If provided, deletes only that conversation.
+                          If not provided, deletes all conversations for the platform.
+
+        Returns:
+            Number of conversations deleted
+        """
+        if conversation_id:
+            # Delete specific conversation
+            # First delete messages
+            self.conn.execute("""
+                DELETE FROM messages WHERE platform = ? AND conversation_id = ?
+            """, [platform, conversation_id])
+            # Then delete conversation
+            self.conn.execute("""
+                DELETE FROM conversations WHERE platform = ? AND conversation_id = ?
+            """, [platform, conversation_id])
+            return 1
+        else:
+            # Delete all conversations for platform
+            # First get count
+            count_row = self.conn.execute("""
+                SELECT COUNT(*) FROM conversations WHERE platform = ?
+            """, [platform]).fetchone()
+            count = count_row[0] if count_row else 0
+
+            # Then delete all messages
+            self.conn.execute("""
+                DELETE FROM messages WHERE platform = ?
+            """, [platform])
+            # Then delete all conversations
+            self.conn.execute("""
+                DELETE FROM conversations WHERE platform = ?
+            """, [platform])
+
+            return count

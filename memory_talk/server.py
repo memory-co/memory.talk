@@ -22,11 +22,15 @@ def _init_default_subjects():
         Subject(
             id="human-default",
             name="Human User",
+            match="role == 'user'",
+            priority=10,
             metadata={"description": "Default human user"},
         ),
         Subject(
             id="ai-assistant",
             name="AI Assistant",
+            match="role == 'assistant'",
+            priority=10,
             metadata={"description": "Default AI assistant"},
         ),
     ]
