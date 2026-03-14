@@ -4,7 +4,7 @@ from fastapi import APIRouter
 from memory_talk.models import ServerStatus
 from memory_talk.storage import Storage
 
-router = APIRouter()
+router = APIRouter(tags=["Status"])
 storage = Storage()
 
 # Global source manager (will be set by web app)
@@ -22,7 +22,7 @@ def set_source_manager(manager):
     source_manager = manager
 
 
-@router.get("/api/status")
+@router.get("/api/v1/status")
 async def get_server_status() -> dict:
     """Get overall server status.
 

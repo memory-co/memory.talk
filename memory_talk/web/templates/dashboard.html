@@ -379,12 +379,12 @@
 
                 conversations.forEach(conv => {
                     const item = document.createElement('div');
-                    item.className = `source-item ${selectedConversation && selectedConversation.platform === conv.platform && selectedConversation.session_id === conv.session_id ? 'selected' : ''}`;
-                    item.onclick = () => selectConversation(conv.platform, conv.session_id);
+                    item.className = `source-item ${selectedConversation && selectedConversation.platform === conv.platform && selectedConversation.conversation_id === conv.conversation_id ? 'selected' : ''}`;
+                    item.onclick = () => selectConversation(conv.platform, conv.conversation_id);
 
                     item.innerHTML = `
                         <div class="source-name">
-                            <span>${conv.title || conv.session_id}</span>
+                            <span>${conv.title || conv.conversation_id}</span>
                             <span class="source-status">${conv.platform}</span>
                         </div>
                         <div class="source-metrics">
@@ -406,7 +406,7 @@
         }
 
         async function selectConversation(platform, sessionId) {
-            selectedConversation = { platform, session_id: sessionId };
+            selectedConversation = { platform, conversation_id: sessionId };
             fetchConversations(); // Re-render to show selection
 
             try {
@@ -440,8 +440,8 @@
                 panel.innerHTML = `
                     <div class="detail-header">
                         <button onclick="showEmptyState()" style="background: transparent; border: 1px solid rgba(255,255,255,0.2); color: var(--text-secondary); padding: 8px 16px; border-radius: 6px; cursor: pointer; margin-bottom: 16px;">← Back</button>
-                        <div class="detail-title">${escapeHtml(metadata.title || metadata.session_id)}</div>
-                        <div class="detail-subtitle">Platform: ${metadata.platform} | Session: ${metadata.session_id}</div>
+                        <div class="detail-title">${escapeHtml(metadata.title || metadata.conversation_id)}</div>
+                        <div class="detail-subtitle">Platform: ${metadata.platform} | Session: ${metadata.conversation_id}</div>
                     </div>
 
                     <div class="metrics-grid">
@@ -503,7 +503,7 @@
             fetchStatus();
             fetchConversations();
             if (selectedConversation) {
-                selectConversation(selectedConversation.platform, selectedConversation.session_id);
+                selectConversation(selectedConversation.platform, selectedConversation.conversation_id);
             }
         }, 5000);
     </script>

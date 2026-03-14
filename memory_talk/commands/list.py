@@ -19,7 +19,7 @@ def list_cmd(platform: str, server: str):
         memory-talk list
         memory-talk list chatgpt
     """
-    url = f"{server}/api/conversations"
+    url = f"{server}/api/v1/conversations"
     if platform:
         url += f"?platform={platform}"
 
@@ -33,17 +33,17 @@ def list_cmd(platform: str, server: str):
             return
 
         # Format output
-        click.echo(f"{'Platform':<15} {'Session ID':<20} {'Title':<30} {'Messages':<10} {'Updated':<20}")
+        click.echo(f"{'Platform':<15} {'Conversation ID':<20} {'Title':<30} {'Messages':<10} {'Updated':<20}")
         click.echo("-" * 95)
 
         for conv in conversations:
             title = conv.get("title", "")[:28]
-            session_id = conv.get("session_id", "")[:18]
+            conversation_id = conv.get("conversation_id", "")[:18]
             platform_name = conv.get("platform", "")[:13]
             msg_count = str(conv.get("message_count", 0))[:8]
             updated = conv.get("updated_at", "")[:19]
 
-            click.echo(f"{platform_name:<15} {session_id:<20} {title:<30} {msg_count:<10} {updated:<20}")
+            click.echo(f"{platform_name:<15} {conversation_id:<20} {title:<30} {msg_count:<10} {updated:<20}")
 
     except requests.exceptions.ConnectionError:
         click.echo(f"Error: Cannot connect to server at {server}", err=True)

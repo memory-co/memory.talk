@@ -3,11 +3,11 @@ from fastapi import APIRouter
 
 from memory_talk.storage import Storage
 
-router = APIRouter()
+router = APIRouter(tags=["Search"])
 storage = Storage()
 
 
-@router.get("/api/search")
+@router.get("/api/v1/search")
 async def search_conversations(q: str) -> list[dict]:
     """Search conversations.
 

@@ -13,7 +13,7 @@ class Participant(BaseModel):
 
 class ConversationMetadata(BaseModel):
     """Conversation metadata."""
-    session_id: str
+    conversation_id: str
     platform: str
     title: str
     created_at: datetime
@@ -24,7 +24,7 @@ class ConversationMetadata(BaseModel):
 
 class ConversationSummary(BaseModel):
     """Summary of a conversation for listing."""
-    session_id: str
+    conversation_id: str
     platform: str
     title: str
     created_at: datetime

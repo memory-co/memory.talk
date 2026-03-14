@@ -3,7 +3,7 @@ from fastapi import APIRouter
 
 from memory_talk.storage import Storage
 
-router = APIRouter()
+router = APIRouter(tags=["Sources"])
 storage = Storage()
 
 # Global source manager (will be set by web app)
@@ -21,7 +21,7 @@ def set_source_manager(manager):
     source_manager = manager
 
 
-@router.get("/api/sources")
+@router.get("/api/v1/sources")
 async def list_sources() -> list[dict]:
     """List all sources and their status.
 

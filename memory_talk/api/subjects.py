@@ -4,11 +4,11 @@ from fastapi import APIRouter, HTTPException
 from memory_talk.models import Subject
 from memory_talk.storage import Storage
 
-router = APIRouter()
+router = APIRouter(tags=["Subjects"])
 storage = Storage()
 
 
-@router.get("/api/subjects")
+@router.get("/api/v1/subjects")
 async def list_subjects() -> list[dict]:
     """List all subjects.
 
@@ -19,7 +19,7 @@ async def list_subjects() -> list[dict]:
     return [subject.model_dump(mode="json") for subject in subjects]
 
 
-@router.get("/api/subjects/{subject_id}")
+@router.get("/api/v1/subjects/{subject_id}")
 async def get_subject(subject_id: str) -> dict:
     """Get a subject by ID.
 
@@ -35,7 +35,7 @@ async def get_subject(subject_id: str) -> dict:
     return subject.model_dump(mode="json")
 
 
-@router.post("/api/subjects")
+@router.post("/api/v1/subjects")
 async def create_subject(subject: Subject) -> dict:
     """Create a new subject.
 
@@ -53,7 +53,7 @@ async def create_subject(subject: Subject) -> dict:
     return created.model_dump(mode="json")
 
 
-@router.put("/api/subjects/{subject_id}")
+@router.put("/api/v1/subjects/{subject_id}")
 async def update_subject(subject_id: str, subject: Subject) -> dict:
     """Update a subject.
 
@@ -73,7 +73,7 @@ async def update_subject(subject_id: str, subject: Subject) -> dict:
     return updated.model_dump(mode="json")
 
 
-@router.delete("/api/subjects/{subject_id}")
+@router.delete("/api/v1/subjects/{subject_id}")
 async def delete_subject(subject_id: str) -> dict:
     """Delete a subject.
 

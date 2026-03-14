@@ -1,4 +1,6 @@
 """Integration tests for Claude Code data import."""
+import importlib.util
+import json
 import os
 import signal
 import subprocess
@@ -10,6 +12,20 @@ from pathlib import Path
 
 import pytest
 import requests
+
+
+# Load connector's parse_messages function dynamically
+def _load_parse_messages():
+    """Load parse_messages from connector script."""
+    project_root = Path(__file__).parent.parent.parent
+    script_path = project_root / "connectors" / "claude-code" / "export_sessions.py"
+    spec = importlib.util.spec_from_file_location("export_sessions", script_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.parse_messages
+
+
+parse_messages = _load_parse_messages()
 
 
 # Patch Storage to support environment variable for base_path
@@ -91,74 +107,92 @@ class TestClaudeCodeImport:
         return requests.post(f"{self.base_url}{path}", json=json, timeout=10)
 
     @pytest.fixture
-    def claude_code_data(self):
-        """Claude Code format test data matching export_sessions.py output."""
+    def claude_code_data(self, tmp_path):
+        """Claude Code format test data using connector's parse_messages logic."""
+        # Create a temporary JSONL file with Claude Code session data
+        session_file = tmp_path / "test-project-2025-01-15.jsonl"
+
         base_time = datetime(2025, 1, 15, 10, 0, 0)
+        jsonl_data = [
+            {
+                "uuid": "msg-001",
+                "parentUuid": None,
+                "type": "user",
+                "message": {"content": "Hello, help me with my Python project"},
+                "timestamp": base_time.isoformat(),
+            },
+            {
+                "uuid": "msg-002",
+                "parentUuid": "msg-001",
+                "type": "assistant",
+                "message": {"content": [
+                    {"type": "text", "text": "Of course! I'd be happy to help with your Python project. What would you like to work on?"}
+                ]},
+                "timestamp": base_time.isoformat(),
+            },
+            {
+                "uuid": "msg-003",
+                "parentUuid": "msg-002",
+                "type": "user",
+                "message": {"content": "Can you create a simple web server?"},
+                "timestamp": base_time.isoformat(),
+            },
+            {
+                "uuid": "msg-004",
+                "parentUuid": "msg-003",
+                "type": "assistant",
+                "message": {"content": [
+                    {"type": "text", "text": "I'll create a simple Flask web server for you."}
+                ], "model": "claude-sonnet-4-20250514"},
+                "timestamp": base_time.isoformat(),
+            },
+            {
+                "uuid": "msg-005",
+                "parentUuid": "msg-004",
+                "type": "assistant",
+                "message": {"content": [
+                    {"type": "tool_use", "name": "Read", "input": {}}
+                ]},
+                "timestamp": base_time.isoformat(),
+            },
+            {
+                "uuid": "msg-006",
+                "parentUuid": "msg-005",
+                "type": "assistant",
+                "message": {"content": [
+                    {"type": "tool_use", "name": "Write", "input": {}}
+                ]},
+                "timestamp": base_time.isoformat(),
+            },
+            {
+                "uuid": "msg-007",
+                "parentUuid": "msg-006",
+                "type": "assistant",
+                "message": {"content": [
+                    {"type": "text", "text": "I've created a simple Flask web server in app.py."}
+                ], "model": "claude-sonnet-4-20250514"},
+                "timestamp": base_time.isoformat(),
+            },
+            {
+                "uuid": "msg-008",
+                "parentUuid": "msg-007",
+                "type": "user",
+                "message": {"content": "Thanks! Can you add a /goodbye route?"},
+                "timestamp": base_time.isoformat(),
+            },
+        ]
+
+        with open(session_file, "w") as f:
+            for item in jsonl_data:
+                f.write(json.dumps(item) + "\n")
+
+        # Use connector's parse_messages to generate test data
+        messages = parse_messages(session_file)
+
         return {
             "platform": "claude-code",
-            "session_id": "test-project-2025-01-15",
-            "messages": [
-                {
-                    "uuid": "msg-001",
-                    "parent_uuid": None,
-                    "role": "user",
-                    "content": "Hello, help me with my Python project",
-                    "timestamp": (base_time).isoformat(),
-                },
-                {
-                    "uuid": "msg-002",
-                    "parent_uuid": "msg-001",
-                    "role": "assistant",
-                    "content": "Of course! I'd be happy to help with your Python project. What would you like to work on?",
-                    "timestamp": (base_time).isoformat(),
-                },
-                {
-                    "uuid": "msg-003",
-                    "parent_uuid": "msg-002",
-                    "role": "user",
-                    "content": "Can you create a simple web server?",
-                    "timestamp": (base_time).isoformat(),
-                },
-                {
-                    "uuid": "msg-004",
-                    "parent_uuid": "msg-003",
-                    "role": "assistant",
-                    "content": "I'll create a simple Flask web server for you.",
-                    "metadata": {"model": "claude-sonnet-4-20250514"},
-                    "timestamp": (base_time).isoformat(),
-                },
-                {
-                    "uuid": "msg-005",
-                    "parent_uuid": "msg-004",
-                    "role": "assistant",
-                    "content": "[tool_use: Read]",
-                    "metadata": {"tool_name": "Read"},
-                    "timestamp": (base_time).isoformat(),
-                },
-                {
-                    "uuid": "msg-006",
-                    "parent_uuid": "msg-005",
-                    "role": "assistant",
-                    "content": "[tool_use: Write]",
-                    "metadata": {"tool_name": "Write"},
-                    "timestamp": (base_time).isoformat(),
-                },
-                {
-                    "uuid": "msg-007",
-                    "parent_uuid": "msg-006",
-                    "role": "assistant",
-                    "content": "I've created a simple Flask web server in app.py. Here's what it does:\n\n- Routes for / and /hello\n- Basic request handling",
-                    "metadata": {"model": "claude-sonnet-4-20250514"},
-                    "timestamp": (base_time).isoformat(),
-                },
-                {
-                    "uuid": "msg-008",
-                    "parent_uuid": "msg-007",
-                    "role": "user",
-                    "content": "Thanks! Can you add a /goodbye route?",
-                    "timestamp": (base_time).isoformat(),
-                },
-            ],
+            "conversation_id": "test-project-2025-01-15",
+            "messages": messages,
             "metadata": {
                 "title": "Claude Code - /home/user/my-python-project",
                 "project_path": "/home/user/my-python-project",
@@ -167,44 +201,44 @@ class TestClaudeCodeImport:
 
     def test_import_claude_code_conversation(self, claude_code_data):
         """Test importing a Claude Code conversation."""
-        response = self._post("/api/ingest", claude_code_data)
+        response = self._post("/api/v1/ingest", claude_code_data)
 
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ok"
-        assert data["session_id"] == "test-project-2025-01-15"
+        assert data["conversation_id"] == "test-project-2025-01-15"
 
     def test_list_claude_code_conversations(self, claude_code_data):
         """Test listing Claude Code conversations."""
         # Import first
-        self._post("/api/ingest", claude_code_data)
+        self._post("/api/v1/ingest", claude_code_data)
 
         # List all conversations
-        response = self._get("/api/conversations")
+        response = self._get("/api/v1/conversations")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
-        assert data[0]["session_id"] == "test-project-2025-01-15"
+        assert data[0]["conversation_id"] == "test-project-2025-01-15"
         assert data[0]["platform"] == "claude-code"
 
         # Filter by platform
-        response = self._get("/api/conversations?platform=claude-code")
+        response = self._get("/api/v1/conversations?platform=claude-code")
         assert response.status_code == 200
         data = response.json()
         assert len(data) == 1
 
         # Filter by non-existent platform
-        response = self._get("/api/conversations?platform=nonexistent")
+        response = self._get("/api/v1/conversations?platform=nonexistent")
         assert response.status_code == 200
         assert response.json() == []
 
     def test_get_conversation_details(self, claude_code_data):
-        """Test getting conversation details via /api/messages."""
+        """Test getting conversation details via /api/v1/messages."""
         # Import first
-        self._post("/api/ingest", claude_code_data)
+        self._post("/api/v1/ingest", claude_code_data)
 
-        # Get messages with platform and session_id filters
-        response = self._get("/api/messages?platform=claude-code&session_id=test-project-2025-01-15")
+        # Get messages with platform and conversation_id filters
+        response = self._get("/api/v1/messages?platform=claude-code&conversation_id=test-project-2025-01-15")
         assert response.status_code == 200
         data = response.json()
 
@@ -223,52 +257,32 @@ class TestClaudeCodeImport:
         assert messages[0]["role"] == "user"
 
     def test_subject_matching(self, claude_code_data):
-        """Test that subjects are correctly matched for messages."""
+        """Test that subject_ids are correctly set for messages based on role."""
         # Import first
-        self._post("/api/ingest", claude_code_data)
+        self._post("/api/v1/ingest", claude_code_data)
 
         # Get messages
-        response = self._get("/api/messages?platform=claude-code&session_id=test-project-2025-01-15")
+        response = self._get("/api/v1/messages?platform=claude-code&conversation_id=test-project-2025-01-15")
         assert response.status_code == 200
         data = response.json()
         messages = data["messages"]
 
-        # Verify subject_id matching
+        # Verify subject_id based on role (set by connector)
         # user messages should have subject_id = "human-default"
         user_msgs = [m for m in messages if m["role"] == "user"]
         assert all(m["subject_id"] == "human-default" for m in user_msgs)
 
-        # assistant with model should have subject_id = "ai-{model}"
-        assistant_with_model = [m for m in messages if m.get("metadata", {}).get("model")]
-        for msg in assistant_with_model:
-            expected = f"ai-{msg['metadata']['model'].replace(' ', '-').replace('.', '-').lower()}"
-            assert msg["subject_id"] == expected
-
-        # assistant with tool_name should have subject_id = "tool-{tool_name}"
-        assistant_with_tool = [
-            m for m in messages
-            if m["role"] == "assistant" and m.get("metadata", {}).get("tool_name")
-        ]
-        for msg in assistant_with_tool:
-            expected = f"tool-{msg['metadata']['tool_name']}"
-            assert msg["subject_id"] == expected
-
-        # assistant without model or tool should have default subject_id
-        assistant_default = [
-            m for m in messages
-            if m["role"] == "assistant"
-            and not m.get("metadata", {}).get("model")
-            and not m.get("metadata", {}).get("tool_name")
-        ]
-        assert all(m["subject_id"] == "ai-assistant" for m in assistant_default)
+        # assistant messages should have subject_id = "ai-assistant"
+        assistant_msgs = [m for m in messages if m["role"] == "assistant"]
+        assert all(m["subject_id"] == "ai-assistant" for m in assistant_msgs)
 
     def test_subject_creation(self, claude_code_data):
-        """Test that subjects are automatically created."""
+        """Test that default subjects are created."""
         # Import first
-        self._post("/api/ingest", claude_code_data)
+        self._post("/api/v1/ingest", claude_code_data)
 
         # Get subjects list
-        response = self._get("/api/subjects")
+        response = self._get("/api/v1/subjects")
         assert response.status_code == 200
         subjects = response.json()
 
@@ -276,11 +290,3 @@ class TestClaudeCodeImport:
         subject_ids = [s["id"] for s in subjects]
         assert "human-default" in subject_ids
         assert "ai-assistant" in subject_ids
-
-        # Verify AI model subjects are created
-        model_subjects = [s for s in subjects if s["id"].startswith("ai-")]
-        assert len(model_subjects) >= 1  # At least one AI model subject
-
-        # Verify tool subjects are created
-        tool_subjects = [s for s in subjects if s["id"].startswith("tool-")]
-        assert len(tool_subjects) >= 2  # At least Read and Write tools

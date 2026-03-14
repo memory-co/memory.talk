@@ -23,7 +23,7 @@ class TestStorage:
         """Test saving a conversation."""
         storage.save_conversation(
             platform="test-platform",
-            session_id="session-001",
+            conversation_id="session-001",
             messages=sample_messages,
             metadata={"title": "Test Chat"},
         )
@@ -39,7 +39,7 @@ class TestStorage:
         """Test that metadata is correctly saved."""
         storage.save_conversation(
             platform="test-platform",
-            session_id="session-001",
+            conversation_id="session-001",
             messages=sample_messages,
             metadata={"title": "My Chat"},
         )
@@ -50,7 +50,7 @@ class TestStorage:
 
         assert metadata.title == "My Chat"
         assert metadata.platform == "test-platform"
-        assert metadata.session_id == "session-001"
+        assert metadata.conversation_id == "session-001"
         assert metadata.message_count == 2
 
     def test_save_conversation_deduplication(self, storage):
@@ -67,13 +67,13 @@ class TestStorage:
         # Save twice
         storage.save_conversation(
             platform="test-platform",
-            session_id="session-001",
+            conversation_id="session-001",
             messages=messages,
             metadata={},
         )
         storage.save_conversation(
             platform="test-platform",
-            session_id="session-001",
+            conversation_id="session-001",
             messages=messages,
             metadata={},
         )
@@ -93,13 +93,13 @@ class TestStorage:
         """Test listing conversations."""
         storage.save_conversation(
             platform="chatgpt",
-            session_id="session-1",
+            conversation_id="session-1",
             messages=sample_messages,
             metadata={"title": "Chat 1"},
         )
         storage.save_conversation(
             platform="claude",
-            session_id="session-2",
+            conversation_id="session-2",
             messages=sample_messages,
             metadata={"title": "Chat 2"},
         )
@@ -115,13 +115,13 @@ class TestStorage:
         """Test filtering conversations by platform."""
         storage.save_conversation(
             platform="chatgpt",
-            session_id="session-1",
+            conversation_id="session-1",
             messages=sample_messages,
             metadata={},
         )
         storage.save_conversation(
             platform="claude",
-            session_id="session-2",
+            conversation_id="session-2",
             messages=sample_messages,
             metadata={},
         )
@@ -135,7 +135,7 @@ class TestStorage:
         """Test retrieving a conversation."""
         storage.save_conversation(
             platform="test-platform",
-            session_id="session-001",
+            conversation_id="session-001",
             messages=sample_messages,
             metadata={"title": "Test"},
         )
@@ -169,7 +169,7 @@ class TestStorage:
         """Test searching conversations."""
         storage.save_conversation(
             platform="test-platform",
-            session_id="session-001",
+            conversation_id="session-001",
             messages=sample_messages,
             metadata={},
         )
@@ -184,7 +184,7 @@ class TestStorage:
         """Test getting storage statistics."""
         storage.save_conversation(
             platform="test-platform",
-            session_id="session-001",
+            conversation_id="session-001",
             messages=sample_messages,
             metadata={},
         )

@@ -16,15 +16,15 @@
 
 > 关联测试：`TestClaudeCodeImport.test_import_claude_code_conversation`
 
-小李打开终端，运行导出命令。工具自动扫描他的项目目录，找到今天的会话记录，向 `POST /api/ingest` 发送数据。请求里带着 `platform: "claude-code"` 标明来源、`session_id` 标识这次会话、`messages` 数组包含所有消息，以及 `metadata` 里的项目路径和标题。
+小李打开终端，运行导出命令。工具自动扫描他的项目目录，找到今天的会话记录，向 `POST /api/v1/ingest` 发送数据。请求里带着 `platform: "claude-code"` 标明来源、`conversation_id` 标识这次会话、`messages` 数组包含所有消息，以及 `metadata` 里的项目路径和标题。
 
-终端显示导入成功，返回了 `session_id`。一条命令，几秒钟，今天的工作痕迹就存好了。
+终端显示导入成功，返回了 `conversation_id`。一条命令，几秒钟，今天的工作痕迹就存好了。
 
 ### 场景 2：在列表里找到它
 
 > 关联测试：`TestClaudeCodeImport.test_list_claude_code_conversations`
 
-小李打开 memory-talk 的界面，想确认刚才的导入确实成功了。他请求 `GET /api/conversations`，对话列表里出现了刚刚那条记录，每条记录带着 `session_id` 和 `platform` 字段。他加上 `?platform=claude-code` 筛选，列表只剩来自 Claude Code 的对话。他又试着筛一个不存在的来源，结果如预期是空列表，没有报错。
+小李打开 memory-talk 的界面，想确认刚才的导入确实成功了。他请求 `GET /api/v1/conversations`，对话列表里出现了刚刚那条记录，每条记录带着 `conversation_id` 和 `platform` 字段。他加上 `?platform=claude-code` 筛选，列表只剩来自 Claude Code 的对话。他又试着筛一个不存在的来源，结果如预期是空列表，没有报错。
 
 能筛选就好——以后对话多了，不同来源混在一起也不怕。
 
@@ -32,7 +32,7 @@
 
 > 关联测试：`TestClaudeCodeImport.test_get_conversation_details`
 
-小李从列表里点开了那段对话，请求 `GET /api/messages?platform=claude-code&session_id=test-project-2025-01-15`。返回结果包含 `total`、`limit`、`offset` 和 `messages` 四个字段，支持分页。`messages` 里完整呈现了 8 条消息——他的三次提问、Claude 的三次回复、中间两次工具调用（读文件、写文件），一条不少。每条消息都有 `role` 和 `content`，最顶上就是他说的第一句话。
+小李从列表里点开了那段对话，请求 `GET /api/v1/messages?platform=claude-code&conversation_id=test-project-2025-01-15`。返回结果包含 `total`、`limit`、`offset` 和 `messages` 四个字段，支持分页。`messages` 里完整呈现了 8 条消息——他的三次提问、Claude 的三次回复、中间两次工具调用（读文件、写文件），一条不少。每条消息都有 `role` 和 `content`，最顶上就是他说的第一句话。
 
 就像翻聊天记录一样，当时的上下文全都在。
 
@@ -40,7 +40,7 @@
 
 > 关联测试：`TestClaudeCodeImport.test_subject_matching`
 
-小李通过 `GET /api/messages?platform=claude-code&session_id=test-project-2025-01-15` 查看消息时，注意到每条消息上都多了一个 `subject_id` 字段，标识这条消息的「发言者」是谁。他还可以用 `role`、`subject_id` 等参数做多维度筛选。规则很直觉：
+小李通过 `GET /api/v1/messages?platform=claude-code&conversation_id=test-project-2025-01-15` 查看消息时，注意到每条消息上都多了一个 `subject_id` 字段，标识这条消息的「发言者」是谁。他还可以用 `role`、`subject_id` 等参数做多维度筛选。规则很直觉：
 
 - 他自己发的消息（`role: "user"`），`subject_id` 统一是 `human-default`
 - Claude 的回复如果带了 `metadata.model`，`subject_id` 就是 `ai-{model}`——他能看出用的是哪个版本的 Claude
@@ -53,7 +53,7 @@
 
 > 关联测试：`TestClaudeCodeImport.test_subject_creation`
 
-小李好奇地请求了 `GET /api/subjects`，发现系统已经自动建好了所有参与者。返回的列表里每个 subject 都有 `id` 字段：`human-default` 代表他自己，`ai-assistant` 是通用 AI 角色，还有以 `ai-` 开头的具体模型记录，以及以 `tool-` 开头的工具参与者——Read 和 Write 各占一行。
+小李好奇地请求了 `GET /api/v1/subjects`，发现系统已经自动建好了所有参与者。返回的列表里每个 subject 都有 `id` 字段：`human-default` 代表他自己，`ai-assistant` 是通用 AI 角色，还有以 `ai-` 开头的具体模型记录，以及以 `tool-` 开头的工具参与者——Read 和 Write 各占一行。
 
 这些都不需要他手动配置。他只是导入了一段对话，系统就自动把对话中出现的所有参与者识别出来，各自建好了档案。以后按角色筛选消息也方便。
 
