@@ -1,195 +1,216 @@
-"""Unit tests for models module."""
+"""Unit tests for data models."""
+
 from datetime import datetime
 
-import pytest
-from pydantic import ValidationError
-
 from memory_talk.models import (
-    Attachment,
-    ConversationMetadata,
-    ConversationSummary,
-    IngestRequest,
-    Message,
-    Participant,
-    SearchResult,
-    SourceStatus,
-    ServerStatus,
+    CardLink,
+    CodeBlock,
+    RawRef,
+    Round,
+    Session,
+    TalkCard,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
 )
 
 
-class TestMessage:
-    """Test cases for Message model."""
+class TestContentBlock:
+    def test_text_block(self):
+        b = TextBlock(text="hello")
+        assert b.type == "text"
+        assert b.text == "hello"
 
-    def test_message_creation(self):
-        """Test creating a Message."""
-        msg = Message(
-            uuid="test-uuid",
-            role="user",
-            content="Hello",
-            timestamp=datetime.now(),
+    def test_code_block(self):
+        b = CodeBlock(language="python", text="print(1)")
+        assert b.type == "code"
+        assert b.language == "python"
+
+    def test_tool_use_block(self):
+        b = ToolUseBlock(name="bash", input="ls")
+        assert b.type == "tool_use"
+
+    def test_tool_result_block(self):
+        b = ToolResultBlock(output="file.txt")
+        assert b.type == "tool_result"
+
+
+class TestRound:
+    def test_round_creation(self):
+        r = Round(
+            round_id="r001",
+            speaker="alice",
+            role="human",
+            content=[TextBlock(text="hi")],
         )
+        assert r.round_id == "r001"
+        assert r.speaker == "alice"
+        assert r.role == "human"
+        assert len(r.content) == 1
 
-        assert msg.uuid == "test-uuid"
-        assert msg.role == "user"
-        assert msg.content == "Hello"
-        assert msg.parent_uuid is None
-
-    def test_message_with_parent(self):
-        """Test Message with parent_uuid."""
-        msg = Message(
-            uuid="child-uuid",
-            parent_uuid="parent-uuid",
-            role="user",
-            content="Reply",
-            timestamp=datetime.now(),
-        )
-
-        assert msg.parent_uuid == "parent-uuid"
-
-    def test_message_with_attachments(self):
-        """Test Message with attachments."""
-        msg = Message(
-            uuid="test-uuid",
-            role="user",
-            content="File attached",
-            timestamp=datetime.now(),
-            attachments=[
-                Attachment(
-                    hash="abc123",
-                    name="test.txt",
-                    size=1024,
-                    mime="text/plain",
-                )
+    def test_round_with_mixed_content(self):
+        r = Round(
+            round_id="r002",
+            timestamp=datetime(2026, 4, 10, 14, 30),
+            speaker="claude",
+            role="assistant",
+            content=[
+                TextBlock(text="Let me check"),
+                ToolUseBlock(name="bash", input="ls"),
+                ToolResultBlock(output="file.txt"),
+                TextBlock(text="Found it"),
             ],
         )
+        assert len(r.content) == 4
+        assert r.content[0].type == "text"
+        assert r.content[1].type == "tool_use"
 
-        assert len(msg.attachments) == 1
-        assert msg.attachments[0].name == "test.txt"
-
-
-class TestParticipant:
-    """Test cases for Participant model."""
-
-    def test_participant_creation(self):
-        """Test creating a Participant."""
-        participant = Participant(
-            name="John",
-            role="user",
+    def test_round_serialization(self):
+        r = Round(
+            round_id="r001",
+            speaker="alice",
+            role="human",
+            content=[TextBlock(text="hi")],
         )
+        data = r.model_dump()
+        r2 = Round.model_validate(data)
+        assert r2.round_id == r.round_id
+        assert r2.content[0].text == "hi"
 
-        assert participant.name == "John"
-        assert participant.role == "user"
-        assert participant.model is None
 
-    def test_participant_with_model(self):
-        """Test Participant with model."""
-        participant = Participant(
-            name="AI",
-            role="assistant",
-            model="gpt-4",
+class TestSession:
+    def test_session_creation(self):
+        s = Session(
+            session_id="sess-001",
+            source="claude-code",
         )
+        assert s.session_id == "sess-001"
+        assert s.source == "claude-code"
+        assert s.rounds == []
+        assert s.metadata == {}
 
-        assert participant.model == "gpt-4"
-
-
-class TestConversationMetadata:
-    """Test cases for ConversationMetadata model."""
-
-    def test_metadata_creation(self):
-        """Test creating ConversationMetadata."""
-        meta = ConversationMetadata(
-            session_id="session-001",
-            platform="chatgpt",
-            title="Test Chat",
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-            participants=[],
-            message_count=10,
+    def test_session_with_rounds(self):
+        s = Session(
+            session_id="sess-001",
+            source="claude-code",
+            created_at=datetime(2026, 4, 10),
+            metadata={"project": "memory-talk", "model": "claude-sonnet-4"},
+            rounds=[
+                Round(
+                    round_id="r001",
+                    speaker="user",
+                    role="human",
+                    content=[TextBlock(text="Hello")],
+                ),
+                Round(
+                    round_id="r002",
+                    speaker="claude",
+                    role="assistant",
+                    content=[TextBlock(text="Hi there")],
+                ),
+            ],
         )
+        assert len(s.rounds) == 2
+        assert s.metadata["model"] == "claude-sonnet-4"
 
-        assert meta.session_id == "session-001"
-        assert meta.platform == "chatgpt"
-        assert meta.message_count == 10
-
-
-class TestConversationSummary:
-    """Test cases for ConversationSummary model."""
-
-    def test_summary_creation(self):
-        """Test creating ConversationSummary."""
-        summary = ConversationSummary(
-            session_id="session-001",
-            platform="chatgpt",
-            title="Test",
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-            message_count=5,
+    def test_session_serialization_roundtrip(self):
+        s = Session(
+            session_id="sess-001",
+            source="codex",
+            rounds=[
+                Round(
+                    round_id="r001",
+                    speaker="user",
+                    role="human",
+                    content=[TextBlock(text="test")],
+                ),
+            ],
         )
+        data = s.model_dump(mode="json")
+        s2 = Session.model_validate(data)
+        assert s2.session_id == s.session_id
+        assert len(s2.rounds) == 1
 
-        assert summary.message_count == 5
 
-
-class TestIngestRequest:
-    """Test cases for IngestRequest model."""
-
-    def test_ingest_request_creation(self):
-        """Test creating IngestRequest."""
-        request = IngestRequest(
-            platform="chatgpt",
-            session_id="session-001",
-            messages=[],
-            metadata={"title": "Test"},
+class TestTalkCard:
+    def test_card_creation(self):
+        card = TalkCard(
+            card_id="card-001",
+            cognition_summary="Decided to use LanceDB for vector storage",
+            compressed_rounds="User asked about vector DBs. Discussed options...",
+            raw_ref=RawRef(session_id="sess-001", round_start=0, round_end=5),
         )
+        assert card.card_id == "card-001"
+        assert card.links == []
+        assert card.raw_ref.session_id == "sess-001"
 
-        assert request.platform == "chatgpt"
-        assert request.metadata["title"] == "Test"
-
-
-class TestSearchResult:
-    """Test cases for SearchResult model."""
-
-    def test_search_result_creation(self):
-        """Test creating SearchResult."""
-        result = SearchResult(
-            session_id="session-001",
-            platform="chatgpt",
-            title="Test Chat",
-            matched_message="Found text",
-            timestamp=datetime.now(),
+    def test_card_with_links(self):
+        card = TalkCard(
+            card_id="card-002",
+            cognition_summary="Performance benchmark results for LanceDB",
+            compressed_rounds="Ran benchmarks...",
+            raw_ref=RawRef(session_id="sess-001", round_start=6, round_end=10),
+            links=[
+                CardLink(
+                    source_card_id="card-002",
+                    target_card_id="card-001",
+                    link_type="causal",
+                    weight=0.9,
+                ),
+                CardLink(
+                    source_card_id="card-002",
+                    target_card_id="card-003",
+                    link_type="temporal",
+                ),
+            ],
         )
+        assert len(card.links) == 2
+        assert card.links[0].link_type == "causal"
+        assert card.links[0].weight == 0.9
+        assert card.links[1].weight == 1.0  # default
 
-        assert result.matched_message == "Found text"
-
-
-class TestSourceStatus:
-    """Test cases for SourceStatus model."""
-
-    def test_source_status_creation(self):
-        """Test creating SourceStatus."""
-        status = SourceStatus(
-            name="test-source",
-            status="running",
-            messages_synced=100,
+    def test_card_serialization_roundtrip(self):
+        card = TalkCard(
+            card_id="card-001",
+            cognition_summary="Test summary",
+            compressed_rounds="Test rounds",
+            raw_ref=RawRef(session_id="sess-001", round_start=0, round_end=3),
+            links=[
+                CardLink(
+                    source_card_id="card-001",
+                    target_card_id="card-002",
+                    link_type="topical",
+                ),
+            ],
         )
+        data = card.model_dump(mode="json")
+        card2 = TalkCard.model_validate(data)
+        assert card2.card_id == card.card_id
+        assert card2.links[0].link_type == "topical"
 
-        assert status.name == "test-source"
-        assert status.status == "running"
-        assert status.messages_synced == 100
+
+class TestRawRef:
+    def test_raw_ref(self):
+        ref = RawRef(session_id="sess-001", round_start=0, round_end=5)
+        assert ref.session_id == "sess-001"
+        assert ref.round_start == 0
+        assert ref.round_end == 5
 
 
-class TestServerStatus:
-    """Test cases for ServerStatus model."""
-
-    def test_server_status_creation(self):
-        """Test creating ServerStatus."""
-        status = ServerStatus(
-            version="0.1.0",
-            sources=[],
-            total_conversations=10,
-            total_messages=100,
-            uptime="1 hour",
+class TestCardLink:
+    def test_card_link(self):
+        link = CardLink(
+            source_card_id="a",
+            target_card_id="b",
+            link_type="temporal",
         )
+        assert link.weight == 1.0
 
-        assert status.version == "0.1.0"
-        assert status.total_conversations == 10
-        assert status.total_messages == 100
+    def test_card_link_custom_weight(self):
+        link = CardLink(
+            source_card_id="a",
+            target_card_id="b",
+            link_type="causal",
+            weight=0.5,
+        )
+        assert link.weight == 0.5

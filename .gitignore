@@ -43,3 +43,6 @@ Thumbs.db
 
 uv.lock
 codes
+
+# memory.talk data
+.memory-talk/

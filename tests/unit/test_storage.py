@@ -1,195 +1,205 @@
-"""Unit tests for storage module."""
+"""Unit tests for storage layer."""
+
 from datetime import datetime
-from pathlib import Path
 
 import pytest
 
-from memory_talk.models import Message
-from memory_talk.storage import Storage
+from memory_talk.models import (
+    CardLink,
+    RawRef,
+    Round,
+    Session,
+    TalkCard,
+    TextBlock,
+)
+from memory_talk.storage.card_store import CardStore
+from memory_talk.storage.session_store import SessionStore
+from memory_talk.storage.sqlite_store import SQLiteRelationStore
 
 
-class TestStorage:
-    """Test cases for Storage class."""
+class TestSQLiteRelationStore:
+    @pytest.fixture
+    def store(self, temp_dir):
+        return SQLiteRelationStore(temp_dir / "relation.db")
 
-    def test_init_creates_directories(self, temp_dir):
-        """Test that Storage creates necessary directories on init."""
-        storage = Storage(base_path=temp_dir)
-
-        assert storage.base_path.exists()
-        assert storage.blobs_dir.exists()
-        assert storage.db_path.exists()
-
-    def test_save_conversation(self, storage, sample_messages):
-        """Test saving a conversation."""
-        storage.save_conversation(
-            platform="test-platform",
-            conversation_id="session-001",
-            messages=sample_messages,
-            metadata={"title": "Test Chat"},
+    def test_save_and_get_card(self, store):
+        card = TalkCard(
+            card_id="card-001",
+            cognition_summary="Test summary",
+            compressed_rounds="Test rounds",
+            raw_ref=RawRef(session_id="sess-001", round_start=0, round_end=3),
         )
-
-        # Verify data was saved by retrieving it
-        result = storage.get_conversation("test-platform", "session-001")
+        store.save_card(card)
+        result = store.get_card("card-001")
         assert result is not None
-        metadata, messages = result
-        assert metadata.title == "Test Chat"
-        assert len(messages) == 2
+        assert result["card_id"] == "card-001"
+        assert result["cognition_summary"] == "Test summary"
 
-    def test_save_conversation_updates_metadata(self, storage, sample_messages):
-        """Test that metadata is correctly saved."""
-        storage.save_conversation(
-            platform="test-platform",
-            conversation_id="session-001",
-            messages=sample_messages,
-            metadata={"title": "My Chat"},
+    def test_get_card_not_found(self, store):
+        assert store.get_card("nonexistent") is None
+
+    def test_list_cards(self, store):
+        for i in range(3):
+            card = TalkCard(
+                card_id=f"card-{i:03d}",
+                cognition_summary=f"Summary {i}",
+                compressed_rounds=f"Rounds {i}",
+                raw_ref=RawRef(session_id="sess-001", round_start=i, round_end=i + 1),
+            )
+            store.save_card(card)
+        assert len(store.list_cards()) == 3
+        assert len(store.list_cards(session_id="sess-001")) == 3
+        assert len(store.list_cards(session_id="sess-999")) == 0
+
+    def test_save_card_with_links(self, store):
+        card = TalkCard(
+            card_id="card-a",
+            cognition_summary="A",
+            compressed_rounds="A rounds",
+            raw_ref=RawRef(session_id="sess-001", round_start=0, round_end=1),
+            links=[
+                CardLink(source_card_id="card-a", target_card_id="card-b", link_type="temporal"),
+            ],
         )
+        store.save_card(card)
+        links = store.get_links("card-a")
+        assert len(links) == 1
+        assert links[0]["link_type"] == "temporal"
 
-        result = storage.get_conversation("test-platform", "session-001")
+    def test_save_link_separately(self, store):
+        link = CardLink(source_card_id="card-x", target_card_id="card-y", link_type="causal", weight=0.8)
+        store.save_link(link)
+        links = store.get_links("card-x")
+        assert len(links) == 1
+        assert links[0]["weight"] == 0.8
+
+    def test_get_links_bidirectional(self, store):
+        link = CardLink(source_card_id="a", target_card_id="b", link_type="topical")
+        store.save_link(link)
+        assert len(store.get_links("a")) == 1
+        assert len(store.get_links("b")) == 1
+
+    def test_get_links_filter_by_type(self, store):
+        store.save_link(CardLink(source_card_id="a", target_card_id="b", link_type="temporal"))
+        store.save_link(CardLink(source_card_id="a", target_card_id="c", link_type="causal"))
+        assert len(store.get_links("a", link_types=["temporal"])) == 1
+        assert len(store.get_links("a", link_types=["temporal", "causal"])) == 2
+
+    def test_session_lifecycle(self, store):
+        store.save_session("sess-001", "claude-code", {"project": "test"}, 10)
+        sessions = store.list_sessions()
+        assert len(sessions) == 1
+        assert sessions[0]["source"] == "claude-code"
+
+        unbuilt = store.list_sessions(unbuilt_only=True)
+        assert len(unbuilt) == 1
+
+        store.mark_session_built("sess-001")
+        unbuilt = store.list_sessions(unbuilt_only=True)
+        assert len(unbuilt) == 0
+
+    def test_ingest_log(self, store):
+        assert not store.is_ingested("/path/to/file", "abc123")
+        store.log_ingest("/path/to/file", "sess-001", "abc123")
+        assert store.is_ingested("/path/to/file", "abc123")
+        assert not store.is_ingested("/path/to/file", "different-hash")
+
+
+class TestSessionStore:
+    @pytest.fixture
+    def store(self, temp_dir):
+        return SessionStore(temp_dir / "sessions")
+
+    def test_save_and_read(self, store):
+        session = Session(
+            session_id="ab12cd34",
+            source="claude-code",
+            rounds=[
+                Round(round_id="r001", speaker="user", role="human", content=[TextBlock(text="hello")]),
+                Round(round_id="r002", speaker="claude", role="assistant", content=[TextBlock(text="hi")]),
+            ],
+        )
+        store.save(session)
+        rounds = store.read("claude-code", "ab12cd34")
+        assert len(rounds) == 2
+        assert rounds[0].speaker == "user"
+        assert rounds[1].content[0].text == "hi"
+
+    def test_read_range(self, store):
+        session = Session(
+            session_id="ab12cd34",
+            source="claude-code",
+            rounds=[
+                Round(round_id=f"r{i:03d}", speaker="user", role="human", content=[TextBlock(text=f"msg {i}")])
+                for i in range(10)
+            ],
+        )
+        store.save(session)
+        subset = store.read_range("claude-code", "ab12cd34", 2, 5)
+        assert len(subset) == 3
+        assert subset[0].round_id == "r002"
+
+    def test_read_nonexistent(self, store):
+        assert store.read("claude-code", "nonexistent") == []
+
+    def test_exists(self, store):
+        assert not store.exists("claude-code", "ab12cd34")
+        session = Session(
+            session_id="ab12cd34",
+            source="claude-code",
+            rounds=[Round(round_id="r001", speaker="user", role="human", content=[TextBlock(text="hi")])],
+        )
+        store.save(session)
+        assert store.exists("claude-code", "ab12cd34")
+
+    def test_hash_bucketing(self, store):
+        session = Session(
+            session_id="ab12cd34",
+            source="claude-code",
+            rounds=[Round(round_id="r001", speaker="user", role="human", content=[TextBlock(text="hi")])],
+        )
+        path = store.save(session)
+        assert "/claude-code/ab/" in str(path)
+
+
+class TestCardStore:
+    @pytest.fixture
+    def store(self, temp_dir):
+        return CardStore(temp_dir / "cards")
+
+    def test_save_and_read(self, store):
+        card = TalkCard(
+            card_id="ab12cd34",
+            cognition_summary="Test",
+            compressed_rounds="Rounds",
+            raw_ref=RawRef(session_id="sess-001", round_start=0, round_end=3),
+        )
+        store.save(card)
+        result = store.read("ab12cd34")
         assert result is not None
-        metadata, messages = result
+        assert result.card_id == "ab12cd34"
+        assert result.cognition_summary == "Test"
 
-        assert metadata.title == "My Chat"
-        assert metadata.platform == "test-platform"
-        assert metadata.conversation_id == "session-001"
-        assert metadata.message_count == 2
+    def test_read_nonexistent(self, store):
+        assert store.read("nonexistent") is None
 
-    def test_save_conversation_deduplication(self, storage):
-        """Test that duplicate messages are not saved."""
-        messages = [
-            Message(
-                uuid="msg-001",
-                role="user",
-                content="Hello",
-                timestamp=datetime.now(),
-            ),
-        ]
-
-        # Save twice
-        storage.save_conversation(
-            platform="test-platform",
-            conversation_id="session-001",
-            messages=messages,
-            metadata={},
+    def test_exists(self, store):
+        assert not store.exists("ab12cd34")
+        card = TalkCard(
+            card_id="ab12cd34",
+            cognition_summary="Test",
+            compressed_rounds="Rounds",
+            raw_ref=RawRef(session_id="sess-001", round_start=0, round_end=3),
         )
-        storage.save_conversation(
-            platform="test-platform",
-            conversation_id="session-001",
-            messages=messages,
-            metadata={},
+        store.save(card)
+        assert store.exists("ab12cd34")
+
+    def test_hash_bucketing(self, store):
+        card = TalkCard(
+            card_id="ab12cd34",
+            cognition_summary="Test",
+            compressed_rounds="Rounds",
+            raw_ref=RawRef(session_id="sess-001", round_start=0, round_end=3),
         )
-
-        # Should only have one message
-        result = storage.get_conversation("test-platform", "session-001")
-        assert result is not None
-        _, messages = result
-        assert len(messages) == 1
-
-    def test_list_conversations_empty(self, storage):
-        """Test listing conversations when none exist."""
-        result = storage.list_conversations()
-        assert result == []
-
-    def test_list_conversations(self, storage, sample_messages):
-        """Test listing conversations."""
-        storage.save_conversation(
-            platform="chatgpt",
-            conversation_id="session-1",
-            messages=sample_messages,
-            metadata={"title": "Chat 1"},
-        )
-        storage.save_conversation(
-            platform="claude",
-            conversation_id="session-2",
-            messages=sample_messages,
-            metadata={"title": "Chat 2"},
-        )
-
-        result = storage.list_conversations()
-
-        assert len(result) == 2
-        platforms = [r.platform for r in result]
-        assert "chatgpt" in platforms
-        assert "claude" in platforms
-
-    def test_list_conversations_filter_by_platform(self, storage, sample_messages):
-        """Test filtering conversations by platform."""
-        storage.save_conversation(
-            platform="chatgpt",
-            conversation_id="session-1",
-            messages=sample_messages,
-            metadata={},
-        )
-        storage.save_conversation(
-            platform="claude",
-            conversation_id="session-2",
-            messages=sample_messages,
-            metadata={},
-        )
-
-        result = storage.list_conversations(platform="chatgpt")
-
-        assert len(result) == 1
-        assert result[0].platform == "chatgpt"
-
-    def test_get_conversation(self, storage, sample_messages):
-        """Test retrieving a conversation."""
-        storage.save_conversation(
-            platform="test-platform",
-            conversation_id="session-001",
-            messages=sample_messages,
-            metadata={"title": "Test"},
-        )
-
-        result = storage.get_conversation("test-platform", "session-001")
-
-        assert result is not None
-        metadata, messages = result
-        assert metadata.title == "Test"
-        assert len(messages) == 2
-
-    def test_get_conversation_not_found(self, storage):
-        """Test retrieving a non-existent conversation."""
-        result = storage.get_conversation("test-platform", "nonexistent")
-        assert result is None
-
-    def test_save_blob(self, storage):
-        """Test saving a blob file."""
-        content = b"test file content"
-        file_hash = storage.save_blob("test-platform", content, "test.txt")
-
-        assert file_hash is not None
-        assert len(file_hash) == 64  # SHA-256 hash
-
-        # Check file was saved
-        blob_dir = storage.blobs_dir / "test-platform" / file_hash[:2] / file_hash[2:4]
-        blob_path = blob_dir / f"{file_hash}.txt"
-        assert blob_path.exists()
-
-    def test_search(self, storage, sample_messages):
-        """Test searching conversations."""
-        storage.save_conversation(
-            platform="test-platform",
-            conversation_id="session-001",
-            messages=sample_messages,
-            metadata={},
-        )
-
-        results = storage.search("Hello")
-        assert len(results) == 1
-
-        results = storage.search("nonexistent")
-        assert len(results) == 0
-
-    def test_get_stats(self, storage, sample_messages):
-        """Test getting storage statistics."""
-        storage.save_conversation(
-            platform="test-platform",
-            conversation_id="session-001",
-            messages=sample_messages,
-            metadata={},
-        )
-
-        total_conversations, total_messages = storage.get_stats()
-
-        assert total_conversations == 1
-        assert total_messages == 2
+        path = store.save(card)
+        assert "/ab/" in str(path)

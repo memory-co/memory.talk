@@ -1,22 +1,25 @@
 """Main CLI entry point for memory-talk."""
+
 import click
 
-from memory_talk.commands import serve, status as status_cmd, list as list_cmd, search, export
+from memory_talk.commands import cards, explore, links, raw, recall, sessions, setup, status
 
 
 @click.group()
 @click.version_option()
 def main():
-    """memory-talk: Manage conversation data from various chat platforms."""
+    """memory-talk: Persistent cross-session memory for AI agents."""
     pass
 
 
-# Register commands
-main.add_command(serve.serve)
-main.add_command(status_cmd.status)
-main.add_command(list_cmd.list_cmd)
-main.add_command(search.search)
-main.add_command(export.export)
+main.add_command(setup.setup)
+main.add_command(explore.explore)
+main.add_command(sessions.sessions)
+main.add_command(cards.cards)
+main.add_command(links.links)
+main.add_command(recall.recall)
+main.add_command(raw.raw)
+main.add_command(status.status)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,9 @@
+{
+  "name": "memory-talk",
+  "displayName": "memory.talk",
+  "description": "Persistent cross-session memory for AI agents via Talk-Card architecture",
+  "version": "0.2.0",
+  "license": "MIT",
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks-cursor.json"
+}

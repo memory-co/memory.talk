@@ -1,0 +1,13 @@
+{
+  "name": "memory-talk",
+  "description": "Persistent cross-session memory for AI agents via Talk-Card architecture",
+  "version": "0.2.0",
+  "license": "MIT",
+  "keywords": [
+    "memory",
+    "talk-card",
+    "cross-session",
+    "recall",
+    "conversation"
+  ]
+}

@@ -1,18 +1,16 @@
 [project]
 name = "memory-talk"
-version = "0.1.0"
-description = "memory-talk - local server for storing conversation data from various chat platforms"
+version = "0.2.0"
+description = "Persistent cross-session memory for AI agents via Talk-Card architecture"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "click>=8.1.0",
-    "requests>=2.31.0",
-    "pyyaml>=6.0.0",
-    "fastapi>=0.109.0",
-    "uvicorn>=0.27.0",
-    "jinja2>=3.1.0",
     "pydantic>=2.0.0",
-    "duckdb>=0.9.0",
+    "pyyaml>=6.0.0",
+    "lancedb>=0.6.0",
+    "numpy>=1.24.0",
+    "python-ulid>=2.0.0",
 ]
 
 [project.scripts]
@@ -21,13 +19,15 @@ memory-talk = "memory_talk.cli:main"
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4.0",
-    "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
-    "httpx>=0.25.0",
+    "sentence-transformers>=2.2.0",
+]
+local = [
+    "sentence-transformers>=2.2.0",
 ]
 
 [tool.setuptools.packages.find]
-include = ["memory_talk*", "sources*"]
+include = ["memory_talk*"]
 
 [build-system]
 requires = ["setuptools>=68.0"]
@@ -40,17 +40,16 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
 markers = [
-    "integration: integration tests that require full app context",
+    "integration: integration tests",
 ]
 
 [tool.coverage.run]
 source = ["memory_talk"]
-omit = ["tests/*", "*/migrations/*"]
+omit = ["tests/*"]
 
 [tool.coverage.report]
 exclude_lines = [
     "pragma: no cover",
-    "def __repr__",
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
@@ -58,4 +57,3 @@ exclude_lines = [
 ]
 precision = 2
 show_missing = true
-skip_covered = false
