@@ -32,7 +32,6 @@ Schema：
 
 ```json
 {
-  "data_root": "~/.memory-talk",
   "vector": {
     "provider": "lancedb"
   },
@@ -50,7 +49,6 @@ Schema：
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `data_root` | string | `~/.memory-talk` | 数据根目录 |
 | `vector` | object | | 向量库配置 |
 | `relation` | object | | 关系库配置 |
 | `embedding` | object | | Embedding 配置 |

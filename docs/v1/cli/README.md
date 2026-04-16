@@ -5,7 +5,7 @@
 ```
 memory-talk
 ├── setup                          # 一次性初始化
-├── explore scan / ingest          # 发现和导入对话
+├── sync                           # 自动同步所有平台会话
 ├── sessions list / read / mark-built
 ├── cards create / get / list / links
 ├── links create                   # 为已有 card 补建关联
