@@ -15,26 +15,38 @@ JSON 字段：
 | 字段 | 必填 | 说明 |
 |------|------|------|
 | `cognition_summary` | 是 | 一句话认知总结（embedding 锚点） |
-| `compressed_rounds` | 是 | 压缩后的对话内容（≤1024 token） |
-| `session_id` | 是 | 来源 session ID |
-| `round_start` | 是 | 起始 round 索引 |
-| `round_end` | 是 | 结束 round 索引 |
+| `rounds` | 是 | Round 数组，保留原始结构，内容可精简、部分 round 可跳过 |
+| `links` | 是 | Link 数组，所有关联（包括与 session 的关联）都在这里 |
 | `card_id` | 否 | 不提供则自动生成 ULID |
-| `links` | 否 | CardLink 数组，创建时一并写入 |
+
+`rounds` 保留 Round 的完整结构（`round_id`、`speaker`、`role`、`content`），但内容是精简后的：
+- 关键 round 保留，冗余 round 跳过
+- 保留的 round 中，文本可压缩（去寒暄、去重复），但结构不变
+
+`links` 统一表达所有关联。时间先后由系统根据创建时间自动计算，无需传入。
+
+| 字段 | 说明 |
+|------|------|
+| `target_id` | 关联目标的 ID |
+| `target_type` | `session` 或 `card` |
 
 示例：
 ```bash
 memory-talk cards create '{
   "cognition_summary": "决定用 LanceDB 做向量存储，因为零依赖、本地文件、适合嵌入式部署",
-  "compressed_rounds": "用户问向量库选型。讨论了 ChromaDB vs LanceDB...",
-  "session_id": "abc123",
-  "round_start": 0,
-  "round_end": 5,
+  "rounds": [
+    {"round_id": "r001", "speaker": "user", "role": "human", "content": [{"type": "text", "text": "向量库选型，ChromaDB 和 LanceDB 哪个好？"}]},
+    {"round_id": "r003", "speaker": "claude", "role": "assistant", "content": [{"type": "text", "text": "推荐 LanceDB：零依赖、本地文件存储、适合嵌入式部署。ChromaDB 需要服务进程。"}]},
+    {"round_id": "r005", "speaker": "user", "role": "human", "content": [{"type": "text", "text": "就用 LanceDB。"}]}
+  ],
   "links": [
-    {"target_card_id": "prev-card-id", "link_type": "temporal"}
+    {"target_id": "abc123", "target_type": "session"},
+    {"target_id": "prev-card-id", "target_type": "card"}
   ]
 }'
 ```
+
+注意 `r002`、`r004` 被跳过了（中间的确认和重复内容），保留的 round 文本做了精简，但 round 结构完整。
 
 输出：
 ```json
