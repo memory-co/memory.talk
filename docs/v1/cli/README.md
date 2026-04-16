@@ -16,4 +16,6 @@ memory-talk
 
 全局选项 `--data-root PATH` 覆盖默认数据目录 `~/.memory-talk`。
 
+默认配置文件路径 `~/.memory-talk/settings.json`。
+
 详细文档见各子命令文件。

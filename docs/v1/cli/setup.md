@@ -23,3 +23,53 @@ memory-talk setup [--vector lancedb] [--relation sqlite] [--embedding local|dumm
   "embedding_backend": "local"
 }
 ```
+
+## settings.json
+
+`setup` 运行后生成配置文件 `~/.memory-talk/settings.json`。
+
+Schema：
+
+```json
+{
+  "data_root": "~/.memory-talk",
+  "vector": {
+    "provider": "lancedb"
+  },
+  "relation": {
+    "provider": "sqlite"
+  },
+  "embedding": {
+    "provider": "local",
+    "model": "all-MiniLM-L6-v2"
+  }
+}
+```
+
+**顶层**
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `data_root` | string | `~/.memory-talk` | 数据根目录 |
+| `vector` | object | | 向量库配置 |
+| `relation` | object | | 关系库配置 |
+| `embedding` | object | | Embedding 配置 |
+
+**vector**
+
+| 字段 | 类型 | 默认值 | 可选值 | 说明 |
+|------|------|--------|--------|------|
+| `provider` | string | `lancedb` | `lancedb` / `qdrant` / `milvus` | 向量库后端 |
+
+**relation**
+
+| 字段 | 类型 | 默认值 | 可选值 | 说明 |
+|------|------|--------|--------|------|
+| `provider` | string | `sqlite` | `sqlite` / `postgresql` / `mysql` | 关系库后端 |
+
+**embedding**
+
+| 字段 | 类型 | 默认值 | 可选值 | 说明 |
+|------|------|--------|--------|------|
+| `provider` | string | `local` | `local` / `dummy` | Embedding 后端 |
+| `model` | string | `all-MiniLM-L6-v2` | 任意 sentence-transformers 模型名 | 模型名称（`local` 后端时生效） |
