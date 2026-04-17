@@ -10,7 +10,8 @@
   "summary": "决定用 LanceDB 做向量存储",
   "session_id": "abc123",
   "rounds": [
-    {"round_id": "r001", "speaker": "user", "role": "human", "content": [{"type": "text", "text": "..."}]}
+    {"role": "human", "text": "向量库选型，ChromaDB 和 LanceDB 哪个好？"},
+    {"role": "assistant", "text": "推荐 LanceDB：零依赖、适合嵌入式部署。"}
   ],
   "links": [
     {"id": "abc123", "type": "session", "comment": "从这段讨论中提取"}

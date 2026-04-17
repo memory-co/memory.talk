@@ -9,6 +9,7 @@
 {
   "sessions_total": 12,
   "cards_total": 47,
+  "links_total": 23,
   "vector_provider": "lancedb",
   "relation_provider": "sqlite",
   "embedding_provider": "local"

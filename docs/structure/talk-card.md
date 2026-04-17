@@ -9,22 +9,9 @@ Talk-Card 是 memory.talk 的核心数据结构——从对话中提炼出的记
   "card_id": "01jz8k2m",
   "summary": "项目选定 LanceDB 作为向量存储方案，主要原因是零依赖、嵌入式架构",
   "rounds": [
-    {
-      "round_id": "r001",
-      "speaker": "user",
-      "role": "human",
-      "content": [
-        {"type": "text", "text": "向量库选型，ChromaDB 和 LanceDB 哪个好？"}
-      ]
-    },
-    {
-      "round_id": "r008",
-      "speaker": "assistant",
-      "role": "assistant",
-      "content": [
-        {"type": "text", "text": "LanceDB 零依赖，适合嵌入式部署。"}
-      ]
-    }
+    {"role": "human", "text": "向量库选型，ChromaDB 和 LanceDB 哪个好？"},
+    {"role": "assistant", "text": "推荐 LanceDB：零依赖、本地文件存储、适合嵌入式部署。ChromaDB 需要服务进程。"},
+    {"role": "human", "text": "就用 LanceDB。"}
   ],
   "links": [
     {"link_id": "01jzq7rm", "id": "f7a3e1", "type": "session", "comment": "从这段讨论中提取", "ttl": 100},
@@ -45,25 +32,18 @@ Talk-Card 是 memory.talk 的核心数据结构——从对话中提炼出的记
 | `links` | Link[] | 是 | 与 session 和其他 card 的关联（见下方 Link 结构） |
 | `created_at` | string | 自动生成 | 创建时间，系统自动填充 |
 
-## Round
+## Round（Talk-Card 中）
 
-保留原始结构，内容可精简：关键 round 保留，冗余 round 跳过。保留的 round 中文本可压缩（去寒暄、去重复），但结构不变。
+Talk-Card 中的 round 是极度精简的——只保留谁说了什么。关键 round 保留，冗余 round 跳过，保留的文本压缩到最精炼。
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `round_id` | string | 对应原始 session 中的 round ID |
-| `speaker` | string | 物理身份（谁在说） |
-| `role` | string | 逻辑身份（`human` / `assistant` / `system` / `tool`） |
-| `content` | ContentBlock[] | 内容块列表 |
+| `role` | string | `human` / `assistant` |
+| `text` | string | 精简后的文本 |
 
-### ContentBlock
+与 Session 中的 Round 不同：没有 round_id、parent_id、timestamp、content block 等原始结构。这是记忆，不是录像。
 
-| type | 字段 | 说明 |
-|------|------|------|
-| `text` | `text` | 文本内容 |
-| `code` | `language`, `text` | 代码块 |
-| `tool_use` | `name`, `input` | 工具调用 |
-| `tool_result` | `output` | 工具返回 |
+Session 中完整的 Round 结构见 [session.md](session.md)。
 
 ## Link
 
