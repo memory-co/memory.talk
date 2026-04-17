@@ -7,18 +7,16 @@
 列出 session，支持按 tag 筛选。
 
 ```bash
-memory-talk sessions list [--tag <TAG>] [--unbuilt]
+memory-talk sessions list [--tag <TAG>]
 ```
 
 | 选项 | 说明 |
 |------|------|
 | `--tag` | 按 tag 筛选，可多次使用（AND 关系） |
-| `--unbuilt` | 只显示未整理的 |
 
 示例：
 ```bash
 memory-talk sessions list --tag claude --tag project:myapp
-memory-talk sessions list --unbuilt
 ```
 
 ## sessions read

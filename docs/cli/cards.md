@@ -29,6 +29,7 @@ JSON 字段：
 |------|------|
 | `target_id` | 关联目标的 ID |
 | `target_type` | `session` 或 `card` |
+| `comment` | 可选，说明为什么关联 |
 
 示例：
 ```bash
@@ -40,8 +41,8 @@ memory-talk cards create '{
     {"round_id": "r005", "speaker": "user", "role": "human", "content": [{"type": "text", "text": "就用 LanceDB。"}]}
   ],
   "links": [
-    {"target_id": "abc123", "target_type": "session"},
-    {"target_id": "prev-card-id", "target_type": "card"}
+    {"target_id": "abc123", "target_type": "session", "comment": "从这个会话中提取"},
+    {"target_id": "prev-card-id", "target_type": "card", "comment": "该 card 讨论了备选方案 ChromaDB"}
   ]
 }'
 ```
@@ -69,12 +70,3 @@ memory-talk cards get <CARD_ID>
 memory-talk cards list [--session-id <ID>]
 ```
 
-## cards links
-
-获取与指定 card 关联的所有 card。
-
-```bash
-memory-talk cards links <CARD_ID>
-```
-
-输出包含 `links`（关联关系列表）和 `linked_cards`（关联 card 的完整内容）。
