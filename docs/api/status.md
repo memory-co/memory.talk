@@ -1,17 +1,14 @@
-# status
+# Status API
 
-显示存储统计信息。
+## GET /status
 
-```bash
-memory-talk status
-```
+返回存储统计信息。
 
-输出示例：
+响应：
 ```json
 {
   "sessions_total": 12,
   "cards_total": 47,
-  "links_total": 23,
   "vector_provider": "lancedb",
   "relation_provider": "sqlite",
   "embedding_provider": "local"

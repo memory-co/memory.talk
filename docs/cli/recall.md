@@ -17,9 +17,8 @@ memory-talk recall "<QUERY>" [--top-k N]
   "results": [
     {
       "card_id": "01jz...",
-      "cognition_summary": "决定用 LanceDB...",
-      "compressed_rounds": "...",
-      "raw_ref": {"session_id": "abc123", "round_start": 0, "round_end": 5},
+      "summary": "决定用 LanceDB...",
+      "session_id": "abc123",
       "distance": 0.23
     }
   ],

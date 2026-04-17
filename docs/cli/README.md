@@ -5,9 +5,9 @@
 ```
 memory-talk
 ├── sync                           # 自动同步所有平台会话
-├── sessions list / read / mark-built
+├── sessions list / read / tag
 ├── cards create / get / list
-├── links create / list / delete   # 管理关联（card↔card, card↔session）
+├── links create / list            # 管理关联（TTL 通过 cards get --link-id 自动刷新）
 ├── recall                         # 向量检索
 └── status                         # 统计信息
 ```
