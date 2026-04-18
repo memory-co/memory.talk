@@ -107,7 +107,9 @@ cards create 时 link 简写为 `{id, type, comment}`，source 隐含为当前 c
 ```
 ~/.memory-talk/
 ├── settings.json                              # JSON 配置
-├── sessions/{source}/{id[0:2]}/{sid}.jsonl    # 原始对话
+├── sessions/{source}/{id[0:2]}/{session_id}/
+│   ├── meta.json                              # 会话元数据
+│   └── rounds.jsonl                           # 原始对话轮次
 ├── cards/{id[0:2]}/{card_id}.json             # 记忆卡片
 ├── data/
 │   ├── vectors/                               # LanceDB

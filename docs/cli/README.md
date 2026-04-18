@@ -17,7 +17,8 @@ memory-talk
 ├── card create / get / list
 ├── link create / list             # 管理关联（TTL 通过 card get --link-id 自动刷新）
 ├── recall                         # 向量检索
-└── status                         # 统计信息
+├── status                         # 统计信息
+└── rebuild                        # 从文件重建索引
 ```
 
 配置文件 `~/.memory-talk/settings.json`，不存在时使用默认值，由 AI 直接读写。详见 [settings.md](../structure/settings.md)。

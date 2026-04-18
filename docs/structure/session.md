@@ -2,6 +2,17 @@
 
 Session 是从平台导入的一段原始对话，由 `sync` 命令写入。
 
+## 存储路径
+
+```
+sessions/{source}/{id[0:2]}/{session_id}/
+├── meta.json
+└── rounds.jsonl
+```
+
+- `meta.json`：会话元数据（session_id, source, tags, round_count 等）
+- `rounds.jsonl`：每行一个 Round JSON 对象
+
 ## Schema
 
 ```json
