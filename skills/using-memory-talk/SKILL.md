@@ -5,7 +5,7 @@ description: Use when starting any conversation - provides persistent cross-sess
 
 # memory.talk
 
-你有持久化的跨会话记忆。过去的对话以 **Talk-Card** 形式保存 —— 一句 `summary` 认知总结、一组压缩后的 `rounds`、以及和其他 card/session 的 `links`。每条 card 和 link 都有 TTL：被访问会续命，冷门会自然淡忘。
+你有持久化的跨会话记忆。过去的对话以 **Talk-Card** 形式保存 —— 一句 `summary` 认知总结、一组精选的关键 `rounds`（保留原始材料，不是复述）、以及和其他 card/session 的 `links`。单卡预算约 8192 token。每条 card 和 link 都有 TTL：被访问会续命，冷门会自然淡忘。
 
 ## CLI Quick Reference
 
@@ -37,7 +37,7 @@ memory-talk rebuild                                # 从文件重建索引（换
 
 ## 数据结构
 
-**Talk-Card**：`{card_id, summary, rounds: [{role, text, thinking?}], links: [{id, type: session|card, comment}], ttl, session_id?, created_at}` —— summary 是 embedding 锚点；rounds 是极度精简的对话，只有角色和文本；links 统一表达关联（包括和来源 session 的关联）。
+**Talk-Card**：`{card_id, summary, rounds: [{role, text, thinking?}], links: [{id, type: session|card, comment}], ttl, session_id?, created_at}` —— summary 是 embedding 锚点；rounds 是从 session 精选的关键轮次，**逐字保留**原始材料（用户原话、代码全文、错误日志），只是剥掉 session 的 `round_id/parent_id/content block` 那层结构；links 统一表达关联（包括和来源 session 的关联）。单卡约 8192 token 预算。
 
 **Session**：从平台导入的原始对话录像。Round 带完整原始结构（`round_id / parent_id / content block / cwd` 等）。Session 是录像，Card 是记忆。
 
