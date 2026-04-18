@@ -1,6 +1,6 @@
 [project]
 name = "memory-talk"
-version = "0.2.0"
+version = "0.3.0"
 description = "Persistent cross-session memory for AI agents via Talk-Card architecture"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -8,6 +8,9 @@ dependencies = [
     "click>=8.1.0",
     "pydantic>=2.0.0",
     "pyyaml>=6.0.0",
+    "fastapi>=0.109.0",
+    "uvicorn>=0.27.0",
+    "httpx>=0.25.0",
     "lancedb>=0.6.0",
     "numpy>=1.24.0",
     "python-ulid>=2.0.0",
@@ -20,7 +23,6 @@ memory-talk = "memory_talk.cli:main"
 dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
-    "sentence-transformers>=2.2.0",
 ]
 local = [
     "sentence-transformers>=2.2.0",
@@ -39,21 +41,3 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
-markers = [
-    "integration: integration tests",
-]
-
-[tool.coverage.run]
-source = ["memory_talk"]
-omit = ["tests/*"]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "raise NotImplementedError",
-    "if __name__ == .__main__.:",
-    "if TYPE_CHECKING:",
-    "@abstractmethod",
-]
-precision = 2
-show_missing = true

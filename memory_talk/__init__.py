@@ -1,2 +1,1 @@
-"""memory-talk package."""
-__version__ = "0.1.0"
+"""memory.talk — persistent cross-session memory for AI agents."""
