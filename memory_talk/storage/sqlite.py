@@ -28,18 +28,20 @@ class SQLiteStore:
         metadata: dict | None = None,
         tags: list[str] | None = None,
         round_count: int = 0,
+        created_at: str | None = None,
         synced_at: str | None = None,
     ) -> None:
         self.conn.execute(
             """INSERT OR REPLACE INTO sessions
-               (session_id, source, metadata, tags, round_count, synced_at)
-               VALUES (?, ?, ?, ?, ?, ?)""",
+               (session_id, source, metadata, tags, round_count, created_at, synced_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (
                 session_id,
                 source,
                 json.dumps(metadata or {}),
                 json.dumps(tags or []),
                 round_count,
+                created_at,
                 synced_at,
             ),
         )
@@ -48,10 +50,10 @@ class SQLiteStore:
     def list_sessions(self, source: Optional[str] = None) -> list[dict]:
         if source:
             rows = self.conn.execute(
-                "SELECT * FROM sessions WHERE source = ?", (source,)
+                "SELECT * FROM sessions WHERE source = ? ORDER BY created_at DESC", (source,)
             ).fetchall()
         else:
-            rows = self.conn.execute("SELECT * FROM sessions").fetchall()
+            rows = self.conn.execute("SELECT * FROM sessions ORDER BY created_at DESC").fetchall()
         return [self._parse_session(r) for r in rows]
 
     def get_session(self, session_id: str) -> dict | None:

@@ -14,10 +14,11 @@ class SessionsService:
     def import_session(self, session: Session) -> dict:
         self.files.save(session)
         synced_at = session.synced_at.isoformat() if session.synced_at else datetime.now().isoformat()
+        created_at = session.created_at.isoformat() if session.created_at else None
         self.db.save_session(
             session_id=session.session_id, source=session.source,
             metadata=session.metadata, tags=session.tags,
-            round_count=len(session.rounds), synced_at=synced_at,
+            round_count=len(session.rounds), created_at=created_at, synced_at=synced_at,
         )
         return {"status": "ok", "session_id": session.session_id, "rounds": len(session.rounds)}
 

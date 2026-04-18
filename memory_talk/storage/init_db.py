@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     metadata TEXT,
     tags TEXT,
     round_count INTEGER,
+    created_at TEXT,
     synced_at TEXT
 );
 CREATE TABLE IF NOT EXISTS cards (
