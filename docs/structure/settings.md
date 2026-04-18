@@ -18,7 +18,7 @@
     "provider": "sqlite"
   },
   "embedding": {
-    "provider": "local",
+    "provider": "dummy",
     "model": "all-MiniLM-L6-v2"
   },
   "ttl": {
