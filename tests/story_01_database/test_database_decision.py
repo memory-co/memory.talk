@@ -1,5 +1,24 @@
 """Story 01: 数据库选型的记忆"""
+import shutil
+from pathlib import Path
+
+import pytest
+
 from memory_talk.adapters.claude_code import ClaudeCodeAdapter
+from tests.conftest import load_sessions_from_dir
+
+SESSIONS_DIR = Path(__file__).parent / "sessions"
+
+
+@pytest.fixture
+def fake_claude_sessions(temp_root):
+    """Copy session JSONL files into a fake Claude projects directory."""
+    projects = temp_root / "claude_projects" / "testproject"
+    projects.mkdir(parents=True)
+    for src in load_sessions_from_dir(SESSIONS_DIR):
+        shutil.copy2(src, projects / src.name)
+    return projects
+
 
 class TestDatabaseDecision:
     def test_full_story(self, client, config, fake_claude_sessions):

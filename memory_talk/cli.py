@@ -6,6 +6,7 @@ import os
 import signal
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import click
@@ -72,17 +73,31 @@ def server_start(data_root: str | None, port: int):
     if data_root:
         env["MEMORY_TALK_DATA_ROOT"] = str(data_root)
 
+    log_path = config.data_root / "server.log"
+    log_file = open(log_path, "w")
+
     proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "memory_talk.api:app",
          "--host", "127.0.0.1", "--port", str(port), "--log-level", "warning"],
         env=env,
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stderr=log_file,
         start_new_session=True,
     )
 
-    pid_path.write_text(str(proc.pid))
-    click.echo(json.dumps({"status": "started", "pid": proc.pid, "port": port}))
+    time.sleep(1.5)
+    exit_code = proc.poll()
+
+    if exit_code is not None:
+        log_file.close()
+        log_content = log_path.read_text()
+        pid_path.unlink(missing_ok=True)
+        error_tail = log_content[-500:] if len(log_content) > 500 else log_content
+        click.echo(json.dumps({"status": "failed", "exit_code": exit_code, "error": error_tail}))
+    else:
+        log_file.close()
+        pid_path.write_text(str(proc.pid))
+        click.echo(json.dumps({"status": "started", "pid": proc.pid, "port": port}))
 
 
 @server.command("stop")
@@ -115,8 +130,15 @@ def server_status(data_root: str | None):
     config = Config(data_root) if data_root else Config()
     pid_path = config.pid_path
 
+    log_path = config.data_root / "server.log"
+
     if not pid_path.exists():
-        click.echo(json.dumps({"status": "not_running"}))
+        if log_path.exists() and log_path.stat().st_size > 0:
+            log_content = log_path.read_text()
+            error_tail = log_content[-500:] if len(log_content) > 500 else log_content
+            click.echo(json.dumps({"status": "crashed", "error": error_tail}))
+        else:
+            click.echo(json.dumps({"status": "not_running"}))
         return
 
     pid = int(pid_path.read_text().strip())
@@ -125,7 +147,12 @@ def server_status(data_root: str | None):
         click.echo(json.dumps({"status": "running", "pid": pid}))
     except OSError:
         pid_path.unlink(missing_ok=True)
-        click.echo(json.dumps({"status": "not_running"}))
+        if log_path.exists() and log_path.stat().st_size > 0:
+            log_content = log_path.read_text()
+            error_tail = log_content[-500:] if len(log_content) > 500 else log_content
+            click.echo(json.dumps({"status": "crashed", "error": error_tail}))
+        else:
+            click.echo(json.dumps({"status": "not_running"}))
 
 
 # ── Sync command ─────────────────────────────────────────────
