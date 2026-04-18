@@ -45,23 +45,43 @@ memory-talk server stop [--data-root PATH]
 
 ## server status
 
-检查 API 服务是否在运行。
+检查 API 服务状态。运行中时同时返回数据统计。
 
 ```bash
 memory-talk server status [--data-root PATH]
 ```
 
-运行中：
+运行中（含数据统计）：
 ```json
-{"status": "running", "pid": 12345}
+{
+  "data_root": "/home/user/.memory-talk",
+  "settings_path": "/home/user/.memory-talk/settings.json",
+  "status": "running",
+  "pid": 12345,
+  "sessions_total": 12,
+  "cards_total": 47,
+  "links_total": 23,
+  "vector_provider": "lancedb",
+  "relation_provider": "sqlite",
+  "embedding_provider": "dummy"
+}
 ```
 
 进程崩溃（有错误日志）：
 ```json
-{"status": "crashed", "error": "...最近的错误信息..."}
+{
+  "data_root": "/home/user/.memory-talk",
+  "settings_path": "/home/user/.memory-talk/settings.json",
+  "status": "crashed",
+  "error": "...最近的错误信息..."
+}
 ```
 
 未运行：
 ```json
-{"status": "not_running"}
+{
+  "data_root": "/home/user/.memory-talk",
+  "settings_path": "/home/user/.memory-talk/settings.json",
+  "status": "not_running"
+}
 ```

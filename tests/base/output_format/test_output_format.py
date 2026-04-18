@@ -55,8 +55,8 @@ class TestOutputFormat:
 
         runner = CliRunner()
 
-        # -f should work on status (leaf command)
-        result = runner.invoke(main, ["status", "-f", "text", "--help"])
+        # -f should work on server status (leaf command)
+        result = runner.invoke(main, ["server", "status", "-f", "text", "--help"])
         assert result.exit_code == 0
 
         # -f should work on session list

@@ -6,19 +6,18 @@
 - **Text**：供人类阅读，`--format text` 或 `-f text`
 
 ```bash
-memory-talk status                  # JSON 输出（默认）
-memory-talk status -f text          # 人类可读输出
+memory-talk server status              # JSON 输出（默认）
+memory-talk server status -f text      # 人类可读输出
 ```
 
 ```
 memory-talk
-├── server start / stop / status   # 管理本地 API 服务
+├── server start / stop / status   # 管理本地 API 服务（status 含数据统计）
 ├── sync                           # 自动同步所有平台会话
 ├── session list / read / tag
 ├── card create / get / list
 ├── link create / list             # 管理关联（TTL 通过 card get --link-id 自动刷新）
 ├── recall                         # 向量检索
-├── status                         # 统计信息
 └── rebuild                        # 从文件重建索引
 ```
 

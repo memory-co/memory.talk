@@ -173,7 +173,12 @@ def server_status(data_root, fmt):
     pid = int(pid_path.read_text().strip())
     try:
         os.kill(pid, 0)
-        _output({**base, "status": "running", "pid": pid}, fmt)
+        # Server running — fetch data stats via API
+        try:
+            stats = _api("GET", "/status")
+            _output({**base, "status": "running", "pid": pid, **stats}, fmt)
+        except SystemExit:
+            _output({**base, "status": "running", "pid": pid}, fmt)
     except OSError:
         pid_path.unlink(missing_ok=True)
         if log_path.exists() and log_path.stat().st_size > 0:
@@ -377,16 +382,6 @@ def link_list(id, type_filter, fmt):
 def recall(query, top_k, fmt):
     """Recall cards by semantic search."""
     result = _api("POST", "/recall", json={"query": query, "top_k": top_k})
-    _output(result, fmt)
-
-
-# ── Status command ───────────────────────────────────────────
-
-@main.command()
-@_fmt_option
-def status(fmt):
-    """Get server status and counts."""
-    result = _api("GET", "/status")
     _output(result, fmt)
 
 
