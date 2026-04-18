@@ -16,3 +16,9 @@ def status(request: Request):
         "relation_provider": config.settings.relation.provider,
         "embedding_provider": config.settings.embedding.provider,
     }
+
+@router.post("/rebuild")
+def rebuild(request: Request):
+    from memory_talk.service.rebuild import rebuild_async
+    rebuild_async(request.app.state.config)
+    return {"status": "rebuilding"}

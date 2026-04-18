@@ -386,5 +386,16 @@ def status(fmt):
     _output(result, fmt)
 
 
+@main.command()
+@_fmt_option
+def rebuild(fmt):
+    """Rebuild SQLite + LanceDB index from files. Runs async."""
+    from memory_talk.config import Config
+    from memory_talk.service.rebuild import rebuild_async
+    config = Config()
+    rebuild_async(config)
+    _output({"status": "rebuilding"}, fmt)
+
+
 if __name__ == "__main__":
     main()
