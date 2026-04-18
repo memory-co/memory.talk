@@ -8,6 +8,9 @@
 
 ```json
 {
+  "server": {
+    "port": 7788
+  },
   "vector": {
     "provider": "lancedb"
   },
@@ -32,6 +35,12 @@
   }
 }
 ```
+
+**server**
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `port` | integer | `7788` | API 服务监听端口 |
 
 **vector**
 

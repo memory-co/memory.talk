@@ -20,7 +20,11 @@ class EmbeddingConfig(BaseModel):
     provider: str = "dummy"
     model: str = "all-MiniLM-L6-v2"
 
+class ServerConfig(BaseModel):
+    port: int = 7788
+
 class Settings(BaseModel):
+    server: ServerConfig = ServerConfig()
     vector: ProviderConfig = ProviderConfig(provider="lancedb")
     relation: ProviderConfig = ProviderConfig(provider="sqlite")
     embedding: EmbeddingConfig = EmbeddingConfig()

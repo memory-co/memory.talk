@@ -40,7 +40,7 @@ class TestServerCrash:
 
         import unittest.mock
         with unittest.mock.patch('memory_talk.cli.subprocess.Popen', FakePopen):
-            result = runner.invoke(server_start, ['--data-root', str(temp_root), '--port', '19999'])
+            result = runner.invoke(server_start, ['--data-root', str(temp_root)])
 
         output = result.output.strip()
         data = json.loads(output)

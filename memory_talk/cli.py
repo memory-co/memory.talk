@@ -12,10 +12,15 @@ from pathlib import Path
 import click
 import httpx
 
-BASE_URL = "http://127.0.0.1:7788"
-
 # Common option for output format — added to every leaf command
 _fmt_option = click.option("-f", "--format", "fmt", type=click.Choice(["json", "text"]), default="json", help="Output format")
+
+
+def _base_url(data_root=None) -> str:
+    """Read port from settings, return base URL."""
+    from memory_talk.config import Config
+    config = Config(data_root) if data_root else Config()
+    return f"http://127.0.0.1:{config.settings.server.port}"
 
 
 def _output(data, fmt="json"):
@@ -38,9 +43,9 @@ def _output(data, fmt="json"):
         click.echo(json.dumps(data, indent=2, ensure_ascii=False, default=str))
 
 
-def _api(method: str, path: str, **kwargs) -> dict | list | None:
+def _api(method: str, path: str, data_root=None, **kwargs) -> dict | list | None:
     """Call the memory.talk API."""
-    url = f"{BASE_URL}{path}"
+    url = f"{_base_url(data_root)}{path}"
     try:
         resp = httpx.request(method, url, timeout=30.0, **kwargs)
         resp.raise_for_status()
@@ -73,13 +78,13 @@ def server():
 
 @server.command("start")
 @click.option("--data-root", default=None, help="Data root directory")
-@click.option("--port", default=7788, help="Port to listen on")
 @_fmt_option
-def server_start(data_root, port, fmt):
+def server_start(data_root, fmt):
     """Start the memory.talk server."""
     from memory_talk.config import Config
     config = Config(data_root) if data_root else Config()
     config.ensure_dirs()
+    port = config.settings.server.port
 
     pid_path = config.pid_path
 
@@ -160,8 +165,9 @@ def server_status(data_root, fmt):
     }
 
     # 直接调 API，能连上就是 running，连不上就是 not_running
+    url = _base_url(data_root)
     try:
-        resp = httpx.get(f"{BASE_URL}/status", timeout=3)
+        resp = httpx.get(f"{url}/status", timeout=3)
         if resp.status_code == 200:
             _output({**base, "status": "running", **resp.json()}, fmt)
         else:
@@ -201,7 +207,7 @@ def sync(data_root, fmt):
             continue
         try:
             s = adapter.convert(fp)
-            result = _api("POST", "/sessions", json=s.model_dump(mode="json"))
+            result = _api("POST", "/sessions", data_root=data_root, json=s.model_dump(mode="json"))
             if result:
                 db.log_ingest(str(fp), s.session_id, file_hash)
                 imported += 1
