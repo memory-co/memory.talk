@@ -76,9 +76,17 @@ class OpenAIEmbedder(Embedder):
 
 
 def get_embedder(config) -> Embedder:
-    p = config.settings.embedding.provider
+    emb = config.settings.embedding
+    p = emb.provider
     if p == "dummy":
-        return DummyEmbedder()
+        return DummyEmbedder(dim=emb.dim)
     elif p == "local":
-        return LocalEmbedder(config.settings.embedding.model)
+        return LocalEmbedder(emb.model)
+    elif p == "openai":
+        return OpenAIEmbedder(
+            endpoint=emb.endpoint,
+            auth_env_key=emb.auth_env_key,
+            model=emb.model,
+            timeout=emb.timeout,
+        )
     raise ValueError(f"Unknown embedding provider: {p}")
