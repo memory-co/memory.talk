@@ -9,7 +9,7 @@ import pyarrow as pa
 class LanceStore:
     TABLE = "cards"
 
-    def __init__(self, data_dir: Path):
+    def __init__(self, data_dir: Path, dim: int = 384):
         import lancedb
 
         self.db = lancedb.connect(str(data_dir))
@@ -17,7 +17,7 @@ class LanceStore:
             [
                 pa.field("card_id", pa.string()),
                 pa.field("text", pa.string()),
-                pa.field("vector", pa.list_(pa.float32())),
+                pa.field("vector", pa.list_(pa.float32(), dim)),
             ]
         )
 
@@ -46,7 +46,7 @@ class LanceStore:
             return []
         table = self.db.open_table(self.TABLE)
         results = (
-            table.search(query)
+            table.search(query, vector_column_name="vector")
             .limit(top_k)
             .to_list()
         )

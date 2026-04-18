@@ -37,5 +37,5 @@ class RecallService:
                      for lk in links_raw if compute_ttl(lk["expires_at"]) > 0]
             results.append({"card_id": card_id, "summary": db_card["summary"],
                            "session_id": db_card["session_id"], "ttl": compute_ttl(new_exp),
-                           "distance": hit["distance"], "links": links})
+                           "distance": hit.get("distance", hit.get("_distance", 0.0)), "links": links})
         return {"query": query, "results": results, "count": len(results)}
