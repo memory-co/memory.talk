@@ -21,8 +21,11 @@ class SessionsService:
         )
         return {"status": "ok", "session_id": session.session_id, "rounds": len(session.rounds)}
 
-    def list_sessions(self, source: str | None = None) -> list[dict]:
-        return self.db.list_sessions(source=source)
+    def list_sessions(self, source: str | None = None, tag: str | None = None) -> list[dict]:
+        rows = self.db.list_sessions(source=source)
+        if tag:
+            rows = [r for r in rows if tag in r.get("tags", [])]
+        return rows
 
     def get_session(self, session_id: str, start: int | None = None, end: int | None = None) -> list[dict]:
         meta = self.db.get_session(session_id)
