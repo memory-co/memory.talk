@@ -173,15 +173,22 @@ def server_status(data_root, fmt):
     pid = int(pid_path.read_text().strip())
     try:
         os.kill(pid, 0)
-        # Server running — try to fetch stats via HTTP (silently skip if unreachable)
+        # Server process alive — try to fetch stats via HTTP
         stats = {}
+        port_error = None
         try:
             resp = httpx.get(f"{BASE_URL}/status", timeout=3)
             if resp.status_code == 200:
                 stats = resp.json()
+        except httpx.ConnectError:
+            port_error = f"进程存活(pid={pid})但端口 {BASE_URL} 连接失败"
         except Exception:
             pass
-        _output({**base, "status": "running", "pid": pid, **stats}, fmt)
+
+        result = {**base, "status": "running", "pid": pid, **stats}
+        if port_error:
+            result["warning"] = port_error
+        _output(result, fmt)
     except OSError:
         pid_path.unlink(missing_ok=True)
         if log_path.exists() and log_path.stat().st_size > 0:
