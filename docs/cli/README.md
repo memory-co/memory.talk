@@ -13,9 +13,9 @@ memory-talk status -f text          # 人类可读输出
 ```
 memory-talk
 ├── sync                           # 自动同步所有平台会话
-├── sessions list / read / tag
-├── cards create / get / list
-├── links create / list            # 管理关联（TTL 通过 cards get --link-id 自动刷新）
+├── session list / read / tag
+├── card create / get / list
+├── link create / list             # 管理关联（TTL 通过 card get --link-id 自动刷新）
 ├── recall                         # 向量检索
 └── status                         # 统计信息
 ```

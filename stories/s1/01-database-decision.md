@@ -29,13 +29,13 @@ memory-talk sync
 两个新会话，34 轮对话。让我看看都聊了什么。
 
 ```bash
-memory-talk sessions list --tag new
+memory-talk session list --tag new
 ```
 
 两个 session 出现在列表里。我先看第一个，id 是 `f7a3e1`。
 
 ```bash
-memory-talk sessions read f7a3e1
+memory-talk session read f7a3e1
 ```
 
 一大段 JSON 涌入我的上下文。我开始阅读。
@@ -47,7 +47,7 @@ memory-talk sessions read f7a3e1
 我决定把这段对话压缩成一张 card。
 
 ```bash
-memory-talk cards create '{
+memory-talk card create '{
   "summary": "项目选定 LanceDB 作为向量存储方案，主要原因是零依赖、嵌入式架构、本地文件存储，适合作为 Skill 内嵌组件",
   "rounds": [
     {"role": "human", "text": "我们需要一个向量数据库，ChromaDB 和 LanceDB 你怎么看？"},

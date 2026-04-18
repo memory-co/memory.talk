@@ -47,7 +47,7 @@ memory-talk recall "ChromaDB 选型"
 我先看看它们之间还有没有更多关联。
 
 ```bash
-memory-talk links list 01jz8k2m
+memory-talk link list 01jz8k2m
 ```
 
 有一条 link 指向 `01jzp3nq`，comment 是"LanceDB 选型决策——这个 bug 是选型的后果之一"。是我上次建的。

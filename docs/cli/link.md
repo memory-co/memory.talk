@@ -1,13 +1,13 @@
-# links
+# link
 
 管理关联关系。link 可以连接任意类型：card、session。每条 link 有唯一 `link_id`。
 
-## links create
+## link create
 
 创建一条关联。
 
 ```bash
-memory-talk links create '<JSON>'
+memory-talk link create '<JSON>'
 ```
 
 JSON 字段：
@@ -24,7 +24,7 @@ JSON 字段：
 
 示例：
 ```bash
-memory-talk links create '{
+memory-talk link create '{
   "source_id": "card-a",
   "source_type": "card",
   "target_id": "card-b",
@@ -33,12 +33,12 @@ memory-talk links create '{
 }'
 ```
 
-## links list
+## link list
 
 查询某个对象的所有关联。
 
 ```bash
-memory-talk links list <ID> [--type card|session]
+memory-talk link list <ID> [--type card|session]
 ```
 
 `--type` 可筛选关联目标的类型。每条结果带 `link_id`。

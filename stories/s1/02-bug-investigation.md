@@ -27,7 +27,7 @@ memory-talk sync
 一个新 session，47 轮。不短。看看是什么。
 
 ```bash
-memory-talk sessions read d8b2f4
+memory-talk session read d8b2f4
 ```
 
 这是一段 bug 排查。用户报告说 `cards create` 命令偶尔会卡住不返回。经过漫长的排查——查日志、加 print、尝试复现——最终发现是 LanceDB 在写入时如果表不存在会触发一个同步的 schema 创建，而在某些文件系统上这个操作会阻塞。解决方案是在首次 `sync` 时预创建表结构。
@@ -35,10 +35,10 @@ memory-talk sessions read d8b2f4
 47 轮对话，但故事线很清晰：症状 → 排查过程 → 根因 → 修复。我要保留排查的关键转折点，而不只是结论——下次遇到类似问题，排查思路比答案更有价值。
 
 ```bash
-memory-talk cards create '{
+memory-talk card create '{
   "summary": "cards create 偶发卡死的根因是 LanceDB 首次写入时同步创建表 schema，在某些文件系统上会阻塞，修复方案是预创建表结构",
   "rounds": [
-    {"role": "human", "text": "memory-talk cards create 有时候会卡住，大概 10 秒不返回，然后又正常了"},
+    {"role": "human", "text": "memory-talk card create 有时候会卡住，大概 10 秒不返回，然后又正常了"},
     {"role": "assistant", "text": "加了计时日志后发现卡在 _ensure_table 方法。怀疑是表创建的开销。", "thinking": "卡住而非报错，说明不是异常而是阻塞。计时日志缩小范围"},
     {"role": "assistant", "text": "找到了。LanceDB create_table 在 NFS 上会触发 fsync，网络文件系统上很慢。本地 SSD 复现不了。", "thinking": "只在部分环境出现——文件系统差异是关键线索"},
     {"role": "human", "text": "我确实是在 NFS 上跑的，公司的开发机。"},
