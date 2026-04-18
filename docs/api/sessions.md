@@ -22,7 +22,7 @@
 }
 ```
 
-Round 和 ContentBlock 结构见 [talk-card.md](../structure/talk-card.md)。
+Round 和 ContentBlock 结构见 [session.md](../structure/session.md)。
 
 响应：
 ```json

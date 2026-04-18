@@ -50,9 +50,9 @@ memory-talk sessions read f7a3e1
 memory-talk cards create '{
   "summary": "项目选定 LanceDB 作为向量存储方案，主要原因是零依赖、嵌入式架构、本地文件存储，适合作为 Skill 内嵌组件",
   "rounds": [
-    {"round_id": "r001", "speaker": "user", "role": "human", "content": [{"type": "text", "text": "我们需要一个向量数据库，ChromaDB 和 LanceDB 你怎么看？"}]},
-    {"round_id": "r008", "speaker": "assistant", "role": "assistant", "content": [{"type": "text", "text": "ChromaDB 功能成熟但需要独立服务进程。LanceDB 是嵌入式方案，数据就是本地文件，零依赖。如果是嵌入到 Skill 里用，LanceDB 更合适——装完就能跑，不需要用户额外启动任何服务。"}]},
-    {"round_id": "r019", "speaker": "user", "role": "human", "content": [{"type": "text", "text": "就用 LanceDB，零依赖这点太重要了。"}]}
+    {"role": "human", "text": "我们需要一个向量数据库，ChromaDB 和 LanceDB 你怎么看？"},
+    {"role": "assistant", "text": "ChromaDB 功能成熟但需要独立服务进程。LanceDB 是嵌入式方案，零依赖。嵌入到 Skill 里用更合适。", "thinking": "关键考量是部署形态——Skill 场景不能要求用户启动额外服务"},
+    {"role": "human", "text": "就用 LanceDB，零依赖这点太重要了。"}
   ],
   "links": [
     {"id": "f7a3e1", "type": "session", "comment": "从这段数据库选型讨论中提取"}

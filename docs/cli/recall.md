@@ -19,7 +19,12 @@ memory-talk recall "<QUERY>" [--top-k N]
       "card_id": "01jz...",
       "summary": "决定用 LanceDB...",
       "session_id": "abc123",
-      "distance": 0.23
+      "ttl": 2592000,
+      "distance": 0.23,
+      "links": [
+        {"link_id": "01jzq7rm", "id": "abc123", "type": "session", "comment": "从这段讨论中提取", "ttl": 100},
+        {"link_id": "01jzq8sn", "id": "01jzp3nq", "type": "card", "comment": "后续踩了 NFS 的坑", "ttl": 85}
+      ]
     }
   ],
   "count": 1
