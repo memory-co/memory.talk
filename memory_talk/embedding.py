@@ -2,6 +2,8 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 import hashlib
+import os
+import httpx
 
 class Embedder(ABC):
     @abstractmethod
@@ -29,10 +31,62 @@ class LocalEmbedder(Embedder):
     def embed(self, texts: list[str]) -> list[list[float]]:
         return self.model.encode(texts, convert_to_numpy=True).tolist()
 
+class OpenAIEmbedder(Embedder):
+    """OpenAI-compatible embeddings over HTTP (e.g. OpenAI, DashScope, vLLM)."""
+
+    def __init__(
+        self,
+        endpoint: str,
+        auth_env_key: str,
+        model: str,
+        timeout: float = 30.0,
+    ):
+        if not endpoint:
+            raise ValueError("OpenAIEmbedder requires an endpoint")
+        if not auth_env_key:
+            raise ValueError("OpenAIEmbedder requires an auth_env_key")
+        self.endpoint = endpoint
+        self.auth_env_key = auth_env_key
+        self.model = model
+        self.timeout = timeout
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        api_key = os.environ.get(self.auth_env_key)
+        if not api_key:
+            raise RuntimeError(
+                f"Environment variable {self.auth_env_key} is not set"
+            )
+        resp = httpx.post(
+            self.endpoint,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": self.model,
+                "input": list(texts),
+                "encoding_format": "float",
+            },
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        data = resp.json().get("data", [])
+        data_sorted = sorted(data, key=lambda d: d["index"])
+        return [d["embedding"] for d in data_sorted]
+
+
 def get_embedder(config) -> Embedder:
-    p = config.settings.embedding.provider
+    emb = config.settings.embedding
+    p = emb.provider
     if p == "dummy":
-        return DummyEmbedder()
+        return DummyEmbedder(dim=emb.dim)
     elif p == "local":
-        return LocalEmbedder(config.settings.embedding.model)
+        return LocalEmbedder(emb.model)
+    elif p == "openai":
+        return OpenAIEmbedder(
+            endpoint=emb.endpoint,
+            auth_env_key=emb.auth_env_key,
+            model=emb.model,
+            timeout=emb.timeout,
+        )
     raise ValueError(f"Unknown embedding provider: {p}")

@@ -11,7 +11,7 @@ class RecallService:
     def __init__(self, config: Config):
         self.config = config
         self.db = SQLiteStore(config.db_path)
-        self.vectors = LanceStore(config.vectors_dir)
+        self.vectors = LanceStore(config.vectors_dir, dim=config.settings.embedding.dim)
         self.files = CardFiles(config.cards_dir)
         self.embedder = get_embedder(config)
 
