@@ -80,7 +80,7 @@ import pytest
 
 @pytest.fixture
 def fake_claude_sessions(temp_root):
-    src = Path(__file__).parent.parent / "story_01_database" / "sessions"
+    src = Path(__file__).parent / "sessions"
     dst = temp_root / "claude_projects" / "testproject"
     shutil.copytree(src, dst)
     return dst

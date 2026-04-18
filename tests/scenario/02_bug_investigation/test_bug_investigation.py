@@ -8,16 +8,13 @@ from memory_talk.adapters.claude_code import ClaudeCodeAdapter
 from tests.conftest import load_sessions_from_dir
 
 SESSIONS_DIR = Path(__file__).parent / "sessions"
-DB_SESSIONS_DIR = Path(__file__).parent.parent / "story_01_database" / "sessions"
 
 
 @pytest.fixture
 def fake_claude_sessions(temp_root):
-    """Copy session JSONL files from both story_01 and story_02 into a fake Claude projects directory."""
+    """Copy all session JSONL files from this test's own sessions/ directory."""
     projects = temp_root / "claude_projects" / "testproject"
     projects.mkdir(parents=True)
-    for src in load_sessions_from_dir(DB_SESSIONS_DIR):
-        shutil.copy2(src, projects / src.name)
     for src in load_sessions_from_dir(SESSIONS_DIR):
         shutil.copy2(src, projects / src.name)
     return projects
