@@ -12,6 +12,7 @@ memory-talk status -f text          # 人类可读输出
 
 ```
 memory-talk
+├── server start / stop / status   # 管理本地 API 服务
 ├── sync                           # 自动同步所有平台会话
 ├── session list / read / tag
 ├── card create / get / list
