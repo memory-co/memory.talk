@@ -20,31 +20,29 @@ class TestServerLifecycle:
 
         runner = CliRunner()
         data_root = str(temp_root)
-        port = "18899"
 
-        # 1. Start
-        result = runner.invoke(main, ["server", "start", "--data-root", data_root, "--port", port])
+        # 1. Start (default port 7788)
+        result = runner.invoke(main, ["server", "start", "--data-root", data_root])
         assert result.exit_code == 0
         start_data = json.loads(result.output)
         assert start_data["status"] == "started"
         pid = start_data["pid"]
         assert pid > 0
 
-        # Give server a moment to fully start
         time.sleep(1)
 
         try:
-            # 2. Status — should be running with data_root and settings_path
+            # 2. Status — API reachable, should be running with stats
             result = runner.invoke(main, ["server", "status", "--data-root", data_root])
             assert result.exit_code == 0
             status_data = json.loads(result.output)
             assert status_data["status"] == "running"
-            assert status_data["pid"] == pid
             assert status_data["data_root"] == data_root
             assert "settings_path" in status_data
+            assert "sessions_total" in status_data
 
             # 3. Start again — should say already_running
-            result = runner.invoke(main, ["server", "start", "--data-root", data_root, "--port", port])
+            result = runner.invoke(main, ["server", "start", "--data-root", data_root])
             assert result.exit_code == 0
             again_data = json.loads(result.output)
             assert again_data["status"] == "already_running"
@@ -67,7 +65,6 @@ class TestServerLifecycle:
             assert not config.pid_path.exists()
 
         finally:
-            # Cleanup: make sure server is stopped even if test fails
             import os
             import signal
             try:

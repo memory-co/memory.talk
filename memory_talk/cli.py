@@ -153,50 +153,21 @@ def server_status(data_root, fmt):
     """Check if the memory.talk server is running."""
     from memory_talk.config import Config
     config = Config(data_root) if data_root else Config()
-    pid_path = config.pid_path
-    log_path = config.data_root / "server.log"
 
     base = {
         "data_root": str(config.data_root),
         "settings_path": str(config.settings_path),
     }
 
-    if not pid_path.exists():
-        if log_path.exists() and log_path.stat().st_size > 0:
-            log_content = log_path.read_text()
-            error_tail = log_content[-500:] if len(log_content) > 500 else log_content
-            _output({**base, "status": "crashed", "error": error_tail}, fmt)
-        else:
-            _output({**base, "status": "not_running"}, fmt)
-        return
-
-    pid = int(pid_path.read_text().strip())
+    # 直接调 API，能连上就是 running，连不上就是 not_running
     try:
-        os.kill(pid, 0)
-        # Server process alive — try to fetch stats via HTTP
-        stats = {}
-        port_error = None
-        try:
-            resp = httpx.get(f"{BASE_URL}/status", timeout=3)
-            if resp.status_code == 200:
-                stats = resp.json()
-        except httpx.ConnectError:
-            port_error = f"进程存活(pid={pid})但端口 {BASE_URL} 连接失败"
-        except Exception:
-            pass
-
-        result = {**base, "status": "running", "pid": pid, **stats}
-        if port_error:
-            result["warning"] = port_error
-        _output(result, fmt)
-    except OSError:
-        pid_path.unlink(missing_ok=True)
-        if log_path.exists() and log_path.stat().st_size > 0:
-            log_content = log_path.read_text()
-            error_tail = log_content[-500:] if len(log_content) > 500 else log_content
-            _output({**base, "status": "crashed", "error": error_tail}, fmt)
+        resp = httpx.get(f"{BASE_URL}/status", timeout=3)
+        if resp.status_code == 200:
+            _output({**base, "status": "running", **resp.json()}, fmt)
         else:
-            _output({**base, "status": "not_running"}, fmt)
+            _output({**base, "status": "running", "error": f"API 返回 {resp.status_code}"}, fmt)
+    except httpx.ConnectError:
+        _output({**base, "status": "not_running"}, fmt)
 
 
 # ── Sync command ─────────────────────────────────────────────
