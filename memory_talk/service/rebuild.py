@@ -24,7 +24,7 @@ def _rebuild(config: Config) -> dict:
 
     init_db(config.db_path)
     db = SQLiteStore(config.db_path)
-    vectors = LanceStore(config.vectors_dir)
+    vectors = LanceStore(config.vectors_dir, dim=config.settings.embedding.dim)
     embedder = get_embedder(config)
 
     session_files = SessionFiles(config.sessions_dir)
