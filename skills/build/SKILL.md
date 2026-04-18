@@ -70,9 +70,16 @@ memory-talk link create '{
 }'
 ```
 
-### 6. 系统会自动把 session 标为 built
+### 6. 标记 session 为已整理
 
-session 被一张 card 引用后（`links` 里带 `{type: "session", id: <session_id>}`），系统自动把 `unbuilt` tag 换成 `built`，不需要手动调。
+整理完一个 session 的所有 card 之后，显式更新 tag：
+
+```
+memory-talk session tag <session_id> remove unbuilt
+memory-talk session tag <session_id> add built
+```
+
+**没有自动机制** —— `built` / `unbuilt` 只是 Agent 用来追踪"这个 session 处理过没"的普通 tag，由你自己打、自己维护。下次 `/build` 靠 `--tag unbuilt` 过滤能不能工作，完全取决于你这一步有没有做。
 
 ## Quality Guidelines
 

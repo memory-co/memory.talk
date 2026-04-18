@@ -28,16 +28,23 @@ memory-talk sync
 
 已导入的 session 重复 sync 会被去重，可以随时跑。
 
-### 2. 浏览导入结果
+### 2. 浏览并标记新 session
 
 ```
-memory-talk session list                  # 全部
-memory-talk session list --tag unbuilt    # 还没整理成 card 的
+memory-talk session list                                    # 全部
 memory-talk session list --tag claude --tag project:myapp   # 多 tag AND 筛选
 ```
 
-`built` / `unbuilt` 是系统自动维护的 tag：sync 后新 session 自动带 `unbuilt`，被 build 流程整理出 card 后自动变成 `built`。
+### 3. 给新 session 打上 `unbuilt` tag
 
-### 3. 下一步
+**tag 没有自动机制**，`built` / `unbuilt` 是 Agent 自己维护的工作流标签。sync 本身不打 tag，后续 `/build` 能不能用 `--tag unbuilt` 找到待整理 session，取决于这一步：
+
+```
+memory-talk session tag <session_id> add unbuilt
+```
+
+识别"哪些是新的 session"：`session tag <id> list` 返回空，或既没 `built` 也没 `unbuilt` 的，就是还没纳入工作流的。
+
+### 4. 下一步
 
 导入完成后提示用户走 `/build` 把 session 整理成 Talk-Card。
