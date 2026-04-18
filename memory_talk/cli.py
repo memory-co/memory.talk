@@ -14,6 +14,9 @@ import httpx
 
 BASE_URL = "http://127.0.0.1:7788"
 
+# Common option for output format — added to every leaf command
+_fmt_option = click.option("-f", "--format", "fmt", type=click.Choice(["json", "text"]), default="json", help="Output format")
+
 
 def _output(data, fmt="json"):
     """Output data in the chosen format."""
@@ -35,16 +38,8 @@ def _output(data, fmt="json"):
         click.echo(json.dumps(data, indent=2, ensure_ascii=False, default=str))
 
 
-def _get_format(ctx):
-    """Get the output format from Click context, defaulting to json."""
-    try:
-        return ctx.obj["format"]
-    except (TypeError, KeyError):
-        return "json"
-
-
 def _api(method: str, path: str, **kwargs) -> dict | list | None:
-    """Call the memory.talk API. Prints error and exits if server is not running."""
+    """Call the memory.talk API."""
     url = f"{BASE_URL}{path}"
     try:
         resp = httpx.request(method, url, timeout=30.0, **kwargs)
@@ -63,37 +58,31 @@ def _api(method: str, path: str, **kwargs) -> dict | list | None:
 
 
 @click.group()
-@click.option("-f", "--format", "output_format", type=click.Choice(["json", "text"]), default="json", help="Output format")
-@click.pass_context
-def main(ctx, output_format):
+def main():
     """memory.talk — persistent cross-session memory for AI agents."""
-    ctx.ensure_object(dict)
-    ctx.obj["format"] = output_format
+    pass
 
 
 # ── Server commands ──────────────────────────────────────────
 
 @main.group()
-@click.pass_context
-def server(ctx):
+def server():
     """Manage the memory.talk server."""
-    ctx.ensure_object(dict)
+    pass
 
 
 @server.command("start")
 @click.option("--data-root", default=None, help="Data root directory")
 @click.option("--port", default=7788, help="Port to listen on")
-@click.pass_context
-def server_start(ctx, data_root: str | None, port: int):
+@_fmt_option
+def server_start(data_root, port, fmt):
     """Start the memory.talk server."""
-    fmt = _get_format(ctx)
     from memory_talk.config import Config
     config = Config(data_root) if data_root else Config()
     config.ensure_dirs()
 
     pid_path = config.pid_path
 
-    # Check if already running
     if pid_path.exists():
         pid = int(pid_path.read_text().strip())
         try:
@@ -136,10 +125,9 @@ def server_start(ctx, data_root: str | None, port: int):
 
 @server.command("stop")
 @click.option("--data-root", default=None, help="Data root directory")
-@click.pass_context
-def server_stop(ctx, data_root: str | None):
+@_fmt_option
+def server_stop(data_root, fmt):
     """Stop the memory.talk server."""
-    fmt = _get_format(ctx)
     from memory_talk.config import Config
     config = Config(data_root) if data_root else Config()
     pid_path = config.pid_path
@@ -160,10 +148,9 @@ def server_stop(ctx, data_root: str | None):
 
 @server.command("status")
 @click.option("--data-root", default=None, help="Data root directory")
-@click.pass_context
-def server_status(ctx, data_root: str | None):
+@_fmt_option
+def server_status(data_root, fmt):
     """Check if the memory.talk server is running."""
-    fmt = _get_format(ctx)
     from memory_talk.config import Config
     config = Config(data_root) if data_root else Config()
     pid_path = config.pid_path
@@ -197,10 +184,9 @@ def server_status(ctx, data_root: str | None):
 
 @main.command()
 @click.option("--data-root", default=None, help="Data root directory")
-@click.pass_context
-def sync(ctx, data_root: str | None):
+@_fmt_option
+def sync(data_root, fmt):
     """Discover and import sessions from Claude Code."""
-    fmt = _get_format(ctx)
     from memory_talk.config import Config
     from memory_talk.storage.init_db import init_db
     from memory_talk.storage.sqlite import SQLiteStore
@@ -224,10 +210,10 @@ def sync(ctx, data_root: str | None):
             skipped += 1
             continue
         try:
-            session = adapter.convert(fp)
-            result = _api("POST", "/sessions", json=session.model_dump(mode="json"))
+            s = adapter.convert(fp)
+            result = _api("POST", "/sessions", json=s.model_dump(mode="json"))
             if result:
-                db.log_ingest(str(fp), session.session_id, file_hash)
+                db.log_ingest(str(fp), s.session_id, file_hash)
                 imported += 1
         except Exception as e:
             errors += 1
@@ -242,21 +228,19 @@ def sync(ctx, data_root: str | None):
     }, fmt)
 
 
-# ── Sessions commands ────────────────────────────────────────
+# ── Session commands ────────────────────────────────────────
 
 @main.group()
-@click.pass_context
-def sessions(ctx):
+def session():
     """Manage sessions."""
-    ctx.ensure_object(dict)
+    pass
 
 
-@sessions.command("list")
+@session.command("list")
 @click.option("--tag", default=None, help="Filter by tag")
-@click.pass_context
-def sessions_list(ctx, tag: str | None):
+@_fmt_option
+def session_list(tag, fmt):
     """List all sessions."""
-    fmt = _get_format(ctx)
     params = {}
     if tag:
         params["tag"] = tag
@@ -264,14 +248,13 @@ def sessions_list(ctx, tag: str | None):
     _output(result, fmt)
 
 
-@sessions.command("read")
+@session.command("read")
 @click.argument("session_id")
 @click.option("--start", default=None, type=int, help="Start round index")
 @click.option("--end", default=None, type=int, help="End round index")
-@click.pass_context
-def sessions_read(ctx, session_id: str, start: int | None, end: int | None):
+@_fmt_option
+def session_read(session_id, start, end, fmt):
     """Read a session's rounds."""
-    fmt = _get_format(ctx)
     params = {}
     if start is not None:
         params["start"] = start
@@ -281,62 +264,56 @@ def sessions_read(ctx, session_id: str, start: int | None, end: int | None):
     _output(result, fmt)
 
 
-@sessions.group("tag")
-@click.pass_context
-def sessions_tag(ctx):
+@session.group("tag")
+def session_tag():
     """Manage session tags."""
-    ctx.ensure_object(dict)
+    pass
 
 
-@sessions_tag.command("add")
+@session_tag.command("add")
 @click.argument("session_id")
 @click.argument("tags", nargs=-1, required=True)
-@click.pass_context
-def sessions_tag_add(ctx, session_id: str, tags: tuple[str, ...]):
+@_fmt_option
+def session_tag_add(session_id, tags, fmt):
     """Add tags to a session."""
-    fmt = _get_format(ctx)
     result = _api("POST", f"/sessions/{session_id}/tags", json={"tags": list(tags)})
     _output(result, fmt)
 
 
-@sessions_tag.command("remove")
+@session_tag.command("remove")
 @click.argument("session_id")
 @click.argument("tags", nargs=-1, required=True)
-@click.pass_context
-def sessions_tag_remove(ctx, session_id: str, tags: tuple[str, ...]):
+@_fmt_option
+def session_tag_remove(session_id, tags, fmt):
     """Remove tags from a session."""
-    fmt = _get_format(ctx)
     result = _api("DELETE", f"/sessions/{session_id}/tags", json={"tags": list(tags)})
     _output(result, fmt)
 
 
-# ── Cards commands ───────────────────────────────────────────
+# ── Card commands ───────────────────────────────────────────
 
 @main.group()
-@click.pass_context
-def cards(ctx):
+def card():
     """Manage cards."""
-    ctx.ensure_object(dict)
+    pass
 
 
-@cards.command("create")
+@card.command("create")
 @click.argument("card_json")
-@click.pass_context
-def cards_create(ctx, card_json: str):
+@_fmt_option
+def card_create(card_json, fmt):
     """Create a card from JSON string."""
-    fmt = _get_format(ctx)
     data = json.loads(card_json)
     result = _api("POST", "/cards", json=data)
     _output(result, fmt)
 
 
-@cards.command("get")
+@card.command("get")
 @click.argument("card_id")
 @click.option("--link-id", default=None, help="Link ID to refresh TTL")
-@click.pass_context
-def cards_get(ctx, card_id: str, link_id: str | None):
+@_fmt_option
+def card_get(card_id, link_id, fmt):
     """Get a card by ID."""
-    fmt = _get_format(ctx)
     params = {}
     if link_id:
         params["link_id"] = link_id
@@ -344,12 +321,11 @@ def cards_get(ctx, card_id: str, link_id: str | None):
     _output(result, fmt)
 
 
-@cards.command("list")
+@card.command("list")
 @click.option("--session-id", default=None, help="Filter by session ID")
-@click.pass_context
-def cards_list(ctx, session_id: str | None):
+@_fmt_option
+def card_list(session_id, fmt):
     """List all cards."""
-    fmt = _get_format(ctx)
     params = {}
     if session_id:
         params["session_id"] = session_id
@@ -357,33 +333,30 @@ def cards_list(ctx, session_id: str | None):
     _output(result, fmt)
 
 
-# ── Links commands ───────────────────────────────────────────
+# ── Link commands ───────────────────────────────────────────
 
 @main.group()
-@click.pass_context
-def links(ctx):
+def link():
     """Manage links."""
-    ctx.ensure_object(dict)
+    pass
 
 
-@links.command("create")
+@link.command("create")
 @click.argument("link_json")
-@click.pass_context
-def links_create(ctx, link_json: str):
+@_fmt_option
+def link_create(link_json, fmt):
     """Create a link from JSON string."""
-    fmt = _get_format(ctx)
     data = json.loads(link_json)
     result = _api("POST", "/links", json=data)
     _output(result, fmt)
 
 
-@links.command("list")
+@link.command("list")
 @click.argument("id")
 @click.option("--type", "type_filter", default=None, help="Filter by type")
-@click.pass_context
-def links_list(ctx, id: str, type_filter: str | None):
+@_fmt_option
+def link_list(id, type_filter, fmt):
     """List links for an object."""
-    fmt = _get_format(ctx)
     params = {"id": id}
     if type_filter:
         params["type"] = type_filter
@@ -396,10 +369,9 @@ def links_list(ctx, id: str, type_filter: str | None):
 @main.command()
 @click.argument("query")
 @click.option("--top-k", default=5, type=int, help="Number of results")
-@click.pass_context
-def recall(ctx, query: str, top_k: int):
+@_fmt_option
+def recall(query, top_k, fmt):
     """Recall cards by semantic search."""
-    fmt = _get_format(ctx)
     result = _api("POST", "/recall", json={"query": query, "top_k": top_k})
     _output(result, fmt)
 
@@ -407,10 +379,9 @@ def recall(ctx, query: str, top_k: int):
 # ── Status command ───────────────────────────────────────────
 
 @main.command()
-@click.pass_context
-def status(ctx):
+@_fmt_option
+def status(fmt):
     """Get server status and counts."""
-    fmt = _get_format(ctx)
     result = _api("GET", "/status")
     _output(result, fmt)
 
