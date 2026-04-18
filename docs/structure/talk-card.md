@@ -10,7 +10,7 @@ Talk-Card 是 memory.talk 的核心数据结构——从对话中提炼出的记
   "summary": "项目选定 LanceDB 作为向量存储方案，主要原因是零依赖、嵌入式架构",
   "rounds": [
     {"role": "human", "text": "向量库选型，ChromaDB 和 LanceDB 哪个好？"},
-    {"role": "assistant", "text": "推荐 LanceDB：零依赖、本地文件存储、适合嵌入式部署。ChromaDB 需要服务进程。"},
+    {"role": "assistant", "text": "推荐 LanceDB：零依赖、本地文件存储、适合嵌入式部署。ChromaDB 需要服务进程。", "thinking": "关键考量是部署形态——Skill 嵌入式场景不能要求用户启动额外服务"},
     {"role": "human", "text": "就用 LanceDB。"}
   ],
   "links": [
@@ -40,6 +40,7 @@ Talk-Card 中的 round 是极度精简的——只保留谁说了什么。关键
 |------|------|------|
 | `role` | string | `human` / `assistant` |
 | `text` | string | 精简后的文本 |
+| `thinking` | string\|null | 可选，关键的思考思路（精简后保留） |
 
 与 Session 中的 Round 不同：没有 round_id、parent_id、timestamp、content block 等原始结构。这是记忆，不是录像。
 
