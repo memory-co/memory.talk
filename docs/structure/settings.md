@@ -58,8 +58,26 @@
 
 | 字段 | 类型 | 默认值 | 可选值 | 说明 |
 |------|------|--------|--------|------|
-| `provider` | string | `local` | `local` / `dummy` | Embedding 后端 |
-| `model` | string | `all-MiniLM-L6-v2` | 任意 sentence-transformers 模型名 | 模型名称（`local` 后端时生效） |
+| `provider` | string | `dummy` | `local` / `dummy` / `openai` | Embedding 后端 |
+| `model` | string | `all-MiniLM-L6-v2` | 任意模型名 | 模型名称（`local` 时为 sentence-transformers 模型，`openai` 时为远端模型 id，如 `text-embedding-v4`） |
+| `endpoint` | string? | `null` | OpenAI 兼容 `/v1/embeddings` URL | 仅 `openai` 后端使用，例如 `https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings` |
+| `auth_env_key` | string? | `null` | 环境变量名 | 仅 `openai` 后端使用，从该环境变量读取 Bearer Token，例如 `QWEN_KEY` |
+| `dim` | integer | `384` | 正整数 | 向量维度，必须与 provider 实际输出一致（如 DashScope `text-embedding-v4` 为 `1024`） |
+| `timeout` | float | `30.0` | 秒 | 仅 `openai` 后端使用，HTTP 请求超时 |
+
+示例：使用 OpenAI 兼容的 DashScope `text-embedding-v4`（需先 `export QWEN_KEY=...`）：
+
+```json
+{
+  "embedding": {
+    "provider": "openai",
+    "endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
+    "auth_env_key": "QWEN_KEY",
+    "model": "text-embedding-v4",
+    "dim": 1024
+  }
+}
+```
 
 **ttl.card**
 
