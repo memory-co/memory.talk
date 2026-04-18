@@ -173,12 +173,15 @@ def server_status(data_root, fmt):
     pid = int(pid_path.read_text().strip())
     try:
         os.kill(pid, 0)
-        # Server running — fetch data stats via API
+        # Server running — try to fetch stats via HTTP (silently skip if unreachable)
+        stats = {}
         try:
-            stats = _api("GET", "/status")
-            _output({**base, "status": "running", "pid": pid, **stats}, fmt)
-        except SystemExit:
-            _output({**base, "status": "running", "pid": pid}, fmt)
+            resp = httpx.get(f"{BASE_URL}/status", timeout=3)
+            if resp.status_code == 200:
+                stats = resp.json()
+        except Exception:
+            pass
+        _output({**base, "status": "running", "pid": pid, **stats}, fmt)
     except OSError:
         pid_path.unlink(missing_ok=True)
         if log_path.exists() and log_path.stat().st_size > 0:
