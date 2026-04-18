@@ -2,18 +2,15 @@
 
 管理本地 API 服务。CLI 的所有数据命令通过 HTTP 调用此服务。
 
+端口从 `settings.json` 的 `server.port` 读取（默认 7788），详见 [settings.md](../structure/settings.md)。
+
 ## server start
 
 启动 API 服务（后台守护进程）。
 
 ```bash
-memory-talk server start [--port 7788] [--data-root PATH]
+memory-talk server start [--data-root PATH]
 ```
-
-| 选项 | 默认值 | 说明 |
-|------|--------|------|
-| `--port` | `7788` | 监听端口 |
-| `--data-root` | `~/.memory-talk` | 数据根目录 |
 
 输出：
 ```json
@@ -45,7 +42,7 @@ memory-talk server stop [--data-root PATH]
 
 ## server status
 
-检查 API 服务状态。运行中时同时返回数据统计。
+检查 API 服务状态。直接调 API，能连上就是 running（同时返回数据统计），连不上就是 not_running。
 
 ```bash
 memory-talk server status [--data-root PATH]
@@ -57,23 +54,12 @@ memory-talk server status [--data-root PATH]
   "data_root": "/home/user/.memory-talk",
   "settings_path": "/home/user/.memory-talk/settings.json",
   "status": "running",
-  "pid": 12345,
   "sessions_total": 12,
   "cards_total": 47,
   "links_total": 23,
   "vector_provider": "lancedb",
   "relation_provider": "sqlite",
   "embedding_provider": "dummy"
-}
-```
-
-进程崩溃（有错误日志）：
-```json
-{
-  "data_root": "/home/user/.memory-talk",
-  "settings_path": "/home/user/.memory-talk/settings.json",
-  "status": "crashed",
-  "error": "...最近的错误信息..."
 }
 ```
 
