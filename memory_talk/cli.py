@@ -15,6 +15,34 @@ import httpx
 BASE_URL = "http://127.0.0.1:7788"
 
 
+def _output(data, fmt="json"):
+    """Output data in the chosen format."""
+    if fmt == "text":
+        if isinstance(data, dict):
+            for k, v in data.items():
+                click.echo(f"{k}: {v}")
+        elif isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    click.echo("---")
+                    for k, v in item.items():
+                        click.echo(f"  {k}: {v}")
+                else:
+                    click.echo(str(item))
+        else:
+            click.echo(str(data))
+    else:
+        click.echo(json.dumps(data, indent=2, ensure_ascii=False, default=str))
+
+
+def _get_format(ctx):
+    """Get the output format from Click context, defaulting to json."""
+    try:
+        return ctx.obj["format"]
+    except (TypeError, KeyError):
+        return "json"
+
+
 def _api(method: str, path: str, **kwargs) -> dict | list | None:
     """Call the memory.talk API. Prints error and exits if server is not running."""
     url = f"{BASE_URL}{path}"
@@ -23,36 +51,42 @@ def _api(method: str, path: str, **kwargs) -> dict | list | None:
         resp.raise_for_status()
         return resp.json()
     except httpx.ConnectError:
-        click.echo(json.dumps({"error": "Server not running. Start with: memory-talk server start"}), err=True)
+        click.echo(json.dumps({"error": "Server not running. Start with: memory-talk server start"}, ensure_ascii=False), err=True)
         sys.exit(1)
     except httpx.HTTPStatusError as e:
         try:
             detail = e.response.json()
         except Exception:
             detail = {"error": e.response.text}
-        click.echo(json.dumps(detail), err=True)
+        click.echo(json.dumps(detail, ensure_ascii=False), err=True)
         sys.exit(1)
 
 
 @click.group()
-def main():
+@click.option("-f", "--format", "output_format", type=click.Choice(["json", "text"]), default="json", help="Output format")
+@click.pass_context
+def main(ctx, output_format):
     """memory.talk — persistent cross-session memory for AI agents."""
-    pass
+    ctx.ensure_object(dict)
+    ctx.obj["format"] = output_format
 
 
 # ── Server commands ──────────────────────────────────────────
 
 @main.group()
-def server():
+@click.pass_context
+def server(ctx):
     """Manage the memory.talk server."""
-    pass
+    ctx.ensure_object(dict)
 
 
 @server.command("start")
 @click.option("--data-root", default=None, help="Data root directory")
 @click.option("--port", default=7788, help="Port to listen on")
-def server_start(data_root: str | None, port: int):
+@click.pass_context
+def server_start(ctx, data_root: str | None, port: int):
     """Start the memory.talk server."""
+    fmt = _get_format(ctx)
     from memory_talk.config import Config
     config = Config(data_root) if data_root else Config()
     config.ensure_dirs()
@@ -64,7 +98,7 @@ def server_start(data_root: str | None, port: int):
         pid = int(pid_path.read_text().strip())
         try:
             os.kill(pid, 0)
-            click.echo(json.dumps({"status": "already_running", "pid": pid, "port": port}))
+            _output({"status": "already_running", "pid": pid, "port": port}, fmt)
             return
         except OSError:
             pid_path.unlink()
@@ -93,39 +127,43 @@ def server_start(data_root: str | None, port: int):
         log_content = log_path.read_text()
         pid_path.unlink(missing_ok=True)
         error_tail = log_content[-500:] if len(log_content) > 500 else log_content
-        click.echo(json.dumps({"status": "failed", "exit_code": exit_code, "error": error_tail}))
+        _output({"status": "failed", "exit_code": exit_code, "error": error_tail}, fmt)
     else:
         log_file.close()
         pid_path.write_text(str(proc.pid))
-        click.echo(json.dumps({"status": "started", "pid": proc.pid, "port": port}))
+        _output({"status": "started", "pid": proc.pid, "port": port}, fmt)
 
 
 @server.command("stop")
 @click.option("--data-root", default=None, help="Data root directory")
-def server_stop(data_root: str | None):
+@click.pass_context
+def server_stop(ctx, data_root: str | None):
     """Stop the memory.talk server."""
+    fmt = _get_format(ctx)
     from memory_talk.config import Config
     config = Config(data_root) if data_root else Config()
     pid_path = config.pid_path
 
     if not pid_path.exists():
-        click.echo(json.dumps({"status": "not_running"}))
+        _output({"status": "not_running"}, fmt)
         return
 
     pid = int(pid_path.read_text().strip())
     try:
         os.kill(pid, signal.SIGTERM)
-        click.echo(json.dumps({"status": "stopped", "pid": pid}))
+        _output({"status": "stopped", "pid": pid}, fmt)
     except OSError:
-        click.echo(json.dumps({"status": "not_running", "pid": pid}))
+        _output({"status": "not_running", "pid": pid}, fmt)
     finally:
         pid_path.unlink(missing_ok=True)
 
 
 @server.command("status")
 @click.option("--data-root", default=None, help="Data root directory")
-def server_status(data_root: str | None):
+@click.pass_context
+def server_status(ctx, data_root: str | None):
     """Check if the memory.talk server is running."""
+    fmt = _get_format(ctx)
     from memory_talk.config import Config
     config = Config(data_root) if data_root else Config()
     pid_path = config.pid_path
@@ -136,31 +174,33 @@ def server_status(data_root: str | None):
         if log_path.exists() and log_path.stat().st_size > 0:
             log_content = log_path.read_text()
             error_tail = log_content[-500:] if len(log_content) > 500 else log_content
-            click.echo(json.dumps({"status": "crashed", "error": error_tail}))
+            _output({"status": "crashed", "error": error_tail}, fmt)
         else:
-            click.echo(json.dumps({"status": "not_running"}))
+            _output({"status": "not_running"}, fmt)
         return
 
     pid = int(pid_path.read_text().strip())
     try:
         os.kill(pid, 0)
-        click.echo(json.dumps({"status": "running", "pid": pid}))
+        _output({"status": "running", "pid": pid}, fmt)
     except OSError:
         pid_path.unlink(missing_ok=True)
         if log_path.exists() and log_path.stat().st_size > 0:
             log_content = log_path.read_text()
             error_tail = log_content[-500:] if len(log_content) > 500 else log_content
-            click.echo(json.dumps({"status": "crashed", "error": error_tail}))
+            _output({"status": "crashed", "error": error_tail}, fmt)
         else:
-            click.echo(json.dumps({"status": "not_running"}))
+            _output({"status": "not_running"}, fmt)
 
 
 # ── Sync command ─────────────────────────────────────────────
 
 @main.command()
 @click.option("--data-root", default=None, help="Data root directory")
-def sync(data_root: str | None):
+@click.pass_context
+def sync(ctx, data_root: str | None):
     """Discover and import sessions from Claude Code."""
+    fmt = _get_format(ctx)
     from memory_talk.config import Config
     from memory_talk.storage.init_db import init_db
     from memory_talk.storage.sqlite import SQLiteStore
@@ -191,142 +231,164 @@ def sync(data_root: str | None):
                 imported += 1
         except Exception as e:
             errors += 1
-            click.echo(json.dumps({"error": str(e), "file": str(fp)}), err=True)
+            click.echo(json.dumps({"error": str(e), "file": str(fp)}, ensure_ascii=False), err=True)
 
-    click.echo(json.dumps({
+    _output({
         "status": "ok",
         "discovered": len(files),
         "imported": imported,
         "skipped": skipped,
         "errors": errors,
-    }))
+    }, fmt)
 
 
 # ── Sessions commands ────────────────────────────────────────
 
 @main.group()
-def sessions():
+@click.pass_context
+def sessions(ctx):
     """Manage sessions."""
-    pass
+    ctx.ensure_object(dict)
 
 
 @sessions.command("list")
 @click.option("--tag", default=None, help="Filter by tag")
-def sessions_list(tag: str | None):
+@click.pass_context
+def sessions_list(ctx, tag: str | None):
     """List all sessions."""
+    fmt = _get_format(ctx)
     params = {}
     if tag:
         params["tag"] = tag
     result = _api("GET", "/sessions", params=params)
-    click.echo(json.dumps(result))
+    _output(result, fmt)
 
 
 @sessions.command("read")
 @click.argument("session_id")
 @click.option("--start", default=None, type=int, help="Start round index")
 @click.option("--end", default=None, type=int, help="End round index")
-def sessions_read(session_id: str, start: int | None, end: int | None):
+@click.pass_context
+def sessions_read(ctx, session_id: str, start: int | None, end: int | None):
     """Read a session's rounds."""
+    fmt = _get_format(ctx)
     params = {}
     if start is not None:
         params["start"] = start
     if end is not None:
         params["end"] = end
     result = _api("GET", f"/sessions/{session_id}", params=params)
-    click.echo(json.dumps(result))
+    _output(result, fmt)
 
 
 @sessions.group("tag")
-def sessions_tag():
+@click.pass_context
+def sessions_tag(ctx):
     """Manage session tags."""
-    pass
+    ctx.ensure_object(dict)
 
 
 @sessions_tag.command("add")
 @click.argument("session_id")
 @click.argument("tags", nargs=-1, required=True)
-def sessions_tag_add(session_id: str, tags: tuple[str, ...]):
+@click.pass_context
+def sessions_tag_add(ctx, session_id: str, tags: tuple[str, ...]):
     """Add tags to a session."""
+    fmt = _get_format(ctx)
     result = _api("POST", f"/sessions/{session_id}/tags", json={"tags": list(tags)})
-    click.echo(json.dumps(result))
+    _output(result, fmt)
 
 
 @sessions_tag.command("remove")
 @click.argument("session_id")
 @click.argument("tags", nargs=-1, required=True)
-def sessions_tag_remove(session_id: str, tags: tuple[str, ...]):
+@click.pass_context
+def sessions_tag_remove(ctx, session_id: str, tags: tuple[str, ...]):
     """Remove tags from a session."""
+    fmt = _get_format(ctx)
     result = _api("DELETE", f"/sessions/{session_id}/tags", json={"tags": list(tags)})
-    click.echo(json.dumps(result))
+    _output(result, fmt)
 
 
 # ── Cards commands ───────────────────────────────────────────
 
 @main.group()
-def cards():
+@click.pass_context
+def cards(ctx):
     """Manage cards."""
-    pass
+    ctx.ensure_object(dict)
 
 
 @cards.command("create")
 @click.argument("card_json")
-def cards_create(card_json: str):
+@click.pass_context
+def cards_create(ctx, card_json: str):
     """Create a card from JSON string."""
+    fmt = _get_format(ctx)
     data = json.loads(card_json)
     result = _api("POST", "/cards", json=data)
-    click.echo(json.dumps(result))
+    _output(result, fmt)
 
 
 @cards.command("get")
 @click.argument("card_id")
 @click.option("--link-id", default=None, help="Link ID to refresh TTL")
-def cards_get(card_id: str, link_id: str | None):
+@click.pass_context
+def cards_get(ctx, card_id: str, link_id: str | None):
     """Get a card by ID."""
+    fmt = _get_format(ctx)
     params = {}
     if link_id:
         params["link_id"] = link_id
     result = _api("GET", f"/cards/{card_id}", params=params)
-    click.echo(json.dumps(result))
+    _output(result, fmt)
 
 
 @cards.command("list")
 @click.option("--session-id", default=None, help="Filter by session ID")
-def cards_list(session_id: str | None):
+@click.pass_context
+def cards_list(ctx, session_id: str | None):
     """List all cards."""
+    fmt = _get_format(ctx)
     params = {}
     if session_id:
         params["session_id"] = session_id
     result = _api("GET", "/cards", params=params)
-    click.echo(json.dumps(result))
+    _output(result, fmt)
 
 
 # ── Links commands ───────────────────────────────────────────
 
 @main.group()
-def links():
+@click.pass_context
+def links(ctx):
     """Manage links."""
-    pass
+    ctx.ensure_object(dict)
 
 
 @links.command("create")
 @click.argument("link_json")
-def links_create(link_json: str):
+@click.pass_context
+def links_create(ctx, link_json: str):
     """Create a link from JSON string."""
+    fmt = _get_format(ctx)
     data = json.loads(link_json)
     result = _api("POST", "/links", json=data)
-    click.echo(json.dumps(result))
+    _output(result, fmt)
 
 
 @links.command("list")
 @click.argument("id")
 @click.option("--type", "type_filter", default=None, help="Filter by type")
-def links_list(id: str, type_filter: str | None):
+@click.pass_context
+def links_list(ctx, id: str, type_filter: str | None):
     """List links for an object."""
+    fmt = _get_format(ctx)
     params = {"id": id}
     if type_filter:
         params["type"] = type_filter
     result = _api("GET", "/links", params=params)
-    click.echo(json.dumps(result))
+    _output(result, fmt)
 
 
 # ── Recall command ───────────────────────────────────────────
@@ -334,19 +396,23 @@ def links_list(id: str, type_filter: str | None):
 @main.command()
 @click.argument("query")
 @click.option("--top-k", default=5, type=int, help="Number of results")
-def recall(query: str, top_k: int):
+@click.pass_context
+def recall(ctx, query: str, top_k: int):
     """Recall cards by semantic search."""
+    fmt = _get_format(ctx)
     result = _api("POST", "/recall", json={"query": query, "top_k": top_k})
-    click.echo(json.dumps(result))
+    _output(result, fmt)
 
 
 # ── Status command ───────────────────────────────────────────
 
 @main.command()
-def status():
+@click.pass_context
+def status(ctx):
     """Get server status and counts."""
+    fmt = _get_format(ctx)
     result = _api("GET", "/status")
-    click.echo(json.dumps(result))
+    _output(result, fmt)
 
 
 if __name__ == "__main__":

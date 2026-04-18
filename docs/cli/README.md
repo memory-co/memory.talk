@@ -1,6 +1,14 @@
 # CLI Reference
 
-所有命令输出 JSON，供 LLM 或脚本消费。
+所有命令支持两种输出格式：
+
+- **JSON**（默认）：供 LLM 或脚本消费，中文直接输出（`ensure_ascii=False`）
+- **Text**：供人类阅读，`--format text` 或 `-f text`
+
+```bash
+memory-talk status                  # JSON 输出（默认）
+memory-talk status -f text          # 人类可读输出
+```
 
 ```
 memory-talk
