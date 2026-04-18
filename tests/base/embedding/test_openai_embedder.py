@@ -1,5 +1,6 @@
 """Unit tests for OpenAIEmbedder — HTTP is mocked, no network."""
 from __future__ import annotations
+import httpx
 import pytest
 from unittest.mock import patch, MagicMock
 from memory_talk.embedding import OpenAIEmbedder
@@ -78,10 +79,8 @@ def test_embed_batch_multiple_inputs(monkeypatch):
     assert kwargs["json"]["input"] == ["x", "y", "z"]
 
 
-def test_missing_env_var_raises():
-    # Ensure the env var is absent.
-    import os
-    os.environ.pop("NO_SUCH_KEY_123", None)
+def test_missing_env_var_raises(monkeypatch):
+    monkeypatch.delenv("NO_SUCH_KEY_123", raising=False)
     e = OpenAIEmbedder(
         endpoint="https://example.com/v1/embeddings",
         auth_env_key="NO_SUCH_KEY_123",
@@ -92,7 +91,6 @@ def test_missing_env_var_raises():
 
 
 def test_http_error_propagates(monkeypatch):
-    import httpx
     monkeypatch.setenv("QWEN_KEY", "sk-test-123")
     e = OpenAIEmbedder(
         endpoint="https://example.com/v1/embeddings",

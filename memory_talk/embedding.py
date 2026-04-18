@@ -71,7 +71,7 @@ class OpenAIEmbedder(Embedder):
         )
         resp.raise_for_status()
         data = resp.json().get("data", [])
-        data_sorted = sorted(data, key=lambda d: d.get("index", 0))
+        data_sorted = sorted(data, key=lambda d: d["index"])
         return [d["embedding"] for d in data_sorted]
 
 
