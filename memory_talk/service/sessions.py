@@ -37,6 +37,18 @@ class SessionsService:
 
     def add_tags(self, session_id: str, tags: list[str]) -> None:
         self.db.add_tags(session_id, tags)
+        self._sync_tags_to_file(session_id)
 
     def remove_tags(self, session_id: str, tags: list[str]) -> None:
         self.db.remove_tags(session_id, tags)
+        self._sync_tags_to_file(session_id)
+
+    def _sync_tags_to_file(self, session_id: str) -> None:
+        session_meta = self.db.get_session(session_id)
+        if not session_meta:
+            return
+        file_meta = self.files.read_meta(session_meta["source"], session_id)
+        if not file_meta:
+            return
+        file_meta["tags"] = session_meta.get("tags", [])
+        self.files.save_meta(session_meta["source"], session_id, file_meta)
