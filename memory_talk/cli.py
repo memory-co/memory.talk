@@ -154,30 +154,34 @@ def server_status(data_root, fmt):
     from memory_talk.config import Config
     config = Config(data_root) if data_root else Config()
     pid_path = config.pid_path
-
     log_path = config.data_root / "server.log"
+
+    base = {
+        "data_root": str(config.data_root),
+        "settings_path": str(config.settings_path),
+    }
 
     if not pid_path.exists():
         if log_path.exists() and log_path.stat().st_size > 0:
             log_content = log_path.read_text()
             error_tail = log_content[-500:] if len(log_content) > 500 else log_content
-            _output({"status": "crashed", "error": error_tail}, fmt)
+            _output({**base, "status": "crashed", "error": error_tail}, fmt)
         else:
-            _output({"status": "not_running"}, fmt)
+            _output({**base, "status": "not_running"}, fmt)
         return
 
     pid = int(pid_path.read_text().strip())
     try:
         os.kill(pid, 0)
-        _output({"status": "running", "pid": pid}, fmt)
+        _output({**base, "status": "running", "pid": pid}, fmt)
     except OSError:
         pid_path.unlink(missing_ok=True)
         if log_path.exists() and log_path.stat().st_size > 0:
             log_content = log_path.read_text()
             error_tail = log_content[-500:] if len(log_content) > 500 else log_content
-            _output({"status": "crashed", "error": error_tail}, fmt)
+            _output({**base, "status": "crashed", "error": error_tail}, fmt)
         else:
-            _output({"status": "not_running"}, fmt)
+            _output({**base, "status": "not_running"}, fmt)
 
 
 # ── Sync command ─────────────────────────────────────────────
