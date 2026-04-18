@@ -19,6 +19,10 @@ class ProviderConfig(BaseModel):
 class EmbeddingConfig(BaseModel):
     provider: str = "dummy"
     model: str = "all-MiniLM-L6-v2"
+    endpoint: str | None = None
+    auth_env_key: str | None = None
+    dim: int = 384
+    timeout: float = 30.0
 
 class ServerConfig(BaseModel):
     port: int = 7788
