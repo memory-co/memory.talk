@@ -99,7 +99,11 @@ created_at >= -7d                    # 相对：-7d / -30m / -24h / -4w
         "tags": ["decision", "project:memory-talk"],
         "round_count": 42,
         "created_at": "2026-04-10T12:00:00",
-        "score": 5.21
+        "score": 5.21,
+        "snippets": [
+          "...focused on **LanceDB** matter-of-fact...",
+          "...improve **LanceDB** reliability over..."
+        ]
       }
     ],
     "count": 1
@@ -110,7 +114,7 @@ created_at >= -7d                    # 相对：-7d / -30m / -24h / -4w
 - `cards.results[].score`：RRF 分数（越大越相关）
 - `sessions.results[].score`：BM25 分数
 - 两路分数不可直接比较
-- Session 结果**不返回 rounds 原文**，请用 `memory-talk session read <SESSION_ID>` 读详情
+- Session 结果**返回匹配片段**（`snippets`），每段用 markdown `**token**` 高亮匹配词，最多 5 段；不返回完整 rounds 原文，需要详细阅读请用 `memory-talk session read <SESSION_ID>`。空 query 退化路径下 `snippets` 为 `[]`。
 
 ## 示例
 

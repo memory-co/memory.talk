@@ -146,3 +146,28 @@ class TestSearch:
             assert isinstance(card["score"], (int, float))
         for s in r["sessions"]["results"]:
             assert "score" in s and "source" in s and "tags" in s
+
+    def test_session_snippets_include_query_match(self, client, config, fake_claude_sessions):
+        _setup(client, fake_claude_sessions)
+
+        r = client.post("/search", json={"query": "LanceDB", "top_k": 5}).json()
+        sessions = r["sessions"]["results"]
+        assert len(sessions) >= 1
+        for s in sessions:
+            assert "snippets" in s
+            assert isinstance(s["snippets"], list)
+            assert len(s["snippets"]) >= 1
+            # Every returned snippet should highlight the matched token
+            for snip in s["snippets"]:
+                assert "**" in snip
+                assert "LanceDB".lower() in snip.lower()
+
+    def test_empty_query_produces_empty_snippets(self, client, config, fake_claude_sessions):
+        db_sid, bug_sid, c1, c2 = _setup(client, fake_claude_sessions)
+
+        r = client.post(
+            "/search",
+            json={"query": "", "where": f'session_id = "{db_sid}"', "top_k": 10},
+        ).json()
+        for s in r["sessions"]["results"]:
+            assert s["snippets"] == []

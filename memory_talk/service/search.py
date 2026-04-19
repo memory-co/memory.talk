@@ -12,7 +12,10 @@ from memory_talk.dsl import (
     parse,
 )
 from memory_talk.embedding import get_embedder
+from memory_talk.service.session_text import rounds_to_text
+from memory_talk.service.snippet import extract_snippets
 from memory_talk.service.ttl import compute_ttl
+from memory_talk.storage.files import SessionFiles
 from memory_talk.storage.lancedb import LanceStore
 from memory_talk.storage.sqlite import SQLiteStore
 
@@ -25,6 +28,7 @@ class SearchService:
         self.config = config
         self.db = SQLiteStore(config.db_path)
         self.vectors = LanceStore(config.vectors_dir, dim=config.settings.embedding.dim)
+        self.files = SessionFiles(config.sessions_dir)
         self.embedder = get_embedder(config)
 
     def search(
@@ -168,7 +172,7 @@ class SearchService:
 
         if not query.strip():
             rows = self._recent_sessions(whitelist, top_k)
-            results = [self._enrich_session(sid, 0.0) for sid in rows]
+            results = [self._enrich_session(sid, 0.0, query) for sid in rows]
             return {"results": [r for r in results if r], "count": len([r for r in results if r])}
 
         hits = self.vectors.fts_search_sessions(query, whitelist, top_k)
@@ -176,7 +180,7 @@ class SearchService:
         for hit in hits:
             sid = hit["session_id"]
             score = hit.get("_score", 0.0)
-            enriched = self._enrich_session(sid, score)
+            enriched = self._enrich_session(sid, score, query)
             if enriched:
                 results.append(enriched)
         return {"results": results, "count": len(results)}
@@ -194,7 +198,9 @@ class SearchService:
         params.append(top_k)
         return [r["session_id"] for r in self.db.conn.execute(sql, params).fetchall()]
 
-    def _enrich_session(self, session_id: str, score: float) -> Optional[dict]:
+    def _enrich_session(
+        self, session_id: str, score: float, query: str
+    ) -> Optional[dict]:
         row = self.db.conn.execute(
             "SELECT session_id, source, tags, round_count, created_at FROM sessions WHERE session_id = ?",
             (session_id,),
@@ -202,6 +208,13 @@ class SearchService:
         if not row:
             return None
         import json
+
+        snippets: list[str] = []
+        if query.strip():
+            rounds = self.files.read_rounds(row["source"], session_id)
+            full_text = rounds_to_text(rounds)
+            snippets = extract_snippets(full_text, query)
+
         return {
             "session_id": row["session_id"],
             "source": row["source"],
@@ -209,4 +222,5 @@ class SearchService:
             "round_count": row["round_count"],
             "created_at": row["created_at"],
             "score": score,
+            "snippets": snippets,
         }
