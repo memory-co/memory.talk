@@ -18,11 +18,12 @@ def create_app(config: Config | None = None) -> FastAPI:
     app = FastAPI(title="memory.talk", lifespan=lifespan)
     app.state.config = config
 
-    from memory_talk.api import sessions, cards, links, recall, status
+    from memory_talk.api import sessions, cards, links, recall, search, status
     app.include_router(sessions.router)
     app.include_router(cards.router)
     app.include_router(links.router)
     app.include_router(recall.router)
+    app.include_router(search.router)
     app.include_router(status.router)
     return app
 

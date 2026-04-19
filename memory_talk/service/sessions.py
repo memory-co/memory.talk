@@ -5,11 +5,14 @@ from memory_talk.config import Config
 from memory_talk.models.session import Session
 from memory_talk.storage.sqlite import SQLiteStore
 from memory_talk.storage.files import SessionFiles
+from memory_talk.storage.lancedb import LanceStore
+from memory_talk.service.session_text import rounds_to_text
 
 class SessionsService:
     def __init__(self, config: Config):
         self.db = SQLiteStore(config.db_path)
         self.files = SessionFiles(config.sessions_dir)
+        self.vectors = LanceStore(config.vectors_dir, dim=config.settings.embedding.dim)
 
     def import_session(self, session: Session) -> dict:
         self.files.save(session)
@@ -20,6 +23,9 @@ class SessionsService:
             metadata=session.metadata, tags=session.tags,
             round_count=len(session.rounds), created_at=created_at, synced_at=synced_at,
         )
+        text = rounds_to_text(session.rounds)
+        self.vectors.add_session(session.session_id, text)
+        self.vectors.ensure_fts_index(LanceStore.SESSIONS)
         return {"status": "ok", "session_id": session.session_id, "rounds": len(session.rounds)}
 
     def list_sessions(self, source: str | None = None, tag: str | None = None) -> list[dict]:

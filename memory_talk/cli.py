@@ -372,6 +372,22 @@ def recall(query, top_k, fmt):
     _output(result, fmt)
 
 
+# ── Search command ───────────────────────────────────────────
+
+@main.command()
+@click.argument("query")
+@click.option("--where", "-w", default=None, help="Metadata filter DSL (see docs/cli/search.md)")
+@click.option("--top-k", default=10, type=int, help="Per-branch cap (cards and sessions each)")
+@_fmt_option
+def search(query, where, top_k, fmt):
+    """Hybrid search over cards and sessions with metadata filtering."""
+    payload = {"query": query, "top_k": top_k}
+    if where is not None:
+        payload["where"] = where
+    result = _api("POST", "/search", json=payload)
+    _output(result, fmt)
+
+
 @main.command()
 @_fmt_option
 def rebuild(fmt):
