@@ -43,6 +43,7 @@ class CardsService:
         text = f"{data['summary']}\n" + "\n".join(r.get("text", "") for r in data.get("rounds", []))
         embedding = self.embedder.embed_one(text)
         self.vectors.add(card_id, text, embedding)
+        self.vectors.ensure_fts_index(LanceStore.CARDS)
         return {"status": "ok", "card_id": card_id}
 
     def get(self, card_id: str, link_id: str | None = None) -> dict | None:

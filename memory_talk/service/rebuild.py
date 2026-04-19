@@ -10,6 +10,7 @@ from memory_talk.storage.init_db import init_db
 from memory_talk.storage.sqlite import SQLiteStore
 from memory_talk.storage.lancedb import LanceStore
 from memory_talk.service.ttl import initial_expires_at
+from memory_talk.service.session_text import rounds_to_text
 
 def rebuild_async(config: Config) -> None:
     t = threading.Thread(target=_rebuild, args=(config,), daemon=True)
@@ -36,6 +37,8 @@ def _rebuild(config: Config) -> dict:
             round_count=meta.get("round_count", 0),
             created_at=meta.get("created_at"), synced_at=meta.get("synced_at"),
         )
+        rounds = session_files.read_rounds(meta["source"], meta["session_id"])
+        vectors.add_session(meta["session_id"], rounds_to_text(rounds))
         session_count += 1
 
     card_files = CardFiles(config.cards_dir)
@@ -59,6 +62,12 @@ def _rebuild(config: Config) -> dict:
         text = f"{card_data['summary']}\n" + "\n".join(r.get("text", "") for r in card_data.get("rounds", []))
         embedding = embedder.embed_one(text)
         vectors.add(card_id, text, embedding)
+
+    # Build FTS indexes on both tables (requires at least one row each).
+    if card_count:
+        vectors.ensure_fts_index(LanceStore.CARDS, replace=True)
+    if session_count:
+        vectors.ensure_fts_index(LanceStore.SESSIONS, replace=True)
 
     return {"status": "ok", "sessions": session_count, "cards": card_count, "links": link_count}
 

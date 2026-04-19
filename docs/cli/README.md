@@ -17,7 +17,8 @@ memory-talk
 ├── session list / read / tag
 ├── card create / get / list
 ├── link create / list             # 管理关联（TTL 通过 card get --link-id 自动刷新）
-├── recall                         # 向量检索
+├── recall                         # 纯向量检索（只返回 card）
+├── search                         # FTS + 向量 hybrid + 元数据 DSL（同时返回 card / session）
 └── rebuild                        # 从文件重建索引
 ```
 

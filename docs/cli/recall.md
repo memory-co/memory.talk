@@ -1,6 +1,8 @@
 # recall
 
-向量检索，返回语义最相关的 Talk-Card。
+纯向量检索，返回语义最相关的 Talk-Card。
+
+> 需要关键词精确匹配、按元数据筛选，或想同时搜 session？请用 [`search`](search.md)。
 
 ```bash
 memory-talk recall "<QUERY>" [--top-k N]
