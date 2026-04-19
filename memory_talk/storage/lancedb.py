@@ -146,18 +146,36 @@ class LanceStore:
     # ---------- FTS index maintenance ----------
 
     def ensure_fts_index(self, table_name: str, replace: bool = False) -> None:
-        """Build FTS index on `text` column. Idempotent when replace=False."""
+        """Ensure FTS index on `text` is present AND up to date.
+
+        LanceDB's native FTS does not auto-absorb appended rows; they stay in
+        an `unindexed` pool until `optimize()` is called. Semantics:
+
+        - replace=True: rebuild from scratch (used by `rebuild`)
+        - index absent: create fresh
+        - index present: call optimize() to absorb rows added since last call
+        """
         if not self._exists(table_name):
             return
         table = self.db.open_table(table_name)
+
+        has_index = False
         if not replace:
             try:
                 for idx in table.list_indices():
-                    # existing FTS on `text` column — skip
                     if "text" in getattr(idx, "columns", []):
-                        return
+                        has_index = True
+                        break
             except Exception:
                 pass
+
+        if has_index:
+            try:
+                table.optimize()
+            except Exception:
+                pass
+            return
+
         table.create_fts_index(
             "text",
             use_tantivy=False,

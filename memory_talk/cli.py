@@ -391,12 +391,12 @@ def search(query, where, top_k, fmt):
 @main.command()
 @_fmt_option
 def rebuild(fmt):
-    """Rebuild SQLite + LanceDB index from files. Runs async."""
+    """Rebuild SQLite + LanceDB index from files. Blocks until done."""
     from memory_talk.config import Config
-    from memory_talk.service.rebuild import rebuild_async
+    from memory_talk.service.rebuild import rebuild_sync
     config = Config()
-    rebuild_async(config)
-    _output({"status": "rebuilding"}, fmt)
+    result = rebuild_sync(config)
+    _output(result, fmt)
 
 
 if __name__ == "__main__":
