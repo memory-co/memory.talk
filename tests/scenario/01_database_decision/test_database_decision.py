@@ -27,23 +27,23 @@ class TestDatabaseDecision:
         paths = adapter.discover()
         db_path = [p for p in paths if "db_decision" in p.name][0]
         session = adapter.convert(db_path)
-        r = client.post("/sessions", json=session.model_dump(mode="json"))
+        r = client.post("/v1/sessions", json=session.model_dump(mode="json"))
         assert r.status_code == 200
         assert r.json()["status"] == "ok"
         session_id = r.json()["session_id"]
 
         # 2. List sessions
-        r = client.get("/sessions")
+        r = client.get("/v1/sessions")
         assert r.status_code == 200
         assert any(s["session_id"] == session_id for s in r.json())
 
         # 3. Read rounds
-        r = client.get(f"/sessions/{session_id}")
+        r = client.get(f"/v1/sessions/{session_id}")
         assert r.status_code == 200
         assert len(r.json()) == 3
 
         # 4. Create card
-        r = client.post("/cards", json={
+        r = client.post("/v1/cards", json={
             "summary": "项目选定 LanceDB 作为向量存储方案",
             "session_id": session_id,
             "rounds": [
@@ -57,7 +57,7 @@ class TestDatabaseDecision:
         card_id = r.json()["card_id"]
 
         # 5. Recall
-        r = client.post("/recall", json={"query": "数据库选型 LanceDB", "top_k": 5})
+        r = client.post("/v1/recall", json={"query": "数据库选型 LanceDB", "top_k": 5})
         assert r.status_code == 200
         data = r.json()
         assert data["count"] >= 1
@@ -67,7 +67,7 @@ class TestDatabaseDecision:
         assert len(found[0]["links"]) >= 1
 
         # 6. Status
-        r = client.get("/status")
+        r = client.get("/v1/status")
         assert r.status_code == 200
         assert r.json()["sessions_total"] >= 1
         assert r.json()["cards_total"] >= 1

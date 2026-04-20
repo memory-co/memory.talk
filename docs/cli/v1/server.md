@@ -2,7 +2,7 @@
 
 管理本地 API 服务。CLI 的所有数据命令通过 HTTP 调用此服务。
 
-端口从 `settings.json` 的 `server.port` 读取（默认 7788），详见 [settings.md](../structure/settings.md)。
+端口从 `settings.json` 的 `server.port` 读取（默认 7788），详见 [settings.md](../../structure/v1/settings.md)。
 
 ## server start
 

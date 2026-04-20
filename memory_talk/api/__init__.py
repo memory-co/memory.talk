@@ -1,10 +1,13 @@
-"""FastAPI application."""
+"""FastAPI app root. Mounts versioned routers."""
 from __future__ import annotations
 import os
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
+
 from memory_talk.config import Config
 from memory_talk.storage.init_db import init_db
+
 
 def create_app(config: Config | None = None) -> FastAPI:
     config = config or Config()
@@ -18,15 +21,10 @@ def create_app(config: Config | None = None) -> FastAPI:
     app = FastAPI(title="memory.talk", lifespan=lifespan)
     app.state.config = config
 
-    from memory_talk.api import sessions, cards, links, recall, search, status
-    app.include_router(sessions.router)
-    app.include_router(cards.router)
-    app.include_router(links.router)
-    app.include_router(recall.router)
-    app.include_router(search.router)
-    app.include_router(status.router)
+    from memory_talk.api.v1 import router as v1_router
+    app.include_router(v1_router, prefix="/v1")
     return app
 
-# Module-level app for uvicorn
+
 _data_root = os.environ.get("MEMORY_TALK_DATA_ROOT")
 app = create_app(Config(_data_root) if _data_root else Config())

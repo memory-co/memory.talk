@@ -23,16 +23,16 @@ def _setup(client, fake_claude_sessions):
     adapter = ClaudeCodeAdapter(projects_dir=fake_claude_sessions.parent)
     for path in adapter.discover():
         session = adapter.convert(path)
-        client.post("/sessions", json=session.model_dump(mode="json"))
+        client.post("/v1/sessions", json=session.model_dump(mode="json"))
 
-    sessions = client.get("/sessions").json()
+    sessions = client.get("/v1/sessions").json()
     db_sid = [s for s in sessions if "db_decision" in s["session_id"]][0]["session_id"]
     bug_sid = [s for s in sessions if "bug" in s["session_id"]][0]["session_id"]
 
     # tag one session to exercise tag filtering later
-    client.post(f"/sessions/{db_sid}/tags", json={"tags": ["decision", "project:memory-talk"]})
+    client.post(f"/v1/sessions/{db_sid}/tags", json={"tags": ["decision", "project:memory-talk"]})
 
-    card1 = client.post("/cards", json={
+    card1 = client.post("/v1/cards", json={
         "summary": "选定 LanceDB 做向量存储 零依赖",
         "session_id": db_sid,
         "rounds": [
@@ -41,7 +41,7 @@ def _setup(client, fake_claude_sessions):
         ],
         "links": [{"id": db_sid, "type": "session"}],
     }).json()
-    card2 = client.post("/cards", json={
+    card2 = client.post("/v1/cards", json={
         "summary": "LanceDB NFS 建表阻塞 预创建表",
         "session_id": bug_sid,
         "rounds": [
@@ -57,7 +57,7 @@ class TestSearch:
     def test_cards_and_sessions_both_return(self, client, config, fake_claude_sessions):
         db_sid, bug_sid, c1, c2 = _setup(client, fake_claude_sessions)
 
-        r = client.post("/search", json={"query": "LanceDB", "top_k": 5}).json()
+        r = client.post("/v1/search", json={"query": "LanceDB", "top_k": 5}).json()
         assert "cards" in r and "sessions" in r
         assert r["cards"]["count"] >= 1
         # "LanceDB" appears in card summaries and at least one session's rounds
@@ -67,7 +67,7 @@ class TestSearch:
         db_sid, bug_sid, c1, c2 = _setup(client, fake_claude_sessions)
 
         r = client.post(
-            "/search",
+            "/v1/search",
             json={"query": "LanceDB", "where": f'session_id = "{db_sid}"', "top_k": 10},
         ).json()
         # cards side: only cards from db_sid
@@ -81,7 +81,7 @@ class TestSearch:
         db_sid, bug_sid, c1, c2 = _setup(client, fake_claude_sessions)
 
         r = client.post(
-            "/search",
+            "/v1/search",
             json={"query": "LanceDB", "where": 'tag = "decision"', "top_k": 10},
         ).json()
         # Only db_sid was tagged "decision"
@@ -95,7 +95,7 @@ class TestSearch:
         db_sid, bug_sid, c1, c2 = _setup(client, fake_claude_sessions)
 
         r = client.post(
-            "/search",
+            "/v1/search",
             json={"query": "LanceDB", "where": 'tag LIKE "project:%"', "top_k": 10},
         ).json()
         # only db_sid was tagged project:memory-talk
@@ -106,7 +106,7 @@ class TestSearch:
         db_sid, bug_sid, c1, c2 = _setup(client, fake_claude_sessions)
 
         r = client.post(
-            "/search",
+            "/v1/search",
             json={"query": "LanceDB", "where": f'card_id = "{c1}"', "top_k": 10},
         ).json()
         # cards side: filters to c1
@@ -119,7 +119,7 @@ class TestSearch:
         db_sid, bug_sid, c1, c2 = _setup(client, fake_claude_sessions)
 
         r = client.post(
-            "/search",
+            "/v1/search",
             json={"query": "", "where": f'session_id = "{db_sid}"', "top_k": 10},
         ).json()
         # Both branches fall back to created_at DESC within the session_id filter
@@ -130,7 +130,7 @@ class TestSearch:
         _setup(client, fake_claude_sessions)
 
         r = client.post(
-            "/search",
+            "/v1/search",
             json={"query": "LanceDB", "where": 'summary LIKE "%x%"', "top_k": 5},
         )
         assert r.status_code == 400
@@ -139,7 +139,7 @@ class TestSearch:
     def test_score_shape(self, client, config, fake_claude_sessions):
         _setup(client, fake_claude_sessions)
 
-        r = client.post("/search", json={"query": "LanceDB", "top_k": 5}).json()
+        r = client.post("/v1/search", json={"query": "LanceDB", "top_k": 5}).json()
         for card in r["cards"]["results"]:
             assert "score" in card and "links" in card
             # RRF score is in [0, 2/(K+1)] ≈ [0, 0.033]; just check it's a number
@@ -150,7 +150,7 @@ class TestSearch:
     def test_session_snippets_include_query_match(self, client, config, fake_claude_sessions):
         _setup(client, fake_claude_sessions)
 
-        r = client.post("/search", json={"query": "LanceDB", "top_k": 5}).json()
+        r = client.post("/v1/search", json={"query": "LanceDB", "top_k": 5}).json()
         sessions = r["sessions"]["results"]
         assert len(sessions) >= 1
         for s in sessions:
@@ -166,7 +166,7 @@ class TestSearch:
         db_sid, bug_sid, c1, c2 = _setup(client, fake_claude_sessions)
 
         r = client.post(
-            "/search",
+            "/v1/search",
             json={"query": "", "where": f'session_id = "{db_sid}"', "top_k": 10},
         ).json()
         for s in r["sessions"]["results"]:

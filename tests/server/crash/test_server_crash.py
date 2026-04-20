@@ -5,7 +5,7 @@ import sys
 import pytest
 from click.testing import CliRunner
 
-from memory_talk.cli import server_start
+from memory_talk.cli.v1 import server_start
 from memory_talk.config import Config
 
 
@@ -39,7 +39,7 @@ class TestServerCrash:
                 return self._proc.poll()
 
         import unittest.mock
-        with unittest.mock.patch('memory_talk.cli.subprocess.Popen', FakePopen):
+        with unittest.mock.patch('memory_talk.cli.v1.subprocess.Popen', FakePopen):
             result = runner.invoke(server_start, ['--data-root', str(temp_root)])
 
         output = result.output.strip()

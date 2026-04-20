@@ -1,6 +1,6 @@
 # Cards API
 
-## POST /cards
+## POST /v1/cards
 
 创建一张 Talk-Card。自动计算 embedding 写入向量库。
 
@@ -23,14 +23,14 @@
 
 `session_id` 可选，冗余字段方便按 session 查找。可为空——基于多个 card 合成的新 card 没有单一来源 session。
 
-完整结构见 [talk-card.md](../structure/talk-card.md)。
+完整结构见 [talk-card.md](../../structure/v1/talk-card.md)。
 
 响应：
 ```json
 {"status": "ok", "card_id": "01jz8k2m"}
 ```
 
-## GET /cards
+## GET /v1/cards
 
 列出 cards。
 
@@ -40,7 +40,7 @@
 
 响应：Card 元数据数组。
 
-## GET /cards/:id
+## GET /v1/cards/:id
 
 读取一张 card 的完整内容。
 

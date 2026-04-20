@@ -1,6 +1,6 @@
 # Status API
 
-## GET /status
+## GET /v1/status
 
 返回存储统计信息。
 

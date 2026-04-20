@@ -28,20 +28,20 @@ class TestRebuild:
         adapter = ClaudeCodeAdapter(projects_dir=fake_claude_sessions.parent)
         for path in adapter.discover():
             session = adapter.convert(path)
-            client.post("/sessions", json=session.model_dump(mode="json"))
+            client.post("/v1/sessions", json=session.model_dump(mode="json"))
 
-        sessions_before = client.get("/sessions").json()
+        sessions_before = client.get("/v1/sessions").json()
         assert len(sessions_before) >= 1
         session_id = sessions_before[0]["session_id"]
 
-        client.post("/cards", json={
+        client.post("/v1/cards", json={
             "summary": "选定 LanceDB",
             "session_id": session_id,
             "rounds": [{"role": "human", "text": "test"}],
             "links": [{"id": session_id, "type": "session"}],
         })
 
-        cards_before = client.get("/cards").json()
+        cards_before = client.get("/v1/cards").json()
         assert len(cards_before) >= 1
 
         # 2. Delete SQLite
@@ -56,12 +56,12 @@ class TestRebuild:
         # 4. Recreate client with rebuilt db
         app = create_app(config)
         with TestClient(app) as new_client:
-            sessions_after = new_client.get("/sessions").json()
+            sessions_after = new_client.get("/v1/sessions").json()
             assert len(sessions_after) == len(sessions_before)
 
-            cards_after = new_client.get("/cards").json()
+            cards_after = new_client.get("/v1/cards").json()
             assert len(cards_after) == len(cards_before)
 
             # Recall should work (LanceDB rebuilt)
-            recall = new_client.post("/recall", json={"query": "LanceDB", "top_k": 5}).json()
+            recall = new_client.post("/v1/recall", json={"query": "LanceDB", "top_k": 5}).json()
             assert recall["count"] >= 1

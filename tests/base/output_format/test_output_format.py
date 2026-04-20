@@ -13,10 +13,10 @@ class TestOutputFormat:
         paths = adapter.discover()
         db_path = [p for p in paths if "db_decision" in p.name][0]
         session = adapter.convert(db_path)
-        r = client.post("/sessions", json=session.model_dump(mode="json"))
+        r = client.post("/v1/sessions", json=session.model_dump(mode="json"))
         session_id = r.json()["session_id"]
 
-        card = client.post("/cards", json={
+        card = client.post("/v1/cards", json={
             "summary": "项目选定 LanceDB 作为向量存储方案",
             "session_id": session_id,
             "rounds": [
@@ -32,7 +32,7 @@ class TestOutputFormat:
         session_id, card_id = self._setup_data(client, fake_claude_sessions)
 
         # Recall with Chinese query
-        r = client.post("/recall", json={"query": "向量库选型", "top_k": 5})
+        r = client.post("/v1/recall", json={"query": "向量库选型", "top_k": 5})
         raw_json = json.dumps(r.json(), ensure_ascii=False)
 
         # Should contain Chinese characters directly
@@ -43,7 +43,7 @@ class TestOutputFormat:
         """Card get should return Chinese text without escaping."""
         session_id, card_id = self._setup_data(client, fake_claude_sessions)
 
-        r = client.get(f"/cards/{card_id}")
+        r = client.get(f"/v1/cards/{card_id}")
         card_data = r.json()
         assert "项目选定" in card_data["summary"]
         assert "向量库选型" in card_data["rounds"][0]["text"]

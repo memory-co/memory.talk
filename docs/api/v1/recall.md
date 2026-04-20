@@ -1,6 +1,6 @@
 # Recall API
 
-## POST /recall
+## POST /v1/recall
 
 向量检索，返回语义最相关的 Talk-Card。
 

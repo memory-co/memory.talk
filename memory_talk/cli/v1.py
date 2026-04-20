@@ -45,7 +45,7 @@ def _output(data, fmt="json"):
 
 def _api(method: str, path: str, data_root=None, **kwargs) -> dict | list | None:
     """Call the memory.talk API."""
-    url = f"{_base_url(data_root)}{path}"
+    url = f"{_base_url(data_root)}/v1{path}"
     try:
         resp = httpx.request(method, url, timeout=30.0, **kwargs)
         resp.raise_for_status()
@@ -167,7 +167,7 @@ def server_status(data_root, fmt):
     # 直接调 API，能连上就是 running，连不上就是 not_running
     url = _base_url(data_root)
     try:
-        resp = httpx.get(f"{url}/status", timeout=3)
+        resp = httpx.get(f"{url}/v1/status", timeout=3)
         if resp.status_code == 200:
             _output({**base, "status": "running", **resp.json()}, fmt)
         else:
@@ -397,6 +397,18 @@ def rebuild(fmt):
     config = Config()
     result = rebuild_sync(config)
     _output(result, fmt)
+
+
+__all__ = [
+    "main",
+    "server", "server_start", "server_stop", "server_status",
+    "sync",
+    "session", "session_list", "session_read",
+    "session_tag", "session_tag_add", "session_tag_remove",
+    "card", "card_create", "card_get", "card_list",
+    "link", "link_create", "link_list",
+    "recall", "search", "rebuild",
+]
 
 
 if __name__ == "__main__":

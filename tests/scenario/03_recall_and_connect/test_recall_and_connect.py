@@ -27,20 +27,20 @@ class TestRecallAndConnect:
         adapter = ClaudeCodeAdapter(projects_dir=fake_claude_sessions.parent)
         for path in adapter.discover():
             session = adapter.convert(path)
-            client.post("/sessions", json=session.model_dump(mode="json"))
+            client.post("/v1/sessions", json=session.model_dump(mode="json"))
 
-        sessions = client.get("/sessions").json()
+        sessions = client.get("/v1/sessions").json()
         db_sid = [s for s in sessions if "db_decision" in s["session_id"]][0]["session_id"]
         bug_sid = [s for s in sessions if "bug" in s["session_id"]][0]["session_id"]
 
-        card1 = client.post("/cards", json={
+        card1 = client.post("/v1/cards", json={
             "summary": "选定 LanceDB 做向量存储 零依赖",
             "session_id": db_sid,
             "rounds": [{"role": "human", "text": "ChromaDB vs LanceDB"}, {"role": "assistant", "text": "LanceDB"}],
             "links": [{"id": db_sid, "type": "session"}],
         }).json()
 
-        card2 = client.post("/cards", json={
+        card2 = client.post("/v1/cards", json={
             "summary": "LanceDB NFS 建表阻塞 预创建表",
             "session_id": bug_sid,
             "rounds": [{"role": "human", "text": "卡住"}, {"role": "assistant", "text": "NFS fsync"}],
@@ -51,32 +51,32 @@ class TestRecallAndConnect:
         }).json()
 
         # 1. Recall
-        recall = client.post("/recall", json={"query": "ChromaDB 选型 LanceDB", "top_k": 5}).json()
+        recall = client.post("/v1/recall", json={"query": "ChromaDB 选型 LanceDB", "top_k": 5}).json()
         assert recall["count"] >= 1
 
         # 2. Card TTL refreshed by recall
-        card1_data = client.get(f"/cards/{card1['card_id']}").json()
+        card1_data = client.get(f"/v1/cards/{card1['card_id']}").json()
         initial_ttl = card1_data["ttl"]
 
         time.sleep(0.1)
-        client.post("/recall", json={"query": "LanceDB 向量存储", "top_k": 5})
-        card1_after = client.get(f"/cards/{card1['card_id']}").json()
+        client.post("/v1/recall", json={"query": "LanceDB 向量存储", "top_k": 5})
+        card1_after = client.get(f"/v1/cards/{card1['card_id']}").json()
         assert card1_after["ttl"] >= initial_ttl
 
         # 3. Link TTL refreshed by cards get --link-id
-        links = client.get("/links", params={"id": card2["card_id"]}).json()
+        links = client.get("/v1/links", params={"id": card2["card_id"]}).json()
         card_link = [lk for lk in links if lk.get("target_type") == "card"][0]
         link_id = card_link["link_id"]
         link_ttl_before = card_link["ttl"]
 
         time.sleep(0.1)
-        client.get(f"/cards/{card2['card_id']}", params={"link_id": link_id})
-        links_after = client.get("/links", params={"id": card2["card_id"]}).json()
+        client.get(f"/v1/cards/{card2['card_id']}", params={"link_id": link_id})
+        links_after = client.get("/v1/links", params={"id": card2["card_id"]}).json()
         card_link_after = [lk for lk in links_after if lk["link_id"] == link_id][0]
         assert card_link_after["ttl"] >= link_ttl_before
 
         # 4. Status
-        st = client.get("/status").json()
+        st = client.get("/v1/status").json()
         assert st["sessions_total"] == 2
         assert st["cards_total"] == 2
         assert st["links_total"] >= 3

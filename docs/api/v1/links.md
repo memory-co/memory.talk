@@ -1,6 +1,6 @@
 # Links API
 
-## POST /links
+## POST /v1/links
 
 创建一条关联。
 
@@ -24,7 +24,7 @@
 
 `link_id` 自动生成，后续用于刷新 TTL 或删除。
 
-## GET /links
+## GET /v1/links
 
 查询某个对象的所有关联。
 
@@ -35,6 +35,6 @@
 
 响应：Link 数组，包含两个方向的关联，每条带 `link_id`。
 
-## DELETE /links/:link_id
+## DELETE /v1/links/:link_id
 
 按 `link_id` 删除一条关联。供人工管理使用，AI 不应调用——正常情况下 link 不会消失，只会因 TTL 耗尽而被遗忘。

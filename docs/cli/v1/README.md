@@ -22,6 +22,6 @@ memory-talk
 └── rebuild                        # 从文件重建索引
 ```
 
-配置文件 `~/.memory-talk/settings.json`，不存在时使用默认值，由 AI 直接读写。详见 [settings.md](../structure/settings.md)。
+配置文件 `~/.memory-talk/settings.json`，不存在时使用默认值，由 AI 直接读写。详见 [settings.md](../../structure/v1/settings.md)。
 
 详细文档见各子命令文件。

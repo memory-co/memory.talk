@@ -1,6 +1,6 @@
 # Sessions API
 
-## POST /sessions
+## POST /v1/sessions
 
 导入一个 session。
 
@@ -22,14 +22,14 @@
 }
 ```
 
-Round 和 ContentBlock 结构见 [session.md](../structure/session.md)。
+Round 和 ContentBlock 结构见 [session.md](../../structure/v1/session.md)。
 
 响应：
 ```json
 {"status": "ok", "session_id": "abc123", "rounds": 15}
 ```
 
-## GET /sessions
+## GET /v1/sessions
 
 列出 sessions。
 
@@ -39,7 +39,7 @@ Round 和 ContentBlock 结构见 [session.md](../structure/session.md)。
 
 响应：Session 元数据数组。
 
-## GET /sessions/:id
+## GET /v1/sessions/:id
 
 读取 session 的 rounds。
 
@@ -50,7 +50,7 @@ Round 和 ContentBlock 结构见 [session.md](../structure/session.md)。
 
 响应：Round 数组。
 
-## POST /sessions/:id/tags
+## POST /v1/sessions/:id/tags
 
 添加 tags。
 
@@ -59,7 +59,7 @@ Round 和 ContentBlock 结构见 [session.md](../structure/session.md)。
 {"tags": ["claude", "project:myapp"]}
 ```
 
-## DELETE /sessions/:id/tags
+## DELETE /v1/sessions/:id/tags
 
 移除 tags。
 
