@@ -1,22 +1,87 @@
-# Search & Result
+# Search
 
-v2 设计中心是 search——所有读取都从一次 search 起步，拿到 `result_id` 后再调 `view` / `log` / `links` / `tags`。这份文档把 search 的输出物（`SearchLog` / `SearchResult`）和 `result_id` 的语法、生命周期、验证语义一次性钉死。
+v2 设计中心是 search——所有读取都从一次 search 起步。这份文档描述 search 的**输出形态**和服务端对 search 调用的**审计记录**（`search_log`）。
 
-## 设计动机：Google 链接追踪的本地版
+## ID 前缀约定（v2 通用）
 
-Google 搜索结果页的链接走 `google.com/url?...&ved=<token>`——`ved` 编码 `(query_id, position, time, signature)`，让 Google 能后向归因"这次 click 来自哪次 search 的第几位"。
+v2 不再发行"追踪 token"（曾用的 `result_id` 已下线）。所有对外出现的主键都是**带前缀的裸 id**，前缀即类型：
 
-memory.talk 的 `result_id` 借了同一思路：
+| 对象 | 前缀 | 示例 |
+|------|------|------|
+| Card | `card_` | `card_01jz8k2m0000000000000000` |
+| Session | `sess_` | `sess_187c6576_875f_4e3e_8fd8` |
+| Link | `link_` | `link_01jzq7rm0000000000000000` |
 
-- search 调用时，服务端把 `(search_id, kind, rank)` 编进每条结果的 `result_id` 里返回。
-- 调用方拿这个 `result_id` 去 view / log / 建 link，服务端可以**反向**追到"这张 card 是因为哪次 search 的第几位被读到 / 被引用 / 被建 link 到的"。
-- 所有此类追踪信息落 jsonl，rebuild 可完整重放。
+**为什么不需要 result_id**：AI agent 调 tool 的整段对话本身就是 tool-use 记录，sync 之后可以完整复原"这次会话用了哪些 card / session"。服务端再造一层 result_id 是重复记账。
 
-**和 Google 不同**：我们用**结构化 token** 而不是不透明 token。本地 Skill 工具里可调试性 > 不可猜性；安全性靠服务端 `search_result` 表的存在性校验，不靠 token 不可猜。
+**为什么需要前缀**：`view <id>` 要能零成本判断读 card 还是 session，前缀一眼区分。服务端仍然会做存在性校验，但不靠前缀；前缀只是 UX。
 
-## SearchLog
+## Search 输入
 
-每次 `POST /v2/search` 都在服务端追加一行 `SearchLog`。
+```json
+{
+  "query": "LanceDB 选型",
+  "where": "tag = \"decision\" AND source = \"claude-code\"",
+  "top_k": 10
+}
+```
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `query` | 是 | 检索文本；可空字符串（配合 `where` 做纯元数据过滤） |
+| `where` | 否 | 元数据 DSL（字段：`session_id` / `card_id` / `tag` / `source` / `created_at`；运算符：`=` / `!=` / `LIKE` / `IN` / `NOT IN` / `AND`） |
+| `top_k` | 否 | 每支（cards / sessions）上限，默认 `settings.search.default_top_k` |
+
+## Search 输出
+
+```json
+{
+  "search_id": "sch_01K7XABCDEFGHIJK01234",
+  "query": "LanceDB 选型",
+  "cards": {
+    "count": 2,
+    "results": [
+      {
+        "card_id": "card_01jz8k2m0000000000000000",
+        "rank": 1,
+        "score": 0.0312,
+        "summary": "选定 LanceDB 做向量存储",
+        "snippets": ["...**LanceDB**..."],
+        "links": [
+          {"link_id": "link_01jzq7rm0000000000000000", "target_id": "sess_f7a3e1", "target_type": "session", "comment": null, "ttl": 0},
+          {"link_id": "link_01jzq8sn0000000000000000", "target_id": "card_01jzp3nq0000000000000000", "target_type": "card", "comment": "选型后果", "ttl": 1814400}
+        ]
+      }
+    ]
+  },
+  "sessions": {
+    "count": 1,
+    "results": [
+      {
+        "session_id": "sess_187c6576_875f",
+        "rank": 1,
+        "score": 0.0289,
+        "source": "claude-code",
+        "tags": ["decision"],
+        "snippets": ["...讨论 **LanceDB** 零依赖..."],
+        "links": [
+          {"link_id": "link_01jzq9tm0000000000000000", "target_id": "card_01jz8k2m0000000000000000", "target_type": "card", "comment": "从此对话提取", "ttl": 0}
+        ]
+      }
+    ]
+  }
+}
+```
+
+要点：
+
+- 响应直接返回**裸（前缀化）id**：`card_id` / `session_id` / `link_id` / `target_id`。拿到之后 `view` / `log` / `tag` / `link create` 都可以直接用。
+- `search_id` 是本次 search 的审计 id（见下方 SearchLog），**不用于后续读取**——它只在服务端日志和 `/v2/log` 的 detail 里出现，用于把"这次 search 跟这个对象的 lifecycle 事件关联起来"。
+- `links` 过滤掉已过期用户 link（`ttl < 0`）——只保留 `ttl >= 0`。想看过期 link 要走 `view`。
+
+## SearchLog（服务端审计）
+
+每次 `POST /v2/search` 在服务端追加一行。
 
 ```json
 {
@@ -25,7 +90,8 @@ memory.talk 的 `result_id` 借了同一思路：
   "where": "tag = \"decision\" AND source = \"claude-code\"",
   "top_k": 10,
   "created_at": "2026-04-20T14:30:00Z",
-  "result_ttl": 2592000
+  "card_hits": ["card_01jz8k2m...", "card_01jzp3nq..."],
+  "session_hits": ["sess_187c6576..."]
 }
 ```
 
@@ -36,124 +102,23 @@ memory.talk 的 `result_id` 借了同一思路：
 | `where` | string \| null | 元数据 DSL 串（无则 null） |
 | `top_k` | integer | 本次请求的 top_k |
 | `created_at` | string | ISO 8601 |
-| `result_ttl` | integer | 写入时刻生效的 result_id TTL（秒）。从 `settings.search.result_ttl` 拷一份过来——如果之后 settings 改了，**已经发出去的 result_id 仍按写入时刻的 TTL 生效**，不被追溯影响 |
+| `card_hits` | string[] | 本次命中的 card_id 列表（按 rank 排序） |
+| `session_hits` | string[] | 本次命中的 session_id 列表（按 rank 排序） |
 
 **落库**：
 - SQLite `search_log` 表
-- `~/.memory-talk/logs/search.jsonl`（append-only，rebuild 真相之源）
+- `~/.memory-talk/logs/search.jsonl`（append-only）
 
-## SearchResult
+SearchLog 不参与任何读取路径的验证——没有"result_id 是否还活着"这种校验。它纯粹是审计/分析用：
+- 看这台机器最近查什么
+- 统计 query 和 hits 的关联
+- rebuild 时从 jsonl 重放回 SQLite
 
-每次 search 同时为它产出的每条命中追加一行 `SearchResult`——这样 rebuild 能完整恢复 `result_id` 的语义，TTL 计时不重置。
+**没有 TTL**——search 的原始查询记录永久保留（或按 `settings.search.search_log_retention_days` 老化，如果配置了）。它不是"授权凭据"，不需要过期。
 
-```json
-{
-  "result_id": "sch_01K7XABCDEFGHIJK01234.c1",
-  "search_id": "sch_01K7XABCDEFGHIJK01234",
-  "kind": "card",
-  "rank": 1,
-  "target_id": "01jz8k2m...",
-  "score": 0.0312,
-  "created_at": "2026-04-20T14:30:00Z"
-}
-```
+## 和其它结构的关系
 
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| `result_id` | string | 形如 `{search_id}.{kind}{rank}`，本条命中的 token |
-| `search_id` | string | 外键，指向 `SearchLog.search_id` |
-| `kind` | string | `card` / `session` |
-| `rank` | integer | 同一 (search, kind) 内的排名，从 1 开始 |
-| `target_id` | string | 真实指向的 `card_id` 或 `session_id`（**不出现在任何 API 响应里**——只在服务端表里存在，是 result_id → 对象的解析键） |
-| `score` | float | 检索打分（hybrid FTS + 向量） |
-| `created_at` | string | 同 SearchLog（拷一份方便单表查询） |
-
-**落库**：
-- SQLite `search_result` 表（外键到 `search_log`）
-- `~/.memory-talk/logs/search.jsonl` 里和它的 SearchLog 行紧挨着追加（一条 SearchLog 后面跟若干条 SearchResult，按 `(search_id, kind, rank)` 分组）
-
-## result_id 语法
-
-```
-ULID         := 26-char Crockford-base32 string
-
-search_id    := "sch_" ULID                     # 例：sch_01K7XABCDEFGHIJK01234567
-
-kind         := "c"                              # card
-              | "s"                              # session
-
-rank         := positive integer                 # 1-based, 对齐 results 数组位置
-
-result_id    := primary | view_child | log_child
-
-primary      := search_id "." kind rank          # search 直接铸造
-                                                  # 例：sch_01K7XAB....c1
-
-view_child   := result_id ".l" subrank           # /v2/view 响应里铸造
-                                                  # 例：sch_01K7XAB....c1.l2
-
-log_child    := result_id ".e" subrank           # /v2/log 响应里铸造
-                                                  # 例：sch_01K7XAB....s1.e3
-
-subrank      := positive integer                 # 父节点本次响应内的局部序号
-```
-
-**子节点可以无限嵌套**：view 的 link 子节点本身也可以再当作父节点喂给 view，view 又会为它的 link 现生 `.l<M>`，这样形成 `....c1.l2.l1` 这样的链条。每加一层就在父节点末尾接 `.l<N>` 或 `.e<N>`。
-
-## 四种形态对照
-
-| 形态 | 谁铸造 | 何时铸造 | SQLite 表 | jsonl | TTL 来源 |
-|------|--------|---------|-----------|-------|----------|
-| `sch_<ULID>.c<N>` | `/v2/search` | search 调用 | `search_result` | `search.jsonl` | `SearchLog.result_ttl` |
-| `sch_<ULID>.s<N>` | `/v2/search` | 同上 | `search_result` | `search.jsonl` | 同上 |
-| `<parent>.l<N>` | `/v2/view` | view 现生 | `view_link_child` | `view.jsonl` | 跟父节点同活 |
-| `<parent>.e<N>` | `/v2/log` | log 现生 | `log_event_ref` | `events.jsonl` | 跟父节点同活 |
-
-`view_link_child` 表结构：
-
-| 字段 | 说明 |
-|------|------|
-| `parent_result_id` | 在哪次 view 哪个父节点上现生的 |
-| `subrank` | `.l<N>` 里的 N |
-| `link_id` | 指向的真实 link |
-| `target_kind` / `target_id` | 该 link 对端的类型和真实 id（用于校验通过后分发） |
-| `created_at` | 现生时间 |
-
-`log_event_ref` 表结构类似，只是 `subrank` 对应 `.e<N>`，`target_*` 指向事件 detail 里引用的对象。
-
-## 生命周期
-
-### 主节点（search 铸造）
-
-`SearchLog.created_at + result_ttl` 之后过期。过期不删除——`search_log` / `search_result` 表行保留，只是被任何端点读取时返回 `410 expired`。这样 rebuild 可以重放，过期状态可被复现。
-
-### 子节点（view / log 铸造）
-
-子节点**不独立计时**——TTL 等于父节点剩余 TTL。换句话说，子节点的"过期"等价于父节点的"过期"。
-
-理由：子节点是父节点上下文里临时铸造的"短期引用"。父节点都过期了（30 天前的 search 没人理），它的 link 子节点 / event 引用子节点继续可读没有意义。
-
-实现上，校验子节点时：先校验父节点未过期，再查子表存在即可。子表行不带独立的 `expires_at`。
-
-## 验证流程
-
-任何 v2 写端点（`view` / `log` / `cards` / `links` / `tags`）收到 `result_id` 时按以下顺序校验：
-
-1. **语法校验**：能否按上面 grammar 解析？不能 → `400 invalid result_id`。
-2. **顶层主节点**：取出最外层的 `search_id`，查 `search_log`：
-   - 不存在 → `404 not found`
-   - `created_at + result_ttl < now` → `410 expired`
-3. **顶层 rank/kind**：按 `(search_id, kind, rank)` 查 `search_result`：
-   - 不存在 → `404 not found`
-4. **递归子节点**：如果有 `.l<N>` / `.e<N>` 后缀，按 `(parent_result_id, subrank)` 查对应子表：
-   - 不存在 → `404 not found`
-   - 如果是 `.l<N>` 且对应 link 自身已过期（`link.ttl < 0`） → `410 expired`（断链不追）
-5. **取 target**：从最深一级的 `target_id` + `target_kind` 取出真实对象，分发给业务逻辑。
-6. **副作用**：view / cards / links / tags 各自的副作用按其文档行为（落 click、刷 TTL、追加事件等）。
-
-## 与其它结构的关系
-
-- `Talk-Card`（[talk-card.md](talk-card.md)）的 `links[].target_result_id` 在 view 响应里就是 `<parent>.l<N>` 形态。
-- `Link`（[link.md](link.md)）的 `link_id` 是真实 link 表的主键，不是 result_id；`POST /v2/links` 的 source/target 只接收 result_id，不接收 link_id。
-- `Settings`（[settings.md](settings.md)）的 `settings.search.result_ttl` 控制主节点 TTL。
-- `Session`（[session.md](session.md)）的 `index` 是 session 内 round 的稳定编号，是 card 写入时引用 round 的键，**和 result_id 是两套独立体系**——一个对内（数据层），一个对外（API 追踪层）。
+- [`Talk-Card`](talk-card.md) 的 `links[].target_id` + `target_type` 直接暴露对端的前缀化 id，可直接喂给 `view`。
+- [`Link`](link.md) 的 `link_id` / `source_id` / `target_id` 都是前缀化裸 id。
+- [`Session`](session.md) 的 `index` 是 session 内 round 的稳定编号，`card` 写入时引用 round 的键——与任何外层 id 体系无关。
+- [`Settings`](settings.md) 里**不再有** `search.result_ttl`——result_id 下线后该字段无意义。

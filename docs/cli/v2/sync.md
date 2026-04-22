@@ -14,6 +14,10 @@ memory-talk sync [--data-root PATH]
 2. 对每个文件计算 sha256，和 `ingest_log` 对比——已导入且哈希未变的跳过。
 3. 其他文件调 adapter.convert 解析成 session，和已有数据按 **append-only** 策略合并（见下方）。
 
+## ID 规范化
+
+平台原始 session 文件名（例如 Claude Code 给的 UUID `187c6576-875f-4e3e-8fd8-f21fe60190b0`）在写入存储时会被服务端**前缀化为 `sess_`**，即 `sess_187c6576-875f-4e3e-8fd8-f21fe60190b0`。后续所有 v2 命令和 API 里出现的 `session_id` 都是带前缀的形态。`ingest_log` 的主键也是 `sess_*`。
+
 ## Append-only 策略
 
 sync 的数据合并只向前追加，不回写已有 round：

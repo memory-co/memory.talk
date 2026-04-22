@@ -17,7 +17,7 @@ sessions/{source}/{id[0:2]}/{session_id}/
 
 ```json
 {
-  "session_id": "abc123",
+  "session_id": "sess_abc123",
   "source": "claude-code",
   "created_at": "2026-04-10T14:30:00Z",
   "metadata": {
@@ -61,7 +61,7 @@ sessions/{source}/{id[0:2]}/{session_id}/
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `session_id` | string | 唯一标识（来源平台的文件名） |
+| `session_id` | string | 唯一标识，形如 `sess_<platform_id>`。前缀 `sess_` 由服务端入库时加上（平台原始文件名不带前缀） |
 | `source` | string | 来源平台（`claude-code` / `codex` / `openclaw`） |
 | `created_at` | string | 对话创建时间（取第一条 round 的时间戳） |
 | `metadata` | object | 平台特有的扩展信息（project、model、title、agent_name、version 等） |

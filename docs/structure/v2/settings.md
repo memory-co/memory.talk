@@ -34,9 +34,9 @@
     }
   },
   "search": {
-    "result_ttl": 2592000,
     "default_top_k": 10,
-    "comment_max_length": 500
+    "comment_max_length": 500,
+    "search_log_retention_days": 0
   }
 }
 ```
@@ -106,6 +106,8 @@
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `result_ttl` | integer | `2592000` | result_id 过期时长（秒），默认 30 天。控制 search 铸造的主节点 result_id（`.c<N>` / `.s<N>`）多久过期。子节点（`.l<N>` / `.e<N>`）不独立计时，跟父节点同活——见 [search-result.md](search-result.md) |
 | `default_top_k` | integer | `10` | search 默认 top_k |
 | `comment_max_length` | integer | `500` | `link.comment` 字数上限 |
+| `search_log_retention_days` | integer | `0` | `search_log` 老化阈值（天）。`0` = 永不老化（默认）。>0 时，`created_at` 早于此阈值的行在下次 rebuild / 扫描时被清除 |
+
+**v2 不再有 result_id**：v2 不发行"带 TTL 的追踪 token"——调用方直接用带前缀的裸 id（`card_<ULID>` / `sess_<ULID>` / `link_<ULID>`）操作所有端点。追踪由 AI session 的 tool-use 对话天然承担，见 [search-result.md](search-result.md)。

@@ -6,16 +6,16 @@ Talk-Card 是 memory.talk 的核心数据结构——从对话中提炼出的记
 
 ```json
 {
-  "card_id": "01jz8k2m",
+  "card_id": "card_01jz8k2m",
   "summary": "项目选定 LanceDB 作为向量存储方案，主要原因是零依赖、嵌入式架构",
   "rounds": [
-    {"role": "human", "text": "向量库选型，ChromaDB 和 LanceDB 哪个好？", "session_id": "f7a3e1", "index": 11},
-    {"role": "assistant", "text": "推荐 LanceDB：零依赖、本地文件存储、适合嵌入式部署。", "thinking": "关键考量是部署形态——Skill 嵌入式场景不能要求用户启动额外服务", "session_id": "f7a3e1", "index": 12},
-    {"role": "human", "text": "就用 LanceDB。", "session_id": "f7a3e1", "index": 13}
+    {"role": "human", "text": "向量库选型，ChromaDB 和 LanceDB 哪个好？", "session_id": "sess_f7a3e1", "index": 11},
+    {"role": "assistant", "text": "推荐 LanceDB：零依赖、本地文件存储、适合嵌入式部署。", "thinking": "关键考量是部署形态——Skill 嵌入式场景不能要求用户启动额外服务", "session_id": "sess_f7a3e1", "index": 12},
+    {"role": "human", "text": "就用 LanceDB。", "session_id": "sess_f7a3e1", "index": 13}
   ],
   "links": [
-    {"link_id": "01jzq7rm", "id": "f7a3e1", "type": "session", "comment": null, "ttl": 0},
-    {"link_id": "01jzq8sn", "id": "01jzp3nq", "type": "card", "comment": "后续踩了 NFS 的坑", "ttl": 1814400}
+    {"link_id": "link_01jzq7rm", "target_id": "sess_f7a3e1", "target_type": "session", "comment": null, "ttl": 0},
+    {"link_id": "link_01jzq8sn", "target_id": "card_01jzp3nq", "target_type": "card", "comment": "后续踩了 NFS 的坑", "ttl": 1814400}
   ],
   "ttl": 2419200,
   "created_at": "2026-04-16T10:30:00Z"
@@ -26,7 +26,7 @@ Talk-Card 是 memory.talk 的核心数据结构——从对话中提炼出的记
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `card_id` | string | 自动生成 | ULID，不提供则自动生成 |
+| `card_id` | string | 自动生成 | `card_<ULID>`，不提供则自动生成。前缀 `card_` 让 `view` / `log` 等命令零成本判型 |
 | `summary` | string | 是 | 一句话认知总结，同时作为 embedding 锚点 |
 | `rounds` | Round[] | 是 | 展开后的对话轮次（见下方 Round 结构），每条自带 `session_id` + `index` 指回源 session。可为空数组（合成 card） |
 | `links` | Link[] | 是 | 与 session 和其他 card 的关联（见下方 Link 结构）。card → session 部分由服务端基于 `rounds` 里出现过的 `session_id` 自动生成 |

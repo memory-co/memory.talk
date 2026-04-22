@@ -2,7 +2,7 @@
 
 v2 里 link API **只有 create**，专门写"用户 link"（`ttl > 0`，可被 `/v2/view` 续命，独立过期）。查询 / 删除都不开放——link 的存在随 `/v2/view` 的响应返回（嵌在 `links` 字段里），TTL 随读取隐式刷新。
 
-"默认 link"（`ttl = 0`，card 写入时自动生成的 card→session）**不走这个接口**——它随 `/v2/cards` 副产生，调用者不传、不参与。
+"默认 link"（`ttl = 0`，card 写入时自动生成的 card→session）**不走这个接口**——它随 `/v2/cards` 副产生，调用方不传、不参与。
 
 ## POST /v2/links
 
@@ -10,21 +10,21 @@ v2 里 link API **只有 create**，专门写"用户 link"（`ttl > 0`，可被 
 
 ```json
 {
-  "source": "sch_01K7XABC....c1",
-  "target": "sch_01K7XABC....s2",
+  "source_id": "card_01jz8k2m",
+  "source_type": "card",
+  "target_id": "sess_187c6576",
+  "target_type": "session",
   "comment": "选型之后踩的坑"
 }
 ```
 
 | 字段 | 必填 | 说明 |
 |------|------|------|
-| `source` | 是 | result_id |
-| `target` | 是 | result_id |
-| `comment` | 否 | 说明为什么关联 |
-
-**`source` / `target` 只接受 `result_id`**——裸 `card_id` / `session_id` 一律拒绝。必须先 `/v2/search` 拿到结果，再在它们之间建 link。这是刻意设计：v2 里"引用一个对象"永远要经过 search 走一遭，服务端借此追踪 link 从何而来。
-
-可接受的 result_id 形态：`.c<N>`（card）、`.s<N>`（session），以及 view 响应里现生的 `.l<N>`、log 响应里的 `.e<N>`（继续追对端）。
+| `source_id` | 是 | 源对象带前缀 id（`card_<...>` 或 `sess_<...>`） |
+| `source_type` | 是 | `card` 或 `session`。必须和 `source_id` 前缀一致，否则 400 |
+| `target_id` | 是 | 目标对象带前缀 id |
+| `target_type` | 是 | `card` 或 `session`。必须和 `target_id` 前缀一致 |
+| `comment` | 否 | 说明为什么关联，长度上限 `settings.search.comment_max_length` |
 
 支持的类型组合（方向由 source → target 表达，双向都允许）：
 
@@ -35,16 +35,16 @@ v2 里 link API **只有 create**，专门写"用户 link"（`ttl > 0`，可被 
 | session | card |
 | session | session |
 
-禁止 `source == target`（自环，两个 result_id 解析到同一个对象时也算）。
+禁止 `source_id == target_id`（自环）。
 
 ## 响应
 
 ```json
-{"status": "ok", "link_id": "01jzq7rm...", "ttl": 1209600}
+{"status": "ok", "link_id": "link_01jzq7rm", "ttl": 1209600}
 ```
 
-- `ttl` = settings 里的用户 link 初始值（默认 100）。
-- 返回的 `link_id` **不用于**后续读取或删除——v2 不暴露这类管理路径。它保留只是为了日志 / 调试里定位。
+- `ttl` = 写入时刻的 `settings.ttl.link.initial`（默认 1209600 秒 = 14 天）。
+- 返回的 `link_id` **不用于**后续读取或删除——v2 不暴露这类管理路径。主要用于日志 / 调试定位。
 
 ## 副作用
 
@@ -56,10 +56,8 @@ v2 里 link API **只有 create**，专门写"用户 link"（`ttl > 0`，可被 
 
 | 情况 | 状态 |
 |------|------|
-| `source` 或 `target` 不是 result_id（裸 `card:xxx` / `session:xxx` 或其它前缀） | 400，`source/target must be a result_id` |
-| result_id 已过期 | 410，`expired` |
-| result_id 未知 / 无法解析 | 404 |
-| `.l<N>` 指向的底层 link 已过期 | 410，`expired` |
-| `source` 和 `target` 解析到同一个对象 | 400，`self-loop not allowed` |
-| 类型组合不在支持表内 | 400，`unsupported link type: <source_type> -> <target_type>` |
-| `comment` 超长（见 settings 上限） | 400，`comment too long` |
+| `source_id` / `target_id` 前缀不是 `card_` / `sess_` | 400，`invalid id prefix` |
+| `source_type` / `target_type` 和 id 前缀不一致 | 400，`type mismatch` |
+| 对象不存在 | 404 |
+| `source_id == target_id`（自环） | 400，`self-loop not allowed` |
+| `comment` 超长 | 400，`comment too long` |
