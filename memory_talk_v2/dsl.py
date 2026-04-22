@@ -38,7 +38,8 @@ class Predicate:
 
 FIELDS = {"session_id", "card_id", "tag", "source", "created_at"}
 CARDS_ONLY_FIELDS = {"card_id"}
-SESSIONS_ONLY_FIELDS = {"source"}
+# tag is sessions-only in v2: cards carry no tags column.
+SESSIONS_ONLY_FIELDS = {"source", "tag"}
 COMPARE_OPS = {"=", "!=", ">", ">=", "<", "<="}
 KEYWORDS = {"AND", "LIKE", "NOT", "IN"}
 
