@@ -47,3 +47,6 @@ codes
 
 # memory.talk data
 .memory-talk/
+
+# Git worktrees
+.worktrees/
