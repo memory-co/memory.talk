@@ -29,7 +29,7 @@ memory-talk search <query> [--where DSL] [--top-k N]
         "snippets": ["...**LanceDB**..."],
         "links": [
           {"target_result_id": "sch_01K7XABC....c1.l1", "target_type": "session", "comment": null, "ttl": 0},
-          {"target_result_id": "sch_01K7XABC....c1.l2", "target_type": "card", "comment": "选型后果", "ttl": 100}
+          {"target_result_id": "sch_01K7XABC....c1.l2", "target_type": "card", "comment": "选型后果", "ttl": 1814400}
         ]
       }
     ]

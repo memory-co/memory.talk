@@ -38,7 +38,9 @@ memory-talk
 
 `c` / `s` 前缀决定 `view` 能读出什么形态的内容，也决定哪些命令可用：`tag add/remove` 只接受 `.s<N>`，传入 `.c<N>` 会返回 type mismatch。
 
-result_id 有 TTL（默认 30 天，`settings.search.result_ttl_days` 可配）。过期后读取返回 expired 错误。
+result_id 有 TTL（默认 30 天，`settings.search.result_ttl` 可配）。过期后读取返回 expired 错误。
+
+完整的 result_id 形态对照（含 view 现生的 `.l<N>`、log 现生的 `.e<N>`）、生命周期、验证流程见 [structure/v2/search-result.md](../../structure/v2/search-result.md)。
 
 ## 输出格式
 

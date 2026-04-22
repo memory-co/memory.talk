@@ -32,6 +32,11 @@
       "factor": 2.0,
       "max": 15768000
     }
+  },
+  "search": {
+    "result_ttl": 2592000,
+    "default_top_k": 10,
+    "comment_max_length": 500
   }
 }
 ```
@@ -81,16 +86,26 @@
 
 **ttl.card**
 
+> **单位约定**：本文件所有 `ttl.*` 字段单位均为**秒**。API 响应里返回的 `ttl` 字段也是秒（计算公式 `expires_at - now`）。
+
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
 | `initial` | integer | `2592000` | 创建时的初始过期时长（秒），默认 30 天 |
-| `factor` | float | `2.0` | 每次被 recall 命中时，剩余 ttl 乘以此系数 |
+| `factor` | float | `2.0` | 每次被 view 命中时，剩余 ttl 乘以此系数 |
 | `max` | integer | `31536000` | ttl 上限（秒），默认 365 天 |
 
 **ttl.link**
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `initial` | integer | `1209600` | 创建时的初始过期时长（秒），默认 14 天 |
+| `initial` | integer | `1209600` | 创建时的初始过期时长（秒），默认 14 天。仅适用于用户 link；默认 link 的 `ttl` 恒为 `0`（sentinel，不参与秒级计时） |
 | `factor` | float | `2.0` | 每次被访问时，剩余 ttl 乘以此系数 |
 | `max` | integer | `15768000` | ttl 上限（秒），默认 182 天 |
+
+**search**
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `result_ttl` | integer | `2592000` | result_id 过期时长（秒），默认 30 天。控制 search 铸造的主节点 result_id（`.c<N>` / `.s<N>`）多久过期。子节点（`.l<N>` / `.e<N>`）不独立计时，跟父节点同活——见 [search-result.md](search-result.md) |
+| `default_top_k` | integer | `10` | search 默认 top_k |
+| `comment_max_length` | integer | `500` | `link.comment` 字数上限 |

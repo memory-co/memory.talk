@@ -15,7 +15,7 @@ memory-talk view sch_01K7XABC....s1        # 读取 session
 
 参数：
 - `<result_id>` 必须是 `.c<N>` 或 `.s<N>` 形态。其它（例如 `.l<N>` 这种只在 view 响应里出现的子 result_id）同样接受——服务端按对应的 `target_type` 分发。
-- 过期的 result_id（超出 `settings.search.result_ttl_days`）返回 `expired`。
+- 过期的 result_id（超出 `settings.search.result_ttl`）返回 `expired`。
 - 未知 result_id 返回 404。
 
 ## 输出
@@ -36,7 +36,7 @@ memory-talk view sch_01K7XABC....s1        # 读取 session
       {"role": "assistant", "text": "推荐 LanceDB 零依赖", "session_id": "abc123", "index": 12}
     ],
     "created_at": "2026-04-10T14:30:00Z",
-    "ttl": 95
+    "ttl": 2419200
   },
   "links": [
     {
@@ -49,13 +49,13 @@ memory-talk view sch_01K7XABC....s1        # 读取 session
       "target_result_id": "sch_01K7XABC....c1.l2",
       "target_type": "card",
       "comment": "选型后果——NFS 上踩的坑",
-      "ttl": 100
+      "ttl": 1814400
     },
     {
       "target_result_id": "sch_01K7XABC....c1.l3",
       "target_type": "card",
       "comment": "早期失败的 ChromaDB 方案",
-      "ttl": -3
+      "ttl": -86400
     }
   ]
 }
@@ -93,7 +93,7 @@ memory-talk view sch_01K7XABC....s1        # 读取 session
       "target_result_id": "sch_01K7XABC....s1.l1",
       "target_type": "card",
       "comment": "从此对话提取",
-      "ttl": 100
+      "ttl": 1209600
     }
   ]
 }

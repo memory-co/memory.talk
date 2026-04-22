@@ -42,7 +42,7 @@ memory-talk link create '<json>'
 输出：
 
 ```json
-{"status": "ok", "link_id": "01jzq7rm...", "ttl": 100}
+{"status": "ok", "link_id": "01jzq7rm...", "ttl": 1209600}
 ```
 
 返回的 `link_id` **不用于**后续读取或删除——v2 不再暴露这类管理路径。它保留只是为了在日志 / 调试里定位这条 link。
@@ -52,7 +52,7 @@ memory-talk link create '<json>'
 | 情况 | 错误 |
 |------|------|
 | `source` 或 `target` 不是 result_id（裸 `card:xxx` / `session:xxx` / 任何其它前缀） | 400，`source/target must be a result_id` |
-| result_id 已过期（超出 `settings.search.result_ttl_days`） | 400，`expired` |
+| result_id 已过期（超出 `settings.search.result_ttl`） | 400，`expired` |
 | result_id 未知 / 无法解析 | 404 |
 | result_id 指向 `.l<N>` 但底层 link 已过期 | 按对端解析失败处理，`expired` |
 | `source` 和 `target` 解析到同一个对象（自环） | 400，`self-loop not allowed` |
