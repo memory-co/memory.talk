@@ -38,4 +38,7 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     from memory_talk.api.v1 import router as v1_router
     app.include_router(v1_router, prefix="/v1")
+
+    from memory_talk.api.v2 import router as v2_router
+    app.include_router(v2_router, prefix="/v2")
     return app
