@@ -14,7 +14,9 @@ from memory_talk.v2.storage.schema import init_v2_schema
 
 
 def create_app(config: Config | None = None) -> FastAPI:
-    config = config or Config()
+    if config is None:
+        data_root = os.environ.get("MEMORY_TALK_DATA_ROOT")
+        config = Config(data_root) if data_root else Config()
     config.ensure_dirs()
     init_db(config.db_path)
 
@@ -37,7 +39,3 @@ def create_app(config: Config | None = None) -> FastAPI:
     from memory_talk.api.v1 import router as v1_router
     app.include_router(v1_router, prefix="/v1")
     return app
-
-
-_data_root = os.environ.get("MEMORY_TALK_DATA_ROOT")
-app = create_app(Config(_data_root) if _data_root else Config())
