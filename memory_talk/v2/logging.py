@@ -17,9 +17,10 @@ class DatedJsonlWriter:
 
     def _file_for(self, now: datetime) -> Path:
         if now.tzinfo is None:
-            now = now.replace(tzinfo=timezone.utc)
-        else:
-            now = now.astimezone(timezone.utc)
+            raise ValueError(
+                "DatedJsonlWriter requires a timezone-aware datetime (naive input is ambiguous)"
+            )
+        now = now.astimezone(timezone.utc)
         return self.base_dir / f"{now.strftime('%Y-%m-%d')}.jsonl"
 
     def append(self, record: dict, now: datetime | None = None) -> None:

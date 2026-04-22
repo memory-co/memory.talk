@@ -1,5 +1,8 @@
 import json
 from datetime import datetime, timezone
+
+import pytest
+
 from memory_talk.v2.logging import DatedJsonlWriter
 
 
@@ -46,3 +49,10 @@ def test_writer_creates_base_dir_if_missing(tmp_path):
     w = DatedJsonlWriter(base_dir=base)
     w.append({"x": 1})
     assert base.exists()
+
+
+def test_writer_raises_on_naive_datetime(tmp_path):
+    base = tmp_path / "logs" / "search"
+    w = DatedJsonlWriter(base_dir=base)
+    with pytest.raises(ValueError, match="timezone-aware"):
+        w.append({"x": 1}, now=datetime(2026, 4, 22, 14, 30))  # naive
