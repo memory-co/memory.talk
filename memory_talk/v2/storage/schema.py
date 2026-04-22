@@ -37,7 +37,7 @@ CREATE INDEX IF NOT EXISTS idx_event_log_object
 
 def init_v2_schema(conn: sqlite3.Connection) -> None:
     """Create v2 tables if they don't exist. Idempotent."""
-    conn.executescript(SEARCH_LOG_DDL)
-    conn.executescript(EVENT_LOG_DDL)
-    conn.executescript(EVENT_LOG_INDEX_DDL)
+    conn.execute(SEARCH_LOG_DDL)
+    conn.execute(EVENT_LOG_DDL)
+    conn.execute(EVENT_LOG_INDEX_DDL)
     conn.commit()
