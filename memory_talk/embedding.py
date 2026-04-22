@@ -90,3 +90,72 @@ def get_embedder(config) -> Embedder:
             timeout=emb.timeout,
         )
     raise ValueError(f"Unknown embedding provider: {p}")
+
+
+class EmbedderValidationError(RuntimeError):
+    """Raised by validate_embedder(config) when the configured embedding
+    provider cannot be used. Meant to be caught at startup and surfaced
+    to the operator, not silently swallowed."""
+
+
+def validate_embedder(config) -> None:
+    """Validate the configured embedding provider at startup.
+
+    - `dummy`: trivially OK.
+    - `local`: attempt to load the sentence-transformers model (catches missing
+      package / missing model / disk failure).
+    - `openai`: require the auth env var to be set AND perform a one-shot
+      probe embed to catch unreachable endpoints, bad model names, wrong
+      `dim` in settings, etc.
+
+    Raises EmbedderValidationError with a user-readable message if anything
+    is off. Caller is responsible for presenting the error and exiting.
+    """
+    emb = config.settings.embedding
+    p = emb.provider
+
+    if p == "dummy":
+        return
+
+    if p == "local":
+        try:
+            from sentence_transformers import SentenceTransformer
+            _ = SentenceTransformer(emb.model)  # triggers download/load
+        except Exception as e:  # pragma: no cover - network-ish
+            raise EmbedderValidationError(
+                f"local embedder failed to load model {emb.model!r}: {e}"
+            ) from e
+        return
+
+    if p == "openai":
+        api_key = os.environ.get(emb.auth_env_key or "")
+        if not api_key:
+            raise EmbedderValidationError(
+                f"openai embedder: environment variable {emb.auth_env_key!r} is not set"
+            )
+        try:
+            resp = httpx.post(
+                emb.endpoint,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={"model": emb.model, "input": ["ping"], "encoding_format": "float"},
+                timeout=emb.timeout,
+            )
+            resp.raise_for_status()
+            data = resp.json().get("data", [])
+            if not data:
+                raise EmbedderValidationError("openai embedder: probe response contained no data")
+            probe_dim = len(data[0]["embedding"])
+            if probe_dim != emb.dim:
+                raise EmbedderValidationError(
+                    f"openai embedder: dim mismatch — settings say {emb.dim}, endpoint returned {probe_dim}"
+                )
+        except EmbedderValidationError:
+            raise
+        except Exception as e:
+            raise EmbedderValidationError(f"openai embedder: {e}") from e
+        return
+
+    raise EmbedderValidationError(f"unknown embedding provider: {p}")

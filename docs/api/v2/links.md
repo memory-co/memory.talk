@@ -48,7 +48,7 @@ v2 里 link API **只有 create**，专门写"用户 link"（`ttl > 0`，可被 
 
 ## 副作用
 
-- 在 SQLite link 表 + `logs/events.jsonl` 里各落一条。
+- 在 SQLite link 表 + `logs/events/<今日 UTC 日期>.jsonl` 里各落一条。
 - 两端对象的 log 都追加一条 `linked` 事件（`direction: incoming/outgoing` 各一）。
 - 不改变两端对象自己的 TTL。
 

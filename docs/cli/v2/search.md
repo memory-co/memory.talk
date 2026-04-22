@@ -62,7 +62,7 @@ memory-talk search <query> [--where DSL] [--top-k N]
 
 ## 追踪语义
 
-每次 search 都会在服务端 `search_log` 表 + `logs/search.jsonl` 里追加一条——**存的是完整的响应体**（含 `snippets` / `score` / `summary` / `tags` / `links` 等一切呈现给使用者的内容），不是只存命中 id。这样事后审计能完整复原"当时用户看到了什么"，即便后续索引变了、对象被改了也能追回原样。详见 [search-result.md](../../structure/v2/search-result.md)。
+每次 search 都会在服务端 `search_log` 表 + `logs/search/<UTC 日期>.jsonl` 里追加一条——**存的是完整的响应体**（含 `snippets` / `score` / `summary` / `tags` / `links` 等一切呈现给使用者的内容），不是只存命中 id。这样事后审计能完整复原"当时用户看到了什么"，即便后续索引变了、对象被改了也能追回原样。详见 [search-result.md](../../structure/v2/search-result.md) 和 [rebuild.md](rebuild.md) 的目录布局。
 
 这是**纯审计**——不做"凭据发行"，不参与任何后续调用的校验。想看"这次 AI 会话用了哪些数据"——看 AI 自己的 tool-use 对话记录（sync 之后存成一个 session），那里有每次 `view` / `search` 的输入输出原文。服务端不再造重复的追踪层。
 

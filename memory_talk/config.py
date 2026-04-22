@@ -27,12 +27,18 @@ class EmbeddingConfig(BaseModel):
 class ServerConfig(BaseModel):
     port: int = 7788
 
+class SearchConfig(BaseModel):
+    default_top_k: int = 10
+    comment_max_length: int = 500
+    search_log_retention_days: int = 0
+
 class Settings(BaseModel):
     server: ServerConfig = ServerConfig()
     vector: ProviderConfig = ProviderConfig(provider="lancedb")
     relation: ProviderConfig = ProviderConfig(provider="sqlite")
     embedding: EmbeddingConfig = EmbeddingConfig()
     ttl: TTLSettings = TTLSettings()
+    search: SearchConfig = SearchConfig()
 
 class Config:
     def __init__(self, data_root: Path | str | None = None):

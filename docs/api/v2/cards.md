@@ -55,7 +55,7 @@ v2 里 card API **只有写**。要再读取，调 `/v2/view` 即可（`card_id`
 - 展开后每条 round 存为 `{role, text, session_id, index}`——`session_id` 和 `index` 不进向量索引。
 - 为每个不同的 `session_id` 自动生成一条 card → session 默认 link（`ttl = 0`）。
 - 自动计算 `summary` 的 embedding，写入向量库。
-- 向 `logs/events.jsonl` 追加 card 的 `created` 事件和涉及到的 session 的 `card_extracted` 事件（同 session 合并）。
+- 向 `logs/events/<今日 UTC 日期>.jsonl` 追加 card 的 `created` 事件和涉及到的 session 的 `card_extracted` 事件（同 session 合并）。
 
 ## 错误
 

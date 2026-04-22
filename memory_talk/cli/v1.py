@@ -105,7 +105,7 @@ def server_start(data_root, fmt):
     log_file = open(log_path, "w")
 
     proc = subprocess.Popen(
-        [sys.executable, "-m", "uvicorn", "memory_talk.api:app",
+        [sys.executable, "-m", "uvicorn", "memory_talk.api:create_app", "--factory",
          "--host", "127.0.0.1", "--port", str(port), "--log-level", "warning"],
         env=env,
         stdout=subprocess.DEVNULL,

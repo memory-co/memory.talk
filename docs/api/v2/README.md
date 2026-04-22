@@ -26,7 +26,7 @@ Status      GET    /v2/status                   统计信息
 - **ID 前缀约定**：所有对外主键都有类型前缀——`card_<ULID>` / `sess_<ULID>` / `link_<ULID>`。服务端靠前缀零成本判型分发。
 - **view / log 自动判型**：`POST /v2/view` 的 `id` 字段可以是 `card_*` 或 `sess_*`，服务端按前缀分发。`tag` 只接受 `sess_*`，`card` 写入返回 `card_*`，`link create` 两端显式带 `type` 字段。
 - **HTTP 方法**：`POST + JSON body`——虽然没了 result_id 的 `.` 字符问题，但保持所有 API 用 body 一致性更好（将来扩展字段方便）。只有 `/v2/status` 用 GET。
-- **副作用日志**：服务端对所有"写行为"落一份 append-only jsonl（`logs/search.jsonl` / `events.jsonl`）。**没有 `view.jsonl`**——不追踪 view 调用。`POST /v2/rebuild` 可按 jsonl 完整重放 `search_log` 和 `event_log`。
+- **副作用日志**：服务端对所有"写行为"落 append-only jsonl，**按 UTC 日期切分**——`logs/search/<YYYY-MM-DD>.jsonl` 和 `logs/events/<YYYY-MM-DD>.jsonl`。**没有 `view/` 目录**——不追踪 view 调用。`POST /v2/rebuild` 可按 jsonl 完整重放 `search_log` 和 `event_log`，retention 走文件级删除。
 - **无 `server start/stop` API**——起停 API 服务本身只能在 CLI 层做。
 - **无 `sync` API**——`sync` 是 CLI 胶水：读平台本地文件 → 调 `POST /v2/sessions` 写入。
 
