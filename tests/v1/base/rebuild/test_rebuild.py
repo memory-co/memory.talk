@@ -9,7 +9,7 @@ from memory_talk.adapters.claude_code import ClaudeCodeAdapter
 from memory_talk.api import create_app
 from memory_talk.config import Config
 from memory_talk.service.rebuild import rebuild_sync
-from tests.conftest import load_sessions_from_dir
+from tests.v1.conftest import load_sessions_from_dir
 
 SESSIONS_DIR = Path(__file__).parent / "sessions"
 

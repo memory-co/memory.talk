@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from memory_talk.adapters.claude_code import ClaudeCodeAdapter
-from tests.conftest import load_sessions_from_dir
+from tests.v1.conftest import load_sessions_from_dir
 
 SESSIONS_DIR = Path(__file__).parent / "sessions"
 
