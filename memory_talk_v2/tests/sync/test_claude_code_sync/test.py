@@ -34,17 +34,15 @@ TABLE_STRIP = {
     "sessions":   {"synced_at"},
     "rounds":     set(),
     "event_log":  {"event_id", "at"},
-    "ingest_log": {"synced_at", "sha256"},
 }
 # Which columns are JSON-encoded in SQLite and need to be parsed for diff
 JSON_COLS = {
     "sessions":   ["metadata", "tags"],
     "rounds":     ["content", "usage"],
     "event_log":  ["detail"],
-    "ingest_log": [],
 }
 # Which tables we snapshot
-TABLES = ["sessions", "rounds", "event_log", "ingest_log"]
+TABLES = ["sessions", "rounds", "event_log"]
 
 
 def _dump_table(db, table: str) -> list[dict]:
@@ -73,7 +71,6 @@ def _pk_cols(table: str) -> list[str]:
         "sessions":   ["session_id"],
         "rounds":     ["session_id", "idx"],
         "event_log":  ["at", "event_id"],
-        "ingest_log": ["session_id", "sha256"],
     }[table]
 
 

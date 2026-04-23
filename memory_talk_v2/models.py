@@ -68,7 +68,7 @@ class IngestSessionIn(BaseModel):
     source: str
     created_at: str
     metadata: dict[str, Any] = Field(default_factory=dict)
-    sha256: str
+    sha256: str | None = None  # optional perf hint for skip-if-unchanged fast path
     rounds: list[IngestRoundIn] = Field(default_factory=list)
 
 

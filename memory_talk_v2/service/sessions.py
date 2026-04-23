@@ -60,9 +60,7 @@ def ingest_session(
     source = payload.get("source") or ""
     if not source:
         raise SessionServiceError("source required")
-    sha256 = payload.get("sha256") or ""
-    if not sha256:
-        raise SessionServiceError("sha256 required")
+    sha256 = payload.get("sha256") or ""  # optional perf hint; not required
 
     session_id = prefix_session_id(raw_id)
     created_at = payload.get("created_at") or dt_to_iso(now_utc())
@@ -70,8 +68,11 @@ def ingest_session(
     in_rounds: list[dict] = payload.get("rounds") or []
     now_iso = dt_to_iso(now_utc())
 
-    # sha256 dedupe
-    if db.ingest_seen(session_id, sha256):
+    # sha256 fast-path: if the client provided a hash and it matches the last
+    # recorded one on meta.json, nothing in the file has changed — skip without
+    # parsing rounds. File is the source of truth; rebuild restores last_sha256.
+    existing_meta = F.read_session_meta(sessions_root, source, session_id)
+    if sha256 and existing_meta and existing_meta.get("last_sha256") == sha256:
         existing = db.get_session(session_id)
         return {
             "status": "ok",
@@ -103,11 +104,14 @@ def ingest_session(
             assigned.append(rec)
 
         # Write files first (rounds.jsonl append), then SQLite
-        F.write_session_meta(sessions_root, source, session_id, {
+        meta_new = {
             "session_id": session_id, "source": source, "created_at": created_at,
             "metadata": metadata, "tags": [], "round_count": len(assigned),
             "synced_at": now_iso,
-        })
+        }
+        if sha256:
+            meta_new["last_sha256"] = sha256
+        F.write_session_meta(sessions_root, source, session_id, meta_new)
         F.append_session_rounds(sessions_root, source, session_id, assigned)
 
         db.upsert_session(
@@ -115,7 +119,6 @@ def ingest_session(
             synced_at=now_iso, metadata=metadata, tags=[], round_count=len(assigned),
         )
         db.upsert_rounds(session_id, assigned)
-        db.ingest_record(session_id, sha256, now_iso)
 
         # LanceDB session text
         vectors.add_session(session_id, _rounds_to_session_text(assigned))
@@ -179,11 +182,11 @@ def ingest_session(
         all_rounds = db.list_rounds(session_id)
         vectors.add_session(session_id, _rounds_to_session_text(all_rounds))
 
-    db.ingest_record(session_id, sha256, now_iso)
-
-    # Also update meta.json
+    # Update meta.json (round_count, synced_at, last_sha256)
     meta_existing = F.read_session_meta(sessions_root, source, session_id) or {}
     meta_existing.update({"round_count": total_count, "synced_at": now_iso})
+    if sha256:
+        meta_existing["last_sha256"] = sha256
     F.write_session_meta(sessions_root, source, session_id, meta_existing)
 
     if appended and not overwrite_skipped:

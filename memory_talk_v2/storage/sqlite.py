@@ -225,22 +225,6 @@ class SQLiteStore:
             "created_at": row["created_at"],
         }
 
-    # ---------- ingest_log ----------
-
-    def ingest_seen(self, session_id: str, sha256: str) -> bool:
-        row = self.conn.execute(
-            "SELECT 1 FROM ingest_log WHERE session_id = ? AND sha256 = ?",
-            (session_id, sha256),
-        ).fetchone()
-        return row is not None
-
-    def ingest_record(self, session_id: str, sha256: str, synced_at: str) -> None:
-        self.conn.execute(
-            "INSERT OR IGNORE INTO ingest_log (session_id, sha256, synced_at) VALUES (?, ?, ?)",
-            (session_id, sha256, synced_at),
-        )
-        self.conn.commit()
-
     # ---------- search_log ----------
 
     def insert_search_log(
@@ -285,6 +269,6 @@ class SQLiteStore:
 
     def clear_all(self) -> None:
         """Nuke all v2 tables' contents. Used by /v2/rebuild."""
-        for t in ("event_log", "search_log", "ingest_log", "links", "cards", "rounds", "sessions"):
+        for t in ("event_log", "search_log", "links", "cards", "rounds", "sessions"):
             self.conn.execute(f"DELETE FROM {t}")
         self.conn.commit()

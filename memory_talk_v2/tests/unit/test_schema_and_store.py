@@ -9,7 +9,7 @@ def test_init_schema_is_idempotent(tmp_path):
     init_schema(conn)
     init_schema(conn)  # second run must not raise
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-    for t in ("sessions", "rounds", "cards", "links", "ingest_log", "search_log", "event_log"):
+    for t in ("sessions", "rounds", "cards", "links", "search_log", "event_log"):
         assert t in tables
     conn.close()
 
@@ -78,10 +78,3 @@ def test_event_log(tmp_path):
     }]
 
 
-def test_ingest_log(tmp_path):
-    db = SQLiteStore(tmp_path / "memory.db")
-    assert not db.ingest_seen("sess_a", "sha1")
-    db.ingest_record("sess_a", "sha1", "2026-04-22T00:00:00Z")
-    assert db.ingest_seen("sess_a", "sha1")
-    # idempotent
-    db.ingest_record("sess_a", "sha1", "2026-04-22T00:00:00Z")

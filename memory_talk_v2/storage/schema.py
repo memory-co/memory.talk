@@ -56,14 +56,6 @@ DDL = [
     "CREATE INDEX IF NOT EXISTS idx_links_source ON links(source_id)",
     "CREATE INDEX IF NOT EXISTS idx_links_target ON links(target_id)",
     """
-    CREATE TABLE IF NOT EXISTS ingest_log (
-        session_id  TEXT NOT NULL,
-        sha256      TEXT NOT NULL,
-        synced_at   TEXT NOT NULL,
-        PRIMARY KEY (session_id, sha256)
-    )
-    """,
-    """
     CREATE TABLE IF NOT EXISTS search_log (
         search_id      TEXT PRIMARY KEY,
         query          TEXT NOT NULL,
