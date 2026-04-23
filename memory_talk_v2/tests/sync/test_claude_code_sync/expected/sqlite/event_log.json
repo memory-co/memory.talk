@@ -1,0 +1,11 @@
+[
+  {
+    "object_id": "sess_01K2FZQE4XGKV7J9MBN8PYRD3A",
+    "object_kind": "session",
+    "kind": "imported",
+    "detail": {
+      "source": "claude-code",
+      "round_count": 4
+    }
+  }
+]

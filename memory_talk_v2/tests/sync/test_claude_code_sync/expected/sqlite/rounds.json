@@ -1,0 +1,88 @@
+[
+  {
+    "session_id": "sess_01K2FZQE4XGKV7J9MBN8PYRD3A",
+    "idx": 1,
+    "round_id": "u1",
+    "parent_id": null,
+    "timestamp": "2026-04-10T14:30:00.000Z",
+    "speaker": "user",
+    "role": "human",
+    "content": [
+      {
+        "type": "text",
+        "text": "ChromaDB vs LanceDB?",
+        "thinking": null,
+        "language": null
+      }
+    ],
+    "is_sidechain": 0,
+    "cwd": "/home/user/mt",
+    "usage": null
+  },
+  {
+    "session_id": "sess_01K2FZQE4XGKV7J9MBN8PYRD3A",
+    "idx": 2,
+    "round_id": "a1",
+    "parent_id": "u1",
+    "timestamp": "2026-04-10T14:30:05.000Z",
+    "speaker": "assistant",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "thinking",
+        "text": null,
+        "thinking": "用户在问向量库选型;LanceDB 优势是嵌入式、零依赖。",
+        "language": null
+      },
+      {
+        "type": "text",
+        "text": "推荐 LanceDB:零依赖、嵌入式。",
+        "thinking": null,
+        "language": null
+      }
+    ],
+    "is_sidechain": 0,
+    "cwd": "/home/user/mt",
+    "usage": null
+  },
+  {
+    "session_id": "sess_01K2FZQE4XGKV7J9MBN8PYRD3A",
+    "idx": 3,
+    "round_id": "u2",
+    "parent_id": "a1",
+    "timestamp": "2026-04-10T14:30:10.000Z",
+    "speaker": "user",
+    "role": "human",
+    "content": [
+      {
+        "type": "text",
+        "text": "就用 LanceDB。",
+        "thinking": null,
+        "language": null
+      }
+    ],
+    "is_sidechain": 0,
+    "cwd": "/home/user/mt",
+    "usage": null
+  },
+  {
+    "session_id": "sess_01K2FZQE4XGKV7J9MBN8PYRD3A",
+    "idx": 4,
+    "round_id": "a2",
+    "parent_id": "u2",
+    "timestamp": "2026-04-10T14:30:12.000Z",
+    "speaker": "assistant",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "好的,已记录选型决定。",
+        "thinking": null,
+        "language": null
+      }
+    ],
+    "is_sidechain": 0,
+    "cwd": "/home/user/mt",
+    "usage": null
+  }
+]
