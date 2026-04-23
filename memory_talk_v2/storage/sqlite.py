@@ -241,34 +241,8 @@ class SQLiteStore:
     def count_search_log(self) -> int:
         return self.conn.execute("SELECT COUNT(*) FROM search_log").fetchone()[0]
 
-    # ---------- event_log ----------
-
-    def insert_event(
-        self, event_id: str, object_id: str, object_kind: str,
-        at: str, kind: str, detail: dict,
-    ) -> None:
-        self.conn.execute(
-            "INSERT INTO event_log (event_id, object_id, object_kind, at, kind, detail) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (event_id, object_id, object_kind, at, kind, json.dumps(detail, ensure_ascii=False)),
-        )
-        self.conn.commit()
-
-    def events_for(self, object_id: str) -> list[dict]:
-        rows = self.conn.execute(
-            "SELECT * FROM event_log WHERE object_id = ? ORDER BY at ASC", (object_id,),
-        ).fetchall()
-        return [{
-            "event_id": r["event_id"],
-            "object_id": r["object_id"],
-            "object_kind": r["object_kind"],
-            "at": r["at"],
-            "kind": r["kind"],
-            "detail": json.loads(r["detail"] or "{}"),
-        } for r in rows]
-
     def clear_all(self) -> None:
         """Nuke all v2 tables' contents. Used by /v2/rebuild."""
-        for t in ("event_log", "search_log", "links", "cards", "rounds", "sessions"):
+        for t in ("search_log", "links", "cards", "rounds", "sessions"):
             self.conn.execute(f"DELETE FROM {t}")
         self.conn.commit()

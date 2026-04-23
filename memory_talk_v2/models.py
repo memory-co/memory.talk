@@ -239,5 +239,4 @@ class RebuildOut(BaseModel):
     sessions: int
     cards: int
     searches_replayed: int
-    events_replayed: int
     errors_count: int = 0

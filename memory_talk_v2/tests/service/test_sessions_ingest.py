@@ -39,7 +39,7 @@ def test_first_ingest_imports(services):
     assert [r["idx"] for r in rounds] == [1, 2]
 
     # Event was logged
-    events = services.db.events_for(result["session_id"])
+    events = services.events_for(result["session_id"])
     assert [e["kind"] for e in events] == ["imported"]
     assert events[0]["detail"]["round_count"] == 2
 
@@ -67,7 +67,7 @@ def test_appended_adds_new_rounds(services):
     assert result["added_count"] == 1
     assert result["round_count"] == 2
 
-    kinds = [e["kind"] for e in services.db.events_for(result["session_id"])]
+    kinds = [e["kind"] for e in services.events_for(result["session_id"])]
     assert kinds == ["imported", "rounds_appended"]
 
 
@@ -96,5 +96,5 @@ def test_partial_append_with_overwrite_skip(services):
     assert rounds[0]["content"][0]["text"] == "hello"  # NOT "HELLO CHANGED"
     assert [r["idx"] for r in rounds] == [1, 2, 3]
 
-    kinds = [e["kind"] for e in services.db.events_for(result["session_id"])]
+    kinds = [e["kind"] for e in services.events_for(result["session_id"])]
     assert kinds == ["imported", "rounds_appended", "rounds_overwrite_skipped"]

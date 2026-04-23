@@ -27,7 +27,7 @@ def test_add_tags_emits_per_new_tag(services):
                  db=services.db, events=services.events,
                  sessions_root=services.config.sessions_dir)
     assert r["tags"] == ["a", "b"]
-    kinds = [e["kind"] for e in services.db.events_for(sid) if e["kind"].startswith("tag_")]
+    kinds = [e["kind"] for e in services.events_for(sid) if e["kind"].startswith("tag_")]
     assert kinds == ["tag_added", "tag_added"]
 
 
@@ -40,7 +40,7 @@ def test_add_tags_idempotent(services):
                  db=services.db, events=services.events,
                  sessions_root=services.config.sessions_dir)
     assert r["tags"] == ["a"]
-    kinds = [e["kind"] for e in services.db.events_for(sid) if e["kind"].startswith("tag_")]
+    kinds = [e["kind"] for e in services.events_for(sid) if e["kind"].startswith("tag_")]
     assert kinds == ["tag_added"]  # only one event
 
 
@@ -53,7 +53,7 @@ def test_remove_tags_emits_per_real_removal(services):
                     db=services.db, events=services.events,
                     sessions_root=services.config.sessions_dir)
     assert r["tags"] == ["a"]
-    kinds = [e["kind"] for e in services.db.events_for(sid) if e["kind"].startswith("tag_")]
+    kinds = [e["kind"] for e in services.events_for(sid) if e["kind"].startswith("tag_")]
     # a(added), b(added), b(removed) — not c, because it wasn't present
     assert kinds == ["tag_added", "tag_added", "tag_removed"]
 

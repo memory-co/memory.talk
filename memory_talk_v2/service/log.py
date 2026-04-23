@@ -1,7 +1,9 @@
-"""Log service — event stream for a card or session (read-only)."""
+"""Log service — read-only event stream from the object's own events.jsonl."""
 from __future__ import annotations
 
+from memory_talk_v2.config import Config
 from memory_talk_v2.ids import IdKind, InvalidIdError, parse_id
+from memory_talk_v2.storage import files as F
 from memory_talk_v2.storage.sqlite import SQLiteStore
 
 
@@ -13,7 +15,7 @@ class LogNotFound(LogError):
     pass
 
 
-def log(object_id: str, *, db: SQLiteStore) -> dict:
+def log(object_id: str, *, config: Config, db: SQLiteStore) -> dict:
     try:
         kind, _ = parse_id(object_id)
     except InvalidIdError as e:
@@ -24,15 +26,16 @@ def log(object_id: str, *, db: SQLiteStore) -> dict:
     if kind == IdKind.CARD:
         if db.get_card(object_id) is None:
             raise LogNotFound(f"card not found: {object_id}")
-        key = "card_id"
-        type_str = "card"
+        events = F.read_card_events(config.cards_dir, object_id)
+        key, type_str = "card_id", "card"
     else:
-        if db.get_session(object_id) is None:
+        session = db.get_session(object_id)
+        if session is None:
             raise LogNotFound(f"session not found: {object_id}")
-        key = "session_id"
-        type_str = "session"
+        events = F.read_session_events(config.sessions_dir, session["source"], object_id)
+        key, type_str = "session_id", "session"
 
-    events = db.events_for(object_id)
+    events.sort(key=lambda e: e["at"])
     return {
         "type": type_str,
         key: object_id,

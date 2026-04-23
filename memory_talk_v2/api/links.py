@@ -16,7 +16,7 @@ router = APIRouter()
 @router.post("/links", response_model=CreateLinkOut)
 async def post_links(payload: CreateLinkIn, request: Request):
     app = request.app
-    events = EventWriter(app.state.event_jsonl, app.state.db)
+    events = EventWriter(app.state.config, app.state.db)
     try:
         result = create_user_link(
             payload.model_dump(),

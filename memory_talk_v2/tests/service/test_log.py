@@ -33,17 +33,17 @@ def _seed(services):
 
 def test_log_invalid_prefix(services):
     with pytest.raises(LogError):
-        log("foo_bar", db=services.db)
+        log("foo_bar", config=services.config, db=services.db)
 
 
 def test_log_not_found(services):
     with pytest.raises(LogNotFound):
-        log("card_nope", db=services.db)
+        log("card_nope", config=services.config, db=services.db)
 
 
 def test_log_session_events(services):
     sid, card_id = _seed(services)
-    r = log(sid, db=services.db)
+    r = log(sid, config=services.config, db=services.db)
     assert r["type"] == "session"
     assert r["session_id"] == sid
     kinds = [e["kind"] for e in r["events"]]
@@ -55,7 +55,7 @@ def test_log_session_events(services):
 
 def test_log_card_events(services):
     sid, card_id = _seed(services)
-    r = log(card_id, db=services.db)
+    r = log(card_id, config=services.config, db=services.db)
     assert r["type"] == "card"
     assert r["card_id"] == card_id
     kinds = [e["kind"] for e in r["events"]]

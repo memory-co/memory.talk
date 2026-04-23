@@ -14,7 +14,7 @@ router = APIRouter()
 @router.post("/sessions", response_model=IngestSessionOut)
 async def post_sessions(payload: IngestSessionIn, request: Request):
     app = request.app
-    events = EventWriter(app.state.event_jsonl, app.state.db)
+    events = EventWriter(app.state.config, app.state.db)
     try:
         result = ingest_session(
             payload.model_dump(),

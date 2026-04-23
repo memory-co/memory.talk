@@ -16,7 +16,7 @@ router = APIRouter()
 @router.post("/tags/add", response_model=TagsOut)
 async def post_tags_add(payload: TagsIn, request: Request):
     app = request.app
-    events = EventWriter(app.state.event_jsonl, app.state.db)
+    events = EventWriter(app.state.config, app.state.db)
     try:
         return add_tags(
             payload.model_dump(),
@@ -33,7 +33,7 @@ async def post_tags_add(payload: TagsIn, request: Request):
 @router.post("/tags/remove", response_model=TagsOut)
 async def post_tags_remove(payload: TagsIn, request: Request):
     app = request.app
-    events = EventWriter(app.state.event_jsonl, app.state.db)
+    events = EventWriter(app.state.config, app.state.db)
     try:
         return remove_tags(
             payload.model_dump(),

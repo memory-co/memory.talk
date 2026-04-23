@@ -16,7 +16,7 @@ router = APIRouter()
 @router.post("/cards", response_model=CreateCardOut)
 async def post_cards(payload: CreateCardIn, request: Request):
     app = request.app
-    events = EventWriter(app.state.event_jsonl, app.state.db)
+    events = EventWriter(app.state.config, app.state.db)
     try:
         result = create_card(
             payload.model_dump(),

@@ -70,12 +70,12 @@ def test_create_card_happy_path(services):
     assert links[0]["expires_at"] is None
 
     # Events: card.created + session.card_extracted
-    card_events = services.db.events_for(card_id)
+    card_events = services.events_for(card_id)
     assert card_events[0]["kind"] == "created"
     assert card_events[0]["detail"]["summary"] == "selected LanceDB"
     assert card_events[0]["detail"]["default_links"][0]["target_id"] == sid
 
-    sess_events = services.db.events_for(sid)
+    sess_events = services.events_for(sid)
     kinds = [e["kind"] for e in sess_events]
     assert "card_extracted" in kinds
     extracted = next(e for e in sess_events if e["kind"] == "card_extracted")
@@ -90,7 +90,7 @@ def test_create_card_with_from_search_id_passes_through(services):
         config=services.config, db=services.db, vectors=services.vectors,
         embedder=services.embedder, events=services.events,
     )
-    ev = services.db.events_for(result["card_id"])[0]
+    ev = services.events_for(result["card_id"])[0]
     assert ev["detail"]["from_search_id"] == "sch_demo"
 
 
@@ -139,6 +139,6 @@ def test_card_extracted_merges_same_session(services):
         config=services.config, db=services.db, vectors=services.vectors,
         embedder=services.embedder, events=services.events,
     )
-    sess_events = [e for e in services.db.events_for(sid) if e["kind"] == "card_extracted"]
+    sess_events = [e for e in services.events_for(sid) if e["kind"] == "card_extracted"]
     assert len(sess_events) == 1
     assert sess_events[0]["detail"]["indexes"] == "1-3,20,22"

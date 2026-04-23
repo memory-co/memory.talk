@@ -38,7 +38,6 @@ def create_app(config: Config | None = None) -> FastAPI:
     vectors = LanceStore(config.vectors_dir, dim=config.settings.embedding.dim)
     embedder = get_embedder(config)
     search_jsonl = DatedJsonlWriter(config.search_log_dir)
-    event_jsonl = DatedJsonlWriter(config.event_log_dir)
 
     try:
         validate_embedder(config)
@@ -57,7 +56,6 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.state.vectors = vectors
     app.state.embedder = embedder
     app.state.search_jsonl = search_jsonl
-    app.state.event_jsonl = event_jsonl
 
     from memory_talk_v2.api.status import router as status_router
     app.include_router(status_router, prefix="/v2")

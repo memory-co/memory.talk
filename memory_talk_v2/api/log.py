@@ -12,8 +12,9 @@ router = APIRouter()
 
 @router.post("/log")
 async def post_log(payload: LogIn, request: Request):
+    app = request.app
     try:
-        return log(payload.id, db=request.app.state.db)
+        return log(payload.id, config=app.state.config, db=app.state.db)
     except LogNotFound as e:
         raise HTTPException(status_code=404, detail=str(e))
     except LogError as e:

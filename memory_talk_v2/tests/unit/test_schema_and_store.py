@@ -9,8 +9,10 @@ def test_init_schema_is_idempotent(tmp_path):
     init_schema(conn)
     init_schema(conn)  # second run must not raise
     tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-    for t in ("sessions", "rounds", "cards", "links", "search_log", "event_log"):
+    for t in ("sessions", "rounds", "cards", "links", "search_log"):
         assert t in tables
+    # event_log is NOT a SQLite table in v2; events live per-object as jsonl
+    assert "event_log" not in tables
     conn.close()
 
 
@@ -61,20 +63,5 @@ def test_store_cards_and_links(tmp_path):
     assert db.count_links() == 1
     touching = db.links_touching("card_x")
     assert len(touching) == 1 and touching[0]["expires_at"] is None
-
-
-def test_event_log(tmp_path):
-    db = SQLiteStore(tmp_path / "memory.db")
-    db.insert_event("evt_1", "card_x", "card", "2026-04-22T00:00:00Z",
-                    "created", {"summary": "x"})
-    events = db.events_for("card_x")
-    assert events == [{
-        "event_id": "evt_1",
-        "object_id": "card_x",
-        "object_kind": "card",
-        "at": "2026-04-22T00:00:00Z",
-        "kind": "created",
-        "detail": {"summary": "x"},
-    }]
 
 

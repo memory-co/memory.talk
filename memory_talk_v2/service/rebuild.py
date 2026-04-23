@@ -42,9 +42,6 @@ def _apply_retention(config: Config) -> None:
     for p in list(config.search_log_dir.glob("*.jsonl")):
         if p.stat().st_mtime < cutoff:
             p.unlink()
-    for p in list(config.event_log_dir.glob("*.jsonl")):
-        if p.stat().st_mtime < cutoff:
-            p.unlink()
 
 
 def rebuild(
@@ -154,24 +151,8 @@ def rebuild(
                 except Exception:
                     errors_count += 1
 
-    # 6) Replay event_log jsonl
-    events_replayed = 0
-    if config.event_log_dir.exists():
-        for jsonl in sorted(config.event_log_dir.glob("*.jsonl")):
-            for line in jsonl.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rec = json.loads(line)
-                    db.insert_event(
-                        event_id=rec["event_id"], object_id=rec["object_id"],
-                        object_kind=rec["object_kind"], at=rec["at"],
-                        kind=rec["kind"], detail=rec.get("detail") or {},
-                    )
-                    events_replayed += 1
-                except Exception:
-                    errors_count += 1
+    # Event log needs no rebuild step: events live inside each object's own
+    # events.jsonl under cards/ or sessions/. They never left.
 
     # 7) FTS index refresh
     vectors.ensure_fts_index("cards", replace=True)
@@ -185,6 +166,5 @@ def rebuild(
         "sessions": sessions_count,
         "cards": cards_count,
         "searches_replayed": searches_replayed,
-        "events_replayed": events_replayed,
         "errors_count": errors_count,
     }

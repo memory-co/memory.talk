@@ -66,17 +66,6 @@ DDL = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_search_log_created ON search_log(created_at)",
-    """
-    CREATE TABLE IF NOT EXISTS event_log (
-        event_id     TEXT PRIMARY KEY,
-        object_id    TEXT NOT NULL,
-        object_kind  TEXT NOT NULL,
-        at           TEXT NOT NULL,
-        kind         TEXT NOT NULL,
-        detail       TEXT NOT NULL
-    )
-    """,
-    "CREATE INDEX IF NOT EXISTS idx_event_log_object ON event_log(object_id, at)",
 ]
 
 

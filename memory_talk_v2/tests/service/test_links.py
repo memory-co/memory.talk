@@ -49,9 +49,9 @@ def test_create_user_link_card_to_card(services):
     assert link["expires_at"] is not None  # user link has TTL
 
     # Two-end events
-    outgoing = [e for e in services.db.events_for(card1)
+    outgoing = [e for e in services.events_for(card1)
                 if e["kind"] == "linked" and e["detail"]["direction"] == "outgoing"]
-    incoming = [e for e in services.db.events_for(card2)
+    incoming = [e for e in services.events_for(card2)
                 if e["kind"] == "linked" and e["detail"]["direction"] == "incoming"]
     assert len(outgoing) == 1
     assert len(incoming) == 1

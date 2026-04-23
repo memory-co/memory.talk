@@ -1,17 +1,17 @@
 """Sync scenario: claude-code JSONL → adapter → /v2/sessions → file + SQLite.
 
 Compares real outputs against committed fixtures under `expected/`:
-- `expected/sessions/<source>/<bucket>/<session_id>/meta.json` + `rounds.jsonl`
-  — the v2 source-of-truth file layer
-- `expected/sqlite/<table>.json` — a list of rows dumped from SQLite
+- `expected/sessions/<source>/<bucket>/<session_id>/meta.json`      — meta
+- `expected/sessions/<source>/<bucket>/<session_id>/rounds.jsonl`   — rounds
+- `expected/sessions/<source>/<bucket>/<session_id>/events.jsonl`   — the session's event stream (file-resident in v2)
+- `expected/sqlite/<table>.json`                                    — SQLite rows per populated table (no event_log — it's a file, not a table)
 
 Non-deterministic fields (timestamps, random event_ids, the absolute path
 captured into `metadata.path`) are stripped from the actual data before
 diff; the committed fixtures do not contain those fields.
 
-Regenerate mode: set `REGENERATE_SYNC_FIXTURES=1` to overwrite the
-`expected/` tree with the current actual output. Use after intentional
-adapter/schema changes.
+Regenerate: `REGENERATE_SYNC_FIXTURES=1 pytest memory_talk_v2/tests/sync/`
+after an intentional adapter or schema change.
 """
 from __future__ import annotations
 import json
@@ -30,25 +30,30 @@ REGENERATE = os.environ.get("REGENERATE_SYNC_FIXTURES") == "1"
 # Non-deterministic fields to drop before diff
 META_STRIP = {"synced_at"}
 META_METADATA_STRIP = {"path"}   # absolute fs path to the fixture jsonl
+EVENT_STRIP = {"event_id", "at"}
 TABLE_STRIP = {
     "sessions":   {"synced_at"},
     "rounds":     set(),
-    "event_log":  {"event_id", "at"},
 }
-# Which columns are JSON-encoded in SQLite and need to be parsed for diff
+# Which columns are JSON-encoded in SQLite and need parsing for diff
 JSON_COLS = {
     "sessions":   ["metadata", "tags"],
     "rounds":     ["content", "usage"],
-    "event_log":  ["detail"],
 }
-# Which tables we snapshot
-TABLES = ["sessions", "rounds", "event_log"]
+# SQLite tables we snapshot (event_log is gone — events live per-object)
+TABLES = ["sessions", "rounds"]
+
+
+def _pk_cols(table: str) -> list[str]:
+    return {
+        "sessions": ["session_id"],
+        "rounds":   ["session_id", "idx"],
+    }[table]
 
 
 def _dump_table(db, table: str) -> list[dict]:
     rows = db.conn.execute(
-        f"SELECT * FROM {table} ORDER BY "
-        + (",".join(_pk_cols(table)))
+        f"SELECT * FROM {table} ORDER BY " + ",".join(_pk_cols(table))
     ).fetchall()
     out = []
     for r in rows:
@@ -58,7 +63,6 @@ def _dump_table(db, table: str) -> list[dict]:
                 d[col] = json.loads(d[col])
         for col in TABLE_STRIP.get(table, set()):
             d.pop(col, None)
-        # sessions.metadata may carry the absolute fixture path
         if table == "sessions" and isinstance(d.get("metadata"), dict):
             for k in META_METADATA_STRIP:
                 d["metadata"].pop(k, None)
@@ -66,16 +70,12 @@ def _dump_table(db, table: str) -> list[dict]:
     return out
 
 
-def _pk_cols(table: str) -> list[str]:
-    return {
-        "sessions":   ["session_id"],
-        "rounds":     ["session_id", "idx"],
-        "event_log":  ["at", "event_id"],
-    }[table]
-
-
 def _read_jsonl(path: Path) -> list[dict]:
     return [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
+
+
+def _strip_events(events: list[dict]) -> list[dict]:
+    return [{k: v for k, v in e.items() if k not in EVENT_STRIP} for e in events]
 
 
 def _write_json(path: Path, obj) -> None:
@@ -100,7 +100,6 @@ def _strip_meta(meta: dict) -> dict:
 def test_claude_code_sync(app_client):
     from memory_talk_v2.adapters.claude_code import ClaudeCodeAdapter
 
-    # Run the full sync
     adapter = ClaudeCodeAdapter()
     actions = []
     for payload in adapter.iter_sessions(PLATFORM):
@@ -112,45 +111,46 @@ def test_claude_code_sync(app_client):
     session_id = actions[0]["session_id"]
     assert actions[0]["action"] == "imported"
 
-    # ---- file layer: meta.json + rounds.jsonl ----
     config = app_client.app.state.config
-    actual_session_dir = config.sessions_dir / "claude-code" / session_id[len("sess_"):len("sess_")+2].lower() / session_id
+    bucket = session_id[len("sess_"):len("sess_")+2].lower()
+    actual_session_dir = config.sessions_dir / "claude-code" / bucket / session_id
     actual_meta = _strip_meta(json.loads((actual_session_dir / "meta.json").read_text(encoding="utf-8")))
     actual_rounds = _read_jsonl(actual_session_dir / "rounds.jsonl")
+    actual_events = _strip_events(_read_jsonl(actual_session_dir / "events.jsonl"))
 
-    # ---- SQLite tables ----
     db = app_client.app.state.db
     actual_tables = {t: _dump_table(db, t) for t in TABLES}
 
-    # Fixture paths
-    expected_session_rel = Path("claude-code") / session_id[len("sess_"):len("sess_")+2].lower() / session_id
-    expected_meta_path = SESSIONS_ROOT / expected_session_rel / "meta.json"
-    expected_rounds_path = SESSIONS_ROOT / expected_session_rel / "rounds.jsonl"
+    expected_session_rel = Path("claude-code") / bucket / session_id
+    expected_session_dir = SESSIONS_ROOT / expected_session_rel
 
     if REGENERATE:
-        _write_json(expected_meta_path, actual_meta)
-        _write_jsonl(expected_rounds_path, actual_rounds)
+        _write_json(expected_session_dir / "meta.json", actual_meta)
+        _write_jsonl(expected_session_dir / "rounds.jsonl", actual_rounds)
+        _write_jsonl(expected_session_dir / "events.jsonl", actual_events)
         for t in TABLES:
             _write_json(SQLITE_ROOT / f"{t}.json", actual_tables[t])
-        # Force a failure so CI notices — never leave regeneration mode as green.
         raise RuntimeError(
             "REGENERATE_SYNC_FIXTURES=1: wrote fixtures, unset and re-run to assert"
         )
 
-    expected_meta = json.loads(expected_meta_path.read_text(encoding="utf-8"))
-    expected_rounds = _read_jsonl(expected_rounds_path)
+    expected_meta = json.loads((expected_session_dir / "meta.json").read_text(encoding="utf-8"))
+    expected_rounds = _read_jsonl(expected_session_dir / "rounds.jsonl")
+    expected_events = _read_jsonl(expected_session_dir / "events.jsonl")
 
     assert actual_meta == expected_meta, "meta.json diff"
     assert actual_rounds == expected_rounds, "rounds.jsonl diff"
+    assert actual_events == expected_events, "events.jsonl diff"
 
     for t in TABLES:
         expected_rows = json.loads((SQLITE_ROOT / f"{t}.json").read_text(encoding="utf-8"))
         assert actual_tables[t] == expected_rows, f"SQLite table {t!r} diff"
 
-    # Idempotency: second run with unchanged bytes → skipped, no new rows
+    # Idempotency: second run with unchanged bytes → skipped, no new rows/events
     for payload in adapter.iter_sessions(PLATFORM):
         r = app_client.post("/v2/sessions", json=payload)
         assert r.json()["action"] == "skipped"
     for t in TABLES:
-        again = _dump_table(db, t)
-        assert again == actual_tables[t], f"idempotency broken for {t!r}"
+        assert _dump_table(db, t) == actual_tables[t], f"idempotency broken for {t!r}"
+    assert _strip_events(_read_jsonl(actual_session_dir / "events.jsonl")) == actual_events, \
+        "idempotency broken for events.jsonl"

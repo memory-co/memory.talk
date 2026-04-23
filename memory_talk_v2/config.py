@@ -102,18 +102,13 @@ class Config:
         return self.logs_dir / "search"
 
     @property
-    def event_log_dir(self) -> Path:
-        return self.logs_dir / "events"
-
-    @property
     def pid_path(self) -> Path:
         return self.data_root / "server.pid"
 
     def ensure_dirs(self) -> None:
         for d in [
             self.data_root, self.vectors_dir, self.sessions_dir,
-            self.cards_dir, self.links_dir,
-            self.search_log_dir, self.event_log_dir,
+            self.cards_dir, self.links_dir, self.search_log_dir,
         ]:
             d.mkdir(parents=True, exist_ok=True)
 
