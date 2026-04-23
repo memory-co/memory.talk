@@ -1,0 +1,88 @@
+[
+  {
+    "session_id": "sess_01K3A2BRG5N9F4YXH8MKPW6D7Q",
+    "idx": 1,
+    "round_id": "b1",
+    "parent_id": null,
+    "timestamp": "2026-04-11T09:00:00.000Z",
+    "speaker": "user",
+    "role": "human",
+    "content": [
+      {
+        "type": "text",
+        "text": "Lance 的 hybrid 检索排序用的是什么?",
+        "thinking": null,
+        "language": null
+      }
+    ],
+    "is_sidechain": 0,
+    "cwd": "/home/user/mt",
+    "usage": null
+  },
+  {
+    "session_id": "sess_01K3A2BRG5N9F4YXH8MKPW6D7Q",
+    "idx": 2,
+    "round_id": "b2",
+    "parent_id": "b1",
+    "timestamp": "2026-04-11T09:00:05.000Z",
+    "speaker": "assistant",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "text",
+        "text": "默认 RRF(reciprocal rank fusion)。",
+        "thinking": null,
+        "language": null
+      }
+    ],
+    "is_sidechain": 0,
+    "cwd": "/home/user/mt",
+    "usage": null
+  },
+  {
+    "session_id": "sess_01K3A2BRG5N9F4YXH8MKPW6D7Q",
+    "idx": 3,
+    "round_id": "b3",
+    "parent_id": "b2",
+    "timestamp": "2026-04-11T09:10:00.000Z",
+    "speaker": "user",
+    "role": "human",
+    "content": [
+      {
+        "type": "text",
+        "text": "能换别的 reranker 吗?",
+        "thinking": null,
+        "language": null
+      }
+    ],
+    "is_sidechain": 0,
+    "cwd": "/home/user/mt",
+    "usage": null
+  },
+  {
+    "session_id": "sess_01K3A2BRG5N9F4YXH8MKPW6D7Q",
+    "idx": 4,
+    "round_id": "b4",
+    "parent_id": "b3",
+    "timestamp": "2026-04-11T09:10:08.000Z",
+    "speaker": "assistant",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "thinking",
+        "text": null,
+        "thinking": "可以选 cross-encoder 之类的 rerank。",
+        "language": null
+      },
+      {
+        "type": "text",
+        "text": "可以,传 rerank=CrossEncoderReranker() 这类即可。",
+        "thinking": null,
+        "language": null
+      }
+    ],
+    "is_sidechain": 0,
+    "cwd": "/home/user/mt",
+    "usage": null
+  }
+]

@@ -1,0 +1,2 @@
+{"type":"user","uuid":"b1","parentUuid":null,"timestamp":"2026-04-11T09:00:00.000Z","isSidechain":false,"cwd":"/home/user/mt","message":{"role":"user","content":"Lance 的 hybrid 检索排序用的是什么?"}}
+{"type":"assistant","uuid":"b2","parentUuid":"b1","timestamp":"2026-04-11T09:00:05.000Z","isSidechain":false,"cwd":"/home/user/mt","message":{"role":"assistant","content":[{"type":"text","text":"默认 RRF(reciprocal rank fusion)。"}]}}

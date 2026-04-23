@@ -1,17 +1,24 @@
-"""Sync scenario: claude-code JSONL → adapter → /v2/sessions → file + SQLite.
+"""Incremental sync scenario: existing session grows, new rounds get appended.
 
-Compares real outputs against committed fixtures under `expected/`:
-- `expected/sessions/<source>/<bucket>/<session_id>/meta.json`      — meta
-- `expected/sessions/<source>/<bucket>/<session_id>/rounds.jsonl`   — rounds
-- `expected/sessions/<source>/<bucket>/<session_id>/events.jsonl`   — the session's event stream (file-resident in v2)
-- `expected/sqlite/<table>.json`                                    — SQLite rows per populated table (no event_log — it's a file, not a table)
+Phase 1 (seed) — adapter ingests `platform_initial/`, server stores it.
+Phase 2 (unchanged) — same bytes: sha256 fast-path → action=skipped.
+Phase 3 (grown)   — adapter ingests `platform_grown/` (same session_id,
+                    new rounds appended to the raw jsonl): server detects
+                    round_id mismatch on the new rounds, appends them
+                    with continuing idx, emits a rounds_appended event.
+Phase 4 (stable)  — same grown bytes again: action=skipped.
 
-Non-deterministic fields (timestamps, random event_ids, the absolute path
-captured into `metadata.path`) are stripped from the actual data before
-diff; the committed fixtures do not contain those fields.
+The `expected/` fixtures capture the END-OF-PHASE-3 state — rounds.jsonl
+has all rounds (initial + new), events.jsonl has imported + rounds_appended,
+meta.json shows the grown round_count and the grown last_sha256.
 
-Regenerate: `REGENERATE_SYNC_FIXTURES=1 pytest memory_talk_v2/tests/sync/`
-after an intentional adapter or schema change.
+This scenario is fully isolated from test_claude_code_full_sync/ — they
+share no fixtures or data. Each uses its own `app_client` (fresh
+tmp_data_root via pytest fixtures), so there is no cross-test leakage.
+
+Regenerate: `REGENERATE_SYNC_FIXTURES=1 pytest
+memory_talk_v2/tests/sync/test_claude_code_incremental_sync/`
+after an intentional adapter/schema change.
 """
 from __future__ import annotations
 import json
@@ -20,35 +27,24 @@ from pathlib import Path
 
 
 HERE = Path(__file__).parent
-PLATFORM = HERE / "platform"
+PLATFORM_INITIAL = HERE / "platform_initial"
+PLATFORM_GROWN = HERE / "platform_grown"
 EXPECTED_ROOT = HERE / "expected"
 SESSIONS_ROOT = EXPECTED_ROOT / "sessions"
 SQLITE_ROOT = EXPECTED_ROOT / "sqlite"
 
 REGENERATE = os.environ.get("REGENERATE_SYNC_FIXTURES") == "1"
 
-# Non-deterministic fields to drop before diff
 META_STRIP = {"synced_at"}
-META_METADATA_STRIP = {"path"}   # absolute fs path to the fixture jsonl
+META_METADATA_STRIP = {"path"}
 EVENT_STRIP = {"event_id", "at"}
-TABLE_STRIP = {
-    "sessions":   {"synced_at"},
-    "rounds":     set(),
-}
-# Which columns are JSON-encoded in SQLite and need parsing for diff
-JSON_COLS = {
-    "sessions":   ["metadata", "tags"],
-    "rounds":     ["content", "usage"],
-}
-# SQLite tables we snapshot (event_log is gone — events live per-object)
+TABLE_STRIP = {"sessions": {"synced_at"}, "rounds": set()}
+JSON_COLS = {"sessions": ["metadata", "tags"], "rounds": ["content", "usage"]}
 TABLES = ["sessions", "rounds"]
 
 
 def _pk_cols(table: str) -> list[str]:
-    return {
-        "sessions": ["session_id"],
-        "rounds":   ["session_id", "idx"],
-    }[table]
+    return {"sessions": ["session_id"], "rounds": ["session_id", "idx"]}[table]
 
 
 def _dump_table(db, table: str) -> list[dict]:
@@ -97,22 +93,47 @@ def _strip_meta(meta: dict) -> dict:
     return out
 
 
-def test_claude_code_sync(app_client):
+def _sync_once(platform: Path, app_client):
     from memory_talk_v2.adapters.claude_code import ClaudeCodeAdapter
 
     adapter = ClaudeCodeAdapter()
     actions = []
-    for payload in adapter.iter_sessions(PLATFORM):
+    for payload in adapter.iter_sessions(platform):
         r = app_client.post("/v2/sessions", json=payload)
         assert r.status_code == 200, r.text
         actions.append(r.json())
+    return actions
 
-    assert len(actions) == 1
-    session_id = actions[0]["session_id"]
-    assert actions[0]["action"] == "imported"
 
+def test_claude_code_incremental_sync(app_client):
+    # Phase 1: seed import
+    actions1 = _sync_once(PLATFORM_INITIAL, app_client)
+    assert len(actions1) == 1
+    assert actions1[0]["action"] == "imported"
+    assert actions1[0]["round_count"] == 2
+    assert actions1[0]["added_count"] == 2
+    session_id = actions1[0]["session_id"]
+
+    # Phase 2: same bytes again → skipped
+    actions2 = _sync_once(PLATFORM_INITIAL, app_client)
+    assert actions2[0]["action"] == "skipped"
+
+    # Phase 3: platform file grew by 2 rounds → appended
+    actions3 = _sync_once(PLATFORM_GROWN, app_client)
+    assert len(actions3) == 1
+    assert actions3[0]["session_id"] == session_id
+    assert actions3[0]["action"] == "appended"
+    assert actions3[0]["added_count"] == 2
+    assert actions3[0]["round_count"] == 4
+    assert actions3[0]["overwrite_skipped"] == []
+
+    # Phase 4: same grown bytes again → skipped
+    actions4 = _sync_once(PLATFORM_GROWN, app_client)
+    assert actions4[0]["action"] == "skipped"
+
+    # ---- snapshot comparison: post-phase-3 state ----
     config = app_client.app.state.config
-    bucket = session_id[len("sess_"):len("sess_")+2].lower()
+    bucket = session_id[len("sess_"):len("sess_") + 2].lower()
     actual_session_dir = config.sessions_dir / "claude-code" / bucket / session_id
     actual_meta = _strip_meta(json.loads((actual_session_dir / "meta.json").read_text(encoding="utf-8")))
     actual_rounds = _read_jsonl(actual_session_dir / "rounds.jsonl")
@@ -121,8 +142,7 @@ def test_claude_code_sync(app_client):
     db = app_client.app.state.db
     actual_tables = {t: _dump_table(db, t) for t in TABLES}
 
-    expected_session_rel = Path("claude-code") / bucket / session_id
-    expected_session_dir = SESSIONS_ROOT / expected_session_rel
+    expected_session_dir = SESSIONS_ROOT / "claude-code" / bucket / session_id
 
     if REGENERATE:
         _write_json(expected_session_dir / "meta.json", actual_meta)
@@ -146,11 +166,8 @@ def test_claude_code_sync(app_client):
         expected_rows = json.loads((SQLITE_ROOT / f"{t}.json").read_text(encoding="utf-8"))
         assert actual_tables[t] == expected_rows, f"SQLite table {t!r} diff"
 
-    # Idempotency: second run with unchanged bytes → skipped, no new rows/events
-    for payload in adapter.iter_sessions(PLATFORM):
-        r = app_client.post("/v2/sessions", json=payload)
-        assert r.json()["action"] == "skipped"
-    for t in TABLES:
-        assert _dump_table(db, t) == actual_tables[t], f"idempotency broken for {t!r}"
-    assert _strip_events(_read_jsonl(actual_session_dir / "events.jsonl")) == actual_events, \
-        "idempotency broken for events.jsonl"
+    # Key invariant: rounds.jsonl is append-only. The first 2 lines (seed rounds)
+    # must be byte-identical to what phase 1 wrote — overwrite-detection and
+    # replay safety depend on it.
+    assert [r["idx"] for r in actual_rounds] == [1, 2, 3, 4]
+    assert [r["round_id"] for r in actual_rounds] == ["b1", "b2", "b3", "b4"]

@@ -1,0 +1,11 @@
+{
+  "session_id": "sess_01K3A2BRG5N9F4YXH8MKPW6D7Q",
+  "source": "claude-code",
+  "created_at": "2026-04-11T09:00:00.000Z",
+  "metadata": {
+    "project": "-home-user-mt"
+  },
+  "tags": [],
+  "round_count": 4,
+  "last_sha256": "680fb5d9c28f173fa399d0d0bf19ffcc78923486a7bafb130c4260c1bd8f83ef"
+}

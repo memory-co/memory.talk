@@ -1,0 +1,4 @@
+{"type":"user","uuid":"b1","parentUuid":null,"timestamp":"2026-04-11T09:00:00.000Z","isSidechain":false,"cwd":"/home/user/mt","message":{"role":"user","content":"Lance 的 hybrid 检索排序用的是什么?"}}
+{"type":"assistant","uuid":"b2","parentUuid":"b1","timestamp":"2026-04-11T09:00:05.000Z","isSidechain":false,"cwd":"/home/user/mt","message":{"role":"assistant","content":[{"type":"text","text":"默认 RRF(reciprocal rank fusion)。"}]}}
+{"type":"user","uuid":"b3","parentUuid":"b2","timestamp":"2026-04-11T09:10:00.000Z","isSidechain":false,"cwd":"/home/user/mt","message":{"role":"user","content":"能换别的 reranker 吗?"}}
+{"type":"assistant","uuid":"b4","parentUuid":"b3","timestamp":"2026-04-11T09:10:08.000Z","isSidechain":false,"cwd":"/home/user/mt","message":{"role":"assistant","content":[{"type":"thinking","thinking":"可以选 cross-encoder 之类的 rerank。"},{"type":"text","text":"可以,传 rerank=CrossEncoderReranker() 这类即可。"}]}}
