@@ -1,0 +1,19 @@
+{
+  "session_id": "sess_01K2FZQE4XGKV7J9MBN8PYRD3A",
+  "source": "claude-code",
+  "round_count": 4,
+  "tags": [],
+  "metadata_project": "-home-user-mt",
+  "first_round": {
+    "index": 1,
+    "role": "human",
+    "text_contains": "ChromaDB vs LanceDB"
+  },
+  "assistant_round_with_thinking": {
+    "index": 2,
+    "role": "assistant",
+    "text_contains": "LanceDB",
+    "content_has_thinking_block": true
+  },
+  "events_kinds": ["imported"]
+}

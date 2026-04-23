@@ -1,0 +1,5 @@
+{"type":"user","uuid":"u1","parentUuid":null,"timestamp":"2026-04-10T14:30:00.000Z","isSidechain":false,"cwd":"/home/user/mt","message":{"role":"user","content":"ChromaDB vs LanceDB?"}}
+{"type":"assistant","uuid":"a1","parentUuid":"u1","timestamp":"2026-04-10T14:30:05.000Z","isSidechain":false,"cwd":"/home/user/mt","message":{"role":"assistant","content":[{"type":"thinking","thinking":"用户在问向量库选型;LanceDB 优势是嵌入式、零依赖。"},{"type":"text","text":"推荐 LanceDB:零依赖、嵌入式。"}]}}
+{"type":"queue-operation","operation":"dequeue","timestamp":"2026-04-10T14:30:06.000Z","sessionId":"01K2FZQE4XGKV7J9MBN8PYRD3A"}
+{"type":"user","uuid":"u2","parentUuid":"a1","timestamp":"2026-04-10T14:30:10.000Z","isSidechain":false,"cwd":"/home/user/mt","message":{"role":"user","content":"就用 LanceDB。"}}
+{"type":"assistant","uuid":"a2","parentUuid":"u2","timestamp":"2026-04-10T14:30:12.000Z","isSidechain":false,"cwd":"/home/user/mt","message":{"role":"assistant","content":[{"type":"text","text":"好的,已记录选型决定。"}]}}
