@@ -1,4 +1,4 @@
-from memory_talk_v2.service.snippet import extract_snippets
+from memory_talk_v2.util.snippet import extract_snippets
 
 
 def test_empty_query_returns_empty():

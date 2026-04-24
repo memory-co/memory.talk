@@ -1,7 +1,7 @@
 import pytest
 from datetime import datetime, timezone
 
-from memory_talk_v2.dsl import parse, compile_for, DSLError
+from memory_talk_v2.util.dsl import parse, compile_for, DSLError
 
 
 NOW = datetime(2026, 4, 22, 12, 0, 0, tzinfo=timezone.utc)

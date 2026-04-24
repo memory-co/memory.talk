@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from memory_talk_v2.service.ttl import current_ttl, refresh, initial_expires_at, dt_to_iso, iso_to_dt
+from memory_talk_v2.util.ttl import current_ttl, refresh, initial_expires_at, dt_to_iso, iso_to_dt
 
 
 NOW = datetime(2026, 4, 22, 12, 0, 0, tzinfo=timezone.utc)

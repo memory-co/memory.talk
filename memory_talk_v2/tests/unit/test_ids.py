@@ -1,6 +1,6 @@
 import pytest
 
-from memory_talk_v2.ids import (
+from memory_talk_v2.util.ids import (
     CARD_PREFIX, SESSION_PREFIX, LINK_PREFIX,
     IdKind, InvalidIdError,
     new_card_id, new_link_id, new_search_id, new_event_id,

@@ -7,8 +7,8 @@ Every card and every session carries its own append-only event stream at:
 from __future__ import annotations
 
 from memory_talk_v2.config import Config
-from memory_talk_v2.ids import CARD_PREFIX, SESSION_PREFIX, new_event_id
-from memory_talk_v2.service.ttl import dt_to_iso, now_utc
+from memory_talk_v2.util.ids import CARD_PREFIX, SESSION_PREFIX, new_event_id
+from memory_talk_v2.util.ttl import dt_to_iso, now_utc
 from memory_talk_v2.storage import files as F
 from memory_talk_v2.storage.sqlite import SQLiteStore
 

@@ -7,7 +7,7 @@ import pytest
 from memory_talk_v2.service import (
     CardNotFound, CardServiceError, SessionNotFound, SessionServiceError,
 )
-from memory_talk_v2.service.ttl import dt_to_iso, iso_to_dt, now_utc
+from memory_talk_v2.util.ttl import dt_to_iso, iso_to_dt, now_utc
 
 
 async def _seed(services):

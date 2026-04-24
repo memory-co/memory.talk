@@ -4,13 +4,13 @@ from typing import Any
 
 from memory_talk_v2.config import Config
 from memory_talk_v2.embedding import Embedder
-from memory_talk_v2.ids import (
+from memory_talk_v2.util.ids import (
     CARD_PREFIX, SESSION_PREFIX,
     new_card_id, new_link_id,
 )
 from memory_talk_v2.service.events import EventWriter
 from memory_talk_v2.service.links import link_to_ref, refresh_active_user_links
-from memory_talk_v2.service.ttl import (
+from memory_talk_v2.util.ttl import (
     current_ttl, dt_to_iso, initial_expires_at, now_utc, refresh,
 )
 from memory_talk_v2.storage import files as F

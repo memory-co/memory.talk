@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
-from memory_talk_v2.ids import IdKind, InvalidIdError, parse_id
+from memory_talk_v2.util.ids import IdKind, InvalidIdError, parse_id
 from memory_talk_v2.models import ViewIn
 from memory_talk_v2.service import (
     CardNotFound, CardServiceError, SessionNotFound, SessionServiceError,

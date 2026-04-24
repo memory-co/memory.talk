@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 
 from memory_talk_v2.config import Config
-from memory_talk_v2.dsl import DSLError, compile_for, parse
+from memory_talk_v2.util.dsl import DSLError, compile_for, parse
 from memory_talk_v2.embedding import Embedder
-from memory_talk_v2.ids import new_search_id
+from memory_talk_v2.util.ids import new_search_id
 from memory_talk_v2.service.links import link_to_ref
-from memory_talk_v2.service.snippet import extract_snippets
-from memory_talk_v2.service.ttl import dt_to_iso, now_utc
+from memory_talk_v2.util.snippet import extract_snippets
+from memory_talk_v2.util.ttl import dt_to_iso, now_utc
 from memory_talk_v2.storage.jsonl_writer import DatedJsonlWriter
 from memory_talk_v2.storage.lancedb import LanceStore
 from memory_talk_v2.storage.sqlite import SQLiteStore
