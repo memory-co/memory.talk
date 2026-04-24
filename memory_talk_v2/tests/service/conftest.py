@@ -5,14 +5,14 @@ from pathlib import Path
 import pytest_asyncio
 
 from memory_talk_v2.config import Config
-from memory_talk_v2.embedding import DummyEmbedder
+from memory_talk_v2.provider.embedding import DummyEmbedder
 from memory_talk_v2.service import (
     CardService, EventWriter, LinkService, RebuildService,
     SearchService, SessionService,
 )
-from memory_talk_v2.storage import files as F
-from memory_talk_v2.storage.jsonl_writer import DatedJsonlWriter
-from memory_talk_v2.storage.lancedb import LanceStore
+from memory_talk_v2.provider import files as F
+from memory_talk_v2.provider.jsonl_writer import DatedJsonlWriter
+from memory_talk_v2.provider.lancedb import LanceStore
 from memory_talk_v2.repository import SQLiteStore
 
 

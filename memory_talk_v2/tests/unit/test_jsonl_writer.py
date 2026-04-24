@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timezone
 
-from memory_talk_v2.storage.jsonl_writer import DatedJsonlWriter
+from memory_talk_v2.provider.jsonl_writer import DatedJsonlWriter
 
 
 async def test_creates_file_for_utc_date(tmp_path):

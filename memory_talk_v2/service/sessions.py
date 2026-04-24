@@ -8,8 +8,8 @@ from memory_talk_v2.util.ids import SESSION_PREFIX, prefix_session_id
 from memory_talk_v2.service.events import EventWriter
 from memory_talk_v2.service.links import link_to_ref, refresh_active_user_links
 from memory_talk_v2.util.ttl import dt_to_iso, now_utc
-from memory_talk_v2.storage import files as F
-from memory_talk_v2.storage.lancedb import LanceStore
+from memory_talk_v2.provider import files as F
+from memory_talk_v2.provider.lancedb import LanceStore
 from memory_talk_v2.repository import SQLiteStore
 
 

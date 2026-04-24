@@ -1,4 +1,4 @@
-from memory_talk_v2.storage import files as F
+from memory_talk_v2.provider import files as F
 
 
 def test_session_dir_bucketing(tmp_path):

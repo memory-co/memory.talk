@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from memory_talk_v2.config import Config, ConfigValidationError
-from memory_talk_v2.embedding import (
+from memory_talk_v2.provider.embedding import (
     EmbedderValidationError,
     get_embedder,
     validate_embedder,
@@ -16,8 +16,8 @@ from memory_talk_v2.service import (
     CardService, EventWriter, LinkService, RebuildService,
     SearchService, SessionService,
 )
-from memory_talk_v2.storage.jsonl_writer import DatedJsonlWriter
-from memory_talk_v2.storage.lancedb import LanceStore
+from memory_talk_v2.provider.jsonl_writer import DatedJsonlWriter
+from memory_talk_v2.provider.lancedb import LanceStore
 from memory_talk_v2.repository import SQLiteStore
 
 

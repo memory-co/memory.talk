@@ -6,9 +6,9 @@ import time
 import aiofiles
 
 from memory_talk_v2.config import Config
-from memory_talk_v2.embedding import Embedder
-from memory_talk_v2.storage import files as F
-from memory_talk_v2.storage.lancedb import LanceStore
+from memory_talk_v2.provider.embedding import Embedder
+from memory_talk_v2.provider import files as F
+from memory_talk_v2.provider.lancedb import LanceStore
 from memory_talk_v2.repository import SQLiteStore
 
 

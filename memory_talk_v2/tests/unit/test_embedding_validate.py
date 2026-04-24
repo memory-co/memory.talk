@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from memory_talk_v2.config import Config
-from memory_talk_v2.embedding import validate_embedder, EmbedderValidationError
+from memory_talk_v2.provider.embedding import validate_embedder, EmbedderValidationError
 
 
 async def test_dummy_passes(tmp_path):
@@ -37,7 +37,7 @@ async def test_openai_probe_dim_mismatch(tmp_path, monkeypatch):
     mock_client.__aexit__ = AsyncMock(return_value=None)
     mock_client.post = AsyncMock(return_value=resp)
 
-    with patch("memory_talk_v2.embedding.httpx.AsyncClient", return_value=mock_client):
+    with patch("memory_talk_v2.provider.embedding.httpx.AsyncClient", return_value=mock_client):
         with pytest.raises(EmbedderValidationError, match="dim mismatch"):
             await validate_embedder(Config(tmp_path))
 
@@ -58,5 +58,5 @@ async def test_openai_probe_success(tmp_path, monkeypatch):
     mock_client.__aexit__ = AsyncMock(return_value=None)
     mock_client.post = AsyncMock(return_value=resp)
 
-    with patch("memory_talk_v2.embedding.httpx.AsyncClient", return_value=mock_client):
+    with patch("memory_talk_v2.provider.embedding.httpx.AsyncClient", return_value=mock_client):
         await validate_embedder(Config(tmp_path))
