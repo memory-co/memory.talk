@@ -43,3 +43,8 @@ python_files = ["test_*.py", "test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+filterwarnings = [
+    # TestClient doesn't support per-request timeout, but api() passes one —
+    # harmless (in-process calls need no timeout). Keep the prod code simple.
+    "ignore:You should not use the 'timeout' argument with the TestClient:DeprecationWarning",
+]

@@ -1,23 +1,18 @@
-"""Incremental sync scenario: existing session grows, new rounds get appended.
+"""Incremental sync scenario — drives the real CLI across platform growth.
 
-Phase 1 (seed) — adapter ingests `platform_initial/`, server stores it.
-Phase 2 (unchanged) — same bytes: sha256 fast-path → action=skipped.
-Phase 3 (grown)   — adapter ingests `platform_grown/` (same session_id,
-                    new rounds appended to the raw jsonl): server detects
-                    round_id mismatch on the new rounds, appends them
-                    with continuing idx, emits a rounds_appended event.
-Phase 4 (stable)  — same grown bytes again: action=skipped.
+Phase 1: CLI sync from platform_initial/   — fresh import
+Phase 2: CLI sync from platform_initial/   — same bytes, sha256 fast-path → skipped
+Phase 3: CLI sync from platform_grown/     — new rounds append to session
+Phase 4: CLI sync from platform_grown/     — same grown bytes → skipped
 
-The `expected/` fixtures capture the END-OF-PHASE-3 state — rounds.jsonl
-has all rounds (initial + new), events.jsonl has imported + rounds_appended,
-meta.json shows the grown round_count and the grown last_sha256.
+Each phase asserts the CLI summary JSON (imported/appended/skipped counts).
+The `expected/` fixtures capture the END-OF-PHASE-3 state.
 
-This scenario is fully isolated from test_claude_code_full_sync/ — they
-share no fixtures or data. Each uses its own `app_client` (fresh
-tmp_data_root via pytest fixtures), so there is no cross-test leakage.
+httpx is ASGI-routed into the in-process app (see tests/sync/conftest.py);
+the full Click → httpx → FastAPI → service → SQLite/LanceDB/file stack
+runs for real with no subprocess.
 
-Regenerate: `REGENERATE_SYNC_FIXTURES=1 pytest
-memory_talk_v2/tests/sync/test_claude_code_incremental_sync/`
+Regenerate: `REGENERATE_SYNC_FIXTURES=1 pytest memory_talk_v2/tests/sync/`
 after an intentional adapter/schema change.
 """
 from __future__ import annotations
@@ -93,53 +88,57 @@ def _strip_meta(meta: dict) -> dict:
     return out
 
 
-def _sync_once(platform: Path, app_client):
-    from memory_talk_v2.adapters.claude_code import ClaudeCodeAdapter
+def _run_sync(cli_env, platform: Path) -> dict:
+    result = cli_env.runner.invoke(cli_env.main, [
+        "sync",
+        "--source=claude-code",
+        "--platform-root", str(platform),
+        "--data-root", str(cli_env.config.data_root),
+    ])
+    assert result.exit_code == 0, f"CLI exited {result.exit_code}\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    return json.loads(result.stdout)
 
-    adapter = ClaudeCodeAdapter()
-    actions = []
-    for payload in adapter.iter_sessions(platform):
-        r = app_client.post("/v2/sessions", json=payload)
-        assert r.status_code == 200, r.text
-        actions.append(r.json())
-    return actions
 
-
-def test_claude_code_incremental_sync(app_client):
+def test_claude_code_incremental_sync(cli_env):
     # Phase 1: seed import
-    actions1 = _sync_once(PLATFORM_INITIAL, app_client)
-    assert len(actions1) == 1
-    assert actions1[0]["action"] == "imported"
-    assert actions1[0]["round_count"] == 2
-    assert actions1[0]["added_count"] == 2
-    session_id = actions1[0]["session_id"]
+    assert _run_sync(cli_env, PLATFORM_INITIAL) == {
+        "status": "ok",
+        "imported": 1, "appended": 0, "skipped": 0, "partial_append": 0,
+        "errors": [],
+    }
 
-    # Phase 2: same bytes again → skipped
-    actions2 = _sync_once(PLATFORM_INITIAL, app_client)
-    assert actions2[0]["action"] == "skipped"
+    # Phase 2: same bytes → skipped
+    assert _run_sync(cli_env, PLATFORM_INITIAL) == {
+        "status": "ok",
+        "imported": 0, "appended": 0, "skipped": 1, "partial_append": 0,
+        "errors": [],
+    }
 
-    # Phase 3: platform file grew by 2 rounds → appended
-    actions3 = _sync_once(PLATFORM_GROWN, app_client)
-    assert len(actions3) == 1
-    assert actions3[0]["session_id"] == session_id
-    assert actions3[0]["action"] == "appended"
-    assert actions3[0]["added_count"] == 2
-    assert actions3[0]["round_count"] == 4
-    assert actions3[0]["overwrite_skipped"] == []
+    # Phase 3: grown bytes → 2 new rounds appended
+    assert _run_sync(cli_env, PLATFORM_GROWN) == {
+        "status": "ok",
+        "imported": 0, "appended": 1, "skipped": 0, "partial_append": 0,
+        "errors": [],
+    }
 
-    # Phase 4: same grown bytes again → skipped
-    actions4 = _sync_once(PLATFORM_GROWN, app_client)
-    assert actions4[0]["action"] == "skipped"
+    # Phase 4: grown bytes again → skipped
+    assert _run_sync(cli_env, PLATFORM_GROWN) == {
+        "status": "ok",
+        "imported": 0, "appended": 0, "skipped": 1, "partial_append": 0,
+        "errors": [],
+    }
 
-    # ---- snapshot comparison: post-phase-3 state ----
-    config = app_client.app.state.config
-    bucket = session_id[len("sess_"):len("sess_") + 2].lower()
+    # --- end-of-phase-3 snapshot comparison ---
+    raw_session_id = "01K3A2BRG5N9F4YXH8MKPW6D7Q"
+    session_id = f"sess_{raw_session_id}"
+    bucket = raw_session_id[:2].lower()
+    config = cli_env.config
     actual_session_dir = config.sessions_dir / "claude-code" / bucket / session_id
     actual_meta = _strip_meta(json.loads((actual_session_dir / "meta.json").read_text(encoding="utf-8")))
     actual_rounds = _read_jsonl(actual_session_dir / "rounds.jsonl")
     actual_events = _strip_events(_read_jsonl(actual_session_dir / "events.jsonl"))
 
-    db = app_client.app.state.db
+    db = cli_env.app.state.db
     actual_tables = {t: _dump_table(db, t) for t in TABLES}
 
     expected_session_dir = SESSIONS_ROOT / "claude-code" / bucket / session_id
@@ -166,8 +165,6 @@ def test_claude_code_incremental_sync(app_client):
         expected_rows = json.loads((SQLITE_ROOT / f"{t}.json").read_text(encoding="utf-8"))
         assert actual_tables[t] == expected_rows, f"SQLite table {t!r} diff"
 
-    # Key invariant: rounds.jsonl is append-only. The first 2 lines (seed rounds)
-    # must be byte-identical to what phase 1 wrote — overwrite-detection and
-    # replay safety depend on it.
+    # Key invariant: rounds.jsonl is append-only.
     assert [r["idx"] for r in actual_rounds] == [1, 2, 3, 4]
     assert [r["round_id"] for r in actual_rounds] == ["b1", "b2", "b3", "b4"]

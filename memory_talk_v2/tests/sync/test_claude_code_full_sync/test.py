@@ -1,24 +1,27 @@
-"""Full sync scenario: first-time import of a claude-code session.
+"""Full sync scenario — drives the real memory-talk CLI end-to-end.
 
-Starts from an empty data root; the adapter reads one `.jsonl` file and
-POSTs it to /v2/sessions once. Asserts action=imported, then verifies
-idempotency (same bytes again → action=skipped). Covers only the
-fresh-import path — the append / overwrite-detect case lives in its own
-sibling scenario (test_claude_code_incremental_sync/) so that each test
-case's data is isolated.
+`cli_env.runner.invoke(main, ["sync", ...])` runs the real Click CLI. The
+CLI's httpx calls are routed through `httpx.ASGITransport(app=app)` so they
+hit the in-process FastAPI app without binding a TCP port. Every line of
+CLI code (arg parsing, adapter dispatch, counts aggregation, error
+collection, JSON output), HTTP serialization, FastAPI routing, service
+layer, SQLite, LanceDB and the file layout get exercised for real.
+
+Covers the fresh-import path only. Re-sync with unchanged bytes asserts
+sha256 fast-path (skipped). The incremental / append case lives in its own
+sibling scenario (test_claude_code_incremental_sync/).
 
 Compares real outputs against committed fixtures under `expected/`:
-- `expected/sessions/<source>/<bucket>/<session_id>/meta.json`      — meta
-- `expected/sessions/<source>/<bucket>/<session_id>/rounds.jsonl`   — rounds
-- `expected/sessions/<source>/<bucket>/<session_id>/events.jsonl`   — the session's event stream (file-resident in v2)
-- `expected/sqlite/<table>.json`                                    — SQLite rows per populated table (no event_log — it's a file, not a table)
+- `expected/sessions/<source>/<bucket>/<session_id>/meta.json`
+- `expected/sessions/<source>/<bucket>/<session_id>/rounds.jsonl`
+- `expected/sessions/<source>/<bucket>/<session_id>/events.jsonl`
+- `expected/sqlite/<table>.json`
 
-Non-deterministic fields (timestamps, random event_ids, the absolute path
-captured into `metadata.path`) are stripped from the actual data before
-diff; the committed fixtures do not contain those fields.
+Non-deterministic fields (timestamps, random event_ids, absolute fixture
+path captured into `metadata.path`) are stripped before diff.
 
 Regenerate: `REGENERATE_SYNC_FIXTURES=1 pytest memory_talk_v2/tests/sync/`
-after an intentional adapter or schema change.
+after an intentional adapter/schema change.
 """
 from __future__ import annotations
 import json
@@ -34,28 +37,16 @@ SQLITE_ROOT = EXPECTED_ROOT / "sqlite"
 
 REGENERATE = os.environ.get("REGENERATE_SYNC_FIXTURES") == "1"
 
-# Non-deterministic fields to drop before diff
 META_STRIP = {"synced_at"}
-META_METADATA_STRIP = {"path"}   # absolute fs path to the fixture jsonl
+META_METADATA_STRIP = {"path"}
 EVENT_STRIP = {"event_id", "at"}
-TABLE_STRIP = {
-    "sessions":   {"synced_at"},
-    "rounds":     set(),
-}
-# Which columns are JSON-encoded in SQLite and need parsing for diff
-JSON_COLS = {
-    "sessions":   ["metadata", "tags"],
-    "rounds":     ["content", "usage"],
-}
-# SQLite tables we snapshot (event_log is gone — events live per-object)
+TABLE_STRIP = {"sessions": {"synced_at"}, "rounds": set()}
+JSON_COLS = {"sessions": ["metadata", "tags"], "rounds": ["content", "usage"]}
 TABLES = ["sessions", "rounds"]
 
 
 def _pk_cols(table: str) -> list[str]:
-    return {
-        "sessions": ["session_id"],
-        "rounds":   ["session_id", "idx"],
-    }[table]
+    return {"sessions": ["session_id"], "rounds": ["session_id", "idx"]}[table]
 
 
 def _dump_table(db, table: str) -> list[dict]:
@@ -104,32 +95,51 @@ def _strip_meta(meta: dict) -> dict:
     return out
 
 
-def test_claude_code_full_sync(app_client):
-    from memory_talk_v2.adapters.claude_code import ClaudeCodeAdapter
+def _run_sync(cli_env) -> dict:
+    """Invoke `memory-talk sync ...` and parse the JSON summary output."""
+    result = cli_env.runner.invoke(cli_env.main, [
+        "sync",
+        "--source=claude-code",
+        "--platform-root", str(PLATFORM),
+        "--data-root", str(cli_env.config.data_root),
+    ])
+    assert result.exit_code == 0, f"CLI exited {result.exit_code}\nstdout: {result.stdout}\nstderr: {result.stderr}"
+    return json.loads(result.stdout)
 
-    adapter = ClaudeCodeAdapter()
-    actions = []
-    for payload in adapter.iter_sessions(PLATFORM):
-        r = app_client.post("/v2/sessions", json=payload)
-        assert r.status_code == 200, r.text
-        actions.append(r.json())
 
-    assert len(actions) == 1
-    session_id = actions[0]["session_id"]
-    assert actions[0]["action"] == "imported"
+def test_claude_code_full_sync(cli_env):
+    # Phase 1: fresh import via real CLI
+    summary = _run_sync(cli_env)
+    assert summary == {
+        "status": "ok",
+        "imported": 1, "appended": 0, "skipped": 0, "partial_append": 0,
+        "errors": [],
+    }
 
-    config = app_client.app.state.config
-    bucket = session_id[len("sess_"):len("sess_")+2].lower()
+    # Phase 2: re-run with unchanged bytes — sha256 fast path → skipped
+    summary_again = _run_sync(cli_env)
+    assert summary_again == {
+        "status": "ok",
+        "imported": 0, "appended": 0, "skipped": 1, "partial_append": 0,
+        "errors": [],
+    }
+
+    # --- file layer snapshot ---
+    # session_id is deterministic from the fixture's .jsonl stem
+    raw_session_id = "01K2FZQE4XGKV7J9MBN8PYRD3A"
+    session_id = f"sess_{raw_session_id}"
+    bucket = raw_session_id[:2].lower()
+    config = cli_env.config
     actual_session_dir = config.sessions_dir / "claude-code" / bucket / session_id
     actual_meta = _strip_meta(json.loads((actual_session_dir / "meta.json").read_text(encoding="utf-8")))
     actual_rounds = _read_jsonl(actual_session_dir / "rounds.jsonl")
     actual_events = _strip_events(_read_jsonl(actual_session_dir / "events.jsonl"))
 
-    db = app_client.app.state.db
+    # --- SQLite snapshot (via the same app's db connection) ---
+    db = cli_env.app.state.db
     actual_tables = {t: _dump_table(db, t) for t in TABLES}
 
-    expected_session_rel = Path("claude-code") / bucket / session_id
-    expected_session_dir = SESSIONS_ROOT / expected_session_rel
+    expected_session_dir = SESSIONS_ROOT / "claude-code" / bucket / session_id
 
     if REGENERATE:
         _write_json(expected_session_dir / "meta.json", actual_meta)
@@ -152,12 +162,3 @@ def test_claude_code_full_sync(app_client):
     for t in TABLES:
         expected_rows = json.loads((SQLITE_ROOT / f"{t}.json").read_text(encoding="utf-8"))
         assert actual_tables[t] == expected_rows, f"SQLite table {t!r} diff"
-
-    # Idempotency: second run with unchanged bytes → skipped, no new rows/events
-    for payload in adapter.iter_sessions(PLATFORM):
-        r = app_client.post("/v2/sessions", json=payload)
-        assert r.json()["action"] == "skipped"
-    for t in TABLES:
-        assert _dump_table(db, t) == actual_tables[t], f"idempotency broken for {t!r}"
-    assert _strip_events(_read_jsonl(actual_session_dir / "events.jsonl")) == actual_events, \
-        "idempotency broken for events.jsonl"
