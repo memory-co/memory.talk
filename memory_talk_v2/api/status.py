@@ -2,7 +2,7 @@
 from __future__ import annotations
 from fastapi import APIRouter, Request
 
-from memory_talk_v2.models import StatusOut
+from memory_talk_v2.schemas import StatusOut
 
 router = APIRouter()
 

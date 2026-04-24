@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
-from memory_talk_v2.models import TagsIn, TagsOut
+from memory_talk_v2.schemas import TagsIn, TagsOut
 from memory_talk_v2.service import SessionNotFound, SessionServiceError
 
 
