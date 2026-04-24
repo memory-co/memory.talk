@@ -19,6 +19,10 @@ from memory_talk_v2.embedding import (
     get_embedder,
     validate_embedder,
 )
+from memory_talk_v2.service import (
+    CardService, EventWriter, LinkService, RebuildService,
+    SearchService, ServiceContext, SessionService,
+)
 from memory_talk_v2.storage.jsonl_writer import DatedJsonlWriter
 from memory_talk_v2.storage.lancedb import LanceStore
 from memory_talk_v2.storage.sqlite import SQLiteStore
@@ -38,12 +42,18 @@ def create_app(config: Config | None = None) -> FastAPI:
     vectors = LanceStore(config.vectors_dir, dim=config.settings.embedding.dim)
     embedder = get_embedder(config)
     search_jsonl = DatedJsonlWriter(config.search_log_dir)
+    events = EventWriter(config, db)
 
     try:
         validate_embedder(config)
     except EmbedderValidationError as e:
         print(f"[memory-talk] embedding startup check failed: {e}", file=sys.stderr)
         raise SystemExit(2) from e
+
+    ctx = ServiceContext(
+        config=config, db=db, vectors=vectors, embedder=embedder,
+        search_jsonl=search_jsonl, events=events,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -56,6 +66,12 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.state.vectors = vectors
     app.state.embedder = embedder
     app.state.search_jsonl = search_jsonl
+    # Service instances — one per noun (plus cross-cutting search / rebuild).
+    app.state.sessions = SessionService(ctx)
+    app.state.cards = CardService(ctx)
+    app.state.links = LinkService(ctx)
+    app.state.search = SearchService(ctx)
+    app.state.rebuild = RebuildService(ctx)
 
     from memory_talk_v2.api.status import router as status_router
     app.include_router(status_router, prefix="/v2")

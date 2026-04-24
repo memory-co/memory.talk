@@ -3,10 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from memory_talk_v2.service.cards import (
-    CardServiceError, CardConflictError, compact_indexes, create_card, parse_indexes,
-)
-from memory_talk_v2.service.sessions import ingest_session
+from memory_talk_v2.service import CardConflictError, CardServiceError
+from memory_talk_v2.service.cards import compact_indexes, parse_indexes
 
 
 def _seed_session(services, *, session_id="platform-abc", rounds_count=5) -> str:
@@ -19,11 +17,9 @@ def _seed_session(services, *, session_id="platform-abc", rounds_count=5) -> str
             "content": [{"type": "text", "text": f"round {i} text"}],
             "is_sidechain": False, "cwd": None,
         })
-    r = ingest_session(
+    r = services.sessions.ingest(
         {"session_id": session_id, "source": "claude-code", "created_at": "",
          "metadata": {}, "sha256": f"sha-{session_id}", "rounds": rounds},
-        db=services.db, vectors=services.vectors, events=services.events,
-        sessions_root=services.config.sessions_dir,
     )
     return r["session_id"]
 
@@ -50,10 +46,8 @@ def test_compact_indexes():
 
 def test_create_card_happy_path(services):
     sid = _seed_session(services, rounds_count=5)
-    result = create_card(
+    result = services.cards.create(
         {"summary": "selected LanceDB", "rounds": [{"session_id": sid, "indexes": "1-3"}]},
-        config=services.config, db=services.db, vectors=services.vectors,
-        embedder=services.embedder, events=services.events,
     )
     assert result["status"] == "ok"
     card_id = result["card_id"]
@@ -63,13 +57,11 @@ def test_create_card_happy_path(services):
     assert [r["index"] for r in card["rounds"]] == [1, 2, 3]
     assert card["rounds"][0]["session_id"] == sid
 
-    # Default link exists: card → session, expires_at IS NULL
     links = services.db.links_touching(card_id)
     assert len(links) == 1
     assert links[0]["source_id"] == card_id and links[0]["target_id"] == sid
     assert links[0]["expires_at"] is None
 
-    # Events: card.created + session.card_extracted
     card_events = services.events_for(card_id)
     assert card_events[0]["kind"] == "created"
     assert card_events[0]["detail"]["summary"] == "selected LanceDB"
@@ -84,11 +76,9 @@ def test_create_card_happy_path(services):
 
 def test_create_card_with_from_search_id_passes_through(services):
     sid = _seed_session(services)
-    result = create_card(
+    result = services.cards.create(
         {"summary": "x", "rounds": [{"session_id": sid, "indexes": "1-2"}],
          "from_search_id": "sch_demo"},
-        config=services.config, db=services.db, vectors=services.vectors,
-        embedder=services.embedder, events=services.events,
     )
     ev = services.events_for(result["card_id"])[0]
     assert ev["detail"]["from_search_id"] == "sch_demo"
@@ -96,48 +86,37 @@ def test_create_card_with_from_search_id_passes_through(services):
 
 def test_create_card_rejects_bad_session_prefix(services):
     with pytest.raises(CardServiceError, match="invalid session_id prefix"):
-        create_card(
+        services.cards.create(
             {"summary": "x", "rounds": [{"session_id": "nope", "indexes": "1"}]},
-            config=services.config, db=services.db, vectors=services.vectors,
-            embedder=services.embedder, events=services.events,
         )
 
 
 def test_create_card_rejects_out_of_range(services):
     sid = _seed_session(services, rounds_count=3)
     with pytest.raises(CardServiceError, match="out of range"):
-        create_card(
+        services.cards.create(
             {"summary": "x", "rounds": [{"session_id": sid, "indexes": "1-99"}]},
-            config=services.config, db=services.db, vectors=services.vectors,
-            embedder=services.embedder, events=services.events,
         )
 
 
 def test_create_card_rejects_duplicate_id(services):
     sid = _seed_session(services)
-    r1 = create_card(
+    r1 = services.cards.create(
         {"summary": "x", "rounds": [{"session_id": sid, "indexes": "1-2"}]},
-        config=services.config, db=services.db, vectors=services.vectors,
-        embedder=services.embedder, events=services.events,
     )
     with pytest.raises(CardConflictError):
-        create_card(
+        services.cards.create(
             {"summary": "y", "card_id": r1["card_id"],
              "rounds": [{"session_id": sid, "indexes": "1-2"}]},
-            config=services.config, db=services.db, vectors=services.vectors,
-            embedder=services.embedder, events=services.events,
         )
 
 
 def test_card_extracted_merges_same_session(services):
     sid = _seed_session(services, rounds_count=25)
-    # Two items referencing same session, non-contiguous ranges
-    result = create_card(
+    services.cards.create(
         {"summary": "s",
          "rounds": [{"session_id": sid, "indexes": "1-3"},
                     {"session_id": sid, "indexes": "20,22"}]},
-        config=services.config, db=services.db, vectors=services.vectors,
-        embedder=services.embedder, events=services.events,
     )
     sess_events = [e for e in services.events_for(sid) if e["kind"] == "card_extracted"]
     assert len(sess_events) == 1

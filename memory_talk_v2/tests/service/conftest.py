@@ -1,4 +1,10 @@
-"""Service-layer test fixtures — real SQLite + LanceDB + dummy embedder."""
+"""Service-layer test fixtures — real SQLite + LanceDB + dummy embedder.
+
+Exposes a `services` bundle with real class instances for each service
+(sessions / cards / links / search / rebuild) plus the raw dependencies
+(config / db / vectors / embedder / events) tests still need for
+inspection or lower-level assertions.
+"""
 from __future__ import annotations
 from pathlib import Path
 
@@ -6,7 +12,10 @@ import pytest
 
 from memory_talk_v2.config import Config
 from memory_talk_v2.embedding import DummyEmbedder
-from memory_talk_v2.service.events import EventWriter
+from memory_talk_v2.service import (
+    CardService, EventWriter, LinkService, RebuildService,
+    SearchService, ServiceContext, SessionService,
+)
 from memory_talk_v2.storage import files as F
 from memory_talk_v2.storage.jsonl_writer import DatedJsonlWriter
 from memory_talk_v2.storage.lancedb import LanceStore
@@ -30,8 +39,12 @@ def services(tmp_path: Path):
     search_jsonl = DatedJsonlWriter(cfg.search_log_dir)
     events = EventWriter(cfg, db)
 
+    ctx = ServiceContext(
+        config=cfg, db=db, vectors=vectors, embedder=embedder,
+        search_jsonl=search_jsonl, events=events,
+    )
+
     def _events_for(object_id: str) -> list[dict]:
-        """Helper: read events.jsonl for a card or session via file layer."""
         if object_id.startswith("card_"):
             return F.read_card_events(cfg.cards_dir, object_id)
         if object_id.startswith("sess_"):
@@ -52,5 +65,11 @@ def services(tmp_path: Path):
     b.events = events
     b.search_jsonl = search_jsonl
     b.events_for = _events_for
+    # Service instances — mirror what create_app attaches to app.state.
+    b.sessions = SessionService(ctx)
+    b.cards = CardService(ctx)
+    b.links = LinkService(ctx)
+    b.search = SearchService(ctx)
+    b.rebuild = RebuildService(ctx)
     yield b
     db.close()
