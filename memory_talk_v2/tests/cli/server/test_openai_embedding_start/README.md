@@ -13,7 +13,9 @@ export QWEN_KEY="sk-xxxxxxxxxxxx"
 pytest memory_talk_v2/tests/cli/server/test_openai_embedding_start/
 ```
 
-没设置 `QWEN_KEY` → pytest 自动 skip(不算失败)。
+**没设置 `QWEN_KEY` → 测试直接 FAIL,不跳过**。这是有意的 —— 配置里声明要走
+OpenAI embedding,就必须能 probe 通;如果连 key 都没有,生产 server 也会拒绝启动,
+测试如实把这件事报出来,而不是把"环境缺配置"的问题藏到 `skipped` 里。
 
 ## 场景
 
@@ -67,12 +69,13 @@ uvicorn 子进程 → lifespan startup → validate_embedder():
 
 ## 用例失败说明
 
-如果 `QWEN_KEY` 已设置但测试失败,常见原因:
+如果测试失败,常见原因:
 
-1. key 失效或过期 → `summary.error` 含 "401 Unauthorized"
-2. 网络不通 → `summary.error` 含 "ConnectError"
-3. DashScope 端点改了 → 改 `settings.json` 里的 `endpoint`
-4. `text-embedding-v4` 维度不再是 1024 → 改 `settings.json.embedding.dim`
+1. **`QWEN_KEY` 未设置** → `summary.error` 含 `"environment variable 'QWEN_KEY' is not set"`
+2. key 失效或过期 → `summary.error` 含 "401 Unauthorized"
+3. 网络不通 → `summary.error` 含 "ConnectError"
+4. DashScope 端点改了 → 改 `settings.json` 里的 `endpoint`
+5. `text-embedding-v4` 维度不再是 1024 → 改 `settings.json.embedding.dim`
 
 ## 和 no_config_start 场景的区别
 
@@ -80,5 +83,5 @@ uvicorn 子进程 → lifespan startup → validate_embedder():
 |---|---|---|
 | embedding provider | dummy | openai |
 | 启动时有网络调用 | 否 | **有**(probe) |
-| 跑 CI 不带 key | ✅ 正常通过 | ⏭️ 自动 skip |
+| 跑 CI 不带 key | ✅ 正常通过 | ❌ **fail**(而不是 skip) |
 | 覆盖 `validate_embedder` 分支 | dummy(trivial) | openai(真实端点) |
