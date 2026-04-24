@@ -8,8 +8,11 @@ from __future__ import annotations
 import json
 import time
 
-from memory_talk_v2.service.context import ServiceContext
+from memory_talk_v2.config import Config
+from memory_talk_v2.embedding import Embedder
 from memory_talk_v2.storage import files as F
+from memory_talk_v2.storage.lancedb import LanceStore
+from memory_talk_v2.storage.sqlite import SQLiteStore
 
 
 def _rounds_to_text(rounds: list[dict]) -> str:
@@ -31,19 +34,27 @@ def _card_emb_text(card: dict) -> str:
 
 
 class RebuildService:
-    def __init__(self, ctx: ServiceContext):
-        self.ctx = ctx
+    def __init__(
+        self, *,
+        config: Config,
+        db: SQLiteStore,
+        vectors: LanceStore,
+        embedder: Embedder,
+    ):
+        self.config = config
+        self.db = db
+        self.vectors = vectors
+        self.embedder = embedder
 
     def rebuild(self) -> dict:
-        ctx = self.ctx
         errors_count = 0
 
-        ctx.db.clear_all()
-        ctx.vectors.drop_cards()
-        ctx.vectors.drop_sessions()
+        self.db.clear_all()
+        self.vectors.drop_cards()
+        self.vectors.drop_sessions()
 
         sessions_count = 0
-        for sess_dir in F.iter_session_dirs(ctx.config.sessions_dir):
+        for sess_dir in F.iter_session_dirs(self.config.sessions_dir):
             meta_path = sess_dir / "meta.json"
             rounds_path = sess_dir / "rounds.jsonl"
             if not meta_path.exists():
@@ -66,7 +77,7 @@ class RebuildService:
                     except json.JSONDecodeError:
                         errors_count += 1
 
-            ctx.db.upsert_session(
+            self.db.upsert_session(
                 session_id=session_id, source=source,
                 created_at=meta.get("created_at") or "",
                 synced_at=meta.get("synced_at") or "",
@@ -75,14 +86,14 @@ class RebuildService:
                 round_count=meta.get("round_count") or len(rounds_from_file),
             )
             if rounds_from_file:
-                ctx.db.upsert_rounds(session_id, rounds_from_file)
-                ctx.vectors.add_session(session_id, _rounds_to_text(rounds_from_file))
+                self.db.upsert_rounds(session_id, rounds_from_file)
+                self.vectors.add_session(session_id, _rounds_to_text(rounds_from_file))
             sessions_count += 1
 
         cards_count = 0
-        for card in F.iter_cards(ctx.config.cards_dir):
+        for card in F.iter_cards(self.config.cards_dir):
             try:
-                ctx.db.insert_card(
+                self.db.insert_card(
                     card_id=card["card_id"],
                     summary=card.get("summary") or "",
                     rounds=card.get("rounds") or [],
@@ -93,13 +104,13 @@ class RebuildService:
                 errors_count += 1
                 continue
             emb_text = _card_emb_text(card)
-            vector = ctx.embedder.embed_one(emb_text)
-            ctx.vectors.add_card(card["card_id"], emb_text, vector)
+            vector = self.embedder.embed_one(emb_text)
+            self.vectors.add_card(card["card_id"], emb_text, vector)
             cards_count += 1
 
-        for link in F.iter_links(ctx.config.links_dir):
+        for link in F.iter_links(self.config.links_dir):
             try:
-                ctx.db.insert_link(
+                self.db.insert_link(
                     link_id=link["link_id"],
                     source_id=link["source_id"], source_type=link["source_type"],
                     target_id=link["target_id"], target_type=link["target_type"],
@@ -111,15 +122,15 @@ class RebuildService:
                 errors_count += 1
 
         searches_replayed = 0
-        if ctx.config.search_log_dir.exists():
-            for jsonl in sorted(ctx.config.search_log_dir.glob("*.jsonl")):
+        if self.config.search_log_dir.exists():
+            for jsonl in sorted(self.config.search_log_dir.glob("*.jsonl")):
                 for line in jsonl.read_text(encoding="utf-8").splitlines():
                     line = line.strip()
                     if not line:
                         continue
                     try:
                         rec = json.loads(line)
-                        ctx.db.insert_search_log(
+                        self.db.insert_search_log(
                             search_id=rec["search_id"], query=rec.get("query") or "",
                             where_dsl=rec.get("where"), top_k=int(rec.get("top_k") or 0),
                             created_at=rec.get("created_at") or "",
@@ -129,8 +140,8 @@ class RebuildService:
                     except Exception:
                         errors_count += 1
 
-        ctx.vectors.ensure_fts_index("cards", replace=True)
-        ctx.vectors.ensure_fts_index("sessions", replace=True)
+        self.vectors.ensure_fts_index("cards", replace=True)
+        self.vectors.ensure_fts_index("sessions", replace=True)
 
         self._apply_retention()
 
@@ -143,11 +154,10 @@ class RebuildService:
         }
 
     def _apply_retention(self) -> None:
-        ctx = self.ctx
-        days = ctx.config.settings.search.search_log_retention_days
+        days = self.config.settings.search.search_log_retention_days
         if days <= 0:
             return
         cutoff = time.time() - days * 86400
-        for p in list(ctx.config.search_log_dir.glob("*.jsonl")):
+        for p in list(self.config.search_log_dir.glob("*.jsonl")):
             if p.stat().st_mtime < cutoff:
                 p.unlink()

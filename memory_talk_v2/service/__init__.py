@@ -1,8 +1,7 @@
-"""Service layer — one class per noun, wired with a shared ServiceContext."""
+"""Service layer — one class per noun. Each class declares its own deps."""
 from memory_talk_v2.service.cards import (
     CardConflictError, CardNotFound, CardService, CardServiceError,
 )
-from memory_talk_v2.service.context import ServiceContext
 from memory_talk_v2.service.events import EventWriter
 from memory_talk_v2.service.links import (
     LinkNotFoundError, LinkService, LinkServiceError,
@@ -16,7 +15,7 @@ from memory_talk_v2.service.sessions import (
 
 
 __all__ = [
-    "ServiceContext", "EventWriter",
+    "EventWriter",
     "SessionService", "SessionServiceError", "SessionNotFound",
     "CardService", "CardServiceError", "CardConflictError", "CardNotFound",
     "LinkService", "LinkServiceError", "LinkNotFoundError",

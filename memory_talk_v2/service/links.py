@@ -6,8 +6,9 @@ used by SessionService and CardService during their view() paths.
 from __future__ import annotations
 from datetime import datetime
 
+from memory_talk_v2.config import Config
 from memory_talk_v2.ids import CARD_PREFIX, SESSION_PREFIX, new_link_id
-from memory_talk_v2.service.context import ServiceContext
+from memory_talk_v2.service.events import EventWriter
 from memory_talk_v2.service.ttl import (
     current_ttl, dt_to_iso, initial_expires_at, iso_to_dt, now_utc, refresh,
 )
@@ -66,11 +67,12 @@ def refresh_active_user_links(
 
 
 class LinkService:
-    def __init__(self, ctx: ServiceContext):
-        self.ctx = ctx
+    def __init__(self, *, config: Config, db: SQLiteStore, events: EventWriter):
+        self.config = config
+        self.db = db
+        self.events = events
 
     def create(self, payload: dict) -> dict:
-        ctx = self.ctx
         source_id = payload.get("source_id") or ""
         source_type = payload.get("source_type") or ""
         target_id = payload.get("target_id") or ""
@@ -81,7 +83,7 @@ class LinkService:
             raise LinkServiceError("invalid id prefix or type mismatch")
         if source_id == target_id:
             raise LinkServiceError("self-loop not allowed")
-        if comment is not None and len(comment) > ctx.config.settings.search.comment_max_length:
+        if comment is not None and len(comment) > self.config.settings.search.comment_max_length:
             raise LinkServiceError("comment too long")
 
         if not self._object_exists(source_id, source_type):
@@ -91,7 +93,7 @@ class LinkService:
 
         now = now_utc()
         created_at = dt_to_iso(now)
-        ttl_initial = ctx.config.settings.ttl.link.initial
+        ttl_initial = self.config.settings.ttl.link.initial
         expires_at = initial_expires_at(ttl_initial, now=now)
         link_id = new_link_id()
 
@@ -105,20 +107,20 @@ class LinkService:
             "expires_at": expires_at,
             "created_at": created_at,
         }
-        F.write_link(ctx.config.links_dir, link_doc)
-        ctx.db.insert_link(
+        F.write_link(self.config.links_dir, link_doc)
+        self.db.insert_link(
             link_id=link_id, source_id=source_id, source_type=source_type,
             target_id=target_id, target_type=target_type, comment=comment,
             expires_at=expires_at, created_at=created_at,
         )
 
         # Two-end events
-        ctx.events.emit(source_id, "linked", {
+        self.events.emit(source_id, "linked", {
             "direction": "outgoing", "link_id": link_id,
             "peer_id": target_id, "peer_type": target_type,
             "comment": comment, "ttl_initial": ttl_initial,
         }, at=created_at)
-        ctx.events.emit(target_id, "linked", {
+        self.events.emit(target_id, "linked", {
             "direction": "incoming", "link_id": link_id,
             "peer_id": source_id, "peer_type": source_type,
             "comment": comment, "ttl_initial": ttl_initial,
@@ -128,7 +130,7 @@ class LinkService:
 
     def _object_exists(self, object_id: str, type_str: str) -> bool:
         if type_str == "card":
-            return self.ctx.db.get_card(object_id) is not None
+            return self.db.get_card(object_id) is not None
         if type_str == "session":
-            return self.ctx.db.get_session(object_id) is not None
+            return self.db.get_session(object_id) is not None
         return False

@@ -14,11 +14,14 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from memory_talk_v2.config import Config
 from memory_talk_v2.ids import SESSION_PREFIX, prefix_session_id
-from memory_talk_v2.service.context import ServiceContext
+from memory_talk_v2.service.events import EventWriter
 from memory_talk_v2.service.links import link_to_ref, refresh_active_user_links
 from memory_talk_v2.service.ttl import dt_to_iso, now_utc
 from memory_talk_v2.storage import files as F
+from memory_talk_v2.storage.lancedb import LanceStore
+from memory_talk_v2.storage.sqlite import SQLiteStore
 
 
 class SessionServiceError(ValueError):
@@ -54,13 +57,21 @@ def _round_key(r: dict) -> tuple:
 
 
 class SessionService:
-    def __init__(self, ctx: ServiceContext):
-        self.ctx = ctx
+    def __init__(
+        self, *,
+        config: Config,
+        db: SQLiteStore,
+        vectors: LanceStore,
+        events: EventWriter,
+    ):
+        self.config = config
+        self.db = db
+        self.vectors = vectors
+        self.events = events
 
     # -------- writes --------
 
     def ingest(self, payload: dict) -> dict:
-        ctx = self.ctx
         raw_id = payload.get("session_id") or ""
         if not raw_id:
             raise SessionServiceError("session_id required")
@@ -75,21 +86,19 @@ class SessionService:
         in_rounds: list[dict] = payload.get("rounds") or []
         now_iso = dt_to_iso(now_utc())
 
-        # sha256 fast-path: skip if the client-provided hash matches the last
-        # recorded one on meta.json.
-        existing_meta = F.read_session_meta(ctx.config.sessions_dir, source, session_id)
+        # sha256 fast-path
+        existing_meta = F.read_session_meta(self.config.sessions_dir, source, session_id)
         if sha256 and existing_meta and existing_meta.get("last_sha256") == sha256:
-            existing = ctx.db.get_session(session_id)
+            existing = self.db.get_session(session_id)
             return {
                 "status": "ok", "session_id": session_id, "action": "skipped",
                 "round_count": existing["round_count"] if existing else 0,
                 "added_count": 0, "overwrite_skipped": [],
             }
 
-        existing = ctx.db.get_session(session_id)
+        existing = self.db.get_session(session_id)
 
         if existing is None:
-            # First ingest
             assigned = []
             for i, r in enumerate(in_rounds, start=1):
                 assigned.append({
@@ -112,17 +121,17 @@ class SessionService:
             }
             if sha256:
                 meta_new["last_sha256"] = sha256
-            F.write_session_meta(ctx.config.sessions_dir, source, session_id, meta_new)
-            F.append_session_rounds(ctx.config.sessions_dir, source, session_id, assigned)
+            F.write_session_meta(self.config.sessions_dir, source, session_id, meta_new)
+            F.append_session_rounds(self.config.sessions_dir, source, session_id, assigned)
 
-            ctx.db.upsert_session(
+            self.db.upsert_session(
                 session_id=session_id, source=source, created_at=created_at,
                 synced_at=now_iso, metadata=metadata, tags=[], round_count=len(assigned),
             )
-            ctx.db.upsert_rounds(session_id, assigned)
-            ctx.vectors.add_session(session_id, _rounds_to_text(assigned))
+            self.db.upsert_rounds(session_id, assigned)
+            self.vectors.add_session(session_id, _rounds_to_text(assigned))
 
-            ctx.events.emit(session_id, "imported", {
+            self.events.emit(session_id, "imported", {
                 "source": source, "round_count": len(assigned),
             })
 
@@ -138,9 +147,9 @@ class SessionService:
                 f"source mismatch: existing={existing['source']!r}, new={source!r}"
             )
 
-        existing_rounds = ctx.db.list_rounds(session_id)
+        existing_rounds = self.db.list_rounds(session_id)
         by_round_id = {r["round_id"]: r for r in existing_rounds}
-        next_idx = ctx.db.max_round_idx(session_id) + 1
+        next_idx = self.db.max_round_idx(session_id) + 1
 
         appended: list[dict] = []
         overwrite_skipped: list[int] = []
@@ -174,34 +183,34 @@ class SessionService:
         total_count = existing["round_count"] + len(appended)
 
         if appended:
-            F.append_session_rounds(ctx.config.sessions_dir, source, session_id, appended)
-            ctx.db.upsert_rounds(session_id, appended)
-            ctx.db.update_session_round_count(session_id, total_count, now_iso)
-            all_rounds = ctx.db.list_rounds(session_id)
-            ctx.vectors.add_session(session_id, _rounds_to_text(all_rounds))
+            F.append_session_rounds(self.config.sessions_dir, source, session_id, appended)
+            self.db.upsert_rounds(session_id, appended)
+            self.db.update_session_round_count(session_id, total_count, now_iso)
+            all_rounds = self.db.list_rounds(session_id)
+            self.vectors.add_session(session_id, _rounds_to_text(all_rounds))
 
-        meta_existing = F.read_session_meta(ctx.config.sessions_dir, source, session_id) or {}
+        meta_existing = F.read_session_meta(self.config.sessions_dir, source, session_id) or {}
         meta_existing.update({"round_count": total_count, "synced_at": now_iso})
         if sha256:
             meta_existing["last_sha256"] = sha256
-        F.write_session_meta(ctx.config.sessions_dir, source, session_id, meta_existing)
+        F.write_session_meta(self.config.sessions_dir, source, session_id, meta_existing)
 
         if appended and not overwrite_skipped:
             action = "appended"
-            ctx.events.emit(session_id, "rounds_appended", {
+            self.events.emit(session_id, "rounds_appended", {
                 "from_index": appended[0]["idx"], "to_index": appended[-1]["idx"],
                 "added_count": len(appended),
             })
         elif appended and overwrite_skipped:
             action = "partial_append"
-            ctx.events.emit(session_id, "rounds_appended", {
+            self.events.emit(session_id, "rounds_appended", {
                 "from_index": appended[0]["idx"], "to_index": appended[-1]["idx"],
                 "added_count": len(appended),
             })
-            ctx.events.emit(session_id, "rounds_overwrite_skipped", {"indexes": overwrite_skipped})
+            self.events.emit(session_id, "rounds_overwrite_skipped", {"indexes": overwrite_skipped})
         elif overwrite_skipped:
             action = "partial_append"
-            ctx.events.emit(session_id, "rounds_overwrite_skipped", {"indexes": overwrite_skipped})
+            self.events.emit(session_id, "rounds_overwrite_skipped", {"indexes": overwrite_skipped})
         else:
             action = "skipped"
 
@@ -214,20 +223,19 @@ class SessionService:
     # -------- reads --------
 
     def view(self, session_id: str) -> dict:
-        ctx = self.ctx
         if not session_id.startswith(SESSION_PREFIX):
             raise SessionServiceError("invalid session_id prefix")
-        session = ctx.db.get_session(session_id)
+        session = self.db.get_session(session_id)
         if session is None:
             raise SessionNotFound(f"session not found: {session_id}")
-        rounds = ctx.db.list_rounds(session_id)
+        rounds = self.db.list_rounds(session_id)
 
         now = now_utc()
-        links = ctx.db.links_touching(session_id)
+        links = self.db.links_touching(session_id)
         refresh_active_user_links(
-            ctx.db, links,
-            factor=ctx.config.settings.ttl.link.factor,
-            max_seconds=ctx.config.settings.ttl.link.max,
+            self.db, links,
+            factor=self.config.settings.ttl.link.factor,
+            max_seconds=self.config.settings.ttl.link.max,
             now=now,
         )
 
@@ -251,14 +259,13 @@ class SessionService:
         }
 
     def log(self, session_id: str) -> dict:
-        ctx = self.ctx
         if not session_id.startswith(SESSION_PREFIX):
             raise SessionServiceError("invalid session_id prefix")
-        session = ctx.db.get_session(session_id)
+        session = self.db.get_session(session_id)
         if session is None:
             raise SessionNotFound(f"session not found: {session_id}")
         events = F.read_session_events(
-            ctx.config.sessions_dir, session["source"], session_id,
+            self.config.sessions_dir, session["source"], session_id,
         )
         events.sort(key=lambda e: e["at"])
         return {
@@ -283,7 +290,7 @@ class SessionService:
         self._persist_tags(session, ordered)
         now_iso = dt_to_iso(now_utc())
         for t in newly_added:
-            self.ctx.events.emit(session_id, "tag_added", {"tag": t}, at=now_iso)
+            self.events.emit(session_id, "tag_added", {"tag": t}, at=now_iso)
         return {"status": "ok", "tags": ordered}
 
     def remove_tags(self, payload: dict) -> dict:
@@ -301,24 +308,23 @@ class SessionService:
         self._persist_tags(session, remaining)
         now_iso = dt_to_iso(now_utc())
         for t in truly_removed:
-            self.ctx.events.emit(session_id, "tag_removed", {"tag": t}, at=now_iso)
+            self.events.emit(session_id, "tag_removed", {"tag": t}, at=now_iso)
         return {"status": "ok", "tags": remaining}
 
     def _require_session(self, session_id: str, type_error_msg: str) -> dict:
         if not session_id.startswith(SESSION_PREFIX):
             raise SessionServiceError(f"type mismatch: {type_error_msg}")
-        s = self.ctx.db.get_session(session_id)
+        s = self.db.get_session(session_id)
         if s is None:
             raise SessionNotFound(f"session not found: {session_id}")
         return s
 
     def _persist_tags(self, session: dict, tags: list[str]) -> None:
-        ctx = self.ctx
-        ctx.db.update_session_tags(session["session_id"], tags)
+        self.db.update_session_tags(session["session_id"], tags)
         meta = F.read_session_meta(
-            ctx.config.sessions_dir, session["source"], session["session_id"]
+            self.config.sessions_dir, session["source"], session["session_id"]
         ) or {}
         meta["tags"] = tags
         F.write_session_meta(
-            ctx.config.sessions_dir, session["source"], session["session_id"], meta
+            self.config.sessions_dir, session["source"], session["session_id"], meta
         )
