@@ -29,10 +29,10 @@ async def test_first_ingest_imports(services):
     assert result["round_count"] == 2
     assert result["added_count"] == 2
 
-    s = await services.db.get_session(result["session_id"])
+    s = await services.db.sessions.get(result["session_id"])
     assert s["round_count"] == 2
 
-    rounds = await services.db.list_rounds(result["session_id"])
+    rounds = await services.db.sessions.list_rounds(result["session_id"])
     assert [r["idx"] for r in rounds] == [1, 2]
 
     events = await services.events_for(result["session_id"])
@@ -77,7 +77,7 @@ async def test_partial_append_with_overwrite_skip(services):
     assert result["overwrite_skipped"] == [1]
     assert result["round_count"] == 3
 
-    rounds = await services.db.list_rounds(first["session_id"])
+    rounds = await services.db.sessions.list_rounds(first["session_id"])
     assert rounds[0]["content"][0]["text"] == "hello"
     assert [r["idx"] for r in rounds] == [1, 2, 3]
 

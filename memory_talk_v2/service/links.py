@@ -9,7 +9,7 @@ from memory_talk_v2.util.ttl import (
     current_ttl, dt_to_iso, initial_expires_at, iso_to_dt, now_utc, refresh,
 )
 from memory_talk_v2.storage import files as F
-from memory_talk_v2.storage.sqlite import SQLiteStore
+from memory_talk_v2.repository import SQLiteStore
 
 
 class LinkServiceError(ValueError):
@@ -55,7 +55,7 @@ async def refresh_active_user_links(
             continue
         new_exp = refresh(l["expires_at"], factor, max_seconds, now=now)
         if new_exp != l["expires_at"]:
-            await db.update_link_expires_at(l["link_id"], new_exp)
+            await db.links.update_expires_at(l["link_id"], new_exp)
             l["expires_at"] = new_exp
 
 
@@ -101,7 +101,7 @@ class LinkService:
             "created_at": created_at,
         }
         await F.write_link(self.config.links_dir, link_doc)
-        await self.db.insert_link(
+        await self.db.links.insert(
             link_id=link_id, source_id=source_id, source_type=source_type,
             target_id=target_id, target_type=target_type, comment=comment,
             expires_at=expires_at, created_at=created_at,
@@ -122,7 +122,7 @@ class LinkService:
 
     async def _object_exists(self, object_id: str, type_str: str) -> bool:
         if type_str == "card":
-            return (await self.db.get_card(object_id)) is not None
+            return (await self.db.cards.get(object_id)) is not None
         if type_str == "session":
-            return (await self.db.get_session(object_id)) is not None
+            return (await self.db.sessions.get(object_id)) is not None
         return False

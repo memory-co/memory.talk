@@ -33,7 +33,7 @@ async def test_create_user_link_card_to_card(services):
     assert r["status"] == "ok"
     assert r["ttl"] == services.config.settings.ttl.link.initial
 
-    link = await services.db.get_link(r["link_id"])
+    link = await services.db.links.get(r["link_id"])
     assert link["source_id"] == card1 and link["target_id"] == card2
     assert link["expires_at"] is not None
 

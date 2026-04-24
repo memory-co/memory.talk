@@ -10,7 +10,7 @@ from memory_talk_v2.config import Config
 from memory_talk_v2.util.ids import CARD_PREFIX, SESSION_PREFIX, new_event_id
 from memory_talk_v2.util.ttl import dt_to_iso, now_utc
 from memory_talk_v2.storage import files as F
-from memory_talk_v2.storage.sqlite import SQLiteStore
+from memory_talk_v2.repository import SQLiteStore
 
 
 class EventWriter:
@@ -26,7 +26,7 @@ class EventWriter:
         if object_id.startswith(CARD_PREFIX):
             await F.append_card_event(self.config.cards_dir, object_id, record)
         elif object_id.startswith(SESSION_PREFIX):
-            session = await self.db.get_session(object_id)
+            session = await self.db.sessions.get(object_id)
             if session is None:
                 raise ValueError(f"cannot emit event for unknown session: {object_id}")
             await F.append_session_event(

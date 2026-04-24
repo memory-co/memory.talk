@@ -18,7 +18,7 @@ async def test_rebuild_preserves_objects_and_events(services):
          "target_id": "sess_platform-a", "target_type": "session", "comment": "x"},
     )
 
-    before_card = await services.db.get_card(card_id)
+    before_card = await services.db.cards.get(card_id)
     before_card_events = await services.events_for(card_id)
     before_sess_events = await services.events_for("sess_platform-a")
     assert len(before_card_events) >= 2
@@ -29,13 +29,13 @@ async def test_rebuild_preserves_objects_and_events(services):
     assert r["sessions"] == 1
     assert r["cards"] == 1
 
-    after_card = await services.db.get_card(card_id)
+    after_card = await services.db.cards.get(card_id)
     assert after_card["expires_at"] == before_card["expires_at"]
-    assert (await services.db.get_session("sess_platform-a"))["round_count"] == 1
+    assert (await services.db.sessions.get("sess_platform-a"))["round_count"] == 1
 
     assert await services.events_for(card_id) == before_card_events
     assert await services.events_for("sess_platform-a") == before_sess_events
 
-    links = await services.db.links_touching(card_id)
+    links = await services.db.links.touching(card_id)
     assert any(l["expires_at"] is None for l in links)
     assert any(l["expires_at"] is not None for l in links)

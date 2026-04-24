@@ -13,7 +13,7 @@ from memory_talk_v2.service import (
 from memory_talk_v2.storage import files as F
 from memory_talk_v2.storage.jsonl_writer import DatedJsonlWriter
 from memory_talk_v2.storage.lancedb import LanceStore
-from memory_talk_v2.storage.sqlite import SQLiteStore
+from memory_talk_v2.repository import SQLiteStore
 
 
 @pytest_asyncio.fixture
@@ -37,7 +37,7 @@ async def services(tmp_path: Path):
         if object_id.startswith("card_"):
             return await F.read_card_events(cfg.cards_dir, object_id)
         if object_id.startswith("sess_"):
-            s = await db.get_session(object_id)
+            s = await db.sessions.get(object_id)
             if s is None:
                 return []
             return await F.read_session_events(cfg.sessions_dir, s["source"], object_id)

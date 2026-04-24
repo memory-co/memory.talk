@@ -18,7 +18,7 @@ from memory_talk_v2.service import (
 )
 from memory_talk_v2.storage.jsonl_writer import DatedJsonlWriter
 from memory_talk_v2.storage.lancedb import LanceStore
-from memory_talk_v2.storage.sqlite import SQLiteStore
+from memory_talk_v2.repository import SQLiteStore
 
 
 def create_app(config: Config | None = None) -> FastAPI:

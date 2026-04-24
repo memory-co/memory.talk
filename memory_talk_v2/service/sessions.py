@@ -10,7 +10,7 @@ from memory_talk_v2.service.links import link_to_ref, refresh_active_user_links
 from memory_talk_v2.util.ttl import dt_to_iso, now_utc
 from memory_talk_v2.storage import files as F
 from memory_talk_v2.storage.lancedb import LanceStore
-from memory_talk_v2.storage.sqlite import SQLiteStore
+from memory_talk_v2.repository import SQLiteStore
 
 
 class SessionServiceError(ValueError):
@@ -76,14 +76,14 @@ class SessionService:
 
         existing_meta = await F.read_session_meta(self.config.sessions_dir, source, session_id)
         if sha256 and existing_meta and existing_meta.get("last_sha256") == sha256:
-            existing = await self.db.get_session(session_id)
+            existing = await self.db.sessions.get(session_id)
             return {
                 "status": "ok", "session_id": session_id, "action": "skipped",
                 "round_count": existing["round_count"] if existing else 0,
                 "added_count": 0, "overwrite_skipped": [],
             }
 
-        existing = await self.db.get_session(session_id)
+        existing = await self.db.sessions.get(session_id)
 
         if existing is None:
             assigned = []
@@ -111,11 +111,11 @@ class SessionService:
             await F.write_session_meta(self.config.sessions_dir, source, session_id, meta_new)
             await F.append_session_rounds(self.config.sessions_dir, source, session_id, assigned)
 
-            await self.db.upsert_session(
+            await self.db.sessions.upsert(
                 session_id=session_id, source=source, created_at=created_at,
                 synced_at=now_iso, metadata=metadata, tags=[], round_count=len(assigned),
             )
-            await self.db.upsert_rounds(session_id, assigned)
+            await self.db.sessions.upsert_rounds(session_id, assigned)
             await self.vectors.add_session(session_id, _rounds_to_text(assigned))
 
             await self.events.emit(session_id, "imported", {
@@ -134,9 +134,9 @@ class SessionService:
                 f"source mismatch: existing={existing['source']!r}, new={source!r}"
             )
 
-        existing_rounds = await self.db.list_rounds(session_id)
+        existing_rounds = await self.db.sessions.list_rounds(session_id)
         by_round_id = {r["round_id"]: r for r in existing_rounds}
-        next_idx = (await self.db.max_round_idx(session_id)) + 1
+        next_idx = (await self.db.sessions.max_round_idx(session_id)) + 1
 
         appended: list[dict] = []
         overwrite_skipped: list[int] = []
@@ -171,9 +171,9 @@ class SessionService:
 
         if appended:
             await F.append_session_rounds(self.config.sessions_dir, source, session_id, appended)
-            await self.db.upsert_rounds(session_id, appended)
-            await self.db.update_session_round_count(session_id, total_count, now_iso)
-            all_rounds = await self.db.list_rounds(session_id)
+            await self.db.sessions.upsert_rounds(session_id, appended)
+            await self.db.sessions.update_round_count(session_id, total_count, now_iso)
+            all_rounds = await self.db.sessions.list_rounds(session_id)
             await self.vectors.add_session(session_id, _rounds_to_text(all_rounds))
 
         meta_existing = await F.read_session_meta(self.config.sessions_dir, source, session_id) or {}
@@ -212,13 +212,13 @@ class SessionService:
     async def view(self, session_id: str) -> dict:
         if not session_id.startswith(SESSION_PREFIX):
             raise SessionServiceError("invalid session_id prefix")
-        session = await self.db.get_session(session_id)
+        session = await self.db.sessions.get(session_id)
         if session is None:
             raise SessionNotFound(f"session not found: {session_id}")
-        rounds = await self.db.list_rounds(session_id)
+        rounds = await self.db.sessions.list_rounds(session_id)
 
         now = now_utc()
-        links = await self.db.links_touching(session_id)
+        links = await self.db.links.touching(session_id)
         await refresh_active_user_links(
             self.db, links,
             factor=self.config.settings.ttl.link.factor,
@@ -248,7 +248,7 @@ class SessionService:
     async def log(self, session_id: str) -> dict:
         if not session_id.startswith(SESSION_PREFIX):
             raise SessionServiceError("invalid session_id prefix")
-        session = await self.db.get_session(session_id)
+        session = await self.db.sessions.get(session_id)
         if session is None:
             raise SessionNotFound(f"session not found: {session_id}")
         events = await F.read_session_events(
@@ -301,13 +301,13 @@ class SessionService:
     async def _require_session(self, session_id: str, type_error_msg: str) -> dict:
         if not session_id.startswith(SESSION_PREFIX):
             raise SessionServiceError(f"type mismatch: {type_error_msg}")
-        s = await self.db.get_session(session_id)
+        s = await self.db.sessions.get(session_id)
         if s is None:
             raise SessionNotFound(f"session not found: {session_id}")
         return s
 
     async def _persist_tags(self, session: dict, tags: list[str]) -> None:
-        await self.db.update_session_tags(session["session_id"], tags)
+        await self.db.sessions.update_tags(session["session_id"], tags)
         meta = await F.read_session_meta(
             self.config.sessions_dir, session["source"], session["session_id"]
         ) or {}

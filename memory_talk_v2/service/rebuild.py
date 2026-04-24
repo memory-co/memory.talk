@@ -9,7 +9,7 @@ from memory_talk_v2.config import Config
 from memory_talk_v2.embedding import Embedder
 from memory_talk_v2.storage import files as F
 from memory_talk_v2.storage.lancedb import LanceStore
-from memory_talk_v2.storage.sqlite import SQLiteStore
+from memory_talk_v2.repository import SQLiteStore
 
 
 def _rounds_to_text(rounds: list[dict]) -> str:
@@ -77,7 +77,7 @@ class RebuildService:
                     except json.JSONDecodeError:
                         errors_count += 1
 
-            await self.db.upsert_session(
+            await self.db.sessions.upsert(
                 session_id=session_id, source=source,
                 created_at=meta.get("created_at") or "",
                 synced_at=meta.get("synced_at") or "",
@@ -86,14 +86,14 @@ class RebuildService:
                 round_count=meta.get("round_count") or len(rounds_from_file),
             )
             if rounds_from_file:
-                await self.db.upsert_rounds(session_id, rounds_from_file)
+                await self.db.sessions.upsert_rounds(session_id, rounds_from_file)
                 await self.vectors.add_session(session_id, _rounds_to_text(rounds_from_file))
             sessions_count += 1
 
         cards_count = 0
         async for card in F.iter_cards(self.config.cards_dir):
             try:
-                await self.db.insert_card(
+                await self.db.cards.insert(
                     card_id=card["card_id"],
                     summary=card.get("summary") or "",
                     rounds=card.get("rounds") or [],
@@ -110,7 +110,7 @@ class RebuildService:
 
         async for link in F.iter_links(self.config.links_dir):
             try:
-                await self.db.insert_link(
+                await self.db.links.insert(
                     link_id=link["link_id"],
                     source_id=link["source_id"], source_type=link["source_type"],
                     target_id=link["target_id"], target_type=link["target_type"],
@@ -132,7 +132,7 @@ class RebuildService:
                         continue
                     try:
                         rec = json.loads(line)
-                        await self.db.insert_search_log(
+                        await self.db.search_log.insert(
                             search_id=rec["search_id"], query=rec.get("query") or "",
                             where_dsl=rec.get("where"), top_k=int(rec.get("top_k") or 0),
                             created_at=rec.get("created_at") or "",

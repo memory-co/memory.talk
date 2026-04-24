@@ -11,7 +11,7 @@ from memory_talk_v2.util.snippet import extract_snippets
 from memory_talk_v2.util.ttl import dt_to_iso, now_utc
 from memory_talk_v2.storage.jsonl_writer import DatedJsonlWriter
 from memory_talk_v2.storage.lancedb import LanceStore
-from memory_talk_v2.storage.sqlite import SQLiteStore
+from memory_talk_v2.repository import SQLiteStore
 
 
 class SearchError(ValueError):
@@ -84,7 +84,7 @@ class SearchService:
             "cards": response["cards"], "sessions": response["sessions"],
         }
         await self.search_jsonl.append(persisted, now=now)
-        await self.db.insert_search_log(
+        await self.db.search_log.insert(
             search_id=search_id, query=query, where_dsl=where,
             top_k=top_k, created_at=created_at,
             response_json=json.dumps(persisted, ensure_ascii=False),
@@ -104,19 +104,19 @@ class SearchService:
             card_wl = []
         else:
             sql, params = card_result
-            card_wl = await self.db.dsl_cards_whitelist(sql, params)
+            card_wl = await self.db.cards.dsl_whitelist(sql, params)
 
         sess_wl: list[str] | None
         if sess_result is None:
             sess_wl = []
         else:
             sql, params = sess_result
-            sess_wl = await self.db.dsl_sessions_whitelist(sql, params)
+            sess_wl = await self.db.sessions.dsl_whitelist(sql, params)
         return card_wl, sess_wl
 
     async def _active_links(self, object_id: str, now) -> list[dict]:
         out: list[dict] = []
-        for l in await self.db.links_touching(object_id):
+        for l in await self.db.links.touching(object_id):
             ref = link_to_ref(l, object_id, now)
             if ref["ttl"] < 0:
                 continue
@@ -132,7 +132,7 @@ class SearchService:
             raw = await self.vectors.hybrid_search_cards(vector, query, whitelist=whitelist, top_k=top_k)
             for rank, h in enumerate(raw, start=1):
                 cid = h.get("card_id")
-                c = await self.db.get_card(cid)
+                c = await self.db.cards.get(cid)
                 if not c:
                     continue
                 hits.append({
@@ -143,7 +143,7 @@ class SearchService:
                     "links": await self._active_links(cid, now),
                 })
         else:
-            rows = await self.db.cards_metadata_filtered(whitelist, top_k)
+            rows = await self.db.cards.metadata_filtered(whitelist, top_k)
             for rank, r in enumerate(rows, start=1):
                 cid = r["card_id"]
                 hits.append({
@@ -161,10 +161,10 @@ class SearchService:
             raw = await self.vectors.fts_search_sessions(query, whitelist=whitelist, top_k=top_k)
             for rank, h in enumerate(raw, start=1):
                 sid = h.get("session_id")
-                s = await self.db.get_session(sid)
+                s = await self.db.sessions.get(sid)
                 if not s:
                     continue
-                rounds = await self.db.list_rounds(sid)
+                rounds = await self.db.sessions.list_rounds(sid)
                 hits.append({
                     "session_id": sid, "rank": rank,
                     "score": float(h.get("_score") or 0.0),
@@ -173,7 +173,7 @@ class SearchService:
                     "links": await self._active_links(sid, now),
                 })
         else:
-            rows = await self.db.sessions_metadata_filtered(whitelist, top_k)
+            rows = await self.db.sessions.metadata_filtered(whitelist, top_k)
             for rank, r in enumerate(rows, start=1):
                 hits.append({
                     "session_id": r["session_id"], "rank": rank, "score": 0.0,

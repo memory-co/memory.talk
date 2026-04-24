@@ -52,12 +52,12 @@ async def test_create_card_happy_path(services):
     assert result["status"] == "ok"
     card_id = result["card_id"]
 
-    card = await services.db.get_card(card_id)
+    card = await services.db.cards.get(card_id)
     assert card["summary"] == "selected LanceDB"
     assert [r["index"] for r in card["rounds"]] == [1, 2, 3]
     assert card["rounds"][0]["session_id"] == sid
 
-    links = await services.db.links_touching(card_id)
+    links = await services.db.links.touching(card_id)
     assert len(links) == 1
     assert links[0]["source_id"] == card_id and links[0]["target_id"] == sid
     assert links[0]["expires_at"] is None

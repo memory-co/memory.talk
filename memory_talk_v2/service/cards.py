@@ -15,7 +15,7 @@ from memory_talk_v2.util.ttl import (
 )
 from memory_talk_v2.storage import files as F
 from memory_talk_v2.storage.lancedb import LanceStore
-from memory_talk_v2.storage.sqlite import SQLiteStore
+from memory_talk_v2.repository import SQLiteStore
 
 
 class CardServiceError(ValueError):
@@ -114,7 +114,7 @@ class CardService:
         card_id = payload.get("card_id") or new_card_id()
         if not card_id.startswith(CARD_PREFIX):
             raise CardServiceError(f"invalid card_id prefix: {card_id!r}")
-        if (await self.db.get_card(card_id)) is not None:
+        if (await self.db.cards.get(card_id)) is not None:
             raise CardConflictError(f"card_id already exists: {card_id!r}")
 
         rounds_in = payload.get("rounds") or []
@@ -127,11 +127,11 @@ class CardService:
             sid = item.get("session_id")
             if not sid or not sid.startswith(SESSION_PREFIX):
                 raise CardServiceError("invalid session_id prefix")
-            if (await self.db.get_session(sid)) is None:
+            if (await self.db.sessions.get(sid)) is None:
                 raise CardServiceError(f"session not found: {sid}")
             idxs = parse_indexes(item.get("indexes") or "")
             for idx in idxs:
-                r = await self.db.get_round(sid, idx)
+                r = await self.db.sessions.get_round(sid, idx)
                 if r is None:
                     raise CardServiceError(f"index {idx} out of range for session {sid}")
                 text, thinking = _round_text_and_thinking(r["content"])
@@ -157,7 +157,7 @@ class CardService:
         }
 
         await F.write_card(self.config.cards_dir, card_doc)
-        await self.db.insert_card(card_id, summary, expanded_rounds, created_at, expires_at)
+        await self.db.cards.insert(card_id, summary, expanded_rounds, created_at, expires_at)
 
         default_links: list[dict] = []
         for sid in per_session_order:
@@ -168,7 +168,7 @@ class CardService:
                 "comment": None, "expires_at": None, "created_at": created_at,
             }
             await F.write_link(self.config.links_dir, link_doc)
-            await self.db.insert_link(
+            await self.db.links.insert(
                 link_id=link_id, source_id=card_id, source_type="card",
                 target_id=sid, target_type="session", comment=None,
                 expires_at=None, created_at=created_at,
@@ -209,7 +209,7 @@ class CardService:
     async def view(self, card_id: str) -> dict:
         if not card_id.startswith(CARD_PREFIX):
             raise CardServiceError("invalid card_id prefix")
-        card = await self.db.get_card(card_id)
+        card = await self.db.cards.get(card_id)
         if card is None:
             raise CardNotFound(f"card not found: {card_id}")
 
@@ -221,10 +221,10 @@ class CardService:
             now=now,
         )
         if new_exp != card["expires_at"]:
-            await self.db.update_card_expires_at(card_id, new_exp)
+            await self.db.cards.update_expires_at(card_id, new_exp)
             card["expires_at"] = new_exp
 
-        links = await self.db.links_touching(card_id)
+        links = await self.db.links.touching(card_id)
         await refresh_active_user_links(
             self.db, links,
             factor=self.config.settings.ttl.link.factor,
@@ -246,7 +246,7 @@ class CardService:
     async def log(self, card_id: str) -> dict:
         if not card_id.startswith(CARD_PREFIX):
             raise CardServiceError("invalid card_id prefix")
-        if (await self.db.get_card(card_id)) is None:
+        if (await self.db.cards.get(card_id)) is None:
             raise CardNotFound(f"card not found: {card_id}")
         events = await F.read_card_events(self.config.cards_dir, card_id)
         events.sort(key=lambda e: e["at"])

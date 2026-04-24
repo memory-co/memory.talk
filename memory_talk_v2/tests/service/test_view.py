@@ -47,12 +47,12 @@ async def test_view_session_not_found(services):
 
 async def test_view_card_refreshes_ttl(services):
     sid, card_id = await _seed(services)
-    before = (await services.db.get_card(card_id))["expires_at"]
+    before = (await services.db.cards.get(card_id))["expires_at"]
     result = await services.cards.view(card_id)
     assert result["type"] == "card"
     assert result["card"]["card_id"] == card_id
     assert result["card"]["ttl"] > 0
-    after = (await services.db.get_card(card_id))["expires_at"]
+    after = (await services.db.cards.get(card_id))["expires_at"]
     assert iso_to_dt(after) > iso_to_dt(before)
 
     default_links = [l for l in result["links"] if l["ttl"] == 0]
@@ -73,13 +73,13 @@ async def test_view_refreshes_user_link(services):
         {"source_id": card_id, "source_type": "card",
          "target_id": sid, "target_type": "session", "comment": "x"},
     )
-    links = [l for l in await services.db.links_touching(card_id) if l["expires_at"] is not None]
+    links = [l for l in await services.db.links.touching(card_id) if l["expires_at"] is not None]
     assert len(links) == 1
     before_exp = links[0]["expires_at"]
 
     await services.cards.view(card_id)
 
-    after_exp = (await services.db.get_link(links[0]["link_id"]))["expires_at"]
+    after_exp = (await services.db.links.get(links[0]["link_id"]))["expires_at"]
     assert iso_to_dt(after_exp) > iso_to_dt(before_exp)
 
 
@@ -90,9 +90,9 @@ async def test_view_does_not_revive_expired_link(services):
          "target_id": sid, "target_type": "session", "comment": "x"},
     )
     past = dt_to_iso(now_utc() - timedelta(seconds=1000))
-    await services.db.update_link_expires_at(r["link_id"], past)
+    await services.db.links.update_expires_at(r["link_id"], past)
 
     await services.cards.view(card_id)
 
-    still_expired = (await services.db.get_link(r["link_id"]))["expires_at"]
+    still_expired = (await services.db.links.get(r["link_id"]))["expires_at"]
     assert still_expired == past
