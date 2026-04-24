@@ -49,10 +49,11 @@ def _pk_cols(table: str) -> list[str]:
     return {"sessions": ["session_id"], "rounds": ["session_id", "idx"]}[table]
 
 
-def _dump_table(db, table: str) -> list[dict]:
-    rows = db.conn.execute(
+async def _dump_table(db, table: str) -> list[dict]:
+    async with db.conn.execute(
         f"SELECT * FROM {table} ORDER BY " + ",".join(_pk_cols(table))
-    ).fetchall()
+    ) as cursor:
+        rows = await cursor.fetchall()
     out = []
     for r in rows:
         d = dict(r)
@@ -107,8 +108,7 @@ def _run_sync(cli_env) -> dict:
     return json.loads(result.stdout)
 
 
-def test_claude_code_full_sync(cli_env):
-    # Phase 1: fresh import via real CLI
+async def test_claude_code_full_sync(cli_env):
     summary = _run_sync(cli_env)
     assert summary == {
         "status": "ok",
@@ -116,7 +116,6 @@ def test_claude_code_full_sync(cli_env):
         "errors": [],
     }
 
-    # Phase 2: re-run with unchanged bytes — sha256 fast path → skipped
     summary_again = _run_sync(cli_env)
     assert summary_again == {
         "status": "ok",
@@ -124,8 +123,6 @@ def test_claude_code_full_sync(cli_env):
         "errors": [],
     }
 
-    # --- file layer snapshot ---
-    # session_id is deterministic from the fixture's .jsonl stem
     raw_session_id = "01K2FZQE4XGKV7J9MBN8PYRD3A"
     session_id = f"sess_{raw_session_id}"
     bucket = raw_session_id[:2].lower()
@@ -135,9 +132,8 @@ def test_claude_code_full_sync(cli_env):
     actual_rounds = _read_jsonl(actual_session_dir / "rounds.jsonl")
     actual_events = _strip_events(_read_jsonl(actual_session_dir / "events.jsonl"))
 
-    # --- SQLite snapshot (via the same app's db connection) ---
     db = cli_env.app.state.db
-    actual_tables = {t: _dump_table(db, t) for t in TABLES}
+    actual_tables = {t: await _dump_table(db, t) for t in TABLES}
 
     expected_session_dir = SESSIONS_ROOT / "claude-code" / bucket / session_id
 

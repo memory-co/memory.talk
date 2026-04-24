@@ -1,15 +1,4 @@
-"""Session service — ingest (write), view / log (read), tag add/remove.
-
-Ingest path (spec §3.1): sha256 fast-path via meta.last_sha256, then
-round_id-based append with overwrite detection. rounds.jsonl is append-only.
-
-View path (spec §3.6): reads session + rounds + links, refreshes active
-user links touching this session (sessions themselves have no TTL).
-
-Log path: reads per-session events.jsonl.
-
-Tag path: diff-based event emission, per-tag granularity.
-"""
+"""Session service — ingest (write), view / log (read), tag add/remove. All async."""
 from __future__ import annotations
 import json
 from typing import Any
@@ -48,7 +37,6 @@ def _rounds_to_text(rounds: list[dict]) -> str:
 
 
 def _round_key(r: dict) -> tuple:
-    """Content-equality key for overwrite detection (ignores timestamp)."""
     return (
         r.get("role"),
         r.get("speaker"),
@@ -71,7 +59,7 @@ class SessionService:
 
     # -------- writes --------
 
-    def ingest(self, payload: dict) -> dict:
+    async def ingest(self, payload: dict) -> dict:
         raw_id = payload.get("session_id") or ""
         if not raw_id:
             raise SessionServiceError("session_id required")
@@ -86,17 +74,16 @@ class SessionService:
         in_rounds: list[dict] = payload.get("rounds") or []
         now_iso = dt_to_iso(now_utc())
 
-        # sha256 fast-path
-        existing_meta = F.read_session_meta(self.config.sessions_dir, source, session_id)
+        existing_meta = await F.read_session_meta(self.config.sessions_dir, source, session_id)
         if sha256 and existing_meta and existing_meta.get("last_sha256") == sha256:
-            existing = self.db.get_session(session_id)
+            existing = await self.db.get_session(session_id)
             return {
                 "status": "ok", "session_id": session_id, "action": "skipped",
                 "round_count": existing["round_count"] if existing else 0,
                 "added_count": 0, "overwrite_skipped": [],
             }
 
-        existing = self.db.get_session(session_id)
+        existing = await self.db.get_session(session_id)
 
         if existing is None:
             assigned = []
@@ -121,17 +108,17 @@ class SessionService:
             }
             if sha256:
                 meta_new["last_sha256"] = sha256
-            F.write_session_meta(self.config.sessions_dir, source, session_id, meta_new)
-            F.append_session_rounds(self.config.sessions_dir, source, session_id, assigned)
+            await F.write_session_meta(self.config.sessions_dir, source, session_id, meta_new)
+            await F.append_session_rounds(self.config.sessions_dir, source, session_id, assigned)
 
-            self.db.upsert_session(
+            await self.db.upsert_session(
                 session_id=session_id, source=source, created_at=created_at,
                 synced_at=now_iso, metadata=metadata, tags=[], round_count=len(assigned),
             )
-            self.db.upsert_rounds(session_id, assigned)
-            self.vectors.add_session(session_id, _rounds_to_text(assigned))
+            await self.db.upsert_rounds(session_id, assigned)
+            await self.vectors.add_session(session_id, _rounds_to_text(assigned))
 
-            self.events.emit(session_id, "imported", {
+            await self.events.emit(session_id, "imported", {
                 "source": source, "round_count": len(assigned),
             })
 
@@ -147,9 +134,9 @@ class SessionService:
                 f"source mismatch: existing={existing['source']!r}, new={source!r}"
             )
 
-        existing_rounds = self.db.list_rounds(session_id)
+        existing_rounds = await self.db.list_rounds(session_id)
         by_round_id = {r["round_id"]: r for r in existing_rounds}
-        next_idx = self.db.max_round_idx(session_id) + 1
+        next_idx = (await self.db.max_round_idx(session_id)) + 1
 
         appended: list[dict] = []
         overwrite_skipped: list[int] = []
@@ -183,34 +170,34 @@ class SessionService:
         total_count = existing["round_count"] + len(appended)
 
         if appended:
-            F.append_session_rounds(self.config.sessions_dir, source, session_id, appended)
-            self.db.upsert_rounds(session_id, appended)
-            self.db.update_session_round_count(session_id, total_count, now_iso)
-            all_rounds = self.db.list_rounds(session_id)
-            self.vectors.add_session(session_id, _rounds_to_text(all_rounds))
+            await F.append_session_rounds(self.config.sessions_dir, source, session_id, appended)
+            await self.db.upsert_rounds(session_id, appended)
+            await self.db.update_session_round_count(session_id, total_count, now_iso)
+            all_rounds = await self.db.list_rounds(session_id)
+            await self.vectors.add_session(session_id, _rounds_to_text(all_rounds))
 
-        meta_existing = F.read_session_meta(self.config.sessions_dir, source, session_id) or {}
+        meta_existing = await F.read_session_meta(self.config.sessions_dir, source, session_id) or {}
         meta_existing.update({"round_count": total_count, "synced_at": now_iso})
         if sha256:
             meta_existing["last_sha256"] = sha256
-        F.write_session_meta(self.config.sessions_dir, source, session_id, meta_existing)
+        await F.write_session_meta(self.config.sessions_dir, source, session_id, meta_existing)
 
         if appended and not overwrite_skipped:
             action = "appended"
-            self.events.emit(session_id, "rounds_appended", {
+            await self.events.emit(session_id, "rounds_appended", {
                 "from_index": appended[0]["idx"], "to_index": appended[-1]["idx"],
                 "added_count": len(appended),
             })
         elif appended and overwrite_skipped:
             action = "partial_append"
-            self.events.emit(session_id, "rounds_appended", {
+            await self.events.emit(session_id, "rounds_appended", {
                 "from_index": appended[0]["idx"], "to_index": appended[-1]["idx"],
                 "added_count": len(appended),
             })
-            self.events.emit(session_id, "rounds_overwrite_skipped", {"indexes": overwrite_skipped})
+            await self.events.emit(session_id, "rounds_overwrite_skipped", {"indexes": overwrite_skipped})
         elif overwrite_skipped:
             action = "partial_append"
-            self.events.emit(session_id, "rounds_overwrite_skipped", {"indexes": overwrite_skipped})
+            await self.events.emit(session_id, "rounds_overwrite_skipped", {"indexes": overwrite_skipped})
         else:
             action = "skipped"
 
@@ -222,17 +209,17 @@ class SessionService:
 
     # -------- reads --------
 
-    def view(self, session_id: str) -> dict:
+    async def view(self, session_id: str) -> dict:
         if not session_id.startswith(SESSION_PREFIX):
             raise SessionServiceError("invalid session_id prefix")
-        session = self.db.get_session(session_id)
+        session = await self.db.get_session(session_id)
         if session is None:
             raise SessionNotFound(f"session not found: {session_id}")
-        rounds = self.db.list_rounds(session_id)
+        rounds = await self.db.list_rounds(session_id)
 
         now = now_utc()
-        links = self.db.links_touching(session_id)
-        refresh_active_user_links(
+        links = await self.db.links_touching(session_id)
+        await refresh_active_user_links(
             self.db, links,
             factor=self.config.settings.ttl.link.factor,
             max_seconds=self.config.settings.ttl.link.max,
@@ -258,13 +245,13 @@ class SessionService:
             "links": [link_to_ref(l, session_id, now) for l in links],
         }
 
-    def log(self, session_id: str) -> dict:
+    async def log(self, session_id: str) -> dict:
         if not session_id.startswith(SESSION_PREFIX):
             raise SessionServiceError("invalid session_id prefix")
-        session = self.db.get_session(session_id)
+        session = await self.db.get_session(session_id)
         if session is None:
             raise SessionNotFound(f"session not found: {session_id}")
-        events = F.read_session_events(
+        events = await F.read_session_events(
             self.config.sessions_dir, session["source"], session_id,
         )
         events.sort(key=lambda e: e["at"])
@@ -276,55 +263,55 @@ class SessionService:
 
     # -------- tags --------
 
-    def add_tags(self, payload: dict) -> dict:
+    async def add_tags(self, payload: dict) -> dict:
         session_id = payload.get("session_id") or ""
         incoming = payload.get("tags") or []
         if not isinstance(incoming, list) or not all(isinstance(t, str) and t for t in incoming):
             raise SessionServiceError("tags must be a non-empty list of strings")
-        session = self._require_session(session_id, "tag only applies to sessions")
+        session = await self._require_session(session_id, "tag only applies to sessions")
 
         existing = list(session["tags"])
         newly_added = [t for t in incoming if t not in existing]
         ordered = existing + [t for t in newly_added if t not in existing]
 
-        self._persist_tags(session, ordered)
+        await self._persist_tags(session, ordered)
         now_iso = dt_to_iso(now_utc())
         for t in newly_added:
-            self.events.emit(session_id, "tag_added", {"tag": t}, at=now_iso)
+            await self.events.emit(session_id, "tag_added", {"tag": t}, at=now_iso)
         return {"status": "ok", "tags": ordered}
 
-    def remove_tags(self, payload: dict) -> dict:
+    async def remove_tags(self, payload: dict) -> dict:
         session_id = payload.get("session_id") or ""
         incoming = payload.get("tags") or []
         if not isinstance(incoming, list) or not all(isinstance(t, str) and t for t in incoming):
             raise SessionServiceError("tags must be a non-empty list of strings")
-        session = self._require_session(session_id, "tag only applies to sessions")
+        session = await self._require_session(session_id, "tag only applies to sessions")
 
         existing = list(session["tags"])
         removal_set = set(incoming)
         truly_removed = [t for t in existing if t in removal_set]
         remaining = [t for t in existing if t not in removal_set]
 
-        self._persist_tags(session, remaining)
+        await self._persist_tags(session, remaining)
         now_iso = dt_to_iso(now_utc())
         for t in truly_removed:
-            self.events.emit(session_id, "tag_removed", {"tag": t}, at=now_iso)
+            await self.events.emit(session_id, "tag_removed", {"tag": t}, at=now_iso)
         return {"status": "ok", "tags": remaining}
 
-    def _require_session(self, session_id: str, type_error_msg: str) -> dict:
+    async def _require_session(self, session_id: str, type_error_msg: str) -> dict:
         if not session_id.startswith(SESSION_PREFIX):
             raise SessionServiceError(f"type mismatch: {type_error_msg}")
-        s = self.db.get_session(session_id)
+        s = await self.db.get_session(session_id)
         if s is None:
             raise SessionNotFound(f"session not found: {session_id}")
         return s
 
-    def _persist_tags(self, session: dict, tags: list[str]) -> None:
-        self.db.update_session_tags(session["session_id"], tags)
-        meta = F.read_session_meta(
+    async def _persist_tags(self, session: dict, tags: list[str]) -> None:
+        await self.db.update_session_tags(session["session_id"], tags)
+        meta = await F.read_session_meta(
             self.config.sessions_dir, session["source"], session["session_id"]
         ) or {}
         meta["tags"] = tags
-        F.write_session_meta(
+        await F.write_session_meta(
             self.config.sessions_dir, session["source"], session["session_id"], meta
         )

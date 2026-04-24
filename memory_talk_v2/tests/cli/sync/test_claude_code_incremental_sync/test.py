@@ -42,10 +42,11 @@ def _pk_cols(table: str) -> list[str]:
     return {"sessions": ["session_id"], "rounds": ["session_id", "idx"]}[table]
 
 
-def _dump_table(db, table: str) -> list[dict]:
-    rows = db.conn.execute(
+async def _dump_table(db, table: str) -> list[dict]:
+    async with db.conn.execute(
         f"SELECT * FROM {table} ORDER BY " + ",".join(_pk_cols(table))
-    ).fetchall()
+    ) as cursor:
+        rows = await cursor.fetchall()
     out = []
     for r in rows:
         d = dict(r)
@@ -99,7 +100,7 @@ def _run_sync(cli_env, platform: Path) -> dict:
     return json.loads(result.stdout)
 
 
-def test_claude_code_incremental_sync(cli_env):
+async def test_claude_code_incremental_sync(cli_env):
     # Phase 1: seed import
     assert _run_sync(cli_env, PLATFORM_INITIAL) == {
         "status": "ok",
@@ -139,7 +140,7 @@ def test_claude_code_incremental_sync(cli_env):
     actual_events = _strip_events(_read_jsonl(actual_session_dir / "events.jsonl"))
 
     db = cli_env.app.state.db
-    actual_tables = {t: _dump_table(db, t) for t in TABLES}
+    actual_tables = {t: await _dump_table(db, t) for t in TABLES}
 
     expected_session_dir = SESSIONS_ROOT / "claude-code" / bucket / session_id
 

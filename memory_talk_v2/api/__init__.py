@@ -1,11 +1,4 @@
-"""FastAPI app factory for v2.
-
-create_app() performs fail-fast startup:
-  1) Config.validate() — refuse v1 residue
-  2) init SQLite schema
-  3) validate_embedder() — probe the configured provider
-  4) mount routes at /v2
-"""
+"""FastAPI app factory for v2 — async setup via lifespan."""
 from __future__ import annotations
 import os
 import sys
@@ -38,44 +31,47 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     config.ensure_dirs()
 
-    db = SQLiteStore(config.db_path)
-    vectors = LanceStore(config.vectors_dir, dim=config.settings.embedding.dim)
-    embedder = get_embedder(config)
-    search_jsonl = DatedJsonlWriter(config.search_log_dir)
-    events = EventWriter(config, db)
-
-    try:
-        validate_embedder(config)
-    except EmbedderValidationError as e:
-        print(f"[memory-talk] embedding startup check failed: {e}", file=sys.stderr)
-        raise SystemExit(2) from e
-
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        # Async startup — open DB, LanceDB, probe embedding, wire services.
+        db = await SQLiteStore.create(config.db_path)
+        vectors = await LanceStore.create(config.vectors_dir, dim=config.settings.embedding.dim)
+        embedder = get_embedder(config)
+        search_jsonl = DatedJsonlWriter(config.search_log_dir)
+        events = EventWriter(config, db)
+
+        try:
+            await validate_embedder(config)
+        except EmbedderValidationError as e:
+            print(f"[memory-talk] embedding startup check failed: {e}", file=sys.stderr)
+            raise SystemExit(2) from e
+
+        app.state.config = config
+        app.state.db = db
+        app.state.vectors = vectors
+        app.state.embedder = embedder
+        app.state.search_jsonl = search_jsonl
+        app.state.sessions = SessionService(
+            config=config, db=db, vectors=vectors, events=events,
+        )
+        app.state.cards = CardService(
+            config=config, db=db, vectors=vectors, embedder=embedder, events=events,
+        )
+        app.state.links = LinkService(config=config, db=db, events=events)
+        app.state.search = SearchService(
+            config=config, db=db, vectors=vectors, embedder=embedder,
+            search_jsonl=search_jsonl,
+        )
+        app.state.rebuild = RebuildService(
+            config=config, db=db, vectors=vectors, embedder=embedder,
+        )
+
         yield
-        db.close()
+
+        await db.close()
 
     app = FastAPI(title="memory.talk v2", lifespan=lifespan)
     app.state.config = config
-    app.state.db = db
-    app.state.vectors = vectors
-    app.state.embedder = embedder
-    app.state.search_jsonl = search_jsonl
-    # Service instances — each declares its own deps.
-    app.state.sessions = SessionService(
-        config=config, db=db, vectors=vectors, events=events,
-    )
-    app.state.cards = CardService(
-        config=config, db=db, vectors=vectors, embedder=embedder, events=events,
-    )
-    app.state.links = LinkService(config=config, db=db, events=events)
-    app.state.search = SearchService(
-        config=config, db=db, vectors=vectors, embedder=embedder,
-        search_jsonl=search_jsonl,
-    )
-    app.state.rebuild = RebuildService(
-        config=config, db=db, vectors=vectors, embedder=embedder,
-    )
 
     from memory_talk_v2.api.status import router as status_router
     app.include_router(status_router, prefix="/v2")

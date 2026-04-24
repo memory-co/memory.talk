@@ -13,7 +13,7 @@ router = APIRouter()
 @router.post("/links", response_model=CreateLinkOut)
 async def post_links(payload: CreateLinkIn, request: Request):
     try:
-        return request.app.state.links.create(payload.model_dump())
+        return await request.app.state.links.create(payload.model_dump())
     except LinkNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except LinkServiceError as e:

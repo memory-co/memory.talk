@@ -22,9 +22,9 @@ async def post_view(payload: ViewIn, request: Request):
 
     try:
         if kind == IdKind.CARD:
-            return request.app.state.cards.view(payload.id)
+            return await request.app.state.cards.view(payload.id)
         if kind == IdKind.SESSION:
-            return request.app.state.sessions.view(payload.id)
+            return await request.app.state.sessions.view(payload.id)
     except (CardNotFound, SessionNotFound) as e:
         raise HTTPException(status_code=404, detail=str(e))
     except (CardServiceError, SessionServiceError) as e:

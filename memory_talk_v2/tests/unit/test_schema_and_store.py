@@ -1,24 +1,26 @@
+import aiosqlite
+
 from memory_talk_v2.storage.sqlite import SQLiteStore
 from memory_talk_v2.storage.schema import init_schema
-import sqlite3
 
 
-def test_init_schema_is_idempotent(tmp_path):
+async def test_init_schema_is_idempotent(tmp_path):
     db = tmp_path / "memory.db"
-    conn = sqlite3.connect(db)
-    init_schema(conn)
-    init_schema(conn)  # second run must not raise
-    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    conn = await aiosqlite.connect(str(db))
+    await init_schema(conn)
+    await init_schema(conn)
+    async with conn.execute("SELECT name FROM sqlite_master WHERE type='table'") as cur:
+        rows = await cur.fetchall()
+    tables = {r[0] for r in rows}
     for t in ("sessions", "rounds", "cards", "links", "search_log"):
         assert t in tables
-    # event_log is NOT a SQLite table in v2; events live per-object as jsonl
     assert "event_log" not in tables
-    conn.close()
+    await conn.close()
 
 
-def test_store_sessions_and_rounds_roundtrip(tmp_path):
-    db = SQLiteStore(tmp_path / "memory.db")
-    db.upsert_session(
+async def test_store_sessions_and_rounds_roundtrip(tmp_path):
+    db = await SQLiteStore.create(tmp_path / "memory.db")
+    await db.upsert_session(
         session_id="sess_abc",
         source="claude-code",
         created_at="2026-04-10T00:00:00Z",
@@ -27,7 +29,7 @@ def test_store_sessions_and_rounds_roundtrip(tmp_path):
         tags=["decision"],
         round_count=2,
     )
-    db.upsert_rounds("sess_abc", [
+    await db.upsert_rounds("sess_abc", [
         {"idx": 1, "round_id": "r1", "parent_id": None, "timestamp": "2026-04-10T00:00:01Z",
          "speaker": "user", "role": "human", "content": [{"type": "text", "text": "hi"}],
          "is_sidechain": False, "cwd": None, "usage": None},
@@ -37,31 +39,36 @@ def test_store_sessions_and_rounds_roundtrip(tmp_path):
          "is_sidechain": False, "cwd": None, "usage": {"input_tokens": 10}},
     ])
 
-    s = db.get_session("sess_abc")
+    s = await db.get_session("sess_abc")
     assert s["tags"] == ["decision"]
     assert s["metadata"] == {"project": "x"}
 
-    rounds = db.list_rounds("sess_abc")
+    rounds = await db.list_rounds("sess_abc")
     assert [r["idx"] for r in rounds] == [1, 2]
     assert rounds[1]["usage"] == {"input_tokens": 10}
 
-    r = db.get_round_by_round_id("sess_abc", "r2")
+    r = await db.get_round_by_round_id("sess_abc", "r2")
     assert r["idx"] == 2
-    assert db.max_round_idx("sess_abc") == 2
+    assert await db.max_round_idx("sess_abc") == 2
+    await db.close()
 
 
-def test_store_cards_and_links(tmp_path):
-    db = SQLiteStore(tmp_path / "memory.db")
-    db.insert_card("card_x", "summary", [{"role": "human", "text": "hi", "session_id": "sess_a", "index": 1}],
-                   created_at="2026-04-22T00:00:00Z", expires_at="2026-05-22T00:00:00Z")
-    c = db.get_card("card_x")
+async def test_store_cards_and_links(tmp_path):
+    db = await SQLiteStore.create(tmp_path / "memory.db")
+    await db.insert_card(
+        "card_x", "summary",
+        [{"role": "human", "text": "hi", "session_id": "sess_a", "index": 1}],
+        created_at="2026-04-22T00:00:00Z", expires_at="2026-05-22T00:00:00Z",
+    )
+    c = await db.get_card("card_x")
     assert c["summary"] == "summary"
     assert c["rounds"][0]["role"] == "human"
 
-    db.insert_link("link_1", "card_x", "card", "sess_a", "session", comment=None,
-                   expires_at=None, created_at="2026-04-22T00:00:00Z")
-    assert db.count_links() == 1
-    touching = db.links_touching("card_x")
+    await db.insert_link(
+        "link_1", "card_x", "card", "sess_a", "session", comment=None,
+        expires_at=None, created_at="2026-04-22T00:00:00Z",
+    )
+    assert await db.count_links() == 1
+    touching = await db.links_touching("card_x")
     assert len(touching) == 1 and touching[0]["expires_at"] is None
-
-
+    await db.close()

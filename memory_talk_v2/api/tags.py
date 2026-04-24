@@ -1,4 +1,4 @@
-"""POST /v2/tags/{add,remove} — dispatched to SessionService (tags belong to sessions)."""
+"""POST /v2/tags/{add,remove}."""
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
@@ -13,7 +13,7 @@ router = APIRouter()
 @router.post("/tags/add", response_model=TagsOut)
 async def post_tags_add(payload: TagsIn, request: Request):
     try:
-        return request.app.state.sessions.add_tags(payload.model_dump())
+        return await request.app.state.sessions.add_tags(payload.model_dump())
     except SessionNotFound as e:
         raise HTTPException(status_code=404, detail=str(e))
     except SessionServiceError as e:
@@ -23,7 +23,7 @@ async def post_tags_add(payload: TagsIn, request: Request):
 @router.post("/tags/remove", response_model=TagsOut)
 async def post_tags_remove(payload: TagsIn, request: Request):
     try:
-        return request.app.state.sessions.remove_tags(payload.model_dump())
+        return await request.app.state.sessions.remove_tags(payload.model_dump())
     except SessionNotFound as e:
         raise HTTPException(status_code=404, detail=str(e))
     except SessionServiceError as e:

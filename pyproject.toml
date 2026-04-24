@@ -15,6 +15,8 @@ dependencies = [
     "python-ulid>=2.0.0",
     "jieba>=0.42.1",
     "pyarrow>=14.0.0",
+    "aiosqlite>=0.19.0",
+    "aiofiles>=23.0.0",
 ]
 
 [project.scripts]
@@ -24,6 +26,7 @@ memory-talk = "memory_talk_v2.cli:main"
 dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
+    "pytest-asyncio>=0.23.0",
 ]
 local = [
     "sentence-transformers>=2.2.0",
@@ -43,6 +46,7 @@ python_files = ["test_*.py", "test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --tb=short"
+asyncio_mode = "auto"
 filterwarnings = [
     # TestClient doesn't support per-request timeout, but api() passes one —
     # harmless (in-process calls need no timeout). Keep the prod code simple.

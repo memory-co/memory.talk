@@ -13,6 +13,6 @@ router = APIRouter()
 @router.post("/search")
 async def post_search(payload: SearchIn, request: Request):
     try:
-        return request.app.state.search.search(payload.model_dump())
+        return await request.app.state.search.search(payload.model_dump())
     except SearchError as e:
         raise HTTPException(status_code=400, detail=str(e))

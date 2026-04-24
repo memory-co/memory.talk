@@ -13,6 +13,6 @@ router = APIRouter()
 @router.post("/sessions", response_model=IngestSessionOut)
 async def post_sessions(payload: IngestSessionIn, request: Request):
     try:
-        return request.app.state.sessions.ingest(payload.model_dump())
+        return await request.app.state.sessions.ingest(payload.model_dump())
     except SessionServiceError as e:
         raise HTTPException(status_code=400, detail=str(e))

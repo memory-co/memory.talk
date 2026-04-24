@@ -22,9 +22,9 @@ async def post_log(payload: LogIn, request: Request):
 
     try:
         if kind == IdKind.CARD:
-            return request.app.state.cards.log(payload.id)
+            return await request.app.state.cards.log(payload.id)
         if kind == IdKind.SESSION:
-            return request.app.state.sessions.log(payload.id)
+            return await request.app.state.sessions.log(payload.id)
     except (CardNotFound, SessionNotFound) as e:
         raise HTTPException(status_code=404, detail=str(e))
     except (CardServiceError, SessionServiceError) as e:

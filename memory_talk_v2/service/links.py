@@ -1,8 +1,4 @@
-"""Link service — create user links; helpers for reading links touching an object.
-
-Also exports the shared `link_to_ref` and `refresh_active_user_links` helpers
-used by SessionService and CardService during their view() paths.
-"""
+"""Link service — create user links; helpers for reading links touching an object."""
 from __future__ import annotations
 from datetime import datetime
 
@@ -33,7 +29,6 @@ def _prefix_matches(id_str: str, type_str: str) -> bool:
 
 
 def link_to_ref(link: dict, object_id: str, now: datetime) -> dict:
-    """From the given object's perspective, render a link row as a LinkRef."""
     if link["source_id"] == object_id:
         peer_id = link["target_id"]
         peer_type = link["target_type"]
@@ -49,11 +44,9 @@ def link_to_ref(link: dict, object_id: str, now: datetime) -> dict:
     }
 
 
-def refresh_active_user_links(
+async def refresh_active_user_links(
     db: SQLiteStore, links: list[dict], factor: float, max_seconds: int, now: datetime,
 ) -> None:
-    """Refresh in-place. Default links (expires_at IS NULL) and expired user
-    links (remaining <= 0) are not refreshed."""
     for l in links:
         if l["expires_at"] is None:
             continue
@@ -62,7 +55,7 @@ def refresh_active_user_links(
             continue
         new_exp = refresh(l["expires_at"], factor, max_seconds, now=now)
         if new_exp != l["expires_at"]:
-            db.update_link_expires_at(l["link_id"], new_exp)
+            await db.update_link_expires_at(l["link_id"], new_exp)
             l["expires_at"] = new_exp
 
 
@@ -72,7 +65,7 @@ class LinkService:
         self.db = db
         self.events = events
 
-    def create(self, payload: dict) -> dict:
+    async def create(self, payload: dict) -> dict:
         source_id = payload.get("source_id") or ""
         source_type = payload.get("source_type") or ""
         target_id = payload.get("target_id") or ""
@@ -86,9 +79,9 @@ class LinkService:
         if comment is not None and len(comment) > self.config.settings.search.comment_max_length:
             raise LinkServiceError("comment too long")
 
-        if not self._object_exists(source_id, source_type):
+        if not await self._object_exists(source_id, source_type):
             raise LinkNotFoundError(f"source not found: {source_id}")
-        if not self._object_exists(target_id, target_type):
+        if not await self._object_exists(target_id, target_type):
             raise LinkNotFoundError(f"target not found: {target_id}")
 
         now = now_utc()
@@ -107,20 +100,19 @@ class LinkService:
             "expires_at": expires_at,
             "created_at": created_at,
         }
-        F.write_link(self.config.links_dir, link_doc)
-        self.db.insert_link(
+        await F.write_link(self.config.links_dir, link_doc)
+        await self.db.insert_link(
             link_id=link_id, source_id=source_id, source_type=source_type,
             target_id=target_id, target_type=target_type, comment=comment,
             expires_at=expires_at, created_at=created_at,
         )
 
-        # Two-end events
-        self.events.emit(source_id, "linked", {
+        await self.events.emit(source_id, "linked", {
             "direction": "outgoing", "link_id": link_id,
             "peer_id": target_id, "peer_type": target_type,
             "comment": comment, "ttl_initial": ttl_initial,
         }, at=created_at)
-        self.events.emit(target_id, "linked", {
+        await self.events.emit(target_id, "linked", {
             "direction": "incoming", "link_id": link_id,
             "peer_id": source_id, "peer_type": source_type,
             "comment": comment, "ttl_initial": ttl_initial,
@@ -128,9 +120,9 @@ class LinkService:
 
         return {"status": "ok", "link_id": link_id, "ttl": ttl_initial}
 
-    def _object_exists(self, object_id: str, type_str: str) -> bool:
+    async def _object_exists(self, object_id: str, type_str: str) -> bool:
         if type_str == "card":
-            return self.db.get_card(object_id) is not None
+            return (await self.db.get_card(object_id)) is not None
         if type_str == "session":
-            return self.db.get_session(object_id) is not None
+            return (await self.db.get_session(object_id)) is not None
         return False

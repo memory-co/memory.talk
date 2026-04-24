@@ -1,12 +1,12 @@
-"""Embedding providers and startup validation.
+"""Embedding providers and async startup validation.
 
-Ported from v1 with no behavior changes: dummy / local / openai (OpenAI-compat
-HTTP including DashScope / vLLM). `validate_embedder(config)` performs a
-fail-fast probe at server startup so bad configuration surfaces before any
-traffic hits.
+dummy — deterministic hash, pure CPU, near-instant.
+local — sentence-transformers (CPU/GPU). model.encode wrapped in asyncio.to_thread.
+openai — OpenAI-compatible HTTP endpoint via httpx.AsyncClient.
 """
 from __future__ import annotations
 from abc import ABC, abstractmethod
+import asyncio
 import hashlib
 import os
 import httpx
@@ -14,18 +14,20 @@ import httpx
 
 class Embedder(ABC):
     @abstractmethod
-    def embed(self, texts: list[str]) -> list[list[float]]:
+    async def embed(self, texts: list[str]) -> list[list[float]]:
         ...
 
-    def embed_one(self, text: str) -> list[float]:
-        return self.embed([text])[0]
+    async def embed_one(self, text: str) -> list[float]:
+        out = await self.embed([text])
+        return out[0]
 
 
 class DummyEmbedder(Embedder):
     def __init__(self, dim: int = 384):
         self.dim = dim
 
-    def embed(self, texts: list[str]) -> list[list[float]]:
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        # Pure CPU, submillisecond — no need to offload.
         results = []
         for text in texts:
             h = hashlib.sha256(text.encode()).digest()
@@ -40,8 +42,12 @@ class LocalEmbedder(Embedder):
         from sentence_transformers import SentenceTransformer
         self.model = SentenceTransformer(model_name)
 
-    def embed(self, texts: list[str]) -> list[list[float]]:
-        return self.model.encode(texts, convert_to_numpy=True).tolist()
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        # Model encode is CPU/GPU bound and can take 100ms+ — offload to a thread
+        # so the event loop keeps moving.
+        def _run():
+            return self.model.encode(texts, convert_to_numpy=True).tolist()
+        return await asyncio.to_thread(_run)
 
 
 class OpenAIEmbedder(Embedder):
@@ -63,19 +69,20 @@ class OpenAIEmbedder(Embedder):
         self.model = model
         self.timeout = timeout
 
-    def embed(self, texts: list[str]) -> list[list[float]]:
+    async def embed(self, texts: list[str]) -> list[list[float]]:
         api_key = os.environ.get(self.auth_env_key)
         if not api_key:
             raise RuntimeError(f"Environment variable {self.auth_env_key} is not set")
-        resp = httpx.post(
-            self.endpoint,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={"model": self.model, "input": list(texts), "encoding_format": "float"},
-            timeout=self.timeout,
-        )
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                self.endpoint,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={"model": self.model, "input": list(texts), "encoding_format": "float"},
+                timeout=self.timeout,
+            )
         resp.raise_for_status()
         data = resp.json().get("data", [])
         data_sorted = sorted(data, key=lambda d: d["index"])
@@ -103,8 +110,8 @@ class EmbedderValidationError(RuntimeError):
     """Raised at startup when the configured provider cannot be used."""
 
 
-def validate_embedder(config) -> None:
-    """Fail-fast probe. See module docstring for semantics per provider."""
+async def validate_embedder(config) -> None:
+    """Fail-fast async probe."""
     emb = config.settings.embedding
     p = emb.provider
 
@@ -114,7 +121,9 @@ def validate_embedder(config) -> None:
     if p == "local":
         try:
             from sentence_transformers import SentenceTransformer
-            _ = SentenceTransformer(emb.model)
+            def _load():
+                return SentenceTransformer(emb.model)
+            await asyncio.to_thread(_load)
         except Exception as e:
             raise EmbedderValidationError(
                 f"local embedder failed to load model {emb.model!r}: {e}"
@@ -128,15 +137,16 @@ def validate_embedder(config) -> None:
                 f"openai embedder: environment variable {emb.auth_env_key!r} is not set"
             )
         try:
-            resp = httpx.post(
-                emb.endpoint,
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={"model": emb.model, "input": ["ping"], "encoding_format": "float"},
-                timeout=emb.timeout,
-            )
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    emb.endpoint,
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={"model": emb.model, "input": ["ping"], "encoding_format": "float"},
+                    timeout=emb.timeout,
+                )
             resp.raise_for_status()
             data = resp.json().get("data", [])
             if not data:

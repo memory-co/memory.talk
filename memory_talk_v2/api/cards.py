@@ -13,7 +13,7 @@ router = APIRouter()
 @router.post("/cards", response_model=CreateCardOut)
 async def post_cards(payload: CreateCardIn, request: Request):
     try:
-        return request.app.state.cards.create(payload.model_dump())
+        return await request.app.state.cards.create(payload.model_dump())
     except CardConflictError as e:
         raise HTTPException(status_code=409, detail=str(e))
     except CardServiceError as e:

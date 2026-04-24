@@ -9,4 +9,4 @@ router = APIRouter()
 
 @router.post("/rebuild")
 async def post_rebuild(request: Request) -> dict:
-    return request.app.state.rebuild.rebuild()
+    return await request.app.state.rebuild.rebuild()

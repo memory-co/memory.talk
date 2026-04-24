@@ -1,6 +1,7 @@
 """SQLite schema for v2. All DDL in one place; idempotent init_schema()."""
 from __future__ import annotations
-import sqlite3
+
+import aiosqlite
 
 
 DDL = [
@@ -69,8 +70,8 @@ DDL = [
 ]
 
 
-def init_schema(conn: sqlite3.Connection) -> None:
+async def init_schema(conn: aiosqlite.Connection) -> None:
     """Create all v2 tables if missing. Idempotent."""
     for stmt in DDL:
-        conn.execute(stmt)
-    conn.commit()
+        await conn.execute(stmt)
+    await conn.commit()

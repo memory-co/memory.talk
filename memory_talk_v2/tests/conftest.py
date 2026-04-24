@@ -9,7 +9,6 @@ from memory_talk_v2.config import Config
 
 @pytest.fixture
 def tmp_data_root(tmp_path: Path) -> Path:
-    """A fresh data root directory."""
     d = tmp_path / ".memory-talk"
     d.mkdir(parents=True, exist_ok=True)
     return d
@@ -17,7 +16,6 @@ def tmp_data_root(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def dummy_config(tmp_data_root: Path) -> Config:
-    """Config with dummy embedder (no network, no heavy deps)."""
     (tmp_data_root / "settings.json").write_text(
         '{"embedding": {"provider": "dummy", "dim": 384},'
         ' "ttl": {"card": {"initial": 3600, "factor": 2.0, "max": 86400},'
@@ -28,7 +26,7 @@ def dummy_config(tmp_data_root: Path) -> Config:
 
 @pytest.fixture
 def app_client(dummy_config: Config):
-    """FastAPI TestClient against a dummy-config app."""
+    """TestClient context manager drives async lifespan startup/shutdown."""
     from fastapi.testclient import TestClient
     from memory_talk_v2.api import create_app
     app = create_app(dummy_config)
