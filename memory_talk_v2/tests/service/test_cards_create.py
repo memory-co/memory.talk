@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import pytest
 
+from memory_talk_v2.schemas import (
+    CardRoundsItem, ContentBlock, CreateCardRequest, IngestRound, IngestSessionRequest,
+)
 from memory_talk_v2.service import CardConflictError, CardServiceError
 from memory_talk_v2.service.cards import compact_indexes, parse_indexes
 
@@ -10,18 +13,18 @@ from memory_talk_v2.service.cards import compact_indexes, parse_indexes
 async def _seed_session(services, *, session_id="platform-abc", rounds_count=5) -> str:
     rounds = []
     for i in range(1, rounds_count + 1):
-        rounds.append({
-            "round_id": f"r{i}", "parent_id": None, "timestamp": "2026-04-10T00:00:00Z",
-            "speaker": "user" if i % 2 else "assistant",
-            "role": "human" if i % 2 else "assistant",
-            "content": [{"type": "text", "text": f"round {i} text"}],
-            "is_sidechain": False, "cwd": None,
-        })
-    r = await services.sessions.ingest(
-        {"session_id": session_id, "source": "claude-code", "created_at": "",
-         "metadata": {}, "sha256": f"sha-{session_id}", "rounds": rounds},
-    )
-    return r["session_id"]
+        rounds.append(IngestRound(
+            round_id=f"r{i}", parent_id=None, timestamp="2026-04-10T00:00:00Z",
+            speaker="user" if i % 2 else "assistant",
+            role="human" if i % 2 else "assistant",
+            content=[ContentBlock(type="text", text=f"round {i} text")],
+            is_sidechain=False, cwd=None,
+        ))
+    r = await services.sessions.ingest(IngestSessionRequest(
+        session_id=session_id, source="claude-code", created_at="",
+        metadata={}, sha256=f"sha-{session_id}", rounds=rounds,
+    ))
+    return r.session_id
 
 
 def test_parse_indexes_range():
@@ -46,11 +49,12 @@ def test_compact_indexes():
 
 async def test_create_card_happy_path(services):
     sid = await _seed_session(services, rounds_count=5)
-    result = await services.cards.create(
-        {"summary": "selected LanceDB", "rounds": [{"session_id": sid, "indexes": "1-3"}]},
-    )
-    assert result["status"] == "ok"
-    card_id = result["card_id"]
+    result = await services.cards.create(CreateCardRequest(
+        summary="selected LanceDB",
+        rounds=[CardRoundsItem(session_id=sid, indexes="1-3")],
+    ))
+    assert result.status == "ok"
+    card_id = result.card_id
 
     card = await services.db.cards.get(card_id)
     assert card["summary"] == "selected LanceDB"
@@ -76,48 +80,54 @@ async def test_create_card_happy_path(services):
 
 async def test_create_card_with_from_search_id_passes_through(services):
     sid = await _seed_session(services)
-    result = await services.cards.create(
-        {"summary": "x", "rounds": [{"session_id": sid, "indexes": "1-2"}],
-         "from_search_id": "sch_demo"},
-    )
-    ev = (await services.events_for(result["card_id"]))[0]
+    result = await services.cards.create(CreateCardRequest(
+        summary="x",
+        rounds=[CardRoundsItem(session_id=sid, indexes="1-2")],
+        from_search_id="sch_demo",
+    ))
+    ev = (await services.events_for(result.card_id))[0]
     assert ev["detail"]["from_search_id"] == "sch_demo"
 
 
 async def test_create_card_rejects_bad_session_prefix(services):
     with pytest.raises(CardServiceError, match="invalid session_id prefix"):
-        await services.cards.create(
-            {"summary": "x", "rounds": [{"session_id": "nope", "indexes": "1"}]},
-        )
+        await services.cards.create(CreateCardRequest(
+            summary="x",
+            rounds=[CardRoundsItem(session_id="nope", indexes="1")],
+        ))
 
 
 async def test_create_card_rejects_out_of_range(services):
     sid = await _seed_session(services, rounds_count=3)
     with pytest.raises(CardServiceError, match="out of range"):
-        await services.cards.create(
-            {"summary": "x", "rounds": [{"session_id": sid, "indexes": "1-99"}]},
-        )
+        await services.cards.create(CreateCardRequest(
+            summary="x",
+            rounds=[CardRoundsItem(session_id=sid, indexes="1-99")],
+        ))
 
 
 async def test_create_card_rejects_duplicate_id(services):
     sid = await _seed_session(services)
-    r1 = await services.cards.create(
-        {"summary": "x", "rounds": [{"session_id": sid, "indexes": "1-2"}]},
-    )
+    r1 = await services.cards.create(CreateCardRequest(
+        summary="x",
+        rounds=[CardRoundsItem(session_id=sid, indexes="1-2")],
+    ))
     with pytest.raises(CardConflictError):
-        await services.cards.create(
-            {"summary": "y", "card_id": r1["card_id"],
-             "rounds": [{"session_id": sid, "indexes": "1-2"}]},
-        )
+        await services.cards.create(CreateCardRequest(
+            summary="y", card_id=r1.card_id,
+            rounds=[CardRoundsItem(session_id=sid, indexes="1-2")],
+        ))
 
 
 async def test_card_extracted_merges_same_session(services):
     sid = await _seed_session(services, rounds_count=25)
-    await services.cards.create(
-        {"summary": "s",
-         "rounds": [{"session_id": sid, "indexes": "1-3"},
-                    {"session_id": sid, "indexes": "20,22"}]},
-    )
+    await services.cards.create(CreateCardRequest(
+        summary="s",
+        rounds=[
+            CardRoundsItem(session_id=sid, indexes="1-3"),
+            CardRoundsItem(session_id=sid, indexes="20,22"),
+        ],
+    ))
     sess_events = [e for e in await services.events_for(sid) if e["kind"] == "card_extracted"]
     assert len(sess_events) == 1
     assert sess_events[0]["detail"]["indexes"] == "1-3,20,22"

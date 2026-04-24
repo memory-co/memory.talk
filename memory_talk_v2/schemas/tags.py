@@ -4,11 +4,11 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 
-class TagsIn(BaseModel):
+class TagsRequest(BaseModel):
     session_id: str
     tags: list[str]
 
 
-class TagsOut(BaseModel):
+class TagsResponse(BaseModel):
     status: str = "ok"
     tags: list[str]

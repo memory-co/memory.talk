@@ -3,13 +3,14 @@ from __future__ import annotations
 from datetime import datetime
 
 from memory_talk_v2.config import Config
-from memory_talk_v2.util.ids import CARD_PREFIX, SESSION_PREFIX, new_link_id
+from memory_talk_v2.provider import files as F
+from memory_talk_v2.repository import SQLiteStore
+from memory_talk_v2.schemas import CreateLinkRequest, CreateLinkResponse, LinkRef
 from memory_talk_v2.service.events import EventWriter
+from memory_talk_v2.util.ids import CARD_PREFIX, SESSION_PREFIX, new_link_id
 from memory_talk_v2.util.ttl import (
     current_ttl, dt_to_iso, initial_expires_at, iso_to_dt, now_utc, refresh,
 )
-from memory_talk_v2.provider import files as F
-from memory_talk_v2.repository import SQLiteStore
 
 
 class LinkServiceError(ValueError):
@@ -28,20 +29,20 @@ def _prefix_matches(id_str: str, type_str: str) -> bool:
     return False
 
 
-def link_to_ref(link: dict, object_id: str, now: datetime) -> dict:
+def link_to_ref(link: dict, object_id: str, now: datetime) -> LinkRef:
     if link["source_id"] == object_id:
         peer_id = link["target_id"]
         peer_type = link["target_type"]
     else:
         peer_id = link["source_id"]
         peer_type = link["source_type"]
-    return {
-        "link_id": link["link_id"],
-        "target_id": peer_id,
-        "target_type": peer_type,
-        "comment": link["comment"],
-        "ttl": current_ttl(link["expires_at"], now),
-    }
+    return LinkRef(
+        link_id=link["link_id"],
+        target_id=peer_id,
+        target_type=peer_type,
+        comment=link["comment"],
+        ttl=current_ttl(link["expires_at"], now),
+    )
 
 
 async def refresh_active_user_links(
@@ -65,12 +66,12 @@ class LinkService:
         self.db = db
         self.events = events
 
-    async def create(self, payload: dict) -> dict:
-        source_id = payload.get("source_id") or ""
-        source_type = payload.get("source_type") or ""
-        target_id = payload.get("target_id") or ""
-        target_type = payload.get("target_type") or ""
-        comment = payload.get("comment")
+    async def create(self, payload: CreateLinkRequest) -> CreateLinkResponse:
+        source_id = payload.source_id
+        source_type = payload.source_type
+        target_id = payload.target_id
+        target_type = payload.target_type
+        comment = payload.comment
 
         if not (_prefix_matches(source_id, source_type) and _prefix_matches(target_id, target_type)):
             raise LinkServiceError("invalid id prefix or type mismatch")
@@ -118,7 +119,7 @@ class LinkService:
             "comment": comment, "ttl_initial": ttl_initial,
         }, at=created_at)
 
-        return {"status": "ok", "link_id": link_id, "ttl": ttl_initial}
+        return CreateLinkResponse(status="ok", link_id=link_id, ttl=ttl_initial)
 
     async def _object_exists(self, object_id: str, type_str: str) -> bool:
         if type_str == "card":

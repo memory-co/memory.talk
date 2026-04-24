@@ -4,7 +4,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 
-class StatusOut(BaseModel):
+class StatusResponse(BaseModel):
     data_root: str
     settings_path: str
     status: str = "running"

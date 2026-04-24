@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from memory_talk_v2.schemas.shared import CardRound, LinkRef, SessionRound
 
 
-class ViewIn(BaseModel):
+class ViewRequest(BaseModel):
     id: str
 
 
@@ -28,7 +28,7 @@ class SessionView(BaseModel):
     rounds: list[SessionRound] = Field(default_factory=list)
 
 
-class ViewOut(BaseModel):
+class ViewResponse(BaseModel):
     type: Literal["card", "session"]
     read_at: str
     card: CardView | None = None

@@ -3,19 +3,23 @@ from __future__ import annotations
 from typing import Any
 
 from memory_talk_v2.config import Config
+from memory_talk_v2.provider import files as F
 from memory_talk_v2.provider.embedding import Embedder
+from memory_talk_v2.provider.lancedb import LanceStore
+from memory_talk_v2.repository import SQLiteStore
+from memory_talk_v2.schemas import (
+    CardRound, CardView, ContentBlock, CreateCardRequest, CreateCardResponse,
+    EventEntry, LogResponse, ViewResponse,
+)
+from memory_talk_v2.service.events import EventWriter
+from memory_talk_v2.service.links import link_to_ref, refresh_active_user_links
 from memory_talk_v2.util.ids import (
     CARD_PREFIX, SESSION_PREFIX,
     new_card_id, new_link_id,
 )
-from memory_talk_v2.service.events import EventWriter
-from memory_talk_v2.service.links import link_to_ref, refresh_active_user_links
 from memory_talk_v2.util.ttl import (
     current_ttl, dt_to_iso, initial_expires_at, now_utc, refresh,
 )
-from memory_talk_v2.provider import files as F
-from memory_talk_v2.provider.lancedb import LanceStore
-from memory_talk_v2.repository import SQLiteStore
 
 
 class CardServiceError(ValueError):
@@ -75,17 +79,22 @@ def compact_indexes(indexes: list[int]) -> str:
     return ",".join(parts)
 
 
-def _round_text_and_thinking(content: list[dict]) -> tuple[str, str | None]:
+def _round_text_and_thinking(content: list[ContentBlock] | list[dict]) -> tuple[str, str | None]:
     text_parts: list[str] = []
     thinking_parts: list[str] = []
     for b in content or []:
-        t = b.get("type")
-        if t in ("text", "code"):
-            text_parts.append(b.get("text") or "")
-        elif t == "thinking":
-            thinking_parts.append(b.get("thinking") or "")
-    text = "\n".join(p for p in text_parts if p)
-    thinking = "\n".join(p for p in thinking_parts if p) or None
+        if isinstance(b, ContentBlock):
+            t, text_v, thinking_v = b.type, b.text, b.thinking
+        else:
+            t = b.get("type")
+            text_v = b.get("text")
+            thinking_v = b.get("thinking")
+        if t in ("text", "code") and text_v:
+            text_parts.append(text_v)
+        elif t == "thinking" and thinking_v:
+            thinking_parts.append(thinking_v)
+    text = "\n".join(text_parts)
+    thinking = "\n".join(thinking_parts) or None
     return text, thinking
 
 
@@ -106,30 +115,28 @@ class CardService:
 
     # -------- write --------
 
-    async def create(self, payload: dict) -> dict:
-        summary = (payload.get("summary") or "").strip()
+    async def create(self, payload: CreateCardRequest) -> CreateCardResponse:
+        summary = payload.summary.strip()
         if not summary:
             raise CardServiceError("summary required")
 
-        card_id = payload.get("card_id") or new_card_id()
+        card_id = payload.card_id or new_card_id()
         if not card_id.startswith(CARD_PREFIX):
             raise CardServiceError(f"invalid card_id prefix: {card_id!r}")
         if (await self.db.cards.get(card_id)) is not None:
             raise CardConflictError(f"card_id already exists: {card_id!r}")
 
-        rounds_in = payload.get("rounds") or []
-
         expanded_rounds: list[dict] = []
         per_session_indexes: dict[str, list[int]] = {}
         per_session_order: list[str] = []
 
-        for item in rounds_in:
-            sid = item.get("session_id")
-            if not sid or not sid.startswith(SESSION_PREFIX):
+        for item in payload.rounds:
+            sid = item.session_id
+            if not sid.startswith(SESSION_PREFIX):
                 raise CardServiceError("invalid session_id prefix")
             if (await self.db.sessions.get(sid)) is None:
                 raise CardServiceError(f"session not found: {sid}")
-            idxs = parse_indexes(item.get("indexes") or "")
+            idxs = parse_indexes(item.indexes)
             for idx in idxs:
                 r = await self.db.sessions.get_round(sid, idx)
                 if r is None:
@@ -180,7 +187,6 @@ class CardService:
         vector = await self.embedder.embed_one(emb_text)
         await self.vectors.add_card(card_id, emb_text, vector)
 
-        from_search_id = payload.get("from_search_id")
         rounds_echo = [
             {"session_id": sid, "indexes": compact_indexes(sorted(set(per_session_indexes[sid])))}
             for sid in per_session_order
@@ -190,8 +196,8 @@ class CardService:
             "default_links": default_links,
             "ttl_initial": self.config.settings.ttl.card.initial,
         }
-        if from_search_id:
-            created_detail["from_search_id"] = from_search_id
+        if payload.from_search_id:
+            created_detail["from_search_id"] = payload.from_search_id
         await self.events.emit(card_id, "created", created_detail, at=created_at)
 
         for sid in per_session_order:
@@ -202,11 +208,11 @@ class CardService:
                 "default_link_id": dl["link_id"] if dl else None,
             }, at=created_at)
 
-        return {"status": "ok", "card_id": card_id}
+        return CreateCardResponse(status="ok", card_id=card_id)
 
     # -------- reads --------
 
-    async def view(self, card_id: str) -> dict:
+    async def view(self, card_id: str) -> ViewResponse:
         if not card_id.startswith(CARD_PREFIX):
             raise CardServiceError("invalid card_id prefix")
         card = await self.db.cards.get(card_id)
@@ -232,26 +238,28 @@ class CardService:
             now=now,
         )
 
-        return {
-            "type": "card",
-            "read_at": dt_to_iso(now),
-            "card": {
-                "card_id": card["card_id"], "summary": card["summary"],
-                "rounds": card["rounds"], "created_at": card["created_at"],
-                "ttl": current_ttl(card["expires_at"], now),
-            },
-            "links": [link_to_ref(l, card_id, now) for l in links],
-        }
+        return ViewResponse(
+            type="card",
+            read_at=dt_to_iso(now),
+            card=CardView(
+                card_id=card["card_id"],
+                summary=card["summary"],
+                rounds=[CardRound(**r) for r in card["rounds"]],
+                created_at=card["created_at"],
+                ttl=current_ttl(card["expires_at"], now),
+            ),
+            links=[link_to_ref(l, card_id, now) for l in links],
+        )
 
-    async def log(self, card_id: str) -> dict:
+    async def log(self, card_id: str) -> LogResponse:
         if not card_id.startswith(CARD_PREFIX):
             raise CardServiceError("invalid card_id prefix")
         if (await self.db.cards.get(card_id)) is None:
             raise CardNotFound(f"card not found: {card_id}")
         events = await F.read_card_events(self.config.cards_dir, card_id)
         events.sort(key=lambda e: e["at"])
-        return {
-            "type": "card",
-            "card_id": card_id,
-            "events": [{"at": e["at"], "kind": e["kind"], "detail": e["detail"]} for e in events],
-        }
+        return LogResponse(
+            type="card",
+            card_id=card_id,
+            events=[EventEntry(at=e["at"], kind=e["kind"], detail=e["detail"]) for e in events],
+        )

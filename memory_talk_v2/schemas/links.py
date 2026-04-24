@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from memory_talk_v2.schemas.shared import LinkTargetType
 
 
-class CreateLinkIn(BaseModel):
+class CreateLinkRequest(BaseModel):
     source_id: str
     source_type: LinkTargetType
     target_id: str
@@ -14,7 +14,7 @@ class CreateLinkIn(BaseModel):
     comment: str | None = None
 
 
-class CreateLinkOut(BaseModel):
+class CreateLinkResponse(BaseModel):
     status: str = "ok"
     link_id: str
     ttl: int

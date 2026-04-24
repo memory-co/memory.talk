@@ -5,7 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 
-class LogIn(BaseModel):
+class LogRequest(BaseModel):
     id: str
 
 
@@ -15,7 +15,7 @@ class EventEntry(BaseModel):
     detail: dict[str, Any]
 
 
-class LogOut(BaseModel):
+class LogResponse(BaseModel):
     type: Literal["card", "session"]
     card_id: str | None = None
     session_id: str | None = None

@@ -5,24 +5,24 @@ Split by endpoint group to mirror api/ and service/. Shared types
 Handlers can import from the submodule or from this package root.
 """
 from memory_talk_v2.schemas.cards import (
-    CardRoundsItemIn, CreateCardIn, CreateCardOut,
+    CardRoundsItem, CreateCardRequest, CreateCardResponse,
 )
-from memory_talk_v2.schemas.links import CreateLinkIn, CreateLinkOut
-from memory_talk_v2.schemas.log import EventEntry, LogIn, LogOut
-from memory_talk_v2.schemas.rebuild import RebuildOut
+from memory_talk_v2.schemas.links import CreateLinkRequest, CreateLinkResponse
+from memory_talk_v2.schemas.log import EventEntry, LogRequest, LogResponse
+from memory_talk_v2.schemas.rebuild import RebuildResponse
 from memory_talk_v2.schemas.search import (
-    CardHit, SearchBucket, SearchIn, SearchOut, SessionHit,
+    CardHit, SearchBucket, SearchRequest, SearchResponse, SessionHit,
 )
 from memory_talk_v2.schemas.sessions import (
-    IngestRoundIn, IngestSessionIn, IngestSessionOut,
+    IngestRound, IngestSessionRequest, IngestSessionResponse,
 )
 from memory_talk_v2.schemas.shared import (
     CardRound, ContentBlock, LinkRef, LinkTargetType, ObjectKind, SessionRound,
 )
-from memory_talk_v2.schemas.status import StatusOut
-from memory_talk_v2.schemas.tags import TagsIn, TagsOut
+from memory_talk_v2.schemas.status import StatusResponse
+from memory_talk_v2.schemas.tags import TagsRequest, TagsResponse
 from memory_talk_v2.schemas.view import (
-    CardView, SessionView, ViewIn, ViewOut,
+    CardView, SessionView, ViewRequest, ViewResponse,
 )
 
 
@@ -31,21 +31,21 @@ __all__ = [
     "LinkTargetType", "ObjectKind",
     "ContentBlock", "SessionRound", "CardRound", "LinkRef",
     # sessions
-    "IngestRoundIn", "IngestSessionIn", "IngestSessionOut",
+    "IngestRound", "IngestSessionRequest", "IngestSessionResponse",
     # cards
-    "CardRoundsItemIn", "CreateCardIn", "CreateCardOut",
+    "CardRoundsItem", "CreateCardRequest", "CreateCardResponse",
     # links
-    "CreateLinkIn", "CreateLinkOut",
+    "CreateLinkRequest", "CreateLinkResponse",
     # tags
-    "TagsIn", "TagsOut",
+    "TagsRequest", "TagsResponse",
     # search
-    "SearchIn", "CardHit", "SessionHit", "SearchBucket", "SearchOut",
+    "SearchRequest", "CardHit", "SessionHit", "SearchBucket", "SearchResponse",
     # view
-    "ViewIn", "CardView", "SessionView", "ViewOut",
+    "ViewRequest", "CardView", "SessionView", "ViewResponse",
     # log
-    "LogIn", "EventEntry", "LogOut",
+    "LogRequest", "EventEntry", "LogResponse",
     # status
-    "StatusOut",
+    "StatusResponse",
     # rebuild
-    "RebuildOut",
+    "RebuildResponse",
 ]

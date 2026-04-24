@@ -6,10 +6,11 @@ import time
 import aiofiles
 
 from memory_talk_v2.config import Config
-from memory_talk_v2.provider.embedding import Embedder
 from memory_talk_v2.provider import files as F
+from memory_talk_v2.provider.embedding import Embedder
 from memory_talk_v2.provider.lancedb import LanceStore
 from memory_talk_v2.repository import SQLiteStore
+from memory_talk_v2.schemas import RebuildResponse
 
 
 def _rounds_to_text(rounds: list[dict]) -> str:
@@ -43,7 +44,7 @@ class RebuildService:
         self.vectors = vectors
         self.embedder = embedder
 
-    async def rebuild(self) -> dict:
+    async def rebuild(self) -> RebuildResponse:
         errors_count = 0
 
         await self.db.clear_all()
@@ -147,13 +148,13 @@ class RebuildService:
 
         self._apply_retention()
 
-        return {
-            "status": "ok",
-            "sessions": sessions_count,
-            "cards": cards_count,
-            "searches_replayed": searches_replayed,
-            "errors_count": errors_count,
-        }
+        return RebuildResponse(
+            status="ok",
+            sessions=sessions_count,
+            cards=cards_count,
+            searches_replayed=searches_replayed,
+            errors_count=errors_count,
+        )
 
     def _apply_retention(self) -> None:
         days = self.config.settings.search.search_log_retention_days

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from memory_talk_v2.schemas.shared import ContentBlock
 
 
-class IngestRoundIn(BaseModel):
+class IngestRound(BaseModel):
     round_id: str
     parent_id: str | None = None
     timestamp: str | None = None
@@ -19,16 +19,16 @@ class IngestRoundIn(BaseModel):
     usage: dict[str, Any] | None = None
 
 
-class IngestSessionIn(BaseModel):
+class IngestSessionRequest(BaseModel):
     session_id: str  # RAW platform id (no sess_ prefix); server prefixes on ingest
     source: str
     created_at: str
     metadata: dict[str, Any] = Field(default_factory=dict)
     sha256: str | None = None  # optional perf hint for skip-if-unchanged fast path
-    rounds: list[IngestRoundIn] = Field(default_factory=list)
+    rounds: list[IngestRound] = Field(default_factory=list)
 
 
-class IngestSessionOut(BaseModel):
+class IngestSessionResponse(BaseModel):
     status: str
     session_id: str
     action: Literal["imported", "appended", "skipped", "partial_append"]

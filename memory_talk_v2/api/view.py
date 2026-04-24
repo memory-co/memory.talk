@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 
 from memory_talk_v2.util.ids import IdKind, InvalidIdError, parse_id
-from memory_talk_v2.schemas import ViewIn
+from memory_talk_v2.schemas import ViewRequest, ViewResponse
 from memory_talk_v2.service import (
     CardNotFound, CardServiceError, SessionNotFound, SessionServiceError,
 )
@@ -13,8 +13,8 @@ from memory_talk_v2.service import (
 router = APIRouter()
 
 
-@router.post("/view")
-async def post_view(payload: ViewIn, request: Request):
+@router.post("/view", response_model=ViewResponse)
+async def post_view(payload: ViewRequest, request: Request):
     try:
         kind, _ = parse_id(payload.id)
     except InvalidIdError:

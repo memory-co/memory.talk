@@ -4,7 +4,7 @@ from __future__ import annotations
 from pydantic import BaseModel
 
 
-class RebuildOut(BaseModel):
+class RebuildResponse(BaseModel):
     status: str = "ok"
     sessions: int
     cards: int

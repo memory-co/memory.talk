@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from memory_talk_v2.schemas.shared import LinkRef
 
 
-class SearchIn(BaseModel):
+class SearchRequest(BaseModel):
     query: str
     where: str | None = None
     top_k: int | None = None
@@ -37,7 +37,7 @@ class SearchBucket(BaseModel):
     results: list[Any]
 
 
-class SearchOut(BaseModel):
+class SearchResponse(BaseModel):
     search_id: str
     query: str
     cards: SearchBucket
