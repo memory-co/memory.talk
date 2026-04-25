@@ -4,7 +4,8 @@ import os
 import sys
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from memory_talk_v2.config import Config, ConfigValidationError
 from memory_talk_v2.provider.embedding import (
@@ -72,6 +73,16 @@ def create_app(config: Config | None = None) -> FastAPI:
 
     app = FastAPI(title="memory.talk v2", lifespan=lifespan)
     app.state.config = config
+    app.state.status = "running"
+
+    @app.middleware("http")
+    async def rebuild_gate(request: Request, call_next):
+        status = getattr(request.app.state, "status", "running")
+        if status == "running":
+            return await call_next(request)
+        if request.method == "GET" and request.url.path == "/v2/status":
+            return await call_next(request)
+        return JSONResponse({"error": "rebuilding"}, status_code=503)
 
     from memory_talk_v2.api.status import router as status_router
     app.include_router(status_router, prefix="/v2")

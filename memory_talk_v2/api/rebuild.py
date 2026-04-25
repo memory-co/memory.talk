@@ -1,7 +1,7 @@
 """POST /v2/rebuild."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from memory_talk_v2.schemas import RebuildResponse
 
@@ -11,4 +11,11 @@ router = APIRouter()
 
 @router.post("/rebuild", response_model=RebuildResponse)
 async def post_rebuild(request: Request):
-    return await request.app.state.rebuild.rebuild()
+    app = request.app
+    if getattr(app.state, "status", "running") != "running":
+        raise HTTPException(status_code=409, detail="rebuild already in progress")
+    app.state.status = "rebuilding"
+    try:
+        return await app.state.rebuild.rebuild()
+    finally:
+        app.state.status = "running"
