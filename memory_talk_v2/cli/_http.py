@@ -19,6 +19,33 @@ class ApiError(RuntimeError):
         super().__init__(f"API {status_code}: {payload}")
 
 
+def extract_error_message(payload: Any) -> str:
+    """Pull a single human-readable message string out of whatever shape the
+    server (or the CLI) handed us as an error payload.
+
+    FastAPI tends to return ``{"detail": "..."}``. Our own services return
+    ``{"error": "..."}``. The rebuild gate returns ``{"error": "rebuilding"}``.
+    Some paths produce nested dicts. Plain strings come through too.
+    """
+    if isinstance(payload, str):
+        return payload
+    if isinstance(payload, dict):
+        for key in ("error", "detail", "message"):
+            v = payload.get(key)
+            if isinstance(v, str) and v:
+                return v
+            if isinstance(v, dict):
+                # one level of unwrap, e.g. {"error": {"detail": "..."}}
+                return extract_error_message(v)
+        # Fall back to a compact JSON-ish dump
+        try:
+            import json as _json
+            return _json.dumps(payload, ensure_ascii=False)
+        except Exception:
+            return str(payload)
+    return str(payload)
+
+
 def _default_client(cfg: Config) -> httpx.Client:
     base = f"http://127.0.0.1:{cfg.settings.server.port}"
     return httpx.Client(base_url=base, timeout=30.0)

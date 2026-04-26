@@ -44,7 +44,9 @@ class ServerEnv:
         )
 
     def start(self) -> dict:
-        r = self.runner.invoke(main, ["server", "start", "--data-root", str(self.data_root)])
+        r = self.runner.invoke(main, ["server", "start", "--data-root", str(self.data_root),
+        "--json",
+    ])
         if not r.stdout.strip():
             raise RuntimeError(
                 f"`server start` produced no stdout. exit_code={r.exit_code}. "
@@ -53,7 +55,9 @@ class ServerEnv:
         return json.loads(r.stdout)
 
     def stop(self) -> dict:
-        r = self.runner.invoke(main, ["server", "stop", "--data-root", str(self.data_root)])
+        r = self.runner.invoke(main, ["server", "stop", "--data-root", str(self.data_root),
+        "--json",
+    ])
         return json.loads(r.stdout) if r.stdout.strip() else {}
 
     def wait_ready(self, timeout: float = 10.0) -> dict:

@@ -1,6 +1,8 @@
 """Full sync scenario — drives the real memory-talk CLI end-to-end.
 
-`cli_env.runner.invoke(main, ["sync", ...])` runs the real Click CLI. The
+`cli_env.runner.invoke(main, ["sync", ...,
+        "--json",
+    ])` runs the real Click CLI. The
 CLI's httpx calls are routed through `httpx.ASGITransport(app=app)` so they
 hit the in-process FastAPI app without binding a TCP port. Every line of
 CLI code (arg parsing, adapter dispatch, counts aggregation, error
@@ -103,6 +105,7 @@ def _run_sync(cli_env) -> dict:
         "--source=claude-code",
         "--platform-root", str(PLATFORM),
         "--data-root", str(cli_env.config.data_root),
+        "--json",
     ])
     assert result.exit_code == 0, f"CLI exited {result.exit_code}\nstdout: {result.stdout}\nstderr: {result.stderr}"
     return json.loads(result.stdout)

@@ -36,7 +36,7 @@ async def _seed(cli_env):
 
 
 async def _run_search(cli_env, query: str, top_k: int | None = None) -> tuple[int, dict]:
-    args = ["search", query, "--data-root", str(cli_env.config.data_root)]
+    args = ["search", query, "--data-root", str(cli_env.config.data_root), "--json"]
     if top_k is not None:
         args += ["--top-k", str(top_k)]
     result = cli_env.runner.invoke(cli_env.main, args)

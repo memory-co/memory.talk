@@ -24,6 +24,7 @@ async def _run_search(cli_env, query: str) -> tuple[int, dict]:
     result = cli_env.runner.invoke(cli_env.main, [
         "search", query,
         "--data-root", str(cli_env.config.data_root),
+        "--json",
     ])
     return result.exit_code, json.loads(result.stdout)
 
@@ -56,7 +57,8 @@ async def test_status_still_reachable_during_rebuild(cli_env):
         result = cli_env.runner.invoke(cli_env.main, [
             "server", "status",
             "--data-root", str(cli_env.config.data_root),
-        ])
+        "--json",
+    ])
         assert result.exit_code == 0
         out = json.loads(result.stdout)
         assert out["status"] == "rebuilding"

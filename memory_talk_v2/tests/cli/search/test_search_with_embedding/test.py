@@ -44,6 +44,7 @@ async def test_search_with_openai_embedding(openai_cli_env):
     result = openai_cli_env.runner.invoke(openai_cli_env.main, [
         "search", "LanceDB",
         "--data-root", str(openai_cli_env.config.data_root),
+        "--json",
     ])
     assert result.exit_code == 0, f"search failed:\n{result.stdout}"
     out = json.loads(result.stdout)

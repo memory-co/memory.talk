@@ -36,6 +36,7 @@ async def _run_search(cli_env, query: str, where: str) -> tuple[int, dict]:
         "search", query,
         "--where", where,
         "--data-root", str(cli_env.config.data_root),
+        "--json",
     ])
     return result.exit_code, json.loads(result.stdout)
 

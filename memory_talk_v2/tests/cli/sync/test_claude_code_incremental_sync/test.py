@@ -95,6 +95,7 @@ def _run_sync(cli_env, platform: Path) -> dict:
         "--source=claude-code",
         "--platform-root", str(platform),
         "--data-root", str(cli_env.config.data_root),
+        "--json",
     ])
     assert result.exit_code == 0, f"CLI exited {result.exit_code}\nstdout: {result.stdout}\nstderr: {result.stderr}"
     return json.loads(result.stdout)

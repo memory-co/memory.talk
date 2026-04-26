@@ -28,6 +28,7 @@ async def _run_card(cli_env, body: dict) -> tuple[int, dict]:
     result = cli_env.runner.invoke(cli_env.main, [
         "card", json.dumps(body, ensure_ascii=False),
         "--data-root", str(cli_env.config.data_root),
+        "--json",
     ])
     return result.exit_code, json.loads(result.stdout)
 

@@ -1,22 +1,31 @@
-"""CLI: rebuild → POST /v2/rebuild."""
+"""CLI: rebuild [--json] → POST /v2/rebuild."""
 from __future__ import annotations
-import json
 import sys
 
 import click
 
-from memory_talk_v2.cli._http import ApiError, api
+from memory_talk_v2.cli._format import fmt_error, fmt_rebuild
+from memory_talk_v2.cli._http import ApiError, api, extract_error_message
+from memory_talk_v2.cli._render import emit_json, emit_json_err, emit_md, emit_md_err
 from memory_talk_v2.config import Config
 
 
 @click.command("rebuild")
 @click.option("--data-root", type=click.Path(), default=None)
-def rebuild(data_root: str | None) -> None:
+@click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON instead of Markdown")
+def rebuild(data_root: str | None, json_out: bool) -> None:
     """Blocking rebuild of SQLite + LanceDB from file-layer truth."""
     cfg = Config(data_root) if data_root else Config()
     try:
         result = api("POST", "/v2/rebuild", cfg, timeout=600.0)
-        click.echo(json.dumps(result, ensure_ascii=False))
     except ApiError as e:
-        click.echo(json.dumps({"error": e.payload}, ensure_ascii=False))
+        if json_out:
+            emit_json_err(e.payload)
+        else:
+            emit_md_err(fmt_error(extract_error_message(e.payload)))
         sys.exit(1)
+
+    if json_out:
+        emit_json(result)
+    else:
+        emit_md(fmt_rebuild(result))

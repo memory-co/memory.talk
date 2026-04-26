@@ -7,6 +7,7 @@ async def _run_add(cli_env, object_id: str, *tags: str) -> tuple[int, dict]:
     result = cli_env.runner.invoke(cli_env.main, [
         "tag", "add", object_id, *tags,
         "--data-root", str(cli_env.config.data_root),
+        "--json",
     ])
     return result.exit_code, json.loads(result.stdout)
 
@@ -15,6 +16,7 @@ async def _run_remove(cli_env, object_id: str, *tags: str) -> tuple[int, dict]:
     result = cli_env.runner.invoke(cli_env.main, [
         "tag", "remove", object_id, *tags,
         "--data-root", str(cli_env.config.data_root),
+        "--json",
     ])
     return result.exit_code, json.loads(result.stdout)
 

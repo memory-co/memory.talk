@@ -38,6 +38,7 @@ async def _run(cli_env, object_id: str) -> tuple[int, dict]:
     result = cli_env.runner.invoke(cli_env.main, [
         "log", object_id,
         "--data-root", str(cli_env.config.data_root),
+        "--json",
     ])
     return result.exit_code, json.loads(result.stdout)
 
