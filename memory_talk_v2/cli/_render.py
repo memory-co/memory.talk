@@ -20,8 +20,30 @@ def _render_md_to(stream, text: str) -> None:
     if stream.isatty():
         # Lazy-import rich so non-TTY scripts don't pay the import cost.
         from rich.console import Console
-        from rich.markdown import Markdown
-        Console(file=stream).print(Markdown(text))
+        from rich.markdown import Heading, Markdown
+
+        class _FlatHeading(Heading):
+            """Left-aligned bold headings.
+
+            rich's default Heading hard-codes H1 as a centered Panel and H2 as
+            centered text. With long ULID-bearing titles like
+            "CARD card_01KQ12E6R43JXMFDEKZ0292ZKZ", centering pushes the
+            content way off the left margin. Override to keep all headings
+            flush-left; H2 picks up an underline so the visual hierarchy is
+            still legible.
+            """
+            def __rich_console__(self, console, options):
+                t = self.text
+                t.justify = "left"
+                t.stylize("bold")
+                if self.tag == "h2":
+                    t.stylize("underline")
+                yield t
+
+        class _FlatMarkdown(Markdown):
+            elements = {**Markdown.elements, "heading_open": _FlatHeading}
+
+        Console(file=stream).print(_FlatMarkdown(text))
     else:
         stream.write(text)
         if not text.endswith("\n"):
