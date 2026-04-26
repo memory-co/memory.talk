@@ -12,25 +12,29 @@
 memory-talk server start [--data-root PATH] [--json]
 ```
 
-### Text（默认）
+### Markdown（默认）
+
+成功:
+
+````markdown
+**started** · pid `12345` · port `7788`
+````
+
+启动失败(到 stderr,exit 1):
+
+````markdown
+**error:** server failed to start (exit_code=2)
 
 ```
-started · pid=12345 · port=7788
-```
-
-启动失败：
-
-```
-error: server failed to start (exit_code=2)
 [memory-talk] embedding startup check failed: openai embedder: ...
 ```
-（错误细节到 stderr，exit 1）
+````
 
-已在运行：
+已在运行:
 
-```
-already_running · pid=12345 · port=7788
-```
+````markdown
+**already_running** · pid `12345` · port `7788`
+````
 
 ### JSON（`--json`）
 
@@ -52,17 +56,17 @@ already_running · pid=12345 · port=7788
 memory-talk server stop [--data-root PATH] [--json]
 ```
 
-### Text
+### Markdown
 
-```
-stopped · pid=12345
-```
+````markdown
+**stopped** · pid `12345`
+````
 
-未运行：
+未运行:
 
-```
-not_running
-```
+````markdown
+**not_running**
+````
 
 ### JSON
 
@@ -76,34 +80,38 @@ not_running
 
 ## server status
 
-直接调 API，能连上就是 running（同时返回数据统计），连不上就是 not_running。
+直接调 API,能连上就是 running(同时返回数据统计),连不上就是 not_running。
 
 ```bash
 memory-talk server status [--data-root PATH] [--json]
 ```
 
-### Text（运行中）
+### Markdown(运行中)
 
-```
-status:    running
-data_root: /home/user/.memory-talk
-settings:  /home/user/.memory-talk/settings.json
-sessions:  12
-cards:     47
-links:     23
-searches:  108
-embedding: dummy
-vector:    lancedb
-relation:  sqlite
-```
+````markdown
+# memory-talk · **running**
 
-### Text（未运行）
+| field | value |
+|---|---|
+| data_root | `/home/user/.memory-talk` |
+| settings | `/home/user/.memory-talk/settings.json` |
+| sessions | 12 |
+| cards | 47 |
+| links | 23 |
+| searches | 108 |
+| embedding | dummy |
+| vector | lancedb |
+| relation | sqlite |
+````
 
-```
-status:    not_running
-data_root: /home/user/.memory-talk
-settings:  /home/user/.memory-talk/settings.json
-```
+### Markdown(未运行)
+
+````markdown
+# memory-talk · **not_running**
+
+- data_root: `/home/user/.memory-talk`
+- settings: `/home/user/.memory-talk/settings.json`
+````
 
 ### JSON
 
@@ -122,4 +130,4 @@ settings:  /home/user/.memory-talk/settings.json
 }
 ```
 
-`searches_total` 是 v2 新增字段——v2 把 search 作为主读路径，这个数字能快速看出"这台机器的记忆被多频繁地检索"。
+`searches_total` 是 v2 新增字段——v2 把 search 作为主读路径,这个数字能快速看出"这台机器的记忆被多频繁地检索"。

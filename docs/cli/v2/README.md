@@ -45,25 +45,28 @@ v2 所有对外的主键都带类型前缀：
 
 ## 输出格式
 
-所有命令支持两种输出，**默认人类可读**：
+所有命令支持两种输出，**默认是 Markdown**：
 
-- **Text（默认）**：紧凑、对齐、可一眼扫读。
-- **JSON**：加 `--json`。脚本 / LLM / pipe 用这个，永远 stdout，UTF-8 直出（`ensure_ascii=False`）。
+- **Markdown（默认）**:CLI 直接产出 Markdown 文本。运行时按 `sys.stdout.isatty()` 决定渲染:
+  - **TTY（人在看）**:用 Markdown 渲染器(rich 之类)直接渲染成带样式的输出。
+  - **非 TTY（pipe / script / LLM）**:原样输出 raw Markdown。LLM 训练里 Markdown 本身就是常见格式,直接喂给它就能消化。
+- **JSON**:加 `--json`。机器消费的结构化形态,永远 stdout,UTF-8 直出(`ensure_ascii=False`)。
 
 ```bash
-memory-talk server status            # 默认 text
-memory-talk server status --json     # JSON
+memory-talk view card_01jz8k2m            # TTY → 渲染后的 Markdown
+memory-talk view card_01jz8k2m | cat      # 非 TTY → 原始 Markdown
+memory-talk view card_01jz8k2m --json     # JSON
 ```
 
-错误也走同一契约：
+错误也走同一契约:
 
 | 模式 | 成功 | 失败 |
 |------|------|------|
-| Text（默认）| 行级输出到 stdout | `error: <message>` 到 **stderr**，exit 1 |
-| `--json` | JSON 到 stdout | `{"error": "..."}` 到 **stdout**，exit 1 |
+| Markdown(默认)| Markdown 到 stdout | `**error:** <message>` Markdown 到 **stderr**,exit 1 |
+| `--json` | JSON 到 stdout | `{"error": "..."}` 到 **stdout**,exit 1 |
 
-这样脚本可以稳定 `--json` + 解析 stdout 拿到结构化结果；交互场景看 stderr 的错误消息更直接。
+下面各子命令文档里的"Markdown 输出"示例是**未经渲染的 raw Markdown** ——也就是非 TTY / pipe 场景下你真正会拿到的字符串。在终端里看到的会是被渲染过的形态。
 
-配置文件 `~/.memory-talk/settings.json`，不存在时使用默认值。详见 [settings.md](../../structure/v2/settings.md)。
+配置文件 `~/.memory-talk/settings.json`,不存在时使用默认值。详见 [settings.md](../../structure/v2/settings.md)。
 
 详细文档见各子命令文件。search 的输出形态和审计落库见 [search-result.md](../../structure/v2/search-result.md)。

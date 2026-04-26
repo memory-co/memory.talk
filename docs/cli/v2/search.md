@@ -1,6 +1,6 @@
 # search
 
-v2 主检索入口。hybrid FTS + 向量检索 + 元数据 DSL 过滤，结果分两支返回（cards 和 sessions）。命中的 `card_id` / `session_id` 直接返回给调用方——拿到就能喂给 `view` / `log` / `tag` / `link create`。
+v2 主检索入口。hybrid FTS + 向量检索 + 元数据 DSL 过滤,结果分两支返回(cards 和 sessions)。命中的 `card_id` / `session_id` 直接返回给调用方——拿到就能喂给 `view` / `log` / `tag` / `link create`。
 
 ```bash
 memory-talk search <query> [--where DSL] [--top-k N] [--json]
@@ -8,39 +8,54 @@ memory-talk search <query> [--where DSL] [--top-k N] [--json]
 
 | 参数 | 默认 | 说明 |
 |------|------|------|
-| `<query>` | — | 检索文本。可为空字符串（配合 `--where` 做纯元数据过滤） |
+| `<query>` | — | 检索文本。可为空字符串(配合 `--where` 做纯元数据过滤) |
 | `--where`, `-w` | 无 | 元数据过滤 DSL |
-| `--top-k` | `settings.search.default_top_k`（默认 10） | 每支（cards / sessions）的上限 |
-| `--json` | 关 | 输出 JSON 而非默认 text |
+| `--top-k` | `settings.search.default_top_k`(默认 10) | 每支(cards / sessions)的上限 |
+| `--json` | 关 | 输出 JSON 而非默认 Markdown |
 
-## 输出（Text，默认）
+## Markdown(默认)
 
-```
-search: LanceDB 选型 · search_id=sch_01K7XABC
+````markdown
+# search: LanceDB 选型
 
-cards (2):
-  1. card_01jz8k2m  score=0.031
-     选定 LanceDB 做向量存储
-     > ...**LanceDB**...
-     2 links → sess_f7a3e1, card_01jzp3nq (选型后果, ttl=21d)
+`search_id=sch_01K7XABC`
 
-  2. card_01jzp3nq  score=0.019
-     LanceDB 落地后的踩坑清单
-     > ... NFS 上 mmap **LanceDB** 文件 ...
-     1 link → sess_8eba9e
+## cards (2)
 
-sessions (1):
-  1. sess_187c6576  score=0.029 · claude-code · tags=[decision]
-     > ...讨论 **LanceDB** 零依赖...
-     1 link → card_01jz8k2m (从此对话提取)
-```
+### 1. `card_01jz8k2m` · score 0.031
 
-约定：
-- `score` 三位小数。命中行内 `**...**` 是 snippet 里 highlight 标记，跟 API 返回保持一致。
-- `links` 行展示前 N（默认 3）个，超出折叠为 `+N more`。`comment` / `ttl` 仅当存在时显示。`ttl=expired` 表示已过期的用户 link。
-- 空命中：`cards (0):` 行后空一行，不打"no results"之类的占位文字。
+**选定 LanceDB 做向量存储**
 
-## 输出（`--json`）
+> ...**LanceDB**...
+
+links: `sess_f7a3e1`, `card_01jzp3nq` (选型后果, ttl 21d)
+
+### 2. `card_01jzp3nq` · score 0.019
+
+**LanceDB 落地后的踩坑清单**
+
+> ... NFS 上 mmap **LanceDB** 文件 ...
+
+links: `sess_8eba9e`
+
+## sessions (1)
+
+### 1. `sess_187c6576` · score 0.029
+
+claude-code · tags: `decision`
+
+> ...讨论 **LanceDB** 零依赖...
+
+links: `card_01jz8k2m` (从此对话提取)
+````
+
+约定:
+- `score` 三位小数。
+- snippet 段落里 `**...**` 是 highlight 标记,跟 API 返回保持一致。
+- `links` 行展示前 3 个,超出折叠为 `+N more`。`comment` / `ttl` 仅当存在时显示。`ttl=expired` 表示已过期的用户 link。
+- 空命中桶仍然出 header(`## cards (0)`),不打"no results"占位文字。
+
+## JSON(`--json`)
 
 ```json
 {
@@ -82,23 +97,23 @@ sessions (1):
 ```
 
 注意：
-- 返回体里的 `card_id` / `session_id` / `link_id` 都是**带前缀的裸 id**，直接喂给 `view` / `log` / `link create` 即可，不需要任何中间转换。
-- `search_id` 是本次查询的**审计 id**——只出现在服务端 `search_log` 表和 `log` 命令的 detail 里，**不用于任何后续读取**。
-- `links` 过滤掉**已过期的用户 link**（`ttl < 0`）——只保留 `ttl >= 0`（默认 link + 活跃用户 link）。想看过期 link 走 `view`。
+- 返回体里的 `card_id` / `session_id` / `link_id` 都是**带前缀的裸 id**,直接喂给 `view` / `log` / `link create` 即可,不需要任何中间转换。
+- `search_id` 是本次查询的**审计 id**——只出现在服务端 `search_log` 表和 `log` 命令的 detail 里,**不用于任何后续读取**。
+- `links` 过滤掉**已过期的用户 link**(`ttl < 0`)——只保留 `ttl >= 0`(默认 link + 活跃用户 link)。想看过期 link 走 `view`。
 - search 本身**不续命**任何对象或 link——续命只发生在 `view`。
-- `rank` 从 1 开始，对齐 `results` 数组位置。
+- `rank` 从 1 开始,对齐 `results` 数组位置。
 
 ## 追踪语义
 
-每次 search 都会在服务端 `search_log` 表 + `logs/search/<UTC 日期>.jsonl` 里追加一条——**存的是完整的响应体**（含 `snippets` / `score` / `summary` / `tags` / `links` 等一切呈现给使用者的内容），不是只存命中 id。这样事后审计能完整复原"当时用户看到了什么"，即便后续索引变了、对象被改了也能追回原样。详见 [search-result.md](../../structure/v2/search-result.md) 和 [rebuild.md](rebuild.md) 的目录布局。
+每次 search 都会在服务端 `search_log` 表 + `logs/search/<UTC 日期>.jsonl` 里追加一条——**存的是完整的响应体**(含 `snippets` / `score` / `summary` / `tags` / `links` 等一切呈现给使用者的内容),不是只存命中 id。这样事后审计能完整复原"当时用户看到了什么",即便后续索引变了、对象被改了也能追回原样。详见 [search-result.md](../../structure/v2/search-result.md) 和 [rebuild.md](rebuild.md) 的目录布局。
 
-这是**纯审计**——不做"凭据发行"，不参与任何后续调用的校验。想看"这次 AI 会话用了哪些数据"——看 AI 自己的 tool-use 对话记录（sync 之后存成一个 session），那里有每次 `view` / `search` 的输入输出原文。服务端不再造重复的追踪层。
+这是**纯审计**——不做"凭据发行",不参与任何后续调用的校验。想看"这次 AI 会话用了哪些数据"——看 AI 自己的 tool-use 对话记录(sync 之后存成一个 session),那里有每次 `view` / `search` 的输入输出原文。服务端不再造重复的追踪层。
 
 search_log 默认永久保留。老化策略见 `settings.search.search_log_retention_days`。
 
 ## DSL
 
-支持字段：`session_id`、`card_id`、`tag`、`source`、`created_at`。运算符：`=`、`!=`、`LIKE`、`IN`、`NOT IN`、`AND`。示例：
+支持字段:`session_id`、`card_id`、`tag`、`source`、`created_at`。运算符:`=`、`!=`、`LIKE`、`IN`、`NOT IN`、`AND`。示例:
 
 ```bash
 memory-talk search "LanceDB" -w 'tag = "decision" AND source = "claude-code"'
@@ -106,14 +121,13 @@ memory-talk search "" -w 'created_at > "2026-04-01"'
 memory-talk search "bug" -w 'session_id = "sess_abc123"'
 ```
 
-DSL 解析失败：
+DSL 解析失败:
 
-```
-error: DSL parse error: unknown field 'foo'
-```
-（exit 1，错误到 stderr）
+````markdown
+**error:** DSL parse error: unknown field 'foo'
+````
 
-`--json` 模式下：
+`--json` 模式下:
 
 ```json
 {"error": "DSL parse error: unknown field 'foo'"}
