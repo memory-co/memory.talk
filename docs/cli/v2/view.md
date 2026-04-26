@@ -22,9 +22,9 @@ memory-talk view sess_187c6576 --json
 ### card
 
 ````markdown
-# `card_01jz8k2m` · ttl 28d
+# CARD `card_01jz8k2m`
 
-> 选定 LanceDB 做向量存储
+**Summary:** 选定 LanceDB 做向量存储
 
 read_at: `2026-04-20T14:32:05Z`
 
@@ -35,21 +35,21 @@ read_at: `2026-04-20T14:32:05Z`
 
 ## links (3)
 
-- → `sess_abc123` (session)
-- → `card_01jzp3nq` (card · 选型后果——NFS 上踩的坑) · ttl 21d
-- → `card_01jzold99` (card · 早期失败的 ChromaDB 方案) · expired
+- TO `sess_abc123` (session)
+- TO `card_01jzp3nq` (card) · 选型后果——NFS 上踩的坑
+- TO `card_01jzold99` (card · expired) · 早期失败的 ChromaDB 方案
 ````
 
 ### session
 
 ````markdown
-# `sess_187c6576`
+# SESSION `sess_187c6576`
 
-source: `claude-code` · created: `2026-04-10` · read_at: `2026-04-20T14:32:05Z`
+**Source:** claude-code · **Created:** `2026-04-10` · read_at: `2026-04-20T14:32:05Z`
 
-tags: `decision`, `project:memory-talk`
+**Tags:** `decision`, `project:memory-talk`
 
-metadata:
+**Metadata:**
 
 - project: `/home/user/myapp`
 
@@ -60,13 +60,15 @@ metadata:
 
 ## links (1)
 
-- → `card_01jz8k2m` (card · 从此对话提取) · ttl 14d
+- FROM `card_01jz8k2m` (card) · 从此对话提取
 ````
 
 约定:
 - 单条 round 文本太长时,在 80 列宽处截断附 `…`,完整内容看 `--json`。
 - 多 ContentBlock 的 round(含 thinking 等非 text 块)用 `+ <type>` 标注:`**[#3 assistant +thinking +tool_use]** ...`。
-- `links` 列表里 `(comment)` 仅在有 comment 时显示。`ttl 0` 是默认 link,展示时**省略 ttl 字段**(它跟随对象生死)。`ttl > 0` 是活跃用户 link。`expired` 即 `ttl < 0`。
+- `links` 列表里方向用 `TO` / `FROM`:被读对象是 link 的 source 时显示 `TO`,被读对象是 target 时显示 `FROM`。
+- `(type)` 后用 `· expired` 标记已过期的用户 link;**TTL 不在 Markdown 输出里**——人类读者关心"还在不在",由是否出现 + `expired` 标签表达;完整 ttl 数值看 `--json`。
+- `(comment)` 仅在有 comment 时显示,作为 `· <comment>` 跟在后面。
 
 ## JSON(`--json`)
 
