@@ -36,10 +36,6 @@ memory-talk view sess_187c6576 --json
 - FROM `sess_abc123` (session)
 - TO `card_01jzp3nq` (card) · 选型后果——NFS 上踩的坑
 - TO `card_01jzold99` (card · expired) · 早期失败的 ChromaDB 方案
-
----
-
-read_at: `2026-04-20T14:32:05Z`
 ````
 
 ### session
@@ -66,13 +62,13 @@ read_at: `2026-04-20T14:32:05Z`
 
 ---
 
-**Source:** claude-code · read_at: `2026-04-20T14:32:05Z`
+**Source:** claude-code
 ````
 
 > **TODO(code):** 当前 `service/cards.py` 里 default link 的方向是 `card → session`,跟本文档示例的 `session → card` 直觉序**相反**。详见 [search.md](search.md) 同款 TODO。
 
 约定:
-- 主体内容(`Summary` / `Tags` / `rounds` / `links` 等)放上方,弱信号元信息(`Source`、`read_at`)用 `---` 分隔后放底部。Source 在同一份 corpus 里大都重复,放底部不干扰扫读;read_at 是审计戳,人类读者基本不需要主动看它。
+- 主体内容(`Summary` / `Tags` / `rounds` / `links` 等)放上方;弱信号元信息(session 的 `Source`)用 `---` 分隔后放底部。card 没有 footer 信息,直接没 `---`。`read_at` 在 Markdown 输出里**不展示** —— 人类读者基本不会主动看它,需要时走 `--json`。
 - 单条 round 文本太长时,在 80 列宽处截断附 `…`,完整内容看 `--json`。
 - 多 ContentBlock 的 round(含 thinking 等非 text 块)用 `+ <type>` 标注:`**[#3 assistant +thinking +tool_use]** ...`。
 - `links` 列表里方向以**被读对象的视角**写出:
