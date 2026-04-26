@@ -9,46 +9,104 @@
 启动 API 服务（后台守护进程）。
 
 ```bash
-memory-talk server start [--data-root PATH]
+memory-talk server start [--data-root PATH] [--json]
 ```
 
-输出：
+### Text（默认）
+
+```
+started · pid=12345 · port=7788
+```
+
+启动失败：
+
+```
+error: server failed to start (exit_code=2)
+[memory-talk] embedding startup check failed: openai embedder: ...
+```
+（错误细节到 stderr，exit 1）
+
+已在运行：
+
+```
+already_running · pid=12345 · port=7788
+```
+
+### JSON（`--json`）
+
 ```json
 {"status": "started", "pid": 12345, "port": 7788}
 ```
 
-启动失败时（如端口占用、依赖缺失）：
 ```json
-{"status": "failed", "exit_code": 1, "error": "...错误信息..."}
+{"status": "failed", "exit_code": 2, "error": "..."}
 ```
 
-已在运行时：
 ```json
 {"status": "already_running", "pid": 12345, "port": 7788}
 ```
 
 ## server stop
 
-停止 API 服务。
-
 ```bash
-memory-talk server stop [--data-root PATH]
+memory-talk server stop [--data-root PATH] [--json]
 ```
 
-输出：
+### Text
+
+```
+stopped · pid=12345
+```
+
+未运行：
+
+```
+not_running
+```
+
+### JSON
+
 ```json
 {"status": "stopped", "pid": 12345}
 ```
 
-## server status
-
-检查 API 服务状态。直接调 API，能连上就是 running（同时返回数据统计），连不上就是 not_running。
-
-```bash
-memory-talk server status [--data-root PATH]
+```json
+{"status": "not_running"}
 ```
 
-运行中（含数据统计）：
+## server status
+
+直接调 API，能连上就是 running（同时返回数据统计），连不上就是 not_running。
+
+```bash
+memory-talk server status [--data-root PATH] [--json]
+```
+
+### Text（运行中）
+
+```
+status:    running
+data_root: /home/user/.memory-talk
+settings:  /home/user/.memory-talk/settings.json
+sessions:  12
+cards:     47
+links:     23
+searches:  108
+embedding: dummy
+vector:    lancedb
+relation:  sqlite
+```
+
+### Text（未运行）
+
+```
+status:    not_running
+data_root: /home/user/.memory-talk
+settings:  /home/user/.memory-talk/settings.json
+```
+
+### JSON
+
 ```json
 {
   "data_root": "/home/user/.memory-talk",
@@ -61,15 +119,6 @@ memory-talk server status [--data-root PATH]
   "vector_provider": "lancedb",
   "relation_provider": "sqlite",
   "embedding_provider": "dummy"
-}
-```
-
-未运行：
-```json
-{
-  "data_root": "/home/user/.memory-talk",
-  "settings_path": "/home/user/.memory-talk/settings.json",
-  "status": "not_running"
 }
 ```
 

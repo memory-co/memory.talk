@@ -10,10 +10,10 @@ Link 分两种：
 ## link create
 
 ```bash
-memory-talk link create '<json>'
+memory-talk link create '<json>' [--json]
 ```
 
-输入 JSON（v1 风格，回归显式 type）：
+输入 JSON：
 
 ```json
 {
@@ -46,8 +46,26 @@ memory-talk link create '<json>'
 
 ## 输出
 
+### Text（默认）
+
+```
+ok: linked card_01jz8k2m → sess_187c6576 · ttl=14d
+```
+
+错误：
+
+```
+error: self-loop not allowed
+```
+
+### JSON（`--json`）
+
 ```json
 {"status": "ok", "link_id": "link_01jzq7rm", "ttl": 1209600}
+```
+
+```json
+{"error": "self-loop not allowed"}
 ```
 
 - `ttl` = 写入时刻的 `settings.ttl.link.initial`（默认 1209600 秒 = 14 天）。

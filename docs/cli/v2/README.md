@@ -45,15 +45,24 @@ v2 所有对外的主键都带类型前缀：
 
 ## 输出格式
 
-所有命令支持：
+所有命令支持两种输出，**默认人类可读**：
 
-- **JSON**（默认）：供 LLM 或脚本消费，中文直接输出（`ensure_ascii=False`）
-- **Text**：`--format text` 或 `-f text`，供人类阅读
+- **Text（默认）**：紧凑、对齐、可一眼扫读。
+- **JSON**：加 `--json`。脚本 / LLM / pipe 用这个，永远 stdout，UTF-8 直出（`ensure_ascii=False`）。
 
 ```bash
-memory-talk server status              # JSON 输出（默认）
-memory-talk server status -f text      # 人类可读输出
+memory-talk server status            # 默认 text
+memory-talk server status --json     # JSON
 ```
+
+错误也走同一契约：
+
+| 模式 | 成功 | 失败 |
+|------|------|------|
+| Text（默认）| 行级输出到 stdout | `error: <message>` 到 **stderr**，exit 1 |
+| `--json` | JSON 到 stdout | `{"error": "..."}` 到 **stdout**，exit 1 |
+
+这样脚本可以稳定 `--json` + 解析 stdout 拿到结构化结果；交互场景看 stderr 的错误消息更直接。
 
 配置文件 `~/.memory-talk/settings.json`，不存在时使用默认值。详见 [settings.md](../../structure/v2/settings.md)。
 

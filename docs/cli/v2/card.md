@@ -3,7 +3,7 @@
 创建一张 Talk-Card。v2 里 card 是一级命令，**只负责写入**——读取一律通过 `view <card_id>`。
 
 ```bash
-memory-talk card '<json>'
+memory-talk card '<json>' [--json]
 ```
 
 输入 JSON 结构：
@@ -45,8 +45,26 @@ memory-talk card '<json>'
 
 ## 输出
 
+### Text（默认）
+
+```
+ok: created card_01jz8k2m
+```
+
+错误（`error: ...` 到 stderr，exit 1）：
+
+```
+error: index 99 out of range for session sess_abc123
+```
+
+### JSON（`--json`）
+
 ```json
 {"status": "ok", "card_id": "card_01jz8k2m"}
+```
+
+```json
+{"error": "index 99 out of range for session sess_abc123"}
 ```
 
 返回的 `card_id` 就是**以后所有地方用的读取凭据**——直接喂给 `view` / `log` / `link create` 即可。

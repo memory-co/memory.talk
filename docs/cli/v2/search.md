@@ -3,7 +3,7 @@
 v2 主检索入口。hybrid FTS + 向量检索 + 元数据 DSL 过滤，结果分两支返回（cards 和 sessions）。命中的 `card_id` / `session_id` 直接返回给调用方——拿到就能喂给 `view` / `log` / `tag` / `link create`。
 
 ```bash
-memory-talk search <query> [--where DSL] [--top-k N]
+memory-talk search <query> [--where DSL] [--top-k N] [--json]
 ```
 
 | 参数 | 默认 | 说明 |
@@ -11,8 +11,36 @@ memory-talk search <query> [--where DSL] [--top-k N]
 | `<query>` | — | 检索文本。可为空字符串（配合 `--where` 做纯元数据过滤） |
 | `--where`, `-w` | 无 | 元数据过滤 DSL |
 | `--top-k` | `settings.search.default_top_k`（默认 10） | 每支（cards / sessions）的上限 |
+| `--json` | 关 | 输出 JSON 而非默认 text |
 
-## 输出
+## 输出（Text，默认）
+
+```
+search: LanceDB 选型 · search_id=sch_01K7XABC
+
+cards (2):
+  1. card_01jz8k2m  score=0.031
+     选定 LanceDB 做向量存储
+     > ...**LanceDB**...
+     2 links → sess_f7a3e1, card_01jzp3nq (选型后果, ttl=21d)
+
+  2. card_01jzp3nq  score=0.019
+     LanceDB 落地后的踩坑清单
+     > ... NFS 上 mmap **LanceDB** 文件 ...
+     1 link → sess_8eba9e
+
+sessions (1):
+  1. sess_187c6576  score=0.029 · claude-code · tags=[decision]
+     > ...讨论 **LanceDB** 零依赖...
+     1 link → card_01jz8k2m (从此对话提取)
+```
+
+约定：
+- `score` 三位小数。命中行内 `**...**` 是 snippet 里 highlight 标记，跟 API 返回保持一致。
+- `links` 行展示前 N（默认 3）个，超出折叠为 `+N more`。`comment` / `ttl` 仅当存在时显示。`ttl=expired` 表示已过期的用户 link。
+- 空命中：`cards (0):` 行后空一行，不打"no results"之类的占位文字。
+
+## 输出（`--json`）
 
 ```json
 {
@@ -78,6 +106,17 @@ memory-talk search "" -w 'created_at > "2026-04-01"'
 memory-talk search "bug" -w 'session_id = "sess_abc123"'
 ```
 
-DSL 解析失败返回 400 错误，带 `DSL parse error` 信息。
+DSL 解析失败：
+
+```
+error: DSL parse error: unknown field 'foo'
+```
+（exit 1，错误到 stderr）
+
+`--json` 模式下：
+
+```json
+{"error": "DSL parse error: unknown field 'foo'"}
+```
 
 search 输入 / 输出 / 落库结构的完整定义见 [search-result.md](../../structure/v2/search-result.md)。

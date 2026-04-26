@@ -3,11 +3,12 @@
 从 Claude Code / Codex 等平台的本地会话文件中发现并导入 session。阻塞执行，结束后一次性返回统计。
 
 ```bash
-memory-talk sync [--data-root PATH]
+memory-talk sync [--data-root PATH] [--json]
 ```
 
 参数：
 - `--data-root` 可选，指定数据根目录（默认 `~/.memory-talk`）。
+- `--json` 输出 JSON 而非默认 text。
 
 行为：
 1. 对每个已注册的 adapter（当前为 claude-code）调用 `discover()`，列出平台本地的 session 文件。
@@ -28,6 +29,16 @@ sync 的数据合并只向前追加，不回写已有 round：
 
 ## 输出
 
+### Text（默认）
+
+```
+ok: discovered=42 · imported=3 · skipped=39 · appended=2 · overwrite_warnings=1 · errors=0
+```
+
+`errors > 0` 时，每个失败文件的错误已经逐条到 stderr（一行一条）。
+
+### JSON（`--json`）
+
 ```json
 {
   "status": "ok",
@@ -40,10 +51,11 @@ sync 的数据合并只向前追加，不回写已有 round：
 }
 ```
 
+字段：
 - `imported`：首次导入的 session 数。
 - `appended`：触发 `rounds_appended` 的 session 数（哈希变了、纯追加新 round）。
 - `overwrite_warnings`：检测到已有 round 被平台覆写、触发告警的 session 数（被跳过的 round 数不体现在 `appended` 里）。
-- `errors` 大于 0 时，失败文件的错误信息逐条打印到 stderr（JSON lines）。
+- `errors > 0` 时，失败文件的错误信息逐条打印到 stderr（text 模式行级、JSON 模式 JSON lines）。
 
 导入后新 session 立即可被 `search` 命中；向量侧会在后台异步写入，几秒内生效。
 

@@ -3,16 +3,49 @@
 查一个 card 或 session 的**全生命周期**——什么时候被创建 / 导入、什么时候被打 tag、什么时候被 link、什么时候有 card 从它身上提取、什么时候 sync 追加了新 round……按时间顺序排列。
 
 ```bash
-memory-talk log <id>
+memory-talk log <id> [--json]
 ```
 
 `<id>` 必须是 `card_<...>` 或 `sess_<...>`——服务端按前缀自动判型。
 
 `log` 本身是纯只读的元数据查询，不刷新 TTL、不产生事件——事件流**只记录真实的写行为**。读（search、view、log 自身）不入 log；TTL 归零是被动结果，也不入 log。幂等 no-op（如 `tag add` 时该 tag 已存在）**不算写行为**，不产生事件。
 
-## 输出
+## 输出（Text，默认）
 
 事件按时间升序排列（最老的在前），方便当成"故事线"从上往下读。
+
+### session
+
+```
+sess_187c6576 (7 events)
+
+  2026-04-10T14:30:00Z  imported           source=claude-code · round_count=20
+  2026-04-11T09:00:00Z  rounds_appended    indexes 21-28 (+8)
+  2026-04-15T11:20:00Z  tag_added          decision
+  2026-04-15T11:20:00Z  tag_added          project:memory-talk
+  2026-04-16T10:30:00Z  card_extracted     card_01jz8k2m · indexes=11-15
+  2026-04-17T14:02:33Z  linked             ←incoming card_01jzp3nq (后续踩了 NFS 的坑) · ttl=14d
+  2026-04-19T08:00:00Z  tag_removed        decision
+```
+
+### card
+
+```
+card_01jz8k2m (2 events)
+
+  2026-04-16T10:30:00Z  created            选定 LanceDB 做向量存储 · rounds=sess_abc123/11-15 · 1 default_link · ttl=30d · from sch_01K7XABC
+  2026-04-19T09:05:11Z  linked             →outgoing card_01jzp3nq (替代方案 ChromaDB 的选型讨论) · ttl=14d
+```
+
+约定：
+- 三列对齐：`<UTC ISO 时间>  <kind>  <detail 摘要>`。kind 列宽 18 字符以容纳最长的 `rounds_overwrite_skipped`。
+- `linked` 用 `←incoming` / `→outgoing` 标方向。
+- 摘要里的字段次序固定：先主语（id / 内容），再修饰（comment / ttl / source 等）。
+- 完整 detail 看 `--json`。
+
+## 输出（`--json`）
+
+事件按时间升序排列（最老的在前）。
 
 ### session
 
@@ -135,6 +168,5 @@ memory-talk log <id>
 
 ## 错误
 
-- 非法前缀：400，`invalid id`
-- 未知 id：404
-- id 格式合法但对应对象不存在：404
+- 非法前缀：text 模式 `error: invalid id` 到 stderr，exit 1；JSON 模式 `{"error": "invalid id ..."}`。
+- 未知 / 不存在 id：404，错误同上但消息为 `not found`。

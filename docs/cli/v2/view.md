@@ -3,20 +3,59 @@
 按带前缀的 id 读取 card 或 session——**服务端按 id 前缀自动判型**：`card_*` 走 card 读取，`sess_*` 走 session 读取，其它前缀 400。
 
 ```bash
-memory-talk view <id>
+memory-talk view <id> [--json]
 ```
 
 例：
 
 ```bash
-memory-talk view card_01jz8k2m        # 读取 card
-memory-talk view sess_187c6576        # 读取 session
+memory-talk view card_01jz8k2m            # text 默认
+memory-talk view sess_187c6576 --json
 ```
 
 参数：
 - `<id>` 必须是 `card_<...>` 或 `sess_<...>`。非法前缀或不存在的 id 返回错误。
+- `--json` 输出 JSON。
 
-## 输出
+## 输出（Text，默认）
+
+### card
+
+```
+card_01jz8k2m  ttl=28d  read_at=2026-04-20T14:32:05Z
+选定 LanceDB 做向量存储
+
+rounds (2):
+  [sess_abc123#11 human]     ChromaDB vs LanceDB?
+  [sess_abc123#12 assistant] 推荐 LanceDB 零依赖
+
+links (3):
+  → sess_abc123    (session)
+  → card_01jzp3nq  (card · 选型后果——NFS 上踩的坑) · ttl=21d
+  → card_01jzold99 (card · 早期失败的 ChromaDB 方案) · expired
+```
+
+### session
+
+```
+sess_187c6576  source=claude-code  created=2026-04-10  read_at=2026-04-20T14:32:05Z
+tags: decision, project:memory-talk
+metadata: project=/home/user/myapp
+
+rounds (2):
+  [#1 human]     ChromaDB vs LanceDB?
+  [#2 assistant] 推荐 LanceDB，零依赖嵌入式
+
+links (1):
+  → card_01jz8k2m (card · 从此对话提取) · ttl=14d
+```
+
+约定：
+- 单条 round 文本太长时,在 80 列宽处截断附 `…`,完整内容看 `--json`。
+- 多 ContentBlock 的 round（含 thinking 等非 text 块）用 `+ <type>` 标注:`[#3 assistant +thinking +tool_use] ...`。
+- `links` 里 `(comment)` 仅在有 comment 时显示。`ttl=0` 是默认 link,展示为不带 ttl 字段(因为它跟随对象生死)。`ttl > 0` 是活跃用户 link。`expired` 即 `ttl < 0`。
+
+## 输出（`--json`）
 
 响应体用 `type` 字段标明本次 view 出的是 card 还是 session，对应主体内容放在同名字段下。
 

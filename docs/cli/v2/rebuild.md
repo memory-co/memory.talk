@@ -3,7 +3,7 @@
 从存储根目录下的源文件（`sessions/`、`cards/`、以及 `logs/*.jsonl`）重建 SQLite 行、FTS 索引、向量索引、`search_log`、`event_log`。阻塞执行，跑完一次性返回。
 
 ```bash
-memory-talk rebuild
+memory-talk rebuild [--json]
 ```
 
 适用场景：
@@ -45,19 +45,28 @@ retention：`settings.search.search_log_retention_days > 0` 时，rebuild / sync
 
 ## 输出
 
+### Text（默认）
+
+```
+ok: sessions=12 · cards=47 · searches_replayed=108 · events_replayed=215 · errors=0
+```
+
+### JSON（`--json`）
+
 ```json
 {
   "status": "ok",
   "sessions": 12,
   "cards": 47,
   "searches_replayed": 108,
-  "events_replayed": 215
+  "events_replayed": 215,
+  "errors_count": 0
 }
 ```
 
 ## 注意
 
 - rebuild 本身是 mechanical 操作——不调 LLM、不重新总结 card。
-- 运行期间 API 仍然可用，但 search 返回的结果可能是部分重建的状态，生产环境建议先 `server stop` 再 rebuild 再 `server start`。
+- rebuild 期间 server 进入 `rebuilding` 状态，所有非 `/v2/status` 的请求都会被 503 拦掉（详见 server 中间件）。客户端调用此命令期间应避免并发其它写。
 - 如果 jsonl 日志文件本身丢了，rebuild 只能重建对象，不能重建 search_log / event 流——历史审计就真的没了。建议把 `logs/*/*.jsonl` 纳入常规备份。
 - **对象的 `ttl` / `expires_at` 靠对象文件里的存储状态**——不是从事件流重放出来的。rebuild 不会改变 card / link 的过期状态。

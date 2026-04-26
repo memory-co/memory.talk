@@ -5,7 +5,7 @@
 ## tag add
 
 ```bash
-memory-talk tag add <session_id> <tag> [<tag> ...]
+memory-talk tag add <session_id> <tag> [<tag> ...] [--json]
 ```
 
 例：
@@ -17,7 +17,13 @@ memory-talk tag add sess_187c6576 decision project:memory-talk
 - `<session_id>` 必须是 `sess_<...>`。前缀不对或 session 不存在返回错误。
 - tag 已存在则不重复添加，幂等（log 里也不记重复事件）。
 
-输出：
+### Text（默认）
+
+```
+ok: tags = decision, project:memory-talk
+```
+
+### JSON（`--json`）
 
 ```json
 {"status": "ok", "tags": ["decision", "project:memory-talk"]}
@@ -28,13 +34,25 @@ memory-talk tag add sess_187c6576 decision project:memory-talk
 ## tag remove
 
 ```bash
-memory-talk tag remove <session_id> <tag> [<tag> ...]
+memory-talk tag remove <session_id> <tag> [<tag> ...] [--json]
 ```
 
 - `<session_id>` 必须是 `sess_<...>`。
 - 要移除的 tag 不存在时静默跳过，幂等（log 里也不记）。
 
-输出：
+### Text
+
+```
+ok: tags = project:memory-talk
+```
+
+全 tag 被清空时：
+
+```
+ok: tags = (empty)
+```
+
+### JSON
 
 ```json
 {"status": "ok", "tags": ["project:memory-talk"]}
@@ -47,5 +65,17 @@ memory-talk tag remove <session_id> <tag> [<tag> ...]
 | 情况 | 说明 |
 |------|------|
 | `<session_id>` 不以 `sess_` 开头（例如误传 `card_*`） | 400，`type mismatch: tag only applies to sessions` |
-| session 不存在 | 404 |
-| `tags` 参数为空 | 400 |
+| session 不存在 | 404，`not found` |
+| `tags` 参数为空 | Click 阶段就拦截，提示 `Missing argument 'TAGS...'` |
+
+错误展示：
+
+```
+error: type mismatch: tag only applies to sessions
+```
+
+`--json`：
+
+```json
+{"error": "type mismatch: tag only applies to sessions"}
+```
