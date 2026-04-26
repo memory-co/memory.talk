@@ -114,6 +114,25 @@ def fmt_search(resp: dict) -> str:
 
 # ---------- view ----------
 
+def _session_round_body(content: list[dict]) -> str:
+    """Render the text/code blocks of a session round as Markdown.
+
+    Non-text types (thinking, tool_use, tool_result, ...) are not included
+    in the body — their presence is announced via `+<type>` markers in the
+    round header instead.
+    """
+    parts = []
+    for b in content or []:
+        t = b.get("type")
+        text = b.get("text") or ""
+        if t == "text" and text:
+            parts.append(text)
+        elif t == "code" and text:
+            lang = b.get("language") or ""
+            parts.append(f"```{lang}\n{text}\n```")
+    return "\n\n".join(parts)
+
+
 def fmt_view_card(resp: dict) -> str:
     card = resp.get("card") or {}
     out: list[str] = []
@@ -123,23 +142,30 @@ def fmt_view_card(resp: dict) -> str:
         out.append(f"**Summary:** {card['summary']}")
         out.append("")
 
-    rounds = card.get("rounds") or []
-    out.append(f"## rounds ({len(rounds)})")
-    out.append("")
-    for i, r in enumerate(rounds, start=1):
-        sid = r.get("session_id", "")
-        idx = r.get("index", "")
-        role = r.get("role") or ""
-        text = r.get("text") or ""
-        out.append(f"{i}. **[`{sid}`#{idx} {role}]** {text}")
-    out.append("")
-
     links = resp.get("links") or []
     out.append(f"## links ({len(links)})")
     out.append("")
     for link in links:
         out.append(f"- {_link_line(link)}")
     out.append("")
+
+    rounds = card.get("rounds") or []
+    out.append(f"## rounds ({len(rounds)})")
+    out.append("")
+    for i, r in enumerate(rounds):
+        if i > 0:
+            out.append("---")
+            out.append("")
+        sid = r.get("session_id", "")
+        idx = r.get("index", "")
+        role = r.get("role") or ""
+        thinking_marker = " +thinking" if r.get("thinking") else ""
+        out.append(f"**[`{sid}`#{idx} {role}{thinking_marker}]**")
+        out.append("")
+        body = (r.get("text") or "").rstrip()
+        if body:
+            out.append(body)
+            out.append("")
 
     return _join(*out)
 
@@ -163,18 +189,9 @@ def fmt_view_session(resp: dict) -> str:
         for k, v in metadata.items():
             out.append(f"- {k}: `{v}`")
         out.append("")
-
-    rounds = sess.get("rounds") or []
-    out.append(f"## rounds ({len(rounds)})")
-    out.append("")
-    for r in rounds:
-        idx = r.get("index", "")
-        role = r.get("role") or ""
-        text = "".join(b.get("text") or "" for b in (r.get("content") or []) if b.get("type") in ("text", "code"))
-        extras = sorted({b.get("type") for b in (r.get("content") or []) if b.get("type") not in ("text", "code")})
-        extras_tag = "".join(f" +{e}" for e in extras if e)
-        out.append(f"{r.get('index') or idx}. **[#{idx} {role}{extras_tag}]** {text}")
-    out.append("")
+    if sess.get("source"):
+        out.append(f"**Source:** {sess['source']}")
+        out.append("")
 
     links = resp.get("links") or []
     out.append(f"## links ({len(links)})")
@@ -183,11 +200,28 @@ def fmt_view_session(resp: dict) -> str:
         out.append(f"- {_link_line(link)}")
     out.append("")
 
-    if sess.get("source"):
-        out.append("---")
+    rounds = sess.get("rounds") or []
+    out.append(f"## rounds ({len(rounds)})")
+    out.append("")
+    for i, r in enumerate(rounds):
+        if i > 0:
+            out.append("---")
+            out.append("")
+        idx = r.get("index", "")
+        role = r.get("role") or ""
+        content = r.get("content") or []
+        extras: list[str] = []
+        for b in content:
+            t = b.get("type")
+            if t and t not in ("text", "code") and t not in extras:
+                extras.append(t)
+        extras_marker = "".join(f" +{e}" for e in extras)
+        out.append(f"**[#{idx} {role}{extras_marker}]**")
         out.append("")
-        out.append(f"**Source:** {sess['source']}")
-        out.append("")
+        body = _session_round_body(content).rstrip()
+        if body:
+            out.append(body)
+            out.append("")
 
     return _join(*out)
 

@@ -66,6 +66,8 @@ db = lancedb.connect("./data")
 
 - project: `/home/user/myapp`
 
+**Source:** claude-code
+
 ## links (1)
 
 - TO `card_01jz8k2m` (card) · 从此对话提取
@@ -81,16 +83,12 @@ ChromaDB vs LanceDB?
 **[#2 assistant]**
 
 推荐 LanceDB,零依赖嵌入式。
-
----
-
-**Source:** claude-code
 ````
 
 > **TODO(code):** 当前 `service/cards.py` 里 default link 的方向是 `card → session`,跟本文档示例的 `session → card` 直觉序**相反**。详见 [search.md](search.md) 同款 TODO。
 
 约定:
-- 顺序固定:**头部元数据**(`Summary` / `Created` / `Tags` / `Metadata`)→ **`## links`** → **`## rounds`** → **footer**(session 的 `Source`,用 `---` 分隔)。card 没有 footer。
+- 顺序固定:**头部元数据**(`Summary` 或 `Created` / `Tags` / `Metadata` / `Source`)→ **`## links`** → **`## rounds`**。每段元数据之间用空行隔开;rounds 是最后一段,后面没有 footer。session 的 `Source` 跟其它元数据并排放头部(放最末尾会被长 rounds 推得看不见)。
 - `## rounds` 放最后,因为单条 round 的内容里**经常本身就是 Markdown**(代码块、列表、引用、子标题等),放在中间会跟外层结构混在一起难读。挪到最后等于"先看元数据 + 关系图,再看内容正文"。
 - 每个 round 之间用 `---` 分隔。round 内部:第一行是 `**[<round 头>]**`(card:`[\`<sess_id>\`#<idx> <role>]`;session:`[#<idx> <role>]`),空一行后是 round 正文(原样输出 content 文本,可以含任意 Markdown)。
 - 多 ContentBlock 的 round(含 thinking 等非 text 块)用 `+ <type>` 标注:`**[#3 assistant +thinking +tool_use]**`。正文里只渲染 text/code 块的内容,其他类型的存在用头部 `+xxx` 标记表示。
