@@ -14,7 +14,8 @@ MEMORY_TALK_CLI_VERSION=v2 memory-talk --help
 
 ```
 memory-talk
-├── search <query> [--where DSL] [--top-k N]  # 主检索入口，返回带前缀的 card_id / session_id
+├── search <query> [--where DSL] [--top-k N]  # 有意识检索:AI 主动查记忆
+├── recall <session_id> <prompt>              # 无意识召回:hook 阶段自动注入 top-K 极简 cards
 ├── view <id>                                 # 读取 card 或 session（按 id 前缀自动判型）
 ├── log <id>                                  # 查一个 card / session 的全生命周期事件
 ├── card <json>                               # 创建 card
@@ -27,7 +28,14 @@ memory-talk
 └── server start | stop | status              # 管理本地 API 服务
 ```
 
-对比 v1，v2 **不再包含**：`recall`、`session`（整个子命令树下线）、`card read` / `card get / list`、`link list`。读取一律走 `search` → `view <id>`；card / session 共用同一个读取入口，按前缀自动判型。tag 从 v1 的 `session tag` 提升为一级命令，依然只作用于 session。
+对比 v1，v2 **不再包含**：v1 的旧 `recall`(语义跟 search 重合的另一种主动查询)、`session`（整个子命令树下线）、`card read` / `card get / list`、`link list`。读取一律走 `search` → `view <id>`；card / session 共用同一个读取入口，按前缀自动判型。tag 从 v1 的 `session tag` 提升为一级命令，依然只作用于 session。
+
+v2 的 `search` 和 `recall` 都是 AI 触发的,差别在**意识形态**:
+
+- **`search` = 有意识检索**:AI 在思考过程中主动决定"我要查一下记忆",带具体 query 和过滤条件。返回完整结构(snippets / links / tags / source 等)供 AI 推理。
+- **`recall` = 无意识召回**:在 harness hook 阶段被自动调用,把当前 user prompt 喂给 recall,服务端从记忆库里挑 top-K 最相关的 cards,以**极简**(只 id + summary)形式注入 LLM context,模拟"看到 prompt 时脑子里浮现的相关记忆"。带 `session_id` 用于跨多次召回去重。
+
+详见 [search.md](search.md) 与 [recall.md](recall.md)。两者建在同一套 hybrid FTS+vector 检索基础上。
 
 ## ID 前缀约定
 
