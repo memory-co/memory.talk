@@ -22,36 +22,55 @@ memory-talk search <query> [--where DSL] [--top-k N] [--json]
 
 ## cards (2)
 
-### 1. `card_01jz8k2m` · score 0.031
+### 1. CARD `card_01jz8k2m`
 
-**选定 LanceDB 做向量存储**
+**Summary:** 选定 LanceDB 做向量存储
+
+**Snippets:**
 
 > ...**LanceDB**...
 
-links: `sess_f7a3e1`, `card_01jzp3nq` (选型后果, ttl 21d)
+**Links:**
 
-### 2. `card_01jzp3nq` · score 0.019
+- → `sess_f7a3e1` (session)
+- → `card_01jzp3nq` (card) · 选型后果 · ttl 21d
 
-**LanceDB 落地后的踩坑清单**
+### 2. CARD `card_01jzp3nq`
+
+**Summary:** LanceDB 落地后的踩坑清单
+
+**Snippets:**
 
 > ... NFS 上 mmap **LanceDB** 文件 ...
 
-links: `sess_8eba9e`
+**Links:**
+
+- → `sess_8eba9e` (session)
 
 ## sessions (1)
 
-### 1. `sess_187c6576` · score 0.029
+### 1. SESSION `sess_187c6576`
 
-claude-code · tags: `decision`
+**Source:** claude-code · **Tags:** `decision`
+
+**Snippets:**
 
 > ...讨论 **LanceDB** 零依赖...
 
-links: `card_01jz8k2m` (从此对话提取)
+**Links:**
+
+- → `card_01jz8k2m` (card) · 从此对话提取
 ````
 
 约定:
-- `score` 三位小数。
-- snippet 段落里 `**...**` 是 highlight 标记,跟 API 返回保持一致。
+- 每个结果的标题形如 `### N. CARD \`<card_id>\`` / `### N. SESSION \`<sess_id>\``,大写类型字样 + 反引号包住 id,渲染后类型和 id 都最显眼,不用再扫细节。
+- 每个结果下面都用 **加粗 inline 标签**(`**Summary:**` / `**Snippets:**` / `**Links:**` 等)分小节,渲染前后都好读 —— 标签自带分段语义,不依赖颜色和排版。
+- card 的元信息是 `Summary`(必有);session 的元信息是 `Source` + `Tags`(放一行,中点分隔)。
+- `Snippets` 段下每条 snippet 是一段独立 blockquote(`> ...`),多条之间空一行。`**...**` 是 highlight 标记,跟 API 返回保持一致。
+- `Links` 段是无序列表,每行 `→ \`<id>\` (type) · <comment 若有> · ttl <时间 若有>`。`ttl=0` 是默认 link,**不显示 ttl 字段**(它跟随对象生死)。`expired` 即已过期的用户 link(只在 view 里出现,search 会过滤掉)。
+- 链接列表多于 3 条折叠为 `+N more` 单独一行。
+- 没有 links 时**整段省略**,不打"*(none)*"占位。
+- `score` 不在 Markdown 输出里 —— hybrid RRF 的分数对人类读者价值低,反而干扰扫读。仍然保留在 `--json` 响应里供脚本 / 调试用。
 - `links` 行展示前 3 个,超出折叠为 `+N more`。`comment` / `ttl` 仅当存在时显示。`ttl=expired` 表示已过期的用户 link。
 - 空命中桶仍然出 header(`## cards (0)`),不打"no results"占位文字。
 
