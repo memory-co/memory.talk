@@ -26,8 +26,6 @@ memory-talk view sess_187c6576 --json
 
 **Summary:** 选定 LanceDB 做向量存储
 
-read_at: `2026-04-20T14:32:05Z`
-
 ## rounds (2)
 
 1. **[`sess_abc123`#11 human]** ChromaDB vs LanceDB?
@@ -35,9 +33,13 @@ read_at: `2026-04-20T14:32:05Z`
 
 ## links (3)
 
-- TO `sess_abc123` (session)
+- FROM `sess_abc123` (session)
 - TO `card_01jzp3nq` (card) · 选型后果——NFS 上踩的坑
 - TO `card_01jzold99` (card · expired) · 早期失败的 ChromaDB 方案
+
+---
+
+read_at: `2026-04-20T14:32:05Z`
 ````
 
 ### session
@@ -45,7 +47,7 @@ read_at: `2026-04-20T14:32:05Z`
 ````markdown
 # SESSION `sess_187c6576`
 
-**Source:** claude-code · **Created:** `2026-04-10` · read_at: `2026-04-20T14:32:05Z`
+**Created:** `2026-04-10`
 
 **Tags:** `decision`, `project:memory-talk`
 
@@ -60,13 +62,24 @@ read_at: `2026-04-20T14:32:05Z`
 
 ## links (1)
 
-- FROM `card_01jz8k2m` (card) · 从此对话提取
+- TO `card_01jz8k2m` (card) · 从此对话提取
+
+---
+
+**Source:** claude-code · read_at: `2026-04-20T14:32:05Z`
 ````
 
+> **TODO(code):** 当前 `service/cards.py` 里 default link 的方向是 `card → session`,跟本文档示例的 `session → card` 直觉序**相反**。详见 [search.md](search.md) 同款 TODO。
+
 约定:
+- 主体内容(`Summary` / `Tags` / `rounds` / `links` 等)放上方,弱信号元信息(`Source`、`read_at`)用 `---` 分隔后放底部。Source 在同一份 corpus 里大都重复,放底部不干扰扫读;read_at 是审计戳,人类读者基本不需要主动看它。
 - 单条 round 文本太长时,在 80 列宽处截断附 `…`,完整内容看 `--json`。
 - 多 ContentBlock 的 round(含 thinking 等非 text 块)用 `+ <type>` 标注:`**[#3 assistant +thinking +tool_use]** ...`。
-- `links` 列表里方向用 `TO` / `FROM`:被读对象是 link 的 source 时显示 `TO`,被读对象是 target 时显示 `FROM`。
+- `links` 列表里方向以**被读对象的视角**写出:
+  - `TO \`<id>\` (type) ...` —— 我是 link 的 source(我指向 peer)
+  - `FROM \`<id>\` (type) ...` —— 我是 link 的 target(peer 指向我)
+  
+  Default link 遵循因果序:session 抽出 card → `source=session, target=card`。所以读 card 时 default link 显示 `FROM sess_*`(我从那来),读 session 时显示 `TO card_*`(我抽出去的)。
 - `(type)` 后用 `· expired` 标记已过期的用户 link;**TTL 不在 Markdown 输出里**——人类读者关心"还在不在",由是否出现 + `expired` 标签表达;完整 ttl 数值看 `--json`。
 - `(comment)` 仅在有 comment 时显示,作为 `· <comment>` 跟在后面。
 

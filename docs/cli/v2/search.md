@@ -33,7 +33,7 @@ memory-talk search <query> [--where DSL] [--top-k N] [--json]
 
 **Links:**
 
-- TO `sess_f7a3e1` (session)
+- FROM `sess_f7a3e1` (session)
 - TO `card_01jzp3nq` (card) · 选型后果
 
 ### 2. CARD `card_01jzp3nq`
@@ -46,13 +46,13 @@ memory-talk search <query> [--where DSL] [--top-k N] [--json]
 
 **Links:**
 
-- TO `sess_8eba9e` (session)
+- FROM `sess_8eba9e` (session)
 
 ## sessions (1)
 
 ### 1. SESSION `sess_187c6576`
 
-**Source:** claude-code · **Tags:** `decision`
+**Tags:** `decision`
 
 **Snippets:**
 
@@ -61,15 +61,23 @@ memory-talk search <query> [--where DSL] [--top-k N] [--json]
 
 **Links:**
 
-- FROM `card_01jz8k2m` (card) · 从此对话提取
+- TO `card_01jz8k2m` (card) · 从此对话提取
+
+**Source:** claude-code
 ````
+
+> **TODO(code):** 当前 `service/cards.py` 里 default link 的方向是 `card → session`(card 是 source、session 是 target),跟本文档示例的 `session → card` 直觉序**相反**。需要把 `service/cards.py::CardService.create()` 里 default link 写入处的 `source/target` 对调,以及对应测试里 `source_type/target_type` 的断言。改完后本文档示例的 `TO/FROM` 不需要再动。
 
 约定:
 - 每个结果的标题形如 `### N. CARD \`<card_id>\`` / `### N. SESSION \`<sess_id>\``,大写类型字样 + 反引号包住 id,渲染后类型和 id 都最显眼,不用再扫细节。
 - 每个结果下面都用 **加粗 inline 标签**(`**Summary:**` / `**Snippets:**` / `**Links:**` 等)分小节,渲染前后都好读 —— 标签自带分段语义,不依赖颜色和排版。
-- card 的元信息是 `Summary`(必有);session 的元信息是 `Source` + `Tags`(放一行,中点分隔)。
+- card 的元信息是 `Summary`(必有,顶部);session 的"重要元信息"是 `Tags`(顶部),**`Source` 弱信号、放结果末尾**——同一份 corpus 里 Source 大都重复(`claude-code` / `codex` 占绝大多数),扫读时把它放最显眼位置反而干扰。
 - `Snippets` 是一个无序列表(`- ...`),每条 snippet 一行。`**...**` 是 highlight 标记,跟 API 返回保持一致。
-- `Links` 段是无序列表,每行 `TO \`<id>\` (type) · <comment 若有>` 或 `FROM \`<id>\` (type) · <comment 若有>`。`TO` 表示当前对象是 link 的 source,`FROM` 表示当前对象是 target。
+- `Links` 段是无序列表,从被读对象的视角写方向:
+  - `TO \`<id>\` (type) · <comment 若有>` —— 当前对象是 link 的 source(我指向 peer)
+  - `FROM \`<id>\` (type) · <comment 若有>` —— 当前对象是 link 的 target(peer 指向我)
+  
+  Default link 的方向遵循"因果序":session 抽出 card → `source=session, target=card`。所以读 session 时 default link 显示 `TO card_*`(我抽出去的),读 card 时显示 `FROM sess_*`(我从那来)。User-created link 的方向由 `link create` 调用方决定,显示规则同上。
 - **TTL 不在 Markdown 输出里**——人类读者关心"还在不在"而不是"还剩几秒",而"在不在"已经由"是否出现"表达了(过期 link 不在 search 结果里;view 里过期 link 在 type 标签上加 `· expired`)。完整 ttl 看 `--json`。
 - 链接列表多于 3 条折叠为 `+N more` 单独一行。
 - 没有 links 时**整段省略**,不打"*(none)*"占位。
