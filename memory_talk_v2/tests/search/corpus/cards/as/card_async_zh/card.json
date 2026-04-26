@@ -1,0 +1,15 @@
+{
+  "card_id": "card_async_zh",
+  "summary": "异步编程模型详解",
+  "rounds": [
+    {
+      "role": "human",
+      "text": "异步编程模型详解:event loop、协程、await 语义,以及与线程池的协作模式。",
+      "thinking": "",
+      "session_id": "sess_async_zh",
+      "index": 1
+    }
+  ],
+  "created_at": "2026-04-25T00:00:00Z",
+  "expires_at": "2030-04-25T00:00:00Z"
+}

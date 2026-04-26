@@ -1,0 +1,15 @@
+{
+  "card_id": "card_embedded_zh",
+  "summary": "嵌入式系统开发流程",
+  "rounds": [
+    {
+      "role": "human",
+      "text": "嵌入式系统的开发流程,从硬件选型到固件烧录、内存约束、外设驱动的协调,以及实时调度的考量。",
+      "thinking": "",
+      "session_id": "sess_embedded_zh",
+      "index": 1
+    }
+  ],
+  "created_at": "2026-04-25T00:00:00Z",
+  "expires_at": "2030-04-25T00:00:00Z"
+}

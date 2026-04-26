@@ -1,0 +1,1 @@
+{"idx": 1, "round_id": "r1", "parent_id": null, "timestamp": "", "speaker": "user", "role": "human", "content": [{"type": "text", "text": "FTS inverted index implementation notes: tokenizer choice, posting list compression, and how positional info enables phrase queries.", "thinking": null}], "is_sidechain": false, "cwd": null, "usage": null}

@@ -1,0 +1,1 @@
+{"idx": 1, "round_id": "r1", "parent_id": null, "timestamp": "", "speaker": "user", "role": "human", "content": [{"type": "text", "text": "嵌入式系统的开发流程,从硬件选型到固件烧录、内存约束、外设驱动的协调,以及实时调度的考量。", "thinking": null}], "is_sidechain": false, "cwd": null, "usage": null}

@@ -1,0 +1,1 @@
+{"idx": 1, "round_id": "r1", "parent_id": null, "timestamp": "", "speaker": "user", "role": "human", "content": [{"type": "text", "text": "性能监控和告警体系:Prometheus 抓取、Grafana 仪表板、告警规则触发条件,以及告警去重和静默策略,避免告警疲劳。", "thinking": null}], "is_sidechain": false, "cwd": null, "usage": null}

@@ -1,0 +1,1 @@
+{"idx": 1, "round_id": "r1", "parent_id": null, "timestamp": "", "speaker": "user", "role": "human", "content": [{"type": "text", "text": "PostgreSQL deep dive: MVCC internals, vacuum pressure, planner statistics, and how to read EXPLAIN ANALYZE output.", "thinking": null}], "is_sidechain": false, "cwd": null, "usage": null}

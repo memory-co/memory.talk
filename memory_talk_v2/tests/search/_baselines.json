@@ -1,0 +1,10 @@
+{
+  "fts_plus_vector.en_multi_word": 1.0,
+  "fts_plus_vector.en_single_word": 1.0,
+  "fts_plus_vector.zh_multi_word": 1.0,
+  "fts_plus_vector.zh_single_word": 0.9,
+  "pure_fts.en_multi_word": 1.0,
+  "pure_fts.en_single_word": 0.9,
+  "pure_fts.zh_multi_word": 1.0,
+  "pure_fts.zh_single_word": 1.0
+}

@@ -1,0 +1,1 @@
+{"idx": 1, "round_id": "r1", "parent_id": null, "timestamp": "", "speaker": "user", "role": "human", "content": [{"type": "text", "text": "向量索引重建流程:drop 表、清空 SQLite、从文件层重填,最后重建 FTS 倒排索引,全程在 rebuilding 状态下拒绝并发写。", "thinking": null}], "is_sidechain": false, "cwd": null, "usage": null}

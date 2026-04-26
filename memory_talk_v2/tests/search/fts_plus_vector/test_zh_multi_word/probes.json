@@ -1,0 +1,7 @@
+[
+  ["中文 全文 检索 选型",  "card_zh_fts_decision"],
+  ["异步 数据库 连接池",   "card_async_db_pool_zh"],
+  ["向量 索引 重建",       "card_vector_rebuild_zh"],
+  ["代码 评审 流程",       "card_code_review_zh"],
+  ["性能 监控 告警",       "card_perf_monitoring_zh"]
+]

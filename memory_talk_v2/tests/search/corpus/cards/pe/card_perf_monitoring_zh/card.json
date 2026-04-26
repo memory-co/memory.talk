@@ -1,0 +1,15 @@
+{
+  "card_id": "card_perf_monitoring_zh",
+  "summary": "性能监控告警体系",
+  "rounds": [
+    {
+      "role": "human",
+      "text": "性能监控和告警体系:Prometheus 抓取、Grafana 仪表板、告警规则触发条件,以及告警去重和静默策略,避免告警疲劳。",
+      "thinking": "",
+      "session_id": "sess_perf_monitoring_zh",
+      "index": 1
+    }
+  ],
+  "created_at": "2026-04-25T00:00:00Z",
+  "expires_at": "2030-04-25T00:00:00Z"
+}

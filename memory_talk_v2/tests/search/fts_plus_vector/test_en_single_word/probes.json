@@ -1,0 +1,7 @@
+[
+  ["LanceDB",     "card_lancedb"],
+  ["FastAPI",     "card_fastapi_mw"],
+  ["Pinecone",    "card_pinecone"],
+  ["PostgreSQL",  "card_postgres"],
+  ["Kubernetes",  "card_k8s"]
+]

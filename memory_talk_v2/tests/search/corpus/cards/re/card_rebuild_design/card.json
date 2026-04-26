@@ -1,0 +1,15 @@
+{
+  "card_id": "card_rebuild_design",
+  "summary": "Rebuild from file truth design",
+  "rounds": [
+    {
+      "role": "human",
+      "text": "Rebuild from file truth design: SQLite and LanceDB are derived from the JSONL files on disk, so a corruption can be recovered by replaying.",
+      "thinking": "",
+      "session_id": "sess_rebuild_design",
+      "index": 1
+    }
+  ],
+  "created_at": "2026-04-25T00:00:00Z",
+  "expires_at": "2030-04-25T00:00:00Z"
+}

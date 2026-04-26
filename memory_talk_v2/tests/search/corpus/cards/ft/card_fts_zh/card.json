@@ -1,0 +1,15 @@
+{
+  "card_id": "card_fts_zh",
+  "summary": "全文检索引擎对比",
+  "rounds": [
+    {
+      "role": "human",
+      "text": "全文检索引擎对比:Elasticsearch、OpenSearch、LanceDB FTS 的索引结构差异 和运维成本对比。",
+      "thinking": "",
+      "session_id": "sess_fts_zh",
+      "index": 1
+    }
+  ],
+  "created_at": "2026-04-25T00:00:00Z",
+  "expires_at": "2030-04-25T00:00:00Z"
+}

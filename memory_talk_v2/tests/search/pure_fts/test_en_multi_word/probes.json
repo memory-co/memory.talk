@@ -1,0 +1,7 @@
+[
+  ["vector database comparison",   "sess_vector_compare"],
+  ["async python middleware",      "sess_async_middleware"],
+  ["memory talk skill overview",   "sess_memory_talk_intro"],
+  ["FTS inverted index",           "sess_fts_design"],
+  ["rebuild from file truth",      "sess_rebuild_design"]
+]

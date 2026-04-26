@@ -1,0 +1,15 @@
+{
+  "card_id": "card_pinecone",
+  "summary": "Pinecone vector database review",
+  "rounds": [
+    {
+      "role": "human",
+      "text": "Pinecone is a hosted vector database; we reviewed pricing, namespaces, and the tradeoff vs running an embedded engine ourselves.",
+      "thinking": "",
+      "session_id": "sess_pinecone",
+      "index": 1
+    }
+  ],
+  "created_at": "2026-04-25T00:00:00Z",
+  "expires_at": "2030-04-25T00:00:00Z"
+}

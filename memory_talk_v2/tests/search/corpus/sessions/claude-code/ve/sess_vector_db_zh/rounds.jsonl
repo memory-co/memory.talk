@@ -1,0 +1,1 @@
+{"idx": 1, "round_id": "r1", "parent_id": null, "timestamp": "", "speaker": "user", "role": "human", "content": [{"type": "text", "text": "向量数据库综述:对比 LanceDB、Pinecone、Chroma 在嵌入式、托管、开发体验三个维度上的取舍,以及典型应用场景。", "thinking": null}], "is_sidechain": false, "cwd": null, "usage": null}

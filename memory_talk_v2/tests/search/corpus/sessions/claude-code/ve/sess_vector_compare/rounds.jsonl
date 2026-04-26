@@ -1,0 +1,1 @@
+{"idx": 1, "round_id": "r1", "parent_id": null, "timestamp": "", "speaker": "user", "role": "human", "content": [{"type": "text", "text": "Vector database comparison: LanceDB vs Pinecone vs Chroma — embedded, managed, and developer-experience axes; LanceDB wins for our use case.", "thinking": null}], "is_sidechain": false, "cwd": null, "usage": null}

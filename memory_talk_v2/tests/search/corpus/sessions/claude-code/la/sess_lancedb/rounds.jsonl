@@ -1,0 +1,1 @@
+{"idx": 1, "round_id": "r1", "parent_id": null, "timestamp": "", "speaker": "user", "role": "human", "content": [{"type": "text", "text": "LanceDB is a fully managed embedded vector database with built-in FTS support and zero operational overhead.", "thinking": null}], "is_sidechain": false, "cwd": null, "usage": null}

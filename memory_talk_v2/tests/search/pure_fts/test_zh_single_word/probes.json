@@ -1,0 +1,7 @@
+[
+  ["向量数据库",  "sess_vector_db_zh"],
+  ["搜索引擎",    "sess_search_engine_zh"],
+  ["异步编程",    "sess_async_zh"],
+  ["嵌入式",      "sess_embedded_zh"],
+  ["全文检索",    "sess_fts_zh"]
+]

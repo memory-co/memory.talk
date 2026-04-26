@@ -1,0 +1,7 @@
+[
+  ["向量数据库",  "card_vector_db_zh"],
+  ["搜索引擎",    "card_search_engine_zh"],
+  ["异步编程",    "card_async_zh"],
+  ["嵌入式",      "card_embedded_zh"],
+  ["全文检索",    "card_fts_zh"]
+]

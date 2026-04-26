@@ -1,0 +1,1 @@
+{"idx": 1, "round_id": "r1", "parent_id": null, "timestamp": "", "speaker": "user", "role": "human", "content": [{"type": "text", "text": "代码评审流程规范:小步提交、PR 描述模板、必备 reviewer 矩阵,以及合并门禁。", "thinking": null}], "is_sidechain": false, "cwd": null, "usage": null}

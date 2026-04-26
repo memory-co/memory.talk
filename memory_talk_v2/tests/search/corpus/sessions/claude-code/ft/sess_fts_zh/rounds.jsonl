@@ -1,0 +1,1 @@
+{"idx": 1, "round_id": "r1", "parent_id": null, "timestamp": "", "speaker": "user", "role": "human", "content": [{"type": "text", "text": "全文检索引擎对比:Elasticsearch、OpenSearch、LanceDB FTS 的索引结构差异 和运维成本对比。", "thinking": null}], "is_sidechain": false, "cwd": null, "usage": null}

@@ -1,0 +1,7 @@
+[
+  ["中文 全文 检索 选型",  "sess_zh_fts_decision"],
+  ["异步 数据库 连接池",   "sess_async_db_pool_zh"],
+  ["向量 索引 重建",       "sess_vector_rebuild_zh"],
+  ["代码 评审 流程",       "sess_code_review_zh"],
+  ["性能 监控 告警",       "sess_perf_monitoring_zh"]
+]

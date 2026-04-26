@@ -1,0 +1,15 @@
+{
+  "card_id": "card_vector_compare",
+  "summary": "Vector database comparison",
+  "rounds": [
+    {
+      "role": "human",
+      "text": "Vector database comparison: LanceDB vs Pinecone vs Chroma — embedded, managed, and developer-experience axes; LanceDB wins for our use case.",
+      "thinking": "",
+      "session_id": "sess_vector_compare",
+      "index": 1
+    }
+  ],
+  "created_at": "2026-04-25T00:00:00Z",
+  "expires_at": "2030-04-25T00:00:00Z"
+}

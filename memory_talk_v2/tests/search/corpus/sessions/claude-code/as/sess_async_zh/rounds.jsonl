@@ -1,0 +1,1 @@
+{"idx": 1, "round_id": "r1", "parent_id": null, "timestamp": "", "speaker": "user", "role": "human", "content": [{"type": "text", "text": "异步编程模型详解:event loop、协程、await 语义,以及与线程池的协作模式。", "thinking": null}], "is_sidechain": false, "cwd": null, "usage": null}

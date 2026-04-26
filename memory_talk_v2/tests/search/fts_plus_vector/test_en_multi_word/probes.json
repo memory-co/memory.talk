@@ -1,0 +1,7 @@
+[
+  ["vector database comparison",   "card_vector_compare"],
+  ["async python middleware",      "card_async_middleware"],
+  ["memory talk skill overview",   "card_memory_talk_intro"],
+  ["FTS inverted index",           "card_fts_design"],
+  ["rebuild from file truth",      "card_rebuild_design"]
+]

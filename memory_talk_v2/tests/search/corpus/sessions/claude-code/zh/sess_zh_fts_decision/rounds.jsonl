@@ -1,0 +1,1 @@
+{"idx": 1, "round_id": "r1", "parent_id": null, "timestamp": "", "speaker": "user", "role": "human", "content": [{"type": "text", "text": "中文全文检索选型决策:jieba 预分词加 whitespace tokenizer 是当前最稳的组合,兼容 LanceDB FTS,且对查询端的中文切分行为可预测。", "thinking": null}], "is_sidechain": false, "cwd": null, "usage": null}
