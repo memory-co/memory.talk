@@ -1,12 +1,12 @@
-"""Rebuild service — async reconstruct SQLite + LanceDB from file-layer truth."""
-from __future__ import annotations
-import json
-import time
+"""Rebuild service — async reconstruct SQLite + LanceDB from file-layer truth.
 
-import aiofiles
+All file IO routes through the per-domain Stores (which own Storage). The
+service is provider-agnostic: same code path works whether the underlying
+Storage is local FS or anything else implementing the protocol.
+"""
+from __future__ import annotations
 
 from memory_talk_v2.config import Config
-from memory_talk_v2.provider import files as F
 from memory_talk_v2.provider.embedding import Embedder
 from memory_talk_v2.provider.lancedb import LanceStore
 from memory_talk_v2.repository import SQLiteStore
@@ -52,31 +52,20 @@ class RebuildService:
         await self.vectors.drop_sessions()
 
         sessions_count = 0
-        for sess_dir in F.iter_session_dirs(self.config.sessions_dir):
-            meta_path = sess_dir / "meta.json"
-            rounds_path = sess_dir / "rounds.jsonl"
-            if not meta_path.exists():
-                continue
+        for source, session_id in await self.db.sessions.iter_keys():
             try:
-                async with aiofiles.open(meta_path, "r", encoding="utf-8") as f:
-                    meta = json.loads(await f.read())
-            except json.JSONDecodeError:
+                meta = await self.db.sessions.read_meta(source, session_id)
+            except Exception:
                 errors_count += 1
                 continue
-            session_id = meta.get("session_id") or sess_dir.name
-            source = meta.get("source") or sess_dir.parent.parent.name
-            rounds_from_file: list[dict] = []
-            if rounds_path.exists():
-                async with aiofiles.open(rounds_path, "r", encoding="utf-8") as f:
-                    text = await f.read()
-                for line in text.splitlines():
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        rounds_from_file.append(json.loads(line))
-                    except json.JSONDecodeError:
-                        errors_count += 1
+            if meta is None:
+                continue
+
+            try:
+                rounds_from_file = await self.db.sessions.read_rounds_file(source, session_id)
+            except Exception:
+                errors_count += 1
+                rounds_from_file = []
 
             await self.db.sessions.upsert(
                 session_id=session_id, source=source,
@@ -92,7 +81,7 @@ class RebuildService:
             sessions_count += 1
 
         cards_count = 0
-        async for card in F.iter_cards(self.config.cards_dir):
+        async for card in self.db.cards.iter_docs():
             try:
                 await self.db.cards.insert(
                     card_id=card["card_id"],
@@ -109,7 +98,7 @@ class RebuildService:
             await self.vectors.add_card(card["card_id"], emb_text, vector)
             cards_count += 1
 
-        async for link in F.iter_links(self.config.links_dir):
+        async for link in self.db.links.iter_docs():
             try:
                 await self.db.links.insert(
                     link_id=link["link_id"],
@@ -122,31 +111,15 @@ class RebuildService:
             except Exception:
                 errors_count += 1
 
-        searches_replayed = 0
-        if self.config.search_log_dir.exists():
-            for jsonl in sorted(self.config.search_log_dir.glob("*.jsonl")):
-                async with aiofiles.open(jsonl, "r", encoding="utf-8") as f:
-                    text = await f.read()
-                for line in text.splitlines():
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        rec = json.loads(line)
-                        await self.db.search_log.insert(
-                            search_id=rec["search_id"], query=rec.get("query") or "",
-                            where_dsl=rec.get("where"), top_k=int(rec.get("top_k") or 0),
-                            created_at=rec.get("created_at") or "",
-                            response_json=json.dumps(rec, ensure_ascii=False),
-                        )
-                        searches_replayed += 1
-                    except Exception:
-                        errors_count += 1
+        searches_replayed, replay_errors = await self.db.search_log.replay_files()
+        errors_count += replay_errors
 
         await self.vectors.ensure_fts_index("cards", replace=True)
         await self.vectors.ensure_fts_index("sessions", replace=True)
 
-        self._apply_retention()
+        await self.db.search_log.apply_retention(
+            self.config.settings.search.search_log_retention_days
+        )
 
         return RebuildResponse(
             status="ok",
@@ -155,12 +128,3 @@ class RebuildService:
             searches_replayed=searches_replayed,
             errors_count=errors_count,
         )
-
-    def _apply_retention(self) -> None:
-        days = self.config.settings.search.search_log_retention_days
-        if days <= 0:
-            return
-        cutoff = time.time() - days * 86400
-        for p in list(self.config.search_log_dir.glob("*.jsonl")):
-            if p.stat().st_mtime < cutoff:
-                p.unlink()

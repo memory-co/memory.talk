@@ -44,9 +44,10 @@ async def test_search_returns_both_buckets_and_persists(services):
     assert r.cards.results[0].summary.startswith("selected")
 
     assert (await services.db.search_log.count()) == 1
-    files = list(services.search_jsonl.iter_files())
+    files = await services.storage.list_subkeys("search_log")
+    files = [k for k in files if k.endswith(".jsonl")]
     assert len(files) == 1
-    content = files[0].read_text().strip()
+    content = (await services.storage.read_text(files[0])).strip()
     assert "LanceDB" in content
 
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 from memory_talk_v2.config import Config
-from memory_talk_v2.provider import files as F
 from memory_talk_v2.provider.embedding import Embedder
 from memory_talk_v2.provider.lancedb import LanceStore
 from memory_talk_v2.repository import SQLiteStore
@@ -163,7 +162,7 @@ class CardService:
             "created_at": created_at, "expires_at": expires_at,
         }
 
-        await F.write_card(self.config.cards_dir, card_doc)
+        await self.db.cards.write_doc(card_doc)
         await self.db.cards.insert(card_id, summary, expanded_rounds, created_at, expires_at)
 
         default_links: list[dict] = []
@@ -174,7 +173,7 @@ class CardService:
                 "target_id": sid, "target_type": "session",
                 "comment": None, "expires_at": None, "created_at": created_at,
             }
-            await F.write_link(self.config.links_dir, link_doc)
+            await self.db.links.write_doc(link_doc)
             await self.db.links.insert(
                 link_id=link_id, source_id=card_id, source_type="card",
                 target_id=sid, target_type="session", comment=None,
@@ -256,7 +255,7 @@ class CardService:
             raise CardServiceError("invalid card_id prefix")
         if (await self.db.cards.get(card_id)) is None:
             raise CardNotFound(f"card not found: {card_id}")
-        events = await F.read_card_events(self.config.cards_dir, card_id)
+        events = await self.db.cards.read_events(card_id)
         events.sort(key=lambda e: e["at"])
         return LogResponse(
             type="card",

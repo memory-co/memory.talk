@@ -17,8 +17,8 @@ from memory_talk_v2.service import (
     CardService, EventWriter, LinkService, RebuildService,
     SearchService, SessionService,
 )
-from memory_talk_v2.provider.jsonl_writer import DatedJsonlWriter
 from memory_talk_v2.provider.lancedb import LanceStore
+from memory_talk_v2.provider.storage import LocalStorage
 from memory_talk_v2.repository import SQLiteStore
 
 
@@ -35,11 +35,11 @@ def create_app(config: Config | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # Async startup — open DB, LanceDB, probe embedding, wire services.
-        db = await SQLiteStore.create(config.db_path)
+        storage = LocalStorage(config.data_root)
+        db = await SQLiteStore.create(config.db_path, storage)
         vectors = await LanceStore.create(config.vectors_dir, dim=config.settings.embedding.dim)
         embedder = get_embedder(config)
-        search_jsonl = DatedJsonlWriter(config.search_log_dir)
-        events = EventWriter(config, db)
+        events = EventWriter(db)
 
         try:
             await validate_embedder(config)
@@ -48,10 +48,10 @@ def create_app(config: Config | None = None) -> FastAPI:
             raise SystemExit(2) from e
 
         app.state.config = config
+        app.state.storage = storage
         app.state.db = db
         app.state.vectors = vectors
         app.state.embedder = embedder
-        app.state.search_jsonl = search_jsonl
         app.state.sessions = SessionService(
             config=config, db=db, vectors=vectors, events=events,
         )
@@ -61,7 +61,6 @@ def create_app(config: Config | None = None) -> FastAPI:
         app.state.links = LinkService(config=config, db=db, events=events)
         app.state.search = SearchService(
             config=config, db=db, vectors=vectors, embedder=embedder,
-            search_jsonl=search_jsonl,
         )
         app.state.rebuild = RebuildService(
             config=config, db=db, vectors=vectors, embedder=embedder,

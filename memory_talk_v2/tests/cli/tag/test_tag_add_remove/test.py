@@ -36,9 +36,9 @@ async def _run_remove(cli_env, sid: str, *tags: str) -> tuple[int, dict]:
 
 
 async def _session_events(cli_env, sid: str) -> list[dict]:
-    from memory_talk_v2.provider import files as F
-    s = await cli_env.app.state.db.sessions.get(sid)
-    return await F.read_session_events(cli_env.config.sessions_dir, s["source"], sid)
+    db = cli_env.app.state.db
+    s = await db.sessions.get(sid)
+    return await db.sessions.read_events(s["source"], sid)
 
 
 async def test_add_single_tag(cli_env):

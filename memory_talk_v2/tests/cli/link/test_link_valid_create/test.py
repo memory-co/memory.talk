@@ -101,11 +101,10 @@ async def test_link_create_emits_events_on_both_ends(cli_env):
 
 
 async def _card_events(cli_env, card_id: str) -> list[dict]:
-    from memory_talk_v2.provider import files as F
-    return await F.read_card_events(cli_env.config.cards_dir, card_id)
+    return await cli_env.app.state.db.cards.read_events(card_id)
 
 
 async def _session_events(cli_env, session_id: str) -> list[dict]:
-    from memory_talk_v2.provider import files as F
-    s = await cli_env.app.state.db.sessions.get(session_id)
-    return await F.read_session_events(cli_env.config.sessions_dir, s["source"], session_id)
+    db = cli_env.app.state.db
+    s = await db.sessions.get(session_id)
+    return await db.sessions.read_events(s["source"], session_id)

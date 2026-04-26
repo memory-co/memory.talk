@@ -1,14 +1,88 @@
-"""SessionRepo — async CRUD for sessions + rounds (rounds are session-scoped)."""
+"""SessionStore — session + rounds persistence (file layer + SQLite).
+
+File layout (under storage root):
+  sessions/<source>/<bucket>/<session_id>/meta.json
+  sessions/<source>/<bucket>/<session_id>/rounds.jsonl
+  sessions/<source>/<bucket>/<session_id>/events.jsonl
+
+SQL: ``sessions`` and ``rounds`` tables.
+"""
 from __future__ import annotations
 import json
 from typing import Iterable
 
 import aiosqlite
 
+from memory_talk_v2.provider.storage import Storage
 
-class SessionRepo:
-    def __init__(self, conn: aiosqlite.Connection):
+
+class SessionStore:
+    PREFIX = "sessions"
+
+    def __init__(self, conn: aiosqlite.Connection, storage: Storage):
         self.conn = conn
+        self.storage = storage
+
+    # ---------- file-layer keys ----------
+
+    @staticmethod
+    def _bucket(session_id: str) -> str:
+        raw = session_id[len("sess_"):] if session_id.startswith("sess_") else session_id
+        return (raw[:2] if len(raw) >= 2 else raw).lower()
+
+    def _meta_key(self, source: str, session_id: str) -> str:
+        return f"{self.PREFIX}/{source}/{self._bucket(session_id)}/{session_id}/meta.json"
+
+    def _rounds_key(self, source: str, session_id: str) -> str:
+        return f"{self.PREFIX}/{source}/{self._bucket(session_id)}/{session_id}/rounds.jsonl"
+
+    def _events_key(self, source: str, session_id: str) -> str:
+        return f"{self.PREFIX}/{source}/{self._bucket(session_id)}/{session_id}/events.jsonl"
+
+    # ---------- file-layer ops ----------
+
+    async def write_meta(self, source: str, session_id: str, meta: dict) -> None:
+        await self.storage.write_text(
+            self._meta_key(source, session_id),
+            json.dumps(meta, ensure_ascii=False, indent=2),
+        )
+
+    async def read_meta(self, source: str, session_id: str) -> dict | None:
+        text = await self.storage.read_text(self._meta_key(source, session_id))
+        return json.loads(text) if text else None
+
+    async def append_rounds_file(self, source: str, session_id: str, rounds: list[dict]) -> None:
+        body = "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rounds)
+        await self.storage.append_text(self._rounds_key(source, session_id), body)
+
+    async def read_rounds_file(self, source: str, session_id: str) -> list[dict]:
+        text = await self.storage.read_text(self._rounds_key(source, session_id))
+        if not text:
+            return []
+        return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+    async def append_event(self, source: str, session_id: str, event: dict) -> None:
+        await self.storage.append_text(
+            self._events_key(source, session_id),
+            json.dumps(event, ensure_ascii=False) + "\n",
+        )
+
+    async def read_events(self, source: str, session_id: str) -> list[dict]:
+        text = await self.storage.read_text(self._events_key(source, session_id))
+        if not text:
+            return []
+        return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+    async def iter_keys(self) -> list[tuple[str, str]]:
+        """Returns every (source, session_id) pair found on disk."""
+        keys = await self.storage.list_subkeys(self.PREFIX)
+        seen: set[tuple[str, str]] = set()
+        for k in keys:
+            parts = k.split("/")
+            # sessions/<source>/<bucket>/<session_id>/<filename>
+            if len(parts) >= 5 and parts[0] == self.PREFIX:
+                seen.add((parts[1], parts[3]))
+        return sorted(seen)
 
     # ---------- sessions table ----------
 

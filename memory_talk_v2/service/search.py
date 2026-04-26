@@ -4,7 +4,6 @@ import json
 
 from memory_talk_v2.config import Config
 from memory_talk_v2.provider.embedding import Embedder
-from memory_talk_v2.provider.jsonl_writer import DatedJsonlWriter
 from memory_talk_v2.provider.lancedb import LanceStore
 from memory_talk_v2.repository import SQLiteStore
 from memory_talk_v2.schemas import (
@@ -45,13 +44,11 @@ class SearchService:
         db: SQLiteStore,
         vectors: LanceStore,
         embedder: Embedder,
-        search_jsonl: DatedJsonlWriter,
     ):
         self.config = config
         self.db = db
         self.vectors = vectors
         self.embedder = embedder
-        self.search_jsonl = search_jsonl
 
     async def search(self, payload: SearchRequest) -> SearchResponse:
         query = payload.query or ""
@@ -87,10 +84,8 @@ class SearchService:
             "cards": response.cards.model_dump(),
             "sessions": response.sessions.model_dump(),
         }
-        await self.search_jsonl.append(persisted, now=now)
-        await self.db.search_log.insert(
-            search_id=search_id, query=query, where_dsl=where,
-            top_k=top_k, created_at=created_at,
+        await self.db.search_log.record(
+            persisted, now=now,
             response_json=json.dumps(persisted, ensure_ascii=False),
         )
 

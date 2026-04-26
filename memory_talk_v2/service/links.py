@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime
 
 from memory_talk_v2.config import Config
-from memory_talk_v2.provider import files as F
 from memory_talk_v2.repository import SQLiteStore
 from memory_talk_v2.schemas import CreateLinkRequest, CreateLinkResponse, LinkRef
 from memory_talk_v2.service.events import EventWriter
@@ -101,7 +100,7 @@ class LinkService:
             "expires_at": expires_at,
             "created_at": created_at,
         }
-        await F.write_link(self.config.links_dir, link_doc)
+        await self.db.links.write_doc(link_doc)
         await self.db.links.insert(
             link_id=link_id, source_id=source_id, source_type=source_type,
             target_id=target_id, target_type=target_type, comment=comment,

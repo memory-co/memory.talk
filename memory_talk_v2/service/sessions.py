@@ -4,7 +4,6 @@ import json
 from typing import Any
 
 from memory_talk_v2.config import Config
-from memory_talk_v2.provider import files as F
 from memory_talk_v2.provider.lancedb import LanceStore
 from memory_talk_v2.repository import SQLiteStore
 from memory_talk_v2.schemas import (
@@ -84,7 +83,7 @@ class SessionService:
         metadata = payload.metadata
         now_iso = dt_to_iso(now_utc())
 
-        existing_meta = await F.read_session_meta(self.config.sessions_dir, source, session_id)
+        existing_meta = await self.db.sessions.read_meta(source, session_id)
         if sha256 and existing_meta and existing_meta.get("last_sha256") == sha256:
             existing = await self.db.sessions.get(session_id)
             return IngestSessionResponse(
@@ -105,8 +104,8 @@ class SessionService:
             }
             if sha256:
                 meta_new["last_sha256"] = sha256
-            await F.write_session_meta(self.config.sessions_dir, source, session_id, meta_new)
-            await F.append_session_rounds(self.config.sessions_dir, source, session_id, assigned)
+            await self.db.sessions.write_meta(source, session_id, meta_new)
+            await self.db.sessions.append_rounds_file(source, session_id, assigned)
 
             await self.db.sessions.upsert(
                 session_id=session_id, source=source, created_at=created_at,
@@ -154,17 +153,17 @@ class SessionService:
         total_count = existing["round_count"] + len(appended)
 
         if appended:
-            await F.append_session_rounds(self.config.sessions_dir, source, session_id, appended)
+            await self.db.sessions.append_rounds_file(source, session_id, appended)
             await self.db.sessions.upsert_rounds(session_id, appended)
             await self.db.sessions.update_round_count(session_id, total_count, now_iso)
             all_rounds = await self.db.sessions.list_rounds(session_id)
             await self.vectors.add_session(session_id, _rounds_to_text(all_rounds))
 
-        meta_existing = await F.read_session_meta(self.config.sessions_dir, source, session_id) or {}
+        meta_existing = await self.db.sessions.read_meta(source, session_id) or {}
         meta_existing.update({"round_count": total_count, "synced_at": now_iso})
         if sha256:
             meta_existing["last_sha256"] = sha256
-        await F.write_session_meta(self.config.sessions_dir, source, session_id, meta_existing)
+        await self.db.sessions.write_meta(source, session_id, meta_existing)
 
         if appended and not overwrite_skipped:
             action = "appended"
@@ -252,9 +251,7 @@ class SessionService:
         session = await self.db.sessions.get(session_id)
         if session is None:
             raise SessionNotFound(f"session not found: {session_id}")
-        events = await F.read_session_events(
-            self.config.sessions_dir, session["source"], session_id,
-        )
+        events = await self.db.sessions.read_events(session["source"], session_id)
         events.sort(key=lambda e: e["at"])
         return LogResponse(
             type="session",
@@ -307,10 +304,6 @@ class SessionService:
 
     async def _persist_tags(self, session: dict, tags: list[str]) -> None:
         await self.db.sessions.update_tags(session["session_id"], tags)
-        meta = await F.read_session_meta(
-            self.config.sessions_dir, session["source"], session["session_id"]
-        ) or {}
+        meta = await self.db.sessions.read_meta(session["source"], session["session_id"]) or {}
         meta["tags"] = tags
-        await F.write_session_meta(
-            self.config.sessions_dir, session["source"], session["session_id"], meta
-        )
+        await self.db.sessions.write_meta(session["source"], session["session_id"], meta)

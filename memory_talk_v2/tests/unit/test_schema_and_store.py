@@ -1,5 +1,6 @@
 import aiosqlite
 
+from memory_talk_v2.provider.storage import LocalStorage
 from memory_talk_v2.repository import SQLiteStore
 from memory_talk_v2.repository.schema import init_schema
 
@@ -19,7 +20,7 @@ async def test_init_schema_is_idempotent(tmp_path):
 
 
 async def test_store_sessions_and_rounds_roundtrip(tmp_path):
-    db = await SQLiteStore.create(tmp_path / "memory.db")
+    db = await SQLiteStore.create(tmp_path / "memory.db", LocalStorage(tmp_path))
     await db.sessions.upsert(
         session_id="sess_abc",
         source="claude-code",
@@ -54,7 +55,7 @@ async def test_store_sessions_and_rounds_roundtrip(tmp_path):
 
 
 async def test_store_cards_and_links(tmp_path):
-    db = await SQLiteStore.create(tmp_path / "memory.db")
+    db = await SQLiteStore.create(tmp_path / "memory.db", LocalStorage(tmp_path))
     await db.cards.insert(
         "card_x", "summary",
         [{"role": "human", "text": "hi", "session_id": "sess_a", "index": 1}],

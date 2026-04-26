@@ -1,12 +1,54 @@
-"""LinkRepo — async CRUD for links table."""
+"""LinkStore — link persistence (file layer + SQLite).
+
+File layout: ``links/<bucket>/<link_id>.json``
+"""
 from __future__ import annotations
+import json
+from typing import AsyncIterator
 
 import aiosqlite
 
+from memory_talk_v2.provider.storage import Storage
 
-class LinkRepo:
-    def __init__(self, conn: aiosqlite.Connection):
+
+class LinkStore:
+    PREFIX = "links"
+
+    def __init__(self, conn: aiosqlite.Connection, storage: Storage):
         self.conn = conn
+        self.storage = storage
+
+    # ---------- file-layer keys ----------
+
+    @staticmethod
+    def _bucket(link_id: str) -> str:
+        raw = link_id[len("link_"):] if link_id.startswith("link_") else link_id
+        return (raw[:2] if len(raw) >= 2 else raw).lower()
+
+    def _doc_key(self, link_id: str) -> str:
+        return f"{self.PREFIX}/{self._bucket(link_id)}/{link_id}.json"
+
+    # ---------- file-layer ops ----------
+
+    async def write_doc(self, link: dict) -> None:
+        await self.storage.write_text(
+            self._doc_key(link["link_id"]),
+            json.dumps(link, ensure_ascii=False, indent=2),
+        )
+
+    async def read_doc(self, link_id: str) -> dict | None:
+        text = await self.storage.read_text(self._doc_key(link_id))
+        return json.loads(text) if text else None
+
+    async def iter_docs(self) -> AsyncIterator[dict]:
+        keys = await self.storage.list_subkeys(self.PREFIX)
+        for k in keys:
+            if k.endswith(".json"):
+                text = await self.storage.read_text(k)
+                if text:
+                    yield json.loads(text)
+
+    # ---------- links table ----------
 
     async def insert(
         self, link_id: str, source_id: str, source_type: str,

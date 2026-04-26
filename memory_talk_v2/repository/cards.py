@@ -1,13 +1,71 @@
-"""CardRepo — async CRUD for cards table."""
+"""CardStore — card persistence (file layer + SQLite).
+
+File layout:
+  cards/<bucket>/<card_id>/card.json
+  cards/<bucket>/<card_id>/events.jsonl
+"""
 from __future__ import annotations
 import json
+from typing import AsyncIterator
 
 import aiosqlite
 
+from memory_talk_v2.provider.storage import Storage
 
-class CardRepo:
-    def __init__(self, conn: aiosqlite.Connection):
+
+class CardStore:
+    PREFIX = "cards"
+
+    def __init__(self, conn: aiosqlite.Connection, storage: Storage):
         self.conn = conn
+        self.storage = storage
+
+    # ---------- file-layer keys ----------
+
+    @staticmethod
+    def _bucket(card_id: str) -> str:
+        raw = card_id[len("card_"):] if card_id.startswith("card_") else card_id
+        return (raw[:2] if len(raw) >= 2 else raw).lower()
+
+    def _doc_key(self, card_id: str) -> str:
+        return f"{self.PREFIX}/{self._bucket(card_id)}/{card_id}/card.json"
+
+    def _events_key(self, card_id: str) -> str:
+        return f"{self.PREFIX}/{self._bucket(card_id)}/{card_id}/events.jsonl"
+
+    # ---------- file-layer ops ----------
+
+    async def write_doc(self, card: dict) -> None:
+        await self.storage.write_text(
+            self._doc_key(card["card_id"]),
+            json.dumps(card, ensure_ascii=False, indent=2),
+        )
+
+    async def read_doc(self, card_id: str) -> dict | None:
+        text = await self.storage.read_text(self._doc_key(card_id))
+        return json.loads(text) if text else None
+
+    async def append_event(self, card_id: str, event: dict) -> None:
+        await self.storage.append_text(
+            self._events_key(card_id),
+            json.dumps(event, ensure_ascii=False) + "\n",
+        )
+
+    async def read_events(self, card_id: str) -> list[dict]:
+        text = await self.storage.read_text(self._events_key(card_id))
+        if not text:
+            return []
+        return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+    async def iter_docs(self) -> AsyncIterator[dict]:
+        keys = await self.storage.list_subkeys(self.PREFIX)
+        for k in keys:
+            if k.endswith("/card.json"):
+                text = await self.storage.read_text(k)
+                if text:
+                    yield json.loads(text)
+
+    # ---------- cards table ----------
 
     async def insert(
         self, card_id: str, summary: str, rounds: list[dict],
