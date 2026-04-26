@@ -26,16 +26,31 @@ memory-talk view sess_187c6576 --json
 
 **Summary:** 选定 LanceDB 做向量存储
 
-## rounds (2)
-
-1. **[`sess_abc123`#11 human]** ChromaDB vs LanceDB?
-2. **[`sess_abc123`#12 assistant]** 推荐 LanceDB 零依赖
-
 ## links (3)
 
 - FROM `sess_abc123` (session)
 - TO `card_01jzp3nq` (card) · 选型后果——NFS 上踩的坑
 - TO `card_01jzold99` (card · expired) · 早期失败的 ChromaDB 方案
+
+## rounds (2)
+
+**[`sess_abc123`#11 human]**
+
+ChromaDB vs LanceDB?
+
+---
+
+**[`sess_abc123`#12 assistant]**
+
+推荐 **LanceDB**:
+
+- 零依赖、嵌入式
+- 自带 FTS,跟向量混合检索
+
+```python
+# 伪代码
+db = lancedb.connect("./data")
+```
 ````
 
 ### session
@@ -51,14 +66,21 @@ memory-talk view sess_187c6576 --json
 
 - project: `/home/user/myapp`
 
-## rounds (2)
-
-1. **[#1 human]** ChromaDB vs LanceDB?
-2. **[#2 assistant]** 推荐 LanceDB,零依赖嵌入式
-
 ## links (1)
 
 - TO `card_01jz8k2m` (card) · 从此对话提取
+
+## rounds (2)
+
+**[#1 human]**
+
+ChromaDB vs LanceDB?
+
+---
+
+**[#2 assistant]**
+
+推荐 LanceDB,零依赖嵌入式。
 
 ---
 
@@ -68,9 +90,12 @@ memory-talk view sess_187c6576 --json
 > **TODO(code):** 当前 `service/cards.py` 里 default link 的方向是 `card → session`,跟本文档示例的 `session → card` 直觉序**相反**。详见 [search.md](search.md) 同款 TODO。
 
 约定:
-- 主体内容(`Summary` / `Tags` / `rounds` / `links` 等)放上方;弱信号元信息(session 的 `Source`)用 `---` 分隔后放底部。card 没有 footer 信息,直接没 `---`。`read_at` 在 Markdown 输出里**不展示** —— 人类读者基本不会主动看它,需要时走 `--json`。
-- 单条 round 文本太长时,在 80 列宽处截断附 `…`,完整内容看 `--json`。
-- 多 ContentBlock 的 round(含 thinking 等非 text 块)用 `+ <type>` 标注:`**[#3 assistant +thinking +tool_use]** ...`。
+- 顺序固定:**头部元数据**(`Summary` / `Created` / `Tags` / `Metadata`)→ **`## links`** → **`## rounds`** → **footer**(session 的 `Source`,用 `---` 分隔)。card 没有 footer。
+- `## rounds` 放最后,因为单条 round 的内容里**经常本身就是 Markdown**(代码块、列表、引用、子标题等),放在中间会跟外层结构混在一起难读。挪到最后等于"先看元数据 + 关系图,再看内容正文"。
+- 每个 round 之间用 `---` 分隔。round 内部:第一行是 `**[<round 头>]**`(card:`[\`<sess_id>\`#<idx> <role>]`;session:`[#<idx> <role>]`),空一行后是 round 正文(原样输出 content 文本,可以含任意 Markdown)。
+- 多 ContentBlock 的 round(含 thinking 等非 text 块)用 `+ <type>` 标注:`**[#3 assistant +thinking +tool_use]**`。正文里只渲染 text/code 块的内容,其他类型的存在用头部 `+xxx` 标记表示。
+- 单条 round 正文不再做 80 列截断 —— round 本身可以是长篇内容,放在最后也不会挤占元数据视野。完整 raw 内容仍在 `--json` 里。
+- `read_at` 在 Markdown 输出里**不展示** —— 人类读者基本不会主动看它,需要时走 `--json`。
 - `links` 列表里方向以**被读对象的视角**写出:
   - `TO \`<id>\` (type) ...` —— 我是 link 的 source(我指向 peer)
   - `FROM \`<id>\` (type) ...` —— 我是 link 的 target(peer 指向我)
