@@ -1,4 +1,9 @@
-"""CLI: server start / stop / status [--json]."""
+"""CLI: server start / stop / status [--json].
+
+The lifecycle primitives (`start_server_proc` / `stop_server_proc` /
+`pid_alive`) are exported separately so other commands (notably
+`memory-talk setup`) can reuse them without subprocess-ing themselves.
+"""
 from __future__ import annotations
 import os
 import signal
@@ -21,7 +26,7 @@ def server() -> None:
     """Manage the local API server."""
 
 
-def _pid_alive(pid: int) -> bool:
+def pid_alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
         return True
@@ -29,18 +34,13 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
-def _emit(payload: dict, json_out: bool, md_formatter) -> None:
-    if json_out:
-        emit_json(payload)
-    else:
-        emit_md(md_formatter(payload))
+def start_server_proc(cfg: Config) -> dict:
+    """Start the API server as a daemon. Returns one of:
 
-
-@server.command("start")
-@click.option("--data-root", type=click.Path(), default=None)
-@click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON instead of Markdown")
-def server_start(data_root: str | None, json_out: bool) -> None:
-    cfg = Config(data_root) if data_root else Config()
+      {"status": "started",         "pid": <int>, "port": <int>}
+      {"status": "already_running", "pid": <int>, "port": <int>}
+      {"status": "failed",          "exit_code": <int>, "error": <str>}
+    """
     cfg.ensure_dirs()
     port = cfg.settings.server.port
 
@@ -49,14 +49,12 @@ def server_start(data_root: str | None, json_out: bool) -> None:
             pid = int(cfg.pid_path.read_text().strip())
         except ValueError:
             pid = 0
-        if pid and _pid_alive(pid):
-            _emit({"status": "already_running", "pid": pid, "port": port}, json_out, fmt_server_start)
-            return
+        if pid and pid_alive(pid):
+            return {"status": "already_running", "pid": pid, "port": port}
         cfg.pid_path.unlink(missing_ok=True)
 
     env = os.environ.copy()
-    if data_root:
-        env["MEMORY_TALK_DATA_ROOT"] = str(cfg.data_root)
+    env["MEMORY_TALK_DATA_ROOT"] = str(cfg.data_root)
 
     proc = subprocess.Popen(
         [
@@ -75,16 +73,49 @@ def server_start(data_root: str | None, json_out: bool) -> None:
     time.sleep(1.2)
     if proc.poll() is not None:
         err = (proc.stderr.read() or b"").decode(errors="replace") if proc.stderr else ""
-        payload = {
-            "status": "failed",
-            "exit_code": proc.returncode,
-            "error": err.strip(),
-        }
-        _emit(payload, json_out, fmt_server_start)
-        sys.exit(1)
+        return {"status": "failed", "exit_code": proc.returncode, "error": err.strip()}
 
     cfg.pid_path.write_text(str(proc.pid))
-    _emit({"status": "started", "pid": proc.pid, "port": port}, json_out, fmt_server_start)
+    return {"status": "started", "pid": proc.pid, "port": port}
+
+
+def stop_server_proc(cfg: Config) -> dict:
+    """SIGTERM the daemon and clean up the pid file. Returns:
+
+      {"status": "stopped",     "pid": <int>}
+      {"status": "not_running"}
+    """
+    if not cfg.pid_path.exists():
+        return {"status": "not_running"}
+    try:
+        pid = int(cfg.pid_path.read_text().strip())
+    except ValueError:
+        cfg.pid_path.unlink(missing_ok=True)
+        return {"status": "not_running"}
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    cfg.pid_path.unlink(missing_ok=True)
+    return {"status": "stopped", "pid": pid}
+
+
+def _emit(payload: dict, json_out: bool, md_formatter) -> None:
+    if json_out:
+        emit_json(payload)
+    else:
+        emit_md(md_formatter(payload))
+
+
+@server.command("start")
+@click.option("--data-root", type=click.Path(), default=None)
+@click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON instead of Markdown")
+def server_start(data_root: str | None, json_out: bool) -> None:
+    cfg = Config(data_root) if data_root else Config()
+    payload = start_server_proc(cfg)
+    _emit(payload, json_out, fmt_server_start)
+    if payload.get("status") == "failed":
+        sys.exit(1)
 
 
 @server.command("stop")
@@ -92,21 +123,8 @@ def server_start(data_root: str | None, json_out: bool) -> None:
 @click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON instead of Markdown")
 def server_stop(data_root: str | None, json_out: bool) -> None:
     cfg = Config(data_root) if data_root else Config()
-    if not cfg.pid_path.exists():
-        _emit({"status": "not_running"}, json_out, fmt_server_stop)
-        return
-    try:
-        pid = int(cfg.pid_path.read_text().strip())
-    except ValueError:
-        cfg.pid_path.unlink(missing_ok=True)
-        _emit({"status": "not_running"}, json_out, fmt_server_stop)
-        return
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except ProcessLookupError:
-        pass
-    cfg.pid_path.unlink(missing_ok=True)
-    _emit({"status": "stopped", "pid": pid}, json_out, fmt_server_stop)
+    payload = stop_server_proc(cfg)
+    _emit(payload, json_out, fmt_server_stop)
 
 
 @server.command("status")

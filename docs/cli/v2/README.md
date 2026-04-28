@@ -14,6 +14,7 @@ MEMORY_TALK_CLI_VERSION=v2 memory-talk --help
 
 ```
 memory-talk
+├── setup                                     # 交互式幂等安装 / 改配置 / 重启
 ├── search <query> [--where DSL] [--top-k N]  # 有意识检索:AI 主动查记忆
 ├── recall <session_id> <prompt>              # 无意识召回:hook 阶段自动注入 top-K 极简 cards
 ├── view <id>                                 # 读取 card 或 session（按 id 前缀自动判型）

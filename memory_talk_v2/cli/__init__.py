@@ -13,7 +13,7 @@ def main() -> None:
 main.add_command(server)
 
 # Other command groups are attached as they're implemented.
-for _name in ("card", "tag", "link", "sync", "search", "view", "log", "rebuild"):
+for _name in ("card", "tag", "link", "sync", "search", "view", "log", "rebuild", "setup"):
     try:
         _mod = __import__(f"memory_talk_v2.cli.{_name}", fromlist=[_name])
         main.add_command(getattr(_mod, _name))
