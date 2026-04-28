@@ -1,5 +1,5 @@
 [project]
-name = "memory-talk"
+name = "memorytalk"
 version = "0.4.0"
 description = "Persistent cross-session memory for AI agents via Talk-Card architecture (v2)"
 readme = "README.md"
@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [project.scripts]
-memory-talk = "memory_talk_v2.cli:main"
+memory-talk = "memorytalk.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -34,15 +34,15 @@ local = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["memory_talk_v2*"]
-exclude = ["memory_talk_v2.tests*"]
+include = ["memorytalk*"]
+exclude = ["memorytalk.tests*"]
 
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.pytest.ini_options]
-testpaths = ["memory_talk_v2/tests"]
+testpaths = ["memorytalk/tests"]
 python_files = ["test_*.py", "test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

@@ -40,7 +40,7 @@
 ## Regenerate fixture
 
 ```bash
-REGENERATE_SYNC_FIXTURES=1 pytest memory_talk_v2/tests/cli/sync/test_claude_code_full_sync/
+REGENERATE_SYNC_FIXTURES=1 pytest memorytalk/tests/cli/sync/test_claude_code_full_sync/
 ```
 
 用在 adapter / schema 有意变更后,重录 golden file。regenerate 模式跑完会故意

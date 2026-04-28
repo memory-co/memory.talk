@@ -49,7 +49,7 @@ SQLite whitelist,再作为 LanceDB 的 pre-filter 收窄结果。
 ## 为什么不在这里测 DSL 的全部语法
 
 DSL 语法的所有分支(`=` / `!=` / `LIKE` / `NOT LIKE` / `IN` / `NOT IN` / `AND` /
-reltime / 各种错误)在 `memory_talk_v2/tests/unit/test_dsl.py` 里有纯函数级
+reltime / 各种错误)在 `memorytalk/tests/unit/test_dsl.py` 里有纯函数级
 的穷举测试。这里的 CLI 层只验证**两件事**:
 
 1. DSL 参数被 CLI 正确传下去(非空才入 body)

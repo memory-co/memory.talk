@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
-from memory_talk_v2.schemas import IngestSessionRequest, IngestSessionResponse
-from memory_talk_v2.service import SessionServiceError
+from memorytalk.schemas import IngestSessionRequest, IngestSessionResponse
+from memorytalk.service import SessionServiceError
 
 
 router = APIRouter()

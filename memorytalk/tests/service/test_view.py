@@ -4,14 +4,14 @@ from datetime import timedelta
 
 import pytest
 
-from memory_talk_v2.schemas import (
+from memorytalk.schemas import (
     CardRoundsItem, ContentBlock, CreateCardRequest, CreateLinkRequest,
     IngestRound, IngestSessionRequest,
 )
-from memory_talk_v2.service import (
+from memorytalk.service import (
     CardNotFound, CardServiceError, SessionNotFound, SessionServiceError,
 )
-from memory_talk_v2.util.ttl import dt_to_iso, iso_to_dt, now_utc
+from memorytalk.util.ttl import dt_to_iso, iso_to_dt, now_utc
 
 
 async def _seed(services):

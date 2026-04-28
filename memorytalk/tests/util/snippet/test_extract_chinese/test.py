@@ -1,7 +1,7 @@
 """util.snippet — Chinese query routes through jieba tokenization."""
 from __future__ import annotations
 
-from memory_talk_v2.util.snippet import extract_snippets
+from memorytalk.util.snippet import extract_snippets
 
 
 def test_handles_chinese_via_jieba():

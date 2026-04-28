@@ -4,24 +4,24 @@ Split by endpoint group to mirror api/ and service/. Shared types
 (ContentBlock, SessionRound, CardRound, LinkRef) live in shared.py.
 Handlers can import from the submodule or from this package root.
 """
-from memory_talk_v2.schemas.cards import (
+from memorytalk.schemas.cards import (
     CardRoundsItem, CreateCardRequest, CreateCardResponse,
 )
-from memory_talk_v2.schemas.links import CreateLinkRequest, CreateLinkResponse
-from memory_talk_v2.schemas.log import EventEntry, LogRequest, LogResponse
-from memory_talk_v2.schemas.rebuild import RebuildResponse
-from memory_talk_v2.schemas.search import (
+from memorytalk.schemas.links import CreateLinkRequest, CreateLinkResponse
+from memorytalk.schemas.log import EventEntry, LogRequest, LogResponse
+from memorytalk.schemas.rebuild import RebuildResponse
+from memorytalk.schemas.search import (
     CardHit, SearchBucket, SearchRequest, SearchResponse, SessionHit,
 )
-from memory_talk_v2.schemas.sessions import (
+from memorytalk.schemas.sessions import (
     IngestRound, IngestSessionRequest, IngestSessionResponse,
 )
-from memory_talk_v2.schemas.shared import (
+from memorytalk.schemas.shared import (
     CardRound, ContentBlock, LinkRef, LinkTargetType, ObjectKind, SessionRound,
 )
-from memory_talk_v2.schemas.status import StatusResponse
-from memory_talk_v2.schemas.tags import TagsRequest, TagsResponse
-from memory_talk_v2.schemas.view import (
+from memorytalk.schemas.status import StatusResponse
+from memorytalk.schemas.tags import TagsRequest, TagsResponse
+from memorytalk.schemas.view import (
     CardView, SessionView, ViewRequest, ViewResponse,
 )
 

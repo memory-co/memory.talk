@@ -2,7 +2,7 @@
 from __future__ import annotations
 from pathlib import Path
 
-from memory_talk_v2.provider.storage import LocalStorage
+from memorytalk.provider.storage import LocalStorage
 
 
 async def test_list_empty_prefix_returns_empty(tmp_path: Path):

@@ -2,21 +2,21 @@
 from __future__ import annotations
 from typing import Any
 
-from memory_talk_v2.config import Config
-from memory_talk_v2.provider.embedding import Embedder
-from memory_talk_v2.provider.lancedb import LanceStore
-from memory_talk_v2.repository import SQLiteStore
-from memory_talk_v2.schemas import (
+from memorytalk.config import Config
+from memorytalk.provider.embedding import Embedder
+from memorytalk.provider.lancedb import LanceStore
+from memorytalk.repository import SQLiteStore
+from memorytalk.schemas import (
     CardRound, CardView, ContentBlock, CreateCardRequest, CreateCardResponse,
     EventEntry, LogResponse, ViewResponse,
 )
-from memory_talk_v2.service.events import EventWriter
-from memory_talk_v2.service.links import link_to_ref, refresh_active_user_links
-from memory_talk_v2.util.ids import (
+from memorytalk.service.events import EventWriter
+from memorytalk.service.links import link_to_ref, refresh_active_user_links
+from memorytalk.util.ids import (
     CARD_PREFIX, SESSION_PREFIX,
     new_card_id, new_link_id,
 )
-from memory_talk_v2.util.ttl import (
+from memorytalk.util.ttl import (
     current_ttl, dt_to_iso, initial_expires_at, now_utc, refresh,
 )
 

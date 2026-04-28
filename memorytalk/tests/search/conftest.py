@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from memory_talk_v2.tests.search._quality import load_baselines, save_baselines
+from memorytalk.tests.search._quality import load_baselines, save_baselines
 
 
 _BASELINES_PATH = Path(__file__).parent / "_baselines.json"

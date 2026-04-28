@@ -9,7 +9,7 @@ This module's only job is to (re)bake the fixture tree from the TOPICS
 table. It is NOT imported at test time. Run manually when adding/editing
 topics:
 
-    python -m memory_talk_v2.tests.search._corpus
+    python -m memorytalk.tests.search._corpus
 
 Each TOPICS entry yields TWO objects with parallel deterministic IDs:
 - session ``sess_<label>`` — single round whose content is the topic body

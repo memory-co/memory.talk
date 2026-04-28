@@ -1,4 +1,4 @@
-from memory_talk_v2.cli import main
+from memorytalk.cli import main
 
 if __name__ == "__main__":
     main()

@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
-from memory_talk_v2.schemas import CreateLinkRequest, CreateLinkResponse
-from memory_talk_v2.service import LinkNotFoundError, LinkServiceError
+from memorytalk.schemas import CreateLinkRequest, CreateLinkResponse
+from memorytalk.service import LinkNotFoundError, LinkServiceError
 
 
 router = APIRouter()

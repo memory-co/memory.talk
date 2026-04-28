@@ -4,12 +4,12 @@ from pathlib import Path
 
 import pytest_asyncio
 
-from memory_talk_v2.config import Config
-from memory_talk_v2.provider.embedding import DummyEmbedder
-from memory_talk_v2.provider.lancedb import LanceStore
-from memory_talk_v2.provider.storage import LocalStorage
-from memory_talk_v2.repository import SQLiteStore
-from memory_talk_v2.service import (
+from memorytalk.config import Config
+from memorytalk.provider.embedding import DummyEmbedder
+from memorytalk.provider.lancedb import LanceStore
+from memorytalk.provider.storage import LocalStorage
+from memorytalk.repository import SQLiteStore
+from memorytalk.service import (
     CardService, EventWriter, LinkService, RebuildService,
     SearchService, SessionService,
 )

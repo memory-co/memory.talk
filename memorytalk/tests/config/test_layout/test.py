@@ -1,7 +1,7 @@
 """Config — data_root layout properties + ensure_dirs() side effect."""
 from __future__ import annotations
 
-from memory_talk_v2.config import Config
+from memorytalk.config import Config
 
 
 def test_default_data_root_layout(tmp_path):

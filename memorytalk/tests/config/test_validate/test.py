@@ -4,7 +4,7 @@ import sqlite3
 
 import pytest
 
-from memory_talk_v2.config import Config, ConfigValidationError
+from memorytalk.config import Config, ConfigValidationError
 
 
 def test_validate_passes_on_empty_root(tmp_path):

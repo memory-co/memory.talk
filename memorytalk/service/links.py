@@ -2,12 +2,12 @@
 from __future__ import annotations
 from datetime import datetime
 
-from memory_talk_v2.config import Config
-from memory_talk_v2.repository import SQLiteStore
-from memory_talk_v2.schemas import CreateLinkRequest, CreateLinkResponse, LinkRef
-from memory_talk_v2.service.events import EventWriter
-from memory_talk_v2.util.ids import CARD_PREFIX, SESSION_PREFIX, new_link_id
-from memory_talk_v2.util.ttl import (
+from memorytalk.config import Config
+from memorytalk.repository import SQLiteStore
+from memorytalk.schemas import CreateLinkRequest, CreateLinkResponse, LinkRef
+from memorytalk.service.events import EventWriter
+from memorytalk.util.ids import CARD_PREFIX, SESSION_PREFIX, new_link_id
+from memorytalk.util.ttl import (
     current_ttl, dt_to_iso, initial_expires_at, iso_to_dt, now_utc, refresh,
 )
 

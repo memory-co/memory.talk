@@ -13,12 +13,12 @@ import time
 
 import click
 
-from memory_talk_v2.cli._format import (
+from memorytalk.cli._format import (
     fmt_server_start, fmt_server_stop, fmt_status,
 )
-from memory_talk_v2.cli._http import api
-from memory_talk_v2.cli._render import emit_json, emit_md
-from memory_talk_v2.config import Config
+from memorytalk.cli._http import api
+from memorytalk.cli._render import emit_json, emit_md
+from memorytalk.config import Config
 
 
 @click.group()
@@ -59,7 +59,7 @@ def start_server_proc(cfg: Config) -> dict:
     proc = subprocess.Popen(
         [
             sys.executable, "-m", "uvicorn",
-            "memory_talk_v2.api:app",
+            "memorytalk.api:app",
             "--host", "127.0.0.1",
             "--port", str(port),
         ],

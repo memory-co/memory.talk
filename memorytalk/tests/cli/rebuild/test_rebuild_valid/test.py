@@ -2,7 +2,7 @@
 from __future__ import annotations
 import json
 
-from memory_talk_v2.schemas import (
+from memorytalk.schemas import (
     CardRoundsItem, ContentBlock, CreateCardRequest,
     IngestRound, IngestSessionRequest,
 )

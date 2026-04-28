@@ -12,7 +12,7 @@ httpx is ASGI-routed into the in-process app (see tests/sync/conftest.py);
 the full Click → httpx → FastAPI → service → SQLite/LanceDB/file stack
 runs for real with no subprocess.
 
-Regenerate: `REGENERATE_SYNC_FIXTURES=1 pytest memory_talk_v2/tests/sync/`
+Regenerate: `REGENERATE_SYNC_FIXTURES=1 pytest memorytalk/tests/sync/`
 after an intentional adapter/schema change.
 """
 from __future__ import annotations

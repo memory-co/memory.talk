@@ -13,12 +13,12 @@ from pathlib import Path
 
 import aiosqlite
 
-from memory_talk_v2.provider.storage import Storage
-from memory_talk_v2.repository.cards import CardStore
-from memory_talk_v2.repository.links import LinkStore
-from memory_talk_v2.repository.schema import init_schema
-from memory_talk_v2.repository.search_log import SearchLogStore
-from memory_talk_v2.repository.sessions import SessionStore
+from memorytalk.provider.storage import Storage
+from memorytalk.repository.cards import CardStore
+from memorytalk.repository.links import LinkStore
+from memorytalk.repository.schema import init_schema
+from memorytalk.repository.search_log import SearchLogStore
+from memorytalk.repository.sessions import SessionStore
 
 
 class SQLiteStore:

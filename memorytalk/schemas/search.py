@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from memory_talk_v2.schemas.shared import LinkRef
+from memorytalk.schemas.shared import LinkRef
 
 
 class SearchRequest(BaseModel):

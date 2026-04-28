@@ -19,7 +19,7 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-from memory_talk_v2.cli import main
+from memorytalk.cli import main
 
 
 def _free_port() -> int:

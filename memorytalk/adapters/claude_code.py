@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Iterator
 from urllib.parse import unquote
 
-from memory_talk_v2.adapters.base import BaseAdapter, register
+from memorytalk.adapters.base import BaseAdapter, register
 
 
 @register

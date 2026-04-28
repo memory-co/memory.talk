@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import pytest
 
-from memory_talk_v2.schemas import (
+from memorytalk.schemas import (
     CardRoundsItem, ContentBlock, CreateCardRequest, IngestRound, IngestSessionRequest,
 )
-from memory_talk_v2.service import CardConflictError, CardServiceError
-from memory_talk_v2.service.cards import compact_indexes, parse_indexes
+from memorytalk.service import CardConflictError, CardServiceError
+from memorytalk.service.cards import compact_indexes, parse_indexes
 
 
 async def _seed_session(services, *, session_id="platform-abc", rounds_count=5) -> str:

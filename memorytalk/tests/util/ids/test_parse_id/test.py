@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from memory_talk_v2.util.ids import IdKind, InvalidIdError, parse_id
+from memorytalk.util.ids import IdKind, InvalidIdError, parse_id
 
 
 def test_parse_id_card():

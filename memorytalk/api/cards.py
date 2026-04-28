@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
-from memory_talk_v2.schemas import CreateCardRequest, CreateCardResponse
-from memory_talk_v2.service import CardConflictError, CardServiceError
+from memorytalk.schemas import CreateCardRequest, CreateCardResponse
+from memorytalk.service import CardConflictError, CardServiceError
 
 
 router = APIRouter()

@@ -20,8 +20,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from memory_talk_v2.api import create_app
-from memory_talk_v2.config import Config
+from memorytalk.api import create_app
+from memorytalk.config import Config
 
 
 CORPUS_ROOT = Path(__file__).parent.parent / "corpus"

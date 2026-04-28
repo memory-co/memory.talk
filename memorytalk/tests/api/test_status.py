@@ -13,5 +13,5 @@ def test_v2_status_ok(app_client, tmp_data_root):
 
 
 def test_cli_main_imports():
-    from memory_talk_v2.cli import main
+    from memorytalk.cli import main
     assert main is not None

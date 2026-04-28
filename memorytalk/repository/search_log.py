@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 
 import aiosqlite
 
-from memory_talk_v2.provider.storage import Storage
+from memorytalk.provider.storage import Storage
 
 
 class SearchLogStore:

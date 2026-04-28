@@ -8,7 +8,7 @@ from typing import AsyncIterator
 
 import aiosqlite
 
-from memory_talk_v2.provider.storage import Storage
+from memorytalk.provider.storage import Storage
 
 
 class LinkStore:

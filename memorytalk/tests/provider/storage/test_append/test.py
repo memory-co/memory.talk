@@ -2,7 +2,7 @@
 from __future__ import annotations
 from pathlib import Path
 
-from memory_talk_v2.provider.storage import LocalStorage
+from memorytalk.provider.storage import LocalStorage
 
 
 async def test_append_to_new_creates_file(tmp_path: Path):

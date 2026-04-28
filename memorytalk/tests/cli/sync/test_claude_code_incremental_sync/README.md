@@ -57,7 +57,7 @@ phase-3 结束后对比 `expected/` 快照:
 ## Regenerate fixture
 
 ```bash
-REGENERATE_SYNC_FIXTURES=1 pytest memory_talk_v2/tests/cli/sync/test_claude_code_incremental_sync/
+REGENERATE_SYNC_FIXTURES=1 pytest memorytalk/tests/cli/sync/test_claude_code_incremental_sync/
 ```
 
 只录 phase-3 结束的快照。中间阶段的 CLI 输出是内联断言,不走 fixture。

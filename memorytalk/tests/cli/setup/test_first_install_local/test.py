@@ -10,7 +10,7 @@ async def _noop_validate(cfg):
 def test_first_install_local_writes_settings(setup_env, monkeypatch):
     # Stub validate_embedder so the local branch doesn't try to download
     # all-MiniLM-L6-v2 over the network during tests.
-    from memory_talk_v2.cli import setup as setup_module
+    from memorytalk.cli import setup as setup_module
     monkeypatch.setattr(setup_module, "validate_embedder", _noop_validate)
 
     answers = "\n".join([

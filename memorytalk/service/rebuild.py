@@ -6,11 +6,11 @@ Storage is local FS or anything else implementing the protocol.
 """
 from __future__ import annotations
 
-from memory_talk_v2.config import Config
-from memory_talk_v2.provider.embedding import Embedder
-from memory_talk_v2.provider.lancedb import LanceStore
-from memory_talk_v2.repository import SQLiteStore
-from memory_talk_v2.schemas import RebuildResponse
+from memorytalk.config import Config
+from memorytalk.provider.embedding import Embedder
+from memorytalk.provider.lancedb import LanceStore
+from memorytalk.repository import SQLiteStore
+from memorytalk.schemas import RebuildResponse
 
 
 def _rounds_to_text(rounds: list[dict]) -> str:

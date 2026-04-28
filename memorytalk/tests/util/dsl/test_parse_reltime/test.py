@@ -2,7 +2,7 @@
 from __future__ import annotations
 from datetime import datetime, timezone
 
-from memory_talk_v2.util.dsl import parse
+from memorytalk.util.dsl import parse
 
 
 NOW = datetime(2026, 4, 22, 12, 0, 0, tzinfo=timezone.utc)

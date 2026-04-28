@@ -1,7 +1,7 @@
 """util.ids — new_*_id() functions emit prefixed unique ULIDs."""
 from __future__ import annotations
 
-from memory_talk_v2.util.ids import (
+from memorytalk.util.ids import (
     CARD_PREFIX, LINK_PREFIX,
     new_card_id, new_event_id, new_link_id, new_search_id,
 )

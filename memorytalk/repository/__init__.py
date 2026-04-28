@@ -3,12 +3,12 @@ and SQL ops (via aiosqlite). Services inject `SQLiteStore` and access each
 noun's store as an attribute: `db.sessions`, `db.cards`, `db.links`,
 `db.search_log`.
 """
-from memory_talk_v2.repository.cards import CardStore
-from memory_talk_v2.repository.links import LinkStore
-from memory_talk_v2.repository.schema import init_schema
-from memory_talk_v2.repository.search_log import SearchLogStore
-from memory_talk_v2.repository.sessions import SessionStore
-from memory_talk_v2.repository.store import SQLiteStore
+from memorytalk.repository.cards import CardStore
+from memorytalk.repository.links import LinkStore
+from memorytalk.repository.schema import init_schema
+from memorytalk.repository.search_log import SearchLogStore
+from memorytalk.repository.sessions import SessionStore
+from memorytalk.repository.store import SQLiteStore
 
 
 __all__ = [

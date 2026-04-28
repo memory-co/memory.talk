@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from memory_talk_v2.config import Config
+from memorytalk.config import Config
 
 
 @pytest.fixture
@@ -28,7 +28,7 @@ def dummy_config(tmp_data_root: Path) -> Config:
 def app_client(dummy_config: Config):
     """TestClient context manager drives async lifespan startup/shutdown."""
     from fastapi.testclient import TestClient
-    from memory_talk_v2.api import create_app
+    from memorytalk.api import create_app
     app = create_app(dummy_config)
     with TestClient(app) as client:
         yield client

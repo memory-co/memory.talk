@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from memory_talk_v2.util.dsl import DSLError, parse
+from memorytalk.util.dsl import DSLError, parse
 
 
 def test_parse_truncated_predicate():

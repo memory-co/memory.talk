@@ -7,19 +7,19 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from memory_talk_v2.config import Config, ConfigValidationError
-from memory_talk_v2.provider.embedding import (
+from memorytalk.config import Config, ConfigValidationError
+from memorytalk.provider.embedding import (
     EmbedderValidationError,
     get_embedder,
     validate_embedder,
 )
-from memory_talk_v2.service import (
+from memorytalk.service import (
     CardService, EventWriter, LinkService, RebuildService,
     SearchService, SessionService,
 )
-from memory_talk_v2.provider.lancedb import LanceStore
-from memory_talk_v2.provider.storage import LocalStorage
-from memory_talk_v2.repository import SQLiteStore
+from memorytalk.provider.lancedb import LanceStore
+from memorytalk.provider.storage import LocalStorage
+from memorytalk.repository import SQLiteStore
 
 
 def create_app(config: Config | None = None) -> FastAPI:
@@ -83,12 +83,12 @@ def create_app(config: Config | None = None) -> FastAPI:
             return await call_next(request)
         return JSONResponse({"error": "rebuilding"}, status_code=503)
 
-    from memory_talk_v2.api.status import router as status_router
+    from memorytalk.api.status import router as status_router
     app.include_router(status_router, prefix="/v2")
 
     for name in ("sessions", "cards", "links", "tags", "search", "view", "log", "rebuild"):
         try:
-            mod = __import__(f"memory_talk_v2.api.{name}", fromlist=["router"])
+            mod = __import__(f"memorytalk.api.{name}", fromlist=["router"])
             app.include_router(mod.router, prefix="/v2")
         except ImportError:
             pass

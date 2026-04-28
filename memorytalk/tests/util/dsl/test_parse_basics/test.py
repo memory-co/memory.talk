@@ -1,7 +1,7 @@
 """util.dsl — basic parsing: empty input, single equality, AND chain, source field."""
 from __future__ import annotations
 
-from memory_talk_v2.util.dsl import parse
+from memorytalk.util.dsl import parse
 
 
 def test_parse_empty():

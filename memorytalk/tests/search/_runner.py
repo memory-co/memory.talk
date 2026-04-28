@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from memory_talk_v2.tests.search._quality import mrr, quality_gate
+from memorytalk.tests.search._quality import mrr, quality_gate
 
 
 def _ids_for(expected_id: str, response: dict) -> list[str]:

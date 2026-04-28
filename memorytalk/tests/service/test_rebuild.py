@@ -1,7 +1,7 @@
 """Rebuild: drop SQLite, restore objects from files. Events stay in place."""
 from __future__ import annotations
 
-from memory_talk_v2.schemas import (
+from memorytalk.schemas import (
     CardRoundsItem, ContentBlock, CreateCardRequest, CreateLinkRequest,
     IngestRound, IngestSessionRequest,
 )

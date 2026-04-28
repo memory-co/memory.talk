@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from memory_talk_v2.schemas.shared import CardRound, LinkRef, SessionRound
+from memorytalk.schemas.shared import CardRound, LinkRef, SessionRound
 
 
 class ViewRequest(BaseModel):

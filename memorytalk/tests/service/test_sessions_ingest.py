@@ -1,7 +1,7 @@
 """Ingest semantics: imported / appended / skipped / partial_append + events."""
 from __future__ import annotations
 
-from memory_talk_v2.schemas import ContentBlock, IngestRound, IngestSessionRequest
+from memorytalk.schemas import ContentBlock, IngestRound, IngestSessionRequest
 
 
 def _payload(session_id="platform-abc", source="claude-code", sha256="h1", rounds=None):

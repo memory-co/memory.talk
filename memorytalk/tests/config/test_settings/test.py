@@ -1,7 +1,7 @@
 """Config.settings — defaults + settings.json overrides."""
 from __future__ import annotations
 
-from memory_talk_v2.config import Config
+from memorytalk.config import Config
 
 
 def test_settings_defaults(tmp_path):

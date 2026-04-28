@@ -18,7 +18,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from click.testing import CliRunner
 
-from memory_talk_v2.cli import main
+from memorytalk.cli import main
 
 
 @pytest.fixture
@@ -37,7 +37,7 @@ def setup_env(tmp_path, monkeypatch):
     # By default, neutralize the server start/stop and symlink steps so a
     # plain test doesn't accidentally spawn uvicorn or try to write into
     # /usr/bin. Tests that want real lifecycle behavior can override.
-    from memory_talk_v2.cli import setup as setup_module
+    from memorytalk.cli import setup as setup_module
     monkeypatch.setattr(
         setup_module, "start_server_proc",
         lambda cfg: {"status": "started", "pid": 99999, "port": cfg.settings.server.port},
@@ -65,7 +65,7 @@ def setup_env(tmp_path, monkeypatch):
         client.__aenter__ = AsyncMock(return_value=client)
         client.__aexit__ = AsyncMock(return_value=None)
         client.post = AsyncMock(return_value=resp)
-        from memory_talk_v2.provider import embedding as emb_mod
+        from memorytalk.provider import embedding as emb_mod
         monkeypatch.setattr(emb_mod.httpx, "AsyncClient", lambda *a, **kw: client)
 
     env.mock_openai_probe = mock_openai_probe

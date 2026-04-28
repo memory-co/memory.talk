@@ -9,7 +9,7 @@
 
 ```bash
 export QWEN_KEY="sk-xxxxxxxxxxxx"
-pytest memory_talk_v2/tests/cli/search/test_search_with_embedding/
+pytest memorytalk/tests/cli/search/test_search_with_embedding/
 ```
 
 **没设 `QWEN_KEY` → 测试直接 FAIL,不跳过**。和 `tests/cli/server/test_openai_embedding_start/`

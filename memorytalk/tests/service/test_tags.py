@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from memory_talk_v2.schemas import ContentBlock, IngestRound, IngestSessionRequest, TagsRequest
-from memory_talk_v2.service import SessionNotFound, SessionServiceError
+from memorytalk.schemas import ContentBlock, IngestRound, IngestSessionRequest, TagsRequest
+from memorytalk.service import SessionNotFound, SessionServiceError
 
 
 async def _seed_session(services):

@@ -1,7 +1,7 @@
 """util.dsl — compile_for() emits SQL fragments and enforces per-table field whitelists."""
 from __future__ import annotations
 
-from memory_talk_v2.util.dsl import compile_for, parse
+from memorytalk.util.dsl import compile_for, parse
 
 
 def test_compile_for_sessions_with_source():

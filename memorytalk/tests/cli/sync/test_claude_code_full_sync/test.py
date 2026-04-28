@@ -22,7 +22,7 @@ Compares real outputs against committed fixtures under `expected/`:
 Non-deterministic fields (timestamps, random event_ids, absolute fixture
 path captured into `metadata.path`) are stripped before diff.
 
-Regenerate: `REGENERATE_SYNC_FIXTURES=1 pytest memory_talk_v2/tests/sync/`
+Regenerate: `REGENERATE_SYNC_FIXTURES=1 pytest memorytalk/tests/sync/`
 after an intentional adapter/schema change.
 """
 from __future__ import annotations

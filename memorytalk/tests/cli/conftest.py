@@ -13,8 +13,8 @@ import pytest
 from click.testing import CliRunner
 from fastapi.testclient import TestClient
 
-from memory_talk_v2.api import create_app
-from memory_talk_v2.cli import _http, main
+from memorytalk.api import create_app
+from memorytalk.cli import _http, main
 
 
 @pytest.fixture

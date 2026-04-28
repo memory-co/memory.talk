@@ -2,13 +2,19 @@
 
 v2 的设计中心是 **search**——所有读取都以一次 search 为起点。v2 不再发行 result_id 这类追踪 token——search 直接返回带前缀的裸 id（`card_<ULID>` / `sess_<ULID>` / `link_<ULID>`），调用方拿到之后直接喂给 `view` / `log` / `tag` / `link create`。"这次 AI 会话最终用了哪些数据" 由 AI session 自己的 tool-use 对话天然记录——sync 之后就能完整复原，服务端不再造一份追踪包装。
 
-v2 是通过环境变量切换的 CLI 版本：
+**v2 是当前默认 CLI 版本**,直接用就行:
 
 ```bash
-MEMORY_TALK_CLI_VERSION=v2 memory-talk --help
+memory-talk --help
 ```
 
-不设置该变量时默认为 v1。
+未来如果引入 v3 / v4 等不兼容版本,会通过环境变量切换:
+
+```bash
+MEMORY_TALK_CLI_VERSION=v3 memory-talk --help     # 假设的未来版本
+```
+
+不设置该变量时默认走 v2。
 
 ## 命令树
 

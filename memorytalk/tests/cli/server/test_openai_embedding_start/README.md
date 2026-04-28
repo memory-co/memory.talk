@@ -10,7 +10,7 @@ embedding 服务(默认用 DashScope 的 `text-embedding-v4`),验证 `validate_e
 
 ```bash
 export QWEN_KEY="sk-xxxxxxxxxxxx"
-pytest memory_talk_v2/tests/cli/server/test_openai_embedding_start/
+pytest memorytalk/tests/cli/server/test_openai_embedding_start/
 ```
 
 **没设置 `QWEN_KEY` → 测试直接 FAIL,不跳过**。这是有意的 —— 配置里声明要走

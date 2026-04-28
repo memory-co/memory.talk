@@ -1,7 +1,7 @@
 """util.snippet — extract_snippets() english path: empty query, hit, miss."""
 from __future__ import annotations
 
-from memory_talk_v2.util.snippet import extract_snippets
+from memorytalk.util.snippet import extract_snippets
 
 
 def test_empty_query_returns_empty():

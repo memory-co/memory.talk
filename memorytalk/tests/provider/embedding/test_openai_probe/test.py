@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from memory_talk_v2.config import Config
-from memory_talk_v2.provider.embedding import EmbedderValidationError, validate_embedder
+from memorytalk.config import Config
+from memorytalk.provider.embedding import EmbedderValidationError, validate_embedder
 
 
 def _mock_client_returning(embedding: list[float]) -> MagicMock:
@@ -30,7 +30,7 @@ def _write_openai_settings(tmp_path):
 async def test_openai_probe_dim_mismatch(tmp_path, monkeypatch):
     monkeypatch.setenv("UNIT_TEST_KEY", "sk-fake")
     _write_openai_settings(tmp_path)
-    with patch("memory_talk_v2.provider.embedding.httpx.AsyncClient",
+    with patch("memorytalk.provider.embedding.httpx.AsyncClient",
                return_value=_mock_client_returning([0.1] * 384)):
         with pytest.raises(EmbedderValidationError, match="dim mismatch"):
             await validate_embedder(Config(tmp_path))
@@ -39,6 +39,6 @@ async def test_openai_probe_dim_mismatch(tmp_path, monkeypatch):
 async def test_openai_probe_success(tmp_path, monkeypatch):
     monkeypatch.setenv("UNIT_TEST_KEY", "sk-fake")
     _write_openai_settings(tmp_path)
-    with patch("memory_talk_v2.provider.embedding.httpx.AsyncClient",
+    with patch("memorytalk.provider.embedding.httpx.AsyncClient",
                return_value=_mock_client_returning([0.1] * 1024)):
         await validate_embedder(Config(tmp_path))

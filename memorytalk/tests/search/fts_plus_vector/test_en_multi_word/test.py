@@ -1,7 +1,7 @@
 """fts_plus_vector mode — English multi-word exact-match probe set."""
 from pathlib import Path
 
-from memory_talk_v2.tests.search._runner import load_probes, run_case
+from memorytalk.tests.search._runner import load_probes, run_case
 
 
 PROBES_PATH = Path(__file__).parent / "probes.json"

@@ -1,7 +1,7 @@
 """util.dsl — LIKE / NOT LIKE / IN / NOT IN operators."""
 from __future__ import annotations
 
-from memory_talk_v2.util.dsl import parse
+from memorytalk.util.dsl import parse
 
 
 def test_parse_like_and_not_like():

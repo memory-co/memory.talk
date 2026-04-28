@@ -2,18 +2,18 @@
 from __future__ import annotations
 import json
 
-from memory_talk_v2.config import Config
-from memory_talk_v2.provider.embedding import Embedder
-from memory_talk_v2.provider.lancedb import LanceStore
-from memory_talk_v2.repository import SQLiteStore
-from memory_talk_v2.schemas import (
+from memorytalk.config import Config
+from memorytalk.provider.embedding import Embedder
+from memorytalk.provider.lancedb import LanceStore
+from memorytalk.repository import SQLiteStore
+from memorytalk.schemas import (
     CardHit, SearchBucket, SearchRequest, SearchResponse, SessionHit,
 )
-from memory_talk_v2.service.links import link_to_ref
-from memory_talk_v2.util.dsl import DSLError, compile_for, parse
-from memory_talk_v2.util.ids import new_search_id
-from memory_talk_v2.util.snippet import extract_snippets
-from memory_talk_v2.util.ttl import dt_to_iso, now_utc
+from memorytalk.service.links import link_to_ref
+from memorytalk.util.dsl import DSLError, compile_for, parse
+from memorytalk.util.ids import new_search_id
+from memorytalk.util.snippet import extract_snippets
+from memorytalk.util.ttl import dt_to_iso, now_utc
 
 
 class SearchError(ValueError):

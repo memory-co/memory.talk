@@ -10,7 +10,7 @@ import json
 
 import pytest
 
-from memory_talk_v2.schemas import ContentBlock, IngestRound, IngestSessionRequest
+from memorytalk.schemas import ContentBlock, IngestRound, IngestSessionRequest
 
 
 async def _seed_session(cli_env, *, rounds_count=5) -> str:

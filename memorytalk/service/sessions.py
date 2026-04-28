@@ -3,18 +3,18 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from memory_talk_v2.config import Config
-from memory_talk_v2.provider.lancedb import LanceStore
-from memory_talk_v2.repository import SQLiteStore
-from memory_talk_v2.schemas import (
+from memorytalk.config import Config
+from memorytalk.provider.lancedb import LanceStore
+from memorytalk.repository import SQLiteStore
+from memorytalk.schemas import (
     ContentBlock, EventEntry, IngestRound, IngestSessionRequest,
     IngestSessionResponse, LogResponse, SessionRound, SessionView,
     TagsRequest, TagsResponse, ViewResponse,
 )
-from memory_talk_v2.service.events import EventWriter
-from memory_talk_v2.service.links import link_to_ref, refresh_active_user_links
-from memory_talk_v2.util.ids import SESSION_PREFIX, prefix_session_id
-from memory_talk_v2.util.ttl import dt_to_iso, now_utc
+from memorytalk.service.events import EventWriter
+from memorytalk.service.links import link_to_ref, refresh_active_user_links
+from memorytalk.util.ids import SESSION_PREFIX, prefix_session_id
+from memorytalk.util.ttl import dt_to_iso, now_utc
 
 
 class SessionServiceError(ValueError):

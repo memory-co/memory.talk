@@ -13,15 +13,15 @@ import click
 from rich.console import Console
 from rich.prompt import Confirm, IntPrompt, Prompt
 
-from memory_talk_v2.cli._format import fmt_error
-from memory_talk_v2.cli._render import emit_md, emit_md_err
-from memory_talk_v2.cli._setup_helpers import (
+from memorytalk.cli._format import fmt_error
+from memorytalk.cli._render import emit_md, emit_md_err
+from memorytalk.cli._setup_helpers import (
     create_symlink, detect_install_mode, diff_settings, humanize_paths,
     read_settings_raw, write_settings_atomic,
 )
-from memory_talk_v2.cli.server import pid_alive, start_server_proc, stop_server_proc
-from memory_talk_v2.config import Config, Settings
-from memory_talk_v2.provider.embedding import (
+from memorytalk.cli.server import pid_alive, start_server_proc, stop_server_proc
+from memorytalk.config import Config, Settings
+from memorytalk.provider.embedding import (
     EmbedderValidationError, validate_embedder,
 )
 

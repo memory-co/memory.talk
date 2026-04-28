@@ -4,7 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from memory_talk_v2.schemas.shared import ContentBlock
+from memorytalk.schemas.shared import ContentBlock
 
 
 class IngestRound(BaseModel):

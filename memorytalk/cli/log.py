@@ -4,10 +4,10 @@ import sys
 
 import click
 
-from memory_talk_v2.cli._format import fmt_error, fmt_log
-from memory_talk_v2.cli._http import ApiError, api, extract_error_message
-from memory_talk_v2.cli._render import emit_json, emit_json_err, emit_md, emit_md_err
-from memory_talk_v2.config import Config
+from memorytalk.cli._format import fmt_error, fmt_log
+from memorytalk.cli._http import ApiError, api, extract_error_message
+from memorytalk.cli._render import emit_json, emit_json_err, emit_md, emit_md_err
+from memorytalk.config import Config
 
 
 @click.command("log")

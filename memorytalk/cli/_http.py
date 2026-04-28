@@ -9,7 +9,7 @@ from typing import Any, Callable, Optional
 
 import httpx
 
-from memory_talk_v2.config import Config
+from memorytalk.config import Config
 
 
 class ApiError(RuntimeError):

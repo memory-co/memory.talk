@@ -8,9 +8,9 @@ File ops are routed through the per-domain Stores (which own Storage).
 """
 from __future__ import annotations
 
-from memory_talk_v2.util.ids import CARD_PREFIX, SESSION_PREFIX, new_event_id
-from memory_talk_v2.util.ttl import dt_to_iso, now_utc
-from memory_talk_v2.repository import SQLiteStore
+from memorytalk.util.ids import CARD_PREFIX, SESSION_PREFIX, new_event_id
+from memorytalk.util.ttl import dt_to_iso, now_utc
+from memorytalk.repository import SQLiteStore
 
 
 class EventWriter:

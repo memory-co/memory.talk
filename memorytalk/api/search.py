@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
-from memory_talk_v2.schemas import SearchRequest, SearchResponse
-from memory_talk_v2.service import SearchError
+from memorytalk.schemas import SearchRequest, SearchResponse
+from memorytalk.service import SearchError
 
 
 router = APIRouter()

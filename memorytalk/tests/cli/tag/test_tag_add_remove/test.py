@@ -2,7 +2,7 @@
 from __future__ import annotations
 import json
 
-from memory_talk_v2.schemas import ContentBlock, IngestRound, IngestSessionRequest
+from memorytalk.schemas import ContentBlock, IngestRound, IngestSessionRequest
 
 
 async def _seed_session(cli_env):

@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from memory_talk_v2.config import Config
-from memory_talk_v2.provider.embedding import EmbedderValidationError, validate_embedder
+from memorytalk.config import Config
+from memorytalk.provider.embedding import EmbedderValidationError, validate_embedder
 
 
 async def test_openai_missing_env(tmp_path, monkeypatch):

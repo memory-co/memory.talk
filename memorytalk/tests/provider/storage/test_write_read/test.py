@@ -2,7 +2,7 @@
 from __future__ import annotations
 from pathlib import Path
 
-from memory_talk_v2.provider.storage import LocalStorage
+from memorytalk.provider.storage import LocalStorage
 
 
 async def test_write_then_read_roundtrip(tmp_path: Path):

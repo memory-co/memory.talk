@@ -49,7 +49,7 @@ def test_rebuild_toggles_status_and_restores_on_success(app_client, monkeypatch)
 
 def test_rebuild_restores_status_on_failure(dummy_config, monkeypatch):
     from fastapi.testclient import TestClient
-    from memory_talk_v2.api import create_app
+    from memorytalk.api import create_app
 
     app = create_app(dummy_config)
     with TestClient(app, raise_server_exceptions=False) as client:

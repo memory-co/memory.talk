@@ -2,7 +2,7 @@
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
-from memory_talk_v2.util.ttl import dt_to_iso, iso_to_dt, refresh
+from memorytalk.util.ttl import dt_to_iso, iso_to_dt, refresh
 
 
 NOW = datetime(2026, 4, 22, 12, 0, 0, tzinfo=timezone.utc)

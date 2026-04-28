@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel
 
-from memory_talk_v2.schemas.shared import LinkTargetType
+from memorytalk.schemas.shared import LinkTargetType
 
 
 class CreateLinkRequest(BaseModel):

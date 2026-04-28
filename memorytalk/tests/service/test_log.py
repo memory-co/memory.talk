@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import pytest
 
-from memory_talk_v2.schemas import (
+from memorytalk.schemas import (
     CardRoundsItem, ContentBlock, CreateCardRequest, CreateLinkRequest,
     IngestRound, IngestSessionRequest,
 )
-from memory_talk_v2.service import CardNotFound, SessionNotFound
+from memorytalk.service import CardNotFound, SessionNotFound
 
 
 async def _seed(services):

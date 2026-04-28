@@ -3,9 +3,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
-from memory_talk_v2.util.ids import IdKind, InvalidIdError, parse_id
-from memory_talk_v2.schemas import ViewRequest, ViewResponse
-from memory_talk_v2.service import (
+from memorytalk.util.ids import IdKind, InvalidIdError, parse_id
+from memorytalk.schemas import ViewRequest, ViewResponse
+from memorytalk.service import (
     CardNotFound, CardServiceError, SessionNotFound, SessionServiceError,
 )
 
