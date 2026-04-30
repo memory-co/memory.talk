@@ -8,6 +8,7 @@ from memorytalk.service.links import (
     link_to_ref, refresh_active_user_links,
 )
 from memorytalk.service.rebuild import RebuildService
+from memorytalk.service.recall import RecallError, RecallService
 from memorytalk.service.search import SearchError, SearchService
 from memorytalk.service.sessions import (
     SessionNotFound, SessionService, SessionServiceError,
@@ -21,5 +22,6 @@ __all__ = [
     "LinkService", "LinkServiceError", "LinkNotFoundError",
     "link_to_ref", "refresh_active_user_links",
     "SearchService", "SearchError",
+    "RecallService", "RecallError",
     "RebuildService",
 ]

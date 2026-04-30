@@ -321,6 +321,26 @@ def fmt_log(resp: dict) -> str:
     return fmt_error(f"unknown log type: {resp.get('type')!r}")
 
 
+# ---------- recall ----------
+
+def fmt_recall(resp: dict) -> str:
+    """Bash code-block style — designed to be inlined into LLM context.
+
+    Empty hit set → empty string (per docs: no '## Memory recall (0)'
+    placeholder; the harness gets nothing to inject).
+    """
+    hits = resp.get("recalled") or []
+    if not hits:
+        return ""
+    lines = ["```bash", "# Relevant memories — run any to expand detail:"]
+    for h in hits:
+        cid = h.get("card_id", "")
+        summary = (h.get("summary") or "").replace("\n", " ").strip()
+        lines.append(f"memory-talk view {cid}  # {summary}")
+    lines.append("```")
+    return _join(*lines)
+
+
 # ---------- write commands (single line ok) ----------
 
 def fmt_card_create(resp: dict) -> str:

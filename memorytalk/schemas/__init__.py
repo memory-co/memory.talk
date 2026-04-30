@@ -10,6 +10,9 @@ from memorytalk.schemas.cards import (
 from memorytalk.schemas.links import CreateLinkRequest, CreateLinkResponse
 from memorytalk.schemas.log import EventEntry, LogRequest, LogResponse
 from memorytalk.schemas.rebuild import RebuildResponse
+from memorytalk.schemas.recall import (
+    RecallHit, RecallRequest, RecallResponse,
+)
 from memorytalk.schemas.search import (
     CardHit, SearchBucket, SearchRequest, SearchResponse, SessionHit,
 )
@@ -40,6 +43,8 @@ __all__ = [
     "TagsRequest", "TagsResponse",
     # search
     "SearchRequest", "CardHit", "SessionHit", "SearchBucket", "SearchResponse",
+    # recall
+    "RecallRequest", "RecallHit", "RecallResponse",
     # view
     "ViewRequest", "CardView", "SessionView", "ViewResponse",
     # log

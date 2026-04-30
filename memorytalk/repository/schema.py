@@ -67,6 +67,28 @@ DDL = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_search_log_created ON search_log(created_at)",
+    """
+    CREATE TABLE IF NOT EXISTS recall (
+        session_id   TEXT PRIMARY KEY,
+        round_count  INTEGER NOT NULL DEFAULT 0,
+        first_at     TEXT NOT NULL,
+        last_at      TEXT NOT NULL,
+        last_query   TEXT
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_recall_last_at ON recall(last_at)",
+    """
+    CREATE TABLE IF NOT EXISTS recall_hit (
+        session_id   TEXT NOT NULL,
+        card_id      TEXT NOT NULL,
+        round_count  INTEGER NOT NULL,
+        rank         INTEGER NOT NULL,
+        query        TEXT NOT NULL,
+        recalled_at  TEXT NOT NULL,
+        PRIMARY KEY (session_id, card_id, round_count)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_recall_hit_session_round ON recall_hit(session_id, round_count)",
 ]
 
 

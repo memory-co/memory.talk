@@ -16,6 +16,7 @@ import aiosqlite
 from memorytalk.provider.storage import Storage
 from memorytalk.repository.cards import CardStore
 from memorytalk.repository.links import LinkStore
+from memorytalk.repository.recall import RecallStore
 from memorytalk.repository.schema import init_schema
 from memorytalk.repository.search_log import SearchLogStore
 from memorytalk.repository.sessions import SessionStore
@@ -30,6 +31,7 @@ class SQLiteStore:
         self.cards = CardStore(conn, storage)
         self.links = LinkStore(conn, storage)
         self.search_log = SearchLogStore(conn, storage)
+        self.recall = RecallStore(conn)
 
     @classmethod
     async def create(cls, db_path: Path, storage: Storage) -> "SQLiteStore":
@@ -45,6 +47,6 @@ class SQLiteStore:
 
     async def clear_all(self) -> None:
         """Used by /v2/rebuild — drop all v2 table contents."""
-        for t in ("search_log", "links", "cards", "rounds", "sessions"):
+        for t in ("recall_hit", "recall", "search_log", "links", "cards", "rounds", "sessions"):
             await self.conn.execute(f"DELETE FROM {t}")
         await self.conn.commit()

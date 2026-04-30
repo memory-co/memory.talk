@@ -15,7 +15,7 @@ from memorytalk.provider.embedding import (
 )
 from memorytalk.service import (
     CardService, EventWriter, LinkService, RebuildService,
-    SearchService, SessionService,
+    RecallService, SearchService, SessionService,
 )
 from memorytalk.provider.lancedb import LanceStore
 from memorytalk.provider.storage import LocalStorage
@@ -62,6 +62,9 @@ def create_app(config: Config | None = None) -> FastAPI:
         app.state.search = SearchService(
             config=config, db=db, vectors=vectors, embedder=embedder,
         )
+        app.state.recall = RecallService(
+            config=config, db=db, vectors=vectors, embedder=embedder,
+        )
         app.state.rebuild = RebuildService(
             config=config, db=db, vectors=vectors, embedder=embedder,
         )
@@ -86,7 +89,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     from memorytalk.api.status import router as status_router
     app.include_router(status_router, prefix="/v2")
 
-    for name in ("sessions", "cards", "links", "tags", "search", "view", "log", "rebuild"):
+    for name in ("sessions", "cards", "links", "tags", "search", "recall", "view", "log", "rebuild"):
         try:
             mod = __import__(f"memorytalk.api.{name}", fromlist=["router"])
             app.include_router(mod.router, prefix="/v2")

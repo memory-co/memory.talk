@@ -44,6 +44,12 @@ class SearchConfig(BaseModel):
     search_log_retention_days: int = 0
 
 
+class RecallConfig(BaseModel):
+    default_top_k: int = 3
+    dedup_window_rounds: int = 5
+    fetch_multiplier: int = 3   # candidates pulled = top_k * multiplier; dedup-filter then trim
+
+
 class Settings(BaseModel):
     server: ServerConfig = ServerConfig()
     vector: ProviderConfig = ProviderConfig(provider="lancedb")
@@ -51,6 +57,7 @@ class Settings(BaseModel):
     embedding: EmbeddingConfig = EmbeddingConfig()
     ttl: TTLSettings = TTLSettings()
     search: SearchConfig = SearchConfig()
+    recall: RecallConfig = RecallConfig()
 
 
 # Tables that only v1 used. If memory.db contains any of these, the data root

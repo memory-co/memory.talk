@@ -5,6 +5,7 @@ noun's store as an attribute: `db.sessions`, `db.cards`, `db.links`,
 """
 from memorytalk.repository.cards import CardStore
 from memorytalk.repository.links import LinkStore
+from memorytalk.repository.recall import RecallStore
 from memorytalk.repository.schema import init_schema
 from memorytalk.repository.search_log import SearchLogStore
 from memorytalk.repository.sessions import SessionStore
@@ -13,6 +14,6 @@ from memorytalk.repository.store import SQLiteStore
 
 __all__ = [
     "SQLiteStore",
-    "SessionStore", "CardStore", "LinkStore", "SearchLogStore",
+    "SessionStore", "CardStore", "LinkStore", "SearchLogStore", "RecallStore",
     "init_schema",
 ]
