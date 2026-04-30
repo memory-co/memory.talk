@@ -1,14 +1,8 @@
-"""Helpers for `memory-talk setup`.
+"""Pure helpers for the setup wizard.
 
-Pure functions:
-- read_settings_raw: load settings.json without going through Config defaults
-- write_settings_atomic: tmp + rename
-- diff_settings: list dotted paths that changed between two dicts
-- create_symlink: idempotent symlink with classified result
-- detect_install_mode: figure out whether the running memory-talk lives
-  inside <data_root>/.venv/
-
-These avoid pulling in click/rich so they're easy to unit-test.
+Read/write/diff settings and the idempotent symlink primitive. No click,
+no rich, no networking — easy to unit-test, no side effects beyond the
+filesystem operation each function explicitly does.
 """
 from __future__ import annotations
 import json
@@ -71,16 +65,7 @@ class SymlinkResult:
 
 
 def create_symlink(target: Path, link_path: Path, *, overwrite: bool = False) -> SymlinkResult:
-    """Idempotent symlink. Refuses to clobber a regular (non-symlink) file.
-
-    Behavior:
-    - link_path doesn't exist          → create, return "created"
-    - link_path is a symlink to target → no-op, return "noop"
-    - link_path is a symlink to else   → if overwrite=True, replace; else "skipped_other_target"
-    - link_path is a regular file      → never touch, return "skipped_regular_file"
-    - PermissionError on write         → "skipped_no_perm"
-    - Windows                          → "skipped_windows" (requires admin)
-    """
+    """Idempotent symlink. Refuses to clobber a regular (non-symlink) file."""
     if sys.platform == "win32":
         return SymlinkResult(
             status="skipped_windows", link_path=link_path, target=target,

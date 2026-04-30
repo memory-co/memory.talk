@@ -64,7 +64,10 @@ def test_setup_bootstraps_inner_venv_via_real_subprocess(tmp_path):
     }
     proc = subprocess.run(
         [str(venv_a / "bin" / "memory-talk"), "setup"],
-        input="",  # EOF on first wizard prompt — we don't care about wizard outcome
+        # First prompt is now "Bootstrap dedicated venv?" — answer 'y' to
+        # exercise the bootstrap+execv path. Inner wizard EOFs immediately
+        # after, which is fine; we only verify the venv files exist.
+        input="y\n",
         env=env,
         capture_output=True, text=True,
         timeout=180,

@@ -8,8 +8,8 @@ async def _noop_validate(cfg):
 
 
 def test_first_install_local_writes_settings(setup_env, monkeypatch):
-    from memorytalk.cli import setup as setup_module
-    monkeypatch.setattr(setup_module, "validate_embedder", _noop_validate)
+    from memorytalk.cli.setup.steps import embedding as embedding_step
+    monkeypatch.setattr(embedding_step, "validate_embedder", _noop_validate)
 
     answers = "\n".join([
         "local",    # embedding provider

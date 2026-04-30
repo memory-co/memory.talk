@@ -4,16 +4,19 @@ Setup's first action is to bootstrap a venv at ``~/.memory-talk/.venv``
 and re-exec into it. For the **wizard** tests we don't want either of
 those to actually happen (real venv creation is slow + would write to
 the dev's real home, and os.execv would replace pytest itself). So this
-fixture stubs them out:
+fixture stubs them out.
 
-- ``Path.home()`` → tmp_path/home, so all default-pathing logic
-  (``data_root`` / venv path / pid file) lands inside tmp.
-- ``_already_in_venv()`` → always True, so setup skips the bootstrap
-  branch and goes straight to the wizard.
-- ``_bootstrap_venv`` and ``_reexec_into_venv`` → no-ops (defensive,
-  in case the in-venv check fails).
-- server start/stop/symlink stubs (same as before — tests don't spawn
-  uvicorn or write into real bin dirs).
+Patch sites map to where each name is *resolved at call time*, not where
+it's defined:
+
+- ``_already_in_venv`` / ``_bootstrap_venv`` / ``_reexec_into_venv``:
+  the click entry point in ``memorytalk.cli.setup`` imports them into
+  its own namespace, so we patch them on the package itself.
+- ``start_server_proc`` / ``stop_server_proc`` / ``pid_alive``: called
+  inside ``_step_server`` which lives in
+  ``memorytalk.cli.setup.steps.server``.
+- ``_step_alias``: called inside ``_wizard`` in
+  ``memorytalk.cli.setup.wizard``.
 
 The bootstrap path itself is exercised by a separate scenario,
 ``tests/cli/setup/test_bootstrap_real_venv``, which spins up a real
@@ -46,26 +49,31 @@ def setup_env(tmp_path, monkeypatch):
     env.runner = runner
     env.main = main
 
-    from memorytalk.cli import setup as setup_module
+    from memorytalk.cli import setup as setup_pkg
+    from memorytalk.cli.setup import wizard as wizard_mod
+    from memorytalk.cli.setup.steps import server as server_step
 
     # Pretend we're already inside the venv → skip bootstrap entirely.
-    monkeypatch.setattr(setup_module, "_already_in_venv", lambda: True)
-    monkeypatch.setattr(setup_module, "_bootstrap_venv", lambda upgrade=False: None)
-    monkeypatch.setattr(setup_module, "_reexec_into_venv", lambda: None)
+    monkeypatch.setattr(setup_pkg, "_already_in_venv", lambda: True)
+    monkeypatch.setattr(setup_pkg, "_bootstrap_venv", lambda: None)
+    monkeypatch.setattr(setup_pkg, "_reexec_into_venv", lambda: None)
 
-    # Neutralize server lifecycle and symlink writes.
+    # Neutralize server lifecycle (called from setup.steps.server).
     monkeypatch.setattr(
-        setup_module, "start_server_proc",
+        server_step, "start_server_proc",
         lambda cfg: {"status": "started", "pid": 99999, "port": cfg.settings.server.port},
     )
     monkeypatch.setattr(
-        setup_module, "stop_server_proc",
+        server_step, "stop_server_proc",
         lambda cfg: {"status": "stopped", "pid": 99999},
     )
-    monkeypatch.setattr(setup_module, "pid_alive", lambda pid: False)
+    monkeypatch.setattr(server_step, "pid_alive", lambda pid: False)
+
+    # Skip the symlink write — `_step_alias` is called from setup.wizard.
+    # Signature is `_step_alias(memory_talk_bin)`; absorb whatever's passed.
     monkeypatch.setattr(
-        setup_module, "_step_alias",
-        lambda: {
+        wizard_mod, "_step_alias",
+        lambda *a, **kw: {
             "status": "noop", "link_path": "/tmp/memory.talk", "target": "/tmp/memory-talk",
         },
     )

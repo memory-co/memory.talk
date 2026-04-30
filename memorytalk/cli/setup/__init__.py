@@ -1,0 +1,115 @@
+"""CLI: setup — interactive idempotent install / configure / restart.
+
+Walkthrough lives in ``docs/cli/v2/setup.md``. This module is the entry
+point that:
+
+1. Decides which Python env the wizard runs in:
+   - already running from ``~/.memory-talk/.venv`` → continue here
+   - otherwise → ask once whether to bootstrap that dedicated venv
+     (default yes; answering no keeps the current env)
+2. If the user opted in: bootstraps the venv, then re-execs into it.
+3. Drives the configuration wizard (rich prompts) in whichever env we
+   end up in. The `memory_talk_bin` path of *that* env is threaded
+   through to the symlink step + summary so they reflect reality.
+
+Upgrades are not handled here — there will be a separate command for
+that (``memory-talk upgrade`` or similar).
+
+`--data-root` is intentionally absent — setup is the bootstrap step, it
+needs to anchor on a known location. data_root for *other* commands
+remains overridable via the ``MEMORY_TALK_DATA_ROOT`` env var; setup
+honors it for where ``settings.json`` lands.
+
+Submodules:
+- ``_io``       — shared stderr Console
+- ``helpers``   — pure settings.json + symlink helpers (no rich, no click)
+- ``venv``      — venv path resolution + bootstrap + re-exec + current-env helper
+- ``steps/``    — one module per wizard step
+- ``wizard``    — composes the steps in order
+- ``summary``   — final Markdown table emitted on stdout
+
+The venv helpers are re-imported here so tests can monkeypatch them on
+the package itself (``setup_module._already_in_venv = ...``).
+"""
+from __future__ import annotations
+import subprocess
+import sys
+
+import click
+from rich.prompt import Confirm
+
+from memorytalk.cli._format import fmt_error
+from memorytalk.cli._render import emit_md, emit_md_err
+from memorytalk.config import Config
+
+from ._io import err_console
+from .helpers import read_settings_raw
+from .summary import _summary_md
+from .venv import (
+    _already_in_venv, _bootstrap_venv, _data_root, _reexec_into_venv,
+    _venv_root, current_memory_talk_bin,
+)
+from .wizard import _wizard
+
+
+@click.command("setup")
+def setup() -> None:
+    """Interactive wizard: install / reconfigure / restart memory-talk."""
+    # 1. Decide whether to bootstrap the dedicated venv.
+    #    - If we're already inside it → no prompt, just continue.
+    #    - Otherwise → ask once. Answering yes triggers bootstrap+execv;
+    #      after execv the new process re-enters this function with
+    #      `_already_in_venv()` returning True and skips the prompt.
+    if not _already_in_venv():
+        if Confirm.ask(
+            f"Bootstrap a dedicated venv at {_venv_root()}?\n"
+            "  yes → install memorytalk into a managed venv (recommended)\n"
+            "  no  → keep using the current python env",
+            console=err_console, default=True,
+        ):
+            try:
+                _bootstrap_venv()
+            except subprocess.CalledProcessError as e:
+                emit_md_err(fmt_error(
+                    f"failed to bootstrap venv: {e}\n"
+                    "  check network connectivity and that pip can reach PyPI."
+                ))
+                sys.exit(1)
+            _reexec_into_venv()
+            return  # not reached on success
+
+    # 2. Resolve which `memory-talk` script we're actually running, so the
+    #    symlink step + summary point at the right binary.
+    memory_talk_bin = current_memory_talk_bin()
+
+    # 3. Refuse to run against a v1 data root.
+    cfg = Config(_data_root())
+    try:
+        cfg.validate()
+    except Exception as e:
+        emit_md_err(fmt_error(str(e)))
+        sys.exit(1)
+
+    try:
+        old_raw = read_settings_raw(cfg.settings_path)
+    except ValueError:
+        if not Confirm.ask(
+            "settings.json is corrupted. Back it up to settings.json.bak and re-initialize?",
+            console=err_console, default=True,
+        ):
+            sys.exit(1)
+        bak = cfg.settings_path.with_suffix(".json.bak")
+        cfg.settings_path.replace(bak)
+        old_raw = None
+        err_console.print(f"[dim]backed up corrupt settings → {bak}[/dim]")
+
+    is_first_install = old_raw is None
+    cfg.data_root.mkdir(parents=True, exist_ok=True)
+
+    try:
+        result = _wizard(cfg, old_raw, is_first_install, memory_talk_bin=memory_talk_bin)
+    except KeyboardInterrupt:
+        err_console.print("\n[dim]aborted by user — no changes written[/dim]")
+        sys.exit(130)
+
+    emit_md(_summary_md(cfg, result, memory_talk_bin=memory_talk_bin))
