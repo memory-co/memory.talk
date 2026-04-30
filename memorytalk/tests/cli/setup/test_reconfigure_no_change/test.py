@@ -31,7 +31,6 @@ def test_reconfigure_no_change_does_not_rewrite(setup_env):
     original_text = settings_path.read_text()
 
     answers = "\n".join([
-        "2",       # install_mode: use current
         "",        # provider default (openai)
         "",        # endpoint default
         "",        # auth_env_key default
@@ -41,15 +40,10 @@ def test_reconfigure_no_change_does_not_rewrite(setup_env):
         "",        # port default
     ]) + "\n"
 
-    result = setup_env.runner.invoke(
-        setup_env.main,
-        ["setup", "--data-root", str(setup_env.data_root)],
-        input=answers,
-    )
+    result = setup_env.runner.invoke(setup_env.main, ["setup"], input=answers)
 
     assert result.exit_code == 0, (result.stdout, result.exception)
     # File untouched
     assert settings_path.stat().st_mtime_ns == original_mtime
     assert settings_path.read_text() == original_text
-    # Summary mentions no-op
     assert "nothing" in result.stdout.lower() and "unchanged" in result.stdout.lower()

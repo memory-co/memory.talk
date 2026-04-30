@@ -13,7 +13,6 @@ These avoid pulling in click/rich so they're easy to unit-test.
 from __future__ import annotations
 import json
 import os
-import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -125,26 +124,6 @@ def create_symlink(target: Path, link_path: Path, *, overwrite: bool = False) ->
         status="overwrote" if overwrite else "created",
         link_path=link_path, target=target,
     )
-
-
-# ---------- install mode ----------
-
-def detect_install_mode(data_root: Path) -> str:
-    """Return 'standard' if shutil.which('memory-talk') resolves into the
-    venv at <data_root>/.venv/bin/memory-talk; otherwise 'current'.
-
-    'current' is the default — it covers system Python, --user installs,
-    arbitrary venvs, etc. 'standard' is only declared when the running
-    binary is unambiguously the venv we'd create.
-    """
-    found = shutil.which("memory-talk")
-    if not found:
-        return "current"
-    expected = data_root / ".venv" / "bin" / "memory-talk"
-    try:
-        return "standard" if Path(found).resolve() == expected.resolve() else "current"
-    except OSError:
-        return "current"
 
 
 # ---------- summary helpers ----------

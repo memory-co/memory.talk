@@ -1,15 +1,23 @@
-"""Shared fixtures for `memory-talk setup` tests.
+"""Shared fixtures for in-process `memory-talk setup` tests.
 
-`setup_env` provides:
-- a tmp data_root
-- a CliRunner
-- a `mock_openai_probe` helper that monkey-patches httpx.AsyncClient so
-  the openai embedding probe in `validate_embedder` returns a
-  configurable-dim vector without hitting the real network
-- a `decline_server_start` toggle so tests don't actually spawn uvicorn
-  unless they want to (the symlink step also needs `memory-talk` on
-  PATH; in a CliRunner the binary may not be installed system-wide,
-  so by default we mock both server and symlink steps)
+Setup's first action is to bootstrap a venv at ``~/.memory-talk/.venv``
+and re-exec into it. For the **wizard** tests we don't want either of
+those to actually happen (real venv creation is slow + would write to
+the dev's real home, and os.execv would replace pytest itself). So this
+fixture stubs them out:
+
+- ``Path.home()`` → tmp_path/home, so all default-pathing logic
+  (``data_root`` / venv path / pid file) lands inside tmp.
+- ``_already_in_venv()`` → always True, so setup skips the bootstrap
+  branch and goes straight to the wizard.
+- ``_bootstrap_venv`` and ``_reexec_into_venv`` → no-ops (defensive,
+  in case the in-venv check fails).
+- server start/stop/symlink stubs (same as before — tests don't spawn
+  uvicorn or write into real bin dirs).
+
+The bootstrap path itself is exercised by a separate scenario,
+``tests/cli/setup/test_bootstrap_real_venv``, which spins up a real
+outer venv via subprocess.
 """
 from __future__ import annotations
 from pathlib import Path
@@ -23,21 +31,29 @@ from memorytalk.cli import main
 
 @pytest.fixture
 def setup_env(tmp_path, monkeypatch):
-    data_root = tmp_path / ".mt"
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+
     runner = CliRunner()
 
     class Env:
         pass
 
     env = Env()
-    env.data_root = data_root
+    env.fake_home = fake_home
+    env.data_root = fake_home / ".memory-talk"   # Config(_data_root()) default
     env.runner = runner
     env.main = main
 
-    # By default, neutralize the server start/stop and symlink steps so a
-    # plain test doesn't accidentally spawn uvicorn or try to write into
-    # /usr/bin. Tests that want real lifecycle behavior can override.
     from memorytalk.cli import setup as setup_module
+
+    # Pretend we're already inside the venv → skip bootstrap entirely.
+    monkeypatch.setattr(setup_module, "_already_in_venv", lambda: True)
+    monkeypatch.setattr(setup_module, "_bootstrap_venv", lambda upgrade=False: None)
+    monkeypatch.setattr(setup_module, "_reexec_into_venv", lambda: None)
+
+    # Neutralize server lifecycle and symlink writes.
     monkeypatch.setattr(
         setup_module, "start_server_proc",
         lambda cfg: {"status": "started", "pid": 99999, "port": cfg.settings.server.port},
@@ -46,18 +62,15 @@ def setup_env(tmp_path, monkeypatch):
         setup_module, "stop_server_proc",
         lambda cfg: {"status": "stopped", "pid": 99999},
     )
-    monkeypatch.setattr(
-        setup_module, "pid_alive", lambda pid: False,
-    )
+    monkeypatch.setattr(setup_module, "pid_alive", lambda pid: False)
     monkeypatch.setattr(
         setup_module, "_step_alias",
-        lambda install_mode: {
+        lambda: {
             "status": "noop", "link_path": "/tmp/memory.talk", "target": "/tmp/memory-talk",
         },
     )
 
     def mock_openai_probe(dim: int = 1024) -> None:
-        """Patch httpx.AsyncClient so /v1/embeddings returns a `dim`-d vector."""
         resp = MagicMock()
         resp.raise_for_status.return_value = None
         resp.json.return_value = {"data": [{"index": 0, "embedding": [0.1] * dim}]}

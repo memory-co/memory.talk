@@ -25,22 +25,17 @@ def test_reconfigure_changed_writes_new_value(setup_env):
     _seed_settings(setup_env.data_root)
 
     answers = "\n".join([
-        "2",                       # install_mode
         "",                        # provider default (openai)
         "",                        # endpoint default
         "",                        # auth_env_key default
         "text-embedding-v3",       # NEW model
         "",                        # dim default
-        # vector / relation auto-pick — no input consumed
+        # vector / relation auto-pick
         "",                        # port default
         "n",                       # don't start server
     ]) + "\n"
 
-    result = setup_env.runner.invoke(
-        setup_env.main,
-        ["setup", "--data-root", str(setup_env.data_root)],
-        input=answers,
-    )
+    result = setup_env.runner.invoke(setup_env.main, ["setup"], input=answers)
 
     assert result.exit_code == 0, (result.stdout, result.exception)
     data = json.loads((setup_env.data_root / "settings.json").read_text())
