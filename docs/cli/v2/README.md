@@ -23,6 +23,9 @@ memory-talk
 ├── setup                                     # 交互式幂等安装 / 改配置 / 重启
 ├── search <query> [--where DSL] [--top-k N]  # 有意识检索:AI 主动查记忆
 ├── recall <session_id> <prompt>              # 无意识召回:hook 阶段自动注入 top-K 极简 cards
+├── review
+│   ├── list [--limit N]                      # 横扫所有有 recall 历史的 session
+│   └── detail <session_id> [--limit N]       # 钻进单个 session 看每轮 hit 详情
 ├── view <id>                                 # 读取 card 或 session（按 id 前缀自动判型）
 ├── log <id>                                  # 查一个 card / session 的全生命周期事件
 ├── card <json>                               # 创建 card

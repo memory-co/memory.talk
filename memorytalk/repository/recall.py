@@ -55,15 +55,19 @@ class RecallStore:
         return self._row(row)
 
     async def list_sessions(self, limit: int = 100) -> list[dict]:
-        """Powers the ``review`` command: every session that has any recall
-        history, plus aggregate stats. Joins recall_hit for ``cards_injected``."""
+        """Powers ``review list``: every session with recall history, plus
+        aggregate stats. ``session_exist`` is computed live via LEFT JOIN
+        against the sessions table — never persisted (see review.md).
+        """
         async with self.conn.execute(
             """
             SELECT
                 r.session_id, r.round_count, r.first_at, r.last_at, r.last_query,
-                COUNT(DISTINCT h.card_id) AS cards_injected
+                COUNT(DISTINCT h.card_id) AS cards_injected,
+                CASE WHEN s.session_id IS NOT NULL THEN 1 ELSE 0 END AS session_exist
             FROM recall r
             LEFT JOIN recall_hit h USING(session_id)
+            LEFT JOIN sessions s   ON s.session_id = r.session_id
             GROUP BY r.session_id
             ORDER BY r.last_at DESC
             LIMIT ?
@@ -75,7 +79,80 @@ class RecallStore:
         for r in rows:
             d = self._row(r)
             d["cards_injected"] = int(r["cards_injected"] or 0)
+            d["session_exist"] = bool(r["session_exist"])
             out.append(d)
+        return out
+
+    async def session_detail(self, session_id: str, *, limit: int = 50) -> dict | None:
+        """Powers ``review detail <session_id>``: header (same shape as
+        list_sessions's row) plus the per-round hit list (most recent first).
+
+        Returns None when the session has no row in the recall table.
+        """
+        async with self.conn.execute(
+            """
+            SELECT
+                r.session_id, r.round_count, r.first_at, r.last_at, r.last_query,
+                COUNT(DISTINCT h.card_id) AS cards_injected,
+                CASE WHEN s.session_id IS NOT NULL THEN 1 ELSE 0 END AS session_exist
+            FROM recall r
+            LEFT JOIN recall_hit h USING(session_id)
+            LEFT JOIN sessions s   ON s.session_id = r.session_id
+            WHERE r.session_id = ?
+            GROUP BY r.session_id
+            """,
+            (session_id,),
+        ) as cursor:
+            head = await cursor.fetchone()
+        if head is None:
+            return None
+        out = self._row(head)
+        out["cards_injected"] = int(head["cards_injected"] or 0)
+        out["session_exist"] = bool(head["session_exist"])
+
+        # Pull the most recent N rounds (rounds are identified by round_count;
+        # we slice on distinct round_count, then fetch all hits in those rounds).
+        async with self.conn.execute(
+            """
+            SELECT DISTINCT round_count FROM recall_hit
+            WHERE session_id = ?
+            ORDER BY round_count DESC
+            LIMIT ?
+            """,
+            (session_id, limit),
+        ) as cursor:
+            round_rows = await cursor.fetchall()
+        round_ids = [int(r[0]) for r in round_rows]
+
+        rounds: list[dict] = []
+        if round_ids:
+            placeholders = ",".join("?" * len(round_ids))
+            async with self.conn.execute(
+                f"""
+                SELECT round_count, query, recalled_at, card_id, rank
+                FROM recall_hit
+                WHERE session_id = ? AND round_count IN ({placeholders})
+                ORDER BY round_count DESC, rank ASC
+                """,
+                (session_id, *round_ids),
+            ) as cursor:
+                hit_rows = await cursor.fetchall()
+            by_round: dict[int, dict] = {}
+            for h in hit_rows:
+                rc = int(h["round_count"])
+                if rc not in by_round:
+                    by_round[rc] = {
+                        "round_count": rc,
+                        "query": h["query"],
+                        "recalled_at": h["recalled_at"],
+                        "hits": [],
+                    }
+                by_round[rc]["hits"].append({
+                    "card_id": h["card_id"],
+                    "rank": int(h["rank"]),
+                })
+            rounds = [by_round[rc] for rc in round_ids]
+        out["rounds"] = rounds
         return out
 
     @staticmethod

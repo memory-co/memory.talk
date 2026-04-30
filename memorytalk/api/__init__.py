@@ -89,7 +89,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     from memorytalk.api.status import router as status_router
     app.include_router(status_router, prefix="/v2")
 
-    for name in ("sessions", "cards", "links", "tags", "search", "recall", "view", "log", "rebuild"):
+    for name in ("sessions", "cards", "links", "tags", "search", "recall", "review", "view", "log", "rebuild"):
         try:
             mod = __import__(f"memorytalk.api.{name}", fromlist=["router"])
             app.include_router(mod.router, prefix="/v2")

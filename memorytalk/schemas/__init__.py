@@ -13,6 +13,10 @@ from memorytalk.schemas.rebuild import RebuildResponse
 from memorytalk.schemas.recall import (
     RecallHit, RecallRequest, RecallResponse,
 )
+from memorytalk.schemas.review import (
+    ReviewDetailResponse, ReviewHit, ReviewListResponse, ReviewRound,
+    ReviewSessionSummary,
+)
 from memorytalk.schemas.search import (
     CardHit, SearchBucket, SearchRequest, SearchResponse, SessionHit,
 )
@@ -45,6 +49,9 @@ __all__ = [
     "SearchRequest", "CardHit", "SessionHit", "SearchBucket", "SearchResponse",
     # recall
     "RecallRequest", "RecallHit", "RecallResponse",
+    # review
+    "ReviewSessionSummary", "ReviewListResponse",
+    "ReviewHit", "ReviewRound", "ReviewDetailResponse",
     # view
     "ViewRequest", "CardView", "SessionView", "ViewResponse",
     # log

@@ -321,6 +321,65 @@ def fmt_log(resp: dict) -> str:
     return fmt_error(f"unknown log type: {resp.get('type')!r}")
 
 
+# ---------- review ----------
+
+def fmt_review_list(resp: dict) -> str:
+    sessions = resp.get("sessions") or []
+    out: list[str] = []
+    out.append(f"# Sessions with recall history ({len(sessions)})")
+    out.append("")
+    if not sessions:
+        out.append("*(no recall history yet — call `memory-talk recall <session_id> <prompt>` first)*")
+        out.append("")
+        return _join(*out)
+    for s in sessions:
+        sid = s.get("session_id", "")
+        exist = "true" if s.get("session_exist") else "false"
+        rc = s.get("round_count", 0)
+        ci = s.get("cards_injected", 0)
+        last = s.get("last_at", "")
+        last_q = (s.get("last_query") or "").replace("\n", " ").strip()
+        out.append(
+            f"- **`{sid}`** · `session_exist={exist}` · {rc} rounds · "
+            f"{ci} cards · last {last}"
+        )
+        if last_q:
+            out.append(f"  > {last_q}")
+        out.append("")
+    return _join(*out)
+
+
+def fmt_review_detail(resp: dict) -> str:
+    sid = resp.get("session_id", "")
+    exist = "true" if resp.get("session_exist") else "false"
+    out: list[str] = []
+    out.append(f"# `{sid}` · session_exist={exist}")
+    out.append("")
+    out.append(
+        f"{resp.get('round_count', 0)} rounds · "
+        f"{resp.get('cards_injected', 0)} cards (deduped) · "
+        f"first {resp.get('first_at', '')} · last {resp.get('last_at', '')}"
+    )
+    out.append("")
+    rounds = resp.get("rounds") or []
+    for i, r in enumerate(rounds):
+        if i > 0:
+            out.append("---")
+            out.append("")
+        rc = r.get("round_count", "?")
+        rec_at = r.get("recalled_at", "")
+        out.append(f"## Round {rc} · {rec_at}")
+        out.append("")
+        q = (r.get("query") or "").replace("\n", " ").strip()
+        if q:
+            out.append(f"> {q}")
+            out.append("")
+        for hit in r.get("hits") or []:
+            out.append(f"{hit.get('rank', '?')}. `{hit.get('card_id', '')}`")
+        out.append("")
+    return _join(*out)
+
+
 # ---------- recall ----------
 
 def fmt_recall(resp: dict) -> str:
