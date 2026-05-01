@@ -21,7 +21,7 @@ from pathlib import Path
 from memorytalk.config import Config, Settings
 
 from . import _prompt
-from ._io import err_console
+from ._io import err_console, section
 from .helpers import diff_settings, write_settings_atomic
 from .steps.embedding import _step_embedding, _step_probe_embedding
 from .steps.provider import _step_choice
@@ -46,6 +46,7 @@ def _wizard(
     new_settings = _step_embedding(base)
 
     # 2. vector / relation (single-option but exposed)
+    section("Storage")
     new_settings["vector"] = {"provider": _step_choice(
         "vector provider", ["lancedb"], (base.get("vector") or {}).get("provider", "lancedb"),
     )}
@@ -54,6 +55,7 @@ def _wizard(
     )}
 
     # 3. server port
+    section("Server")
     server_block = base.get("server") or {}
     port_str = _prompt.text(
         "server port",

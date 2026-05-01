@@ -12,3 +12,14 @@ from rich.console import Console
 
 
 err_console = Console(file=sys.stderr)
+
+
+def section(title: str) -> None:
+    """Print a category banner to stderr to group related prompts.
+
+    Used by the wizard / step modules so the user always knows which
+    bucket the next few questions belong to (Embedding / Storage /
+    Server / PATH takeover). Goes to stderr so it doesn't pollute the
+    final Markdown summary on stdout.
+    """
+    err_console.print(f"\n[bold cyan]── {title} ──[/bold cyan]")

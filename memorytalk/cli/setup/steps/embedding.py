@@ -6,6 +6,15 @@ arrow-key selects with a final "Other..." entry that drops to free text
 ``dim`` is auto-derived from the chosen model when picked from the known
 list; only "Other..." asks for it.
 
+When a previous run already set a custom value (e.g. an endpoint URL
+that's not in our known list), ``_select_or_text`` surfaces it as the
+top option marked ``(current)`` and pre-selects it, so reconfigure is
+one keypress to keep the existing value.
+
+Endpoint URLs and auth-env-var names are shown raw (no friendly
+aliases) — the value IS the answer; wrapping it in a brand label only
+hides what the user is picking.
+
 The probe loop is kept identical: validate, on failure ask whether to
 re-edit the embedding section, retry until success or user gives up.
 """
@@ -19,7 +28,7 @@ from memorytalk.provider.embedding import (
 )
 
 from .. import _prompt
-from .._io import err_console
+from .._io import err_console, section
 
 
 # Known model → canonical embedding dim. Keeps users from having to know
@@ -38,32 +47,50 @@ KNOWN_LOCAL_MODELS: dict[str, int] = {
     "BAAI/bge-large-en-v1.5": 1024,
 }
 
+# Raw URLs — no alias / brand title. The URL is what the user is choosing.
 KNOWN_ENDPOINTS = [
-    _prompt.Option(
-        "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
-        title="Dashscope (Aliyun, Qwen-compatible)",
-    ),
-    _prompt.Option(
-        "https://api.openai.com/v1/embeddings",
-        title="OpenAI",
-    ),
+    _prompt.Option("https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings"),
+    _prompt.Option("https://api.openai.com/v1/embeddings"),
 ]
 
+# Raw env-var names — `QWEN_KEY` already says "this is for Qwen".
 KNOWN_AUTH_KEYS = [
-    _prompt.Option("QWEN_KEY", description="Dashscope/Qwen API key"),
-    _prompt.Option("OPENAI_API_KEY", description="OpenAI API key"),
+    _prompt.Option("QWEN_KEY"),
+    _prompt.Option("OPENAI_API_KEY"),
 ]
 
 _OTHER = "__other__"
 
 
-def _select_or_text(label: str, options: list[_prompt.Option], default: str) -> str:
-    """Show known options + 'Other...' entry; drop to free text on Other."""
-    extended = options + [_prompt.Option(_OTHER, title="Other... (type your own)")]
-    sel_default = default if any(o.value == default for o in options) else _OTHER
-    sel = _prompt.select(label, extended, default=sel_default)
+def _select_or_text(
+    label: str,
+    known: list[_prompt.Option],
+    *,
+    current: str | None = None,
+) -> str:
+    """Pick from ``known`` + Other..., with the user's existing value
+    surfaced as the top option if it's not already in the known list.
+
+    ``current`` is the value already set in settings (None on first
+    install). Behavior:
+
+    - If ``current`` matches a known option → pre-select that.
+    - If ``current`` is custom → prepend an option with value=current,
+      marked ``(current)``, and pre-select it.
+    - If no ``current`` → fall back to the first known as default.
+    - "Other..." always offered → drops to free text.
+    """
+    options: list[_prompt.Option] = []
+    if current and not any(o.value == current for o in known):
+        options.append(_prompt.Option(current, description="(current)"))
+    options.extend(known)
+    options.append(_prompt.Option(_OTHER, title="Other... (type your own)"))
+
+    sel_default = current if current else (known[0].value if known else _OTHER)
+
+    sel = _prompt.select(label, options, default=sel_default)
     if sel == _OTHER:
-        return _prompt.text(f"{label} (custom)", default=default)
+        return _prompt.text(f"{label} (custom)", default=current or "")
     return sel
 
 
@@ -75,18 +102,20 @@ def _select_model_and_dim(
     options = [_prompt.Option(m, description=f"dim {d}") for m, d in known.items()]
     options.append(_prompt.Option(_OTHER, title="Other... (type your own)"))
     sel_default = default_model if default_model in known else _OTHER
-    sel = _prompt.select("model", options, default=sel_default)
+    sel = _prompt.select("embedding model", options, default=sel_default)
     if sel != _OTHER:
         return sel, known[sel]
-    model = _prompt.text("model (custom)", default=default_model)
+    model = _prompt.text("embedding model (custom)", default=default_model)
     dim_str = _prompt.text(
-        "dim", default=str(default_dim),
+        "embedding dim", default=str(default_dim),
         validate=lambda v: (v.strip().isdigit() and int(v) > 0) or "must be a positive integer",
     )
     return model, int(dim_str)
 
 
 def _step_embedding(base: dict) -> dict:
+    section("Embedding")
+
     out = dict(base)
     cur_emb = base.get("embedding") or {}
     cur_provider = cur_emb.get("provider")
@@ -107,14 +136,14 @@ def _step_embedding(base: dict) -> dict:
 
     if provider == "openai":
         endpoint = _select_or_text(
-            "endpoint",
+            "embedding endpoint",
             KNOWN_ENDPOINTS,
-            cur_emb.get("endpoint") or KNOWN_ENDPOINTS[0].value,
+            current=cur_emb.get("endpoint"),
         )
         auth_env_key = _select_or_text(
             "auth env var name",
             KNOWN_AUTH_KEYS,
-            cur_emb.get("auth_env_key") or "QWEN_KEY",
+            current=cur_emb.get("auth_env_key"),
         )
         model, dim = _select_model_and_dim(
             KNOWN_OPENAI_MODELS,

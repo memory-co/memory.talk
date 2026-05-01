@@ -33,7 +33,7 @@ import sys
 from pathlib import Path
 
 from .. import _prompt
-from .._io import err_console
+from .._io import err_console, section
 
 
 def _find_all_on_path(name: str) -> list[Path]:
@@ -81,6 +81,7 @@ def _step_path_takeover(target: Path) -> dict:
              "message": "symlinks need admin/dev mode; skipped"},
         ]}
 
+    section("PATH takeover")
     target_resolved = _resolve_safe(target)
     paths = _find_all_on_path("memory-talk")
 
@@ -116,7 +117,7 @@ def _step_path_takeover(target: Path) -> dict:
 
     # Show the plan, then a single confirm.
     err_console.print(
-        f"\nfound [bold]{len(paths)}[/bold] `memory-talk` on $PATH "
+        f"found [bold]{len(paths)}[/bold] `memory-talk` on $PATH "
         f"(target: [cyan]{target}[/cyan]):"
     )
     for p, kind in needs_redirect:
