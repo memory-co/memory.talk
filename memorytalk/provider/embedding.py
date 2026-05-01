@@ -6,10 +6,23 @@ openai — OpenAI-compatible HTTP endpoint via httpx.AsyncClient.
 """
 from __future__ import annotations
 from abc import ABC, abstractmethod
+from string import Template
 import asyncio
 import hashlib
 import os
 import httpx
+
+
+def _resolve_auth_key(auth_key: str) -> str:
+    """Render ``${VAR}`` env-var references in an auth key.
+
+    Uses ``string.Template.substitute`` (strict, not safe_substitute) so
+    a missing env var raises ``KeyError`` — callers turn that into a
+    clear error rather than silently sending an empty Bearer. Strings
+    without any ``$`` pass through untouched. Embed a literal ``$`` as
+    ``$$`` if needed.
+    """
+    return Template(auth_key).substitute(os.environ)
 
 
 class Embedder(ABC):
@@ -56,23 +69,28 @@ class OpenAIEmbedder(Embedder):
     def __init__(
         self,
         endpoint: str,
-        auth_env_key: str,
+        auth_key: str,
         model: str,
         timeout: float = 30.0,
     ):
         if not endpoint:
             raise ValueError("OpenAIEmbedder requires an endpoint")
-        if not auth_env_key:
-            raise ValueError("OpenAIEmbedder requires an auth_env_key")
+        if not auth_key:
+            raise ValueError("OpenAIEmbedder requires an auth_key")
         self.endpoint = endpoint
-        self.auth_env_key = auth_env_key
+        self.auth_key = auth_key
         self.model = model
         self.timeout = timeout
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        api_key = os.environ.get(self.auth_env_key)
+        try:
+            api_key = _resolve_auth_key(self.auth_key)
+        except KeyError as e:
+            raise RuntimeError(
+                f"auth_key references env var ${{{e.args[0]}}} which is not set"
+            ) from e
         if not api_key:
-            raise RuntimeError(f"Environment variable {self.auth_env_key} is not set")
+            raise RuntimeError("auth_key resolved to an empty string")
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 self.endpoint,
@@ -99,7 +117,7 @@ def get_embedder(config) -> Embedder:
     if p == "openai":
         return OpenAIEmbedder(
             endpoint=emb.endpoint,
-            auth_env_key=emb.auth_env_key,
+            auth_key=emb.auth_key,
             model=emb.model,
             timeout=emb.timeout,
         )
@@ -131,10 +149,17 @@ async def validate_embedder(config) -> None:
         return
 
     if p == "openai":
-        api_key = os.environ.get(emb.auth_env_key or "")
+        try:
+            api_key = _resolve_auth_key(emb.auth_key or "")
+        except KeyError as e:
+            raise EmbedderValidationError(
+                f"openai embedder: auth_key references env var ${{{e.args[0]}}} "
+                "which is not set"
+            )
         if not api_key:
             raise EmbedderValidationError(
-                f"openai embedder: environment variable {emb.auth_env_key!r} is not set"
+                "openai embedder: auth_key is empty (set a literal value or "
+                "${VAR} in settings.json)"
             )
         try:
             async with httpx.AsyncClient() as client:

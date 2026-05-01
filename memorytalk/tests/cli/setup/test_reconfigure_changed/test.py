@@ -12,7 +12,7 @@ def _seed_settings(data_root):
         "embedding": {
             "provider": "openai",
             "endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
-            "auth_env_key": "QWEN_KEY",
+            "auth_key": "${QWEN_KEY}",
             "model": "text-embedding-v4",
             "dim": 1024,
             "timeout": 30.0,
@@ -27,7 +27,7 @@ def test_reconfigure_changed_writes_new_value(setup_env):
     setup_env.prompts.extend([
         "openai",                                                              # provider
         "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",        # endpoint
-        "QWEN_KEY",                                                            # auth_env_key
+        "${QWEN_KEY}",                                                         # auth_key (env ref unchanged)
         "text-embedding-v3",                                                   # NEW model (dim 1024 same)
         "",                                                                    # port (default)
         "no",                                                                  # don't start server

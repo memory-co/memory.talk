@@ -1,13 +1,13 @@
 # test_openai_invalid_endpoint
 
-`auth_env_key` 在,但 `endpoint` 是个无人接听的地址 —— `validate_embedder`
+`auth_key` 在,但 `endpoint` 是个无人接听的地址 —— `validate_embedder`
 应该探测到失败,server 起不来。覆盖"key 没问题但 endpoint 错"这一档,跟
 sibling `test_openai_embedding_start/`(全好)和 `test_no_config_start/`
 (全无配置)正交。
 
 ## 场景
 
-- `provider=openai`,`auth_env_key=FAKE_EMB_KEY`(在 monkeypatch 里设上)
+- `provider=openai`,`auth_key=FAKE_EMB_KEY`(在 monkeypatch 里设上)
 - `endpoint=http://127.0.0.1:<random_free_port>/v1/embeddings` —— 那个端口
   没人监听,probe 会立刻拿到 connection refused
 - `timeout=3.0`(把 embedding 探针的等候上限砍到 3 秒,而不是默认 30 秒)

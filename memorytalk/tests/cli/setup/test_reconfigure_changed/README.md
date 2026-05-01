@@ -7,7 +7,7 @@
 
 ## 应答
 
-`embedding provider` Enter(保持 openai),`endpoint` Enter,`auth_env_key` Enter,
+`embedding provider` Enter(保持 openai),`endpoint` Enter,`auth_key` Enter,
 `model` 输入新值 `text-embedding-v3`,`dim` Enter,后面全 Enter,server 启动选 `n`。
 
 ## 验证

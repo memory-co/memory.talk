@@ -23,7 +23,7 @@ async def test_server_fails_to_start_with_invalid_endpoint(server_env, monkeypat
         "embedding": {
             "provider": "openai",
             "endpoint": f"http://127.0.0.1:{bogus_port}/v1/embeddings",
-            "auth_env_key": "FAKE_EMB_KEY",
+            "auth_key": "${FAKE_EMB_KEY}",
             "model": "ignored",
             "dim": 1024,
             "timeout": 3.0,

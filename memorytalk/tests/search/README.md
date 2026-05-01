@@ -23,7 +23,7 @@ tests/search/corpus/                  # 提交进 repo 的 file-layer fixture
               hits → MRR → quality_gate
 ```
 
-整套用真实 DashScope embedding(`auth_env_key=QWEN_KEY`),**没设 key 直接 FAIL**,
+整套用真实 DashScope embedding(`auth_key=QWEN_KEY`),**没设 key 直接 FAIL**,
 不 skip。
 
 ## 模式

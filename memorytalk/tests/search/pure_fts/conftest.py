@@ -45,7 +45,7 @@ def data_root(tmp_path_factory):
         "embedding": {
             "provider": "openai",
             "endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
-            "auth_env_key": "QWEN_KEY",
+            "auth_key": "${QWEN_KEY}",
             "model": "text-embedding-v4",
             "dim": 1024,
         },

@@ -29,7 +29,12 @@ class EmbeddingConfig(BaseModel):
     provider: str = "dummy"
     model: str = "all-MiniLM-L6-v2"
     endpoint: str | None = None
-    auth_env_key: str | None = None
+    # The literal API key, OR a ``${VAR}`` reference rendered from
+    # ``os.environ`` at request time via ``string.Template``. Letting
+    # users paste the literal removes the cross-environment fragility
+    # of "is the right env var set in this shell / cron / IDE / ...";
+    # ``${VAR}`` is kept for tests and for users who want indirection.
+    auth_key: str | None = None
     dim: int = 384
     timeout: float = 30.0
 
@@ -153,5 +158,18 @@ class Config:
     def _load_settings(self) -> Settings:
         if self.settings_path.exists():
             data = json.loads(self.settings_path.read_text())
+            # Strict migration: `embedding.auth_env_key` was replaced by
+            # `embedding.auth_key`. Refuse to start until the user re-runs
+            # setup, so a stale env-name doesn't get silently turned into
+            # an empty literal at runtime.
+            emb = data.get("embedding") or {}
+            if "auth_env_key" in emb:
+                raise ConfigValidationError(
+                    "settings.json uses the legacy field "
+                    "`embedding.auth_env_key`, which was replaced by "
+                    "`embedding.auth_key` (literal value; ${VAR} renders "
+                    "from os.environ via string.Template). "
+                    "Re-run `memory-talk setup` to migrate."
+                )
             return Settings(**data)
         return Settings()

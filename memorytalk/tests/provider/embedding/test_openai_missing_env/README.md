@@ -7,7 +7,7 @@
 
 | 测试函数 | 验证什么 |
 |---|---|
-| `test_openai_missing_env` | settings 指向 `auth_env_key=UNIT_TEST_KEY`,该环境变量未设 → `EmbedderValidationError`,错误消息含变量名 |
+| `test_openai_missing_env` | settings 指向 `auth_key=UNIT_TEST_KEY`,该环境变量未设 → `EmbedderValidationError`,错误消息含变量名 |
 
 ## 覆盖的代码路径
 

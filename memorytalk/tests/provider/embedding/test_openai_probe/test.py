@@ -23,7 +23,7 @@ def _mock_client_returning(embedding: list[float]) -> MagicMock:
 def _write_openai_settings(tmp_path):
     (tmp_path / "settings.json").write_text(
         '{"embedding": {"provider": "openai", "endpoint": "https://x/v1/embeddings",'
-        ' "auth_env_key": "UNIT_TEST_KEY", "model": "x", "dim": 1024}}'
+        ' "auth_key": "${UNIT_TEST_KEY}", "model": "x", "dim": 1024}}'
     )
 
 

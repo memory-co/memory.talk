@@ -29,7 +29,7 @@ def openai_cli_env(tmp_data_root, monkeypatch):
             "embedding": {
                 "provider": "openai",
                 "endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
-                "auth_env_key": "QWEN_KEY",
+                "auth_key": "${QWEN_KEY}",
                 "model": "text-embedding-v4",
                 "dim": 1024,
             },

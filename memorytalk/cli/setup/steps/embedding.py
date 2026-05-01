@@ -53,12 +53,6 @@ KNOWN_ENDPOINTS = [
     _prompt.Option("https://api.openai.com/v1/embeddings"),
 ]
 
-# Raw env-var names — `QWEN_KEY` already says "this is for Qwen".
-KNOWN_AUTH_KEYS = [
-    _prompt.Option("QWEN_KEY"),
-    _prompt.Option("OPENAI_API_KEY"),
-]
-
 _OTHER = "__other__"
 
 
@@ -140,10 +134,16 @@ def _step_embedding(base: dict) -> dict:
             KNOWN_ENDPOINTS,
             current=cur_emb.get("endpoint"),
         )
-        auth_env_key = _select_or_text(
-            "auth env var name",
-            KNOWN_AUTH_KEYS,
-            current=cur_emb.get("auth_env_key"),
+        # auth_key holds the literal API key. ``${VAR}`` references are
+        # rendered via string.Template.substitute(os.environ) at request
+        # time — useful for tests / users who want env indirection.
+        err_console.print(
+            "[dim]auth key: paste the literal API key, "
+            "or use [/dim][bold]${VAR_NAME}[/bold][dim] to read from an env var[/dim]"
+        )
+        auth_key = _prompt.text(
+            "auth key",
+            default=cur_emb.get("auth_key") or "",
         )
         model, dim = _select_model_and_dim(
             KNOWN_OPENAI_MODELS,
@@ -152,7 +152,7 @@ def _step_embedding(base: dict) -> dict:
         )
         out["embedding"] = {
             "provider": "openai", "endpoint": endpoint,
-            "auth_env_key": auth_env_key, "model": model, "dim": dim,
+            "auth_key": auth_key, "model": model, "dim": dim,
             "timeout": cur_emb.get("timeout", 30.0),
         }
     else:
@@ -163,7 +163,7 @@ def _step_embedding(base: dict) -> dict:
         )
         out["embedding"] = {
             "provider": "local", "model": model, "dim": dim,
-            "endpoint": None, "auth_env_key": None,
+            "endpoint": None, "auth_key": None,
             "timeout": cur_emb.get("timeout", 30.0),
         }
     return out

@@ -16,7 +16,7 @@
 | install_mode | `2` |
 | embedding provider | (Enter,保持 openai) |
 | endpoint | (Enter) |
-| auth_env_key | (Enter) |
+| auth_key | (Enter) |
 | model | (Enter) |
 | dim | (Enter) |
 | vector | (Enter) |

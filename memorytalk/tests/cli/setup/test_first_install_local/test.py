@@ -27,6 +27,6 @@ def test_first_install_local_writes_settings(setup_env, monkeypatch):
     assert data["embedding"]["model"] == "all-MiniLM-L6-v2"
     assert data["embedding"]["dim"] == 384
     assert data["embedding"]["endpoint"] is None
-    assert data["embedding"]["auth_env_key"] is None
+    assert data["embedding"]["auth_key"] is None
 
     assert "not_started" in result.stdout

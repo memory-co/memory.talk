@@ -13,7 +13,7 @@ def test_first_install_openai_writes_settings(setup_env):
     setup_env.prompts.extend([
         "openai",                                                              # provider select
         "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",        # endpoint select
-        "QWEN_KEY",                                                            # auth_env_key select
+        "${QWEN_KEY}",                                                         # auth_key text (env-var ref)
         "text-embedding-v4",                                                   # model select (dim 1024 auto)
         "",                                                                    # port text → default
         "yes",                                                                 # start server select
@@ -29,7 +29,7 @@ def test_first_install_openai_writes_settings(setup_env):
     assert data["embedding"]["provider"] == "openai"
     assert data["embedding"]["model"] == "text-embedding-v4"
     assert data["embedding"]["dim"] == 1024
-    assert data["embedding"]["auth_env_key"] == "QWEN_KEY"
+    assert data["embedding"]["auth_key"] == "${QWEN_KEY}"
     assert data["server"]["port"] == 7788
     assert data["vector"]["provider"] == "lancedb"
     assert data["relation"]["provider"] == "sqlite"
