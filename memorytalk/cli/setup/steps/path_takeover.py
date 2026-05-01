@@ -32,8 +32,8 @@ import os
 import sys
 from pathlib import Path
 
-from .. import _prompt
-from .._io import err_console, section
+from memorytalk.cli import console
+from memorytalk.cli.console import err_console, section
 
 
 def _find_all_on_path(name: str) -> list[Path]:
@@ -129,7 +129,7 @@ def _step_path_takeover(target: Path) -> dict:
     for p in already_ok:
         err_console.print(f"  · {p} [green](already correct)[/green]")
 
-    if not _prompt.confirm(
+    if not console.confirm(
         f"Redirect {len(needs_redirect)} path(s) above to → {target}?\n"
         "  · symlinks recreated\n"
         "  · regular files backed up as <name>.bak before being replaced",

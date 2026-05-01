@@ -23,8 +23,8 @@ from pathlib import Path
 
 from memorytalk.config import Config, Settings
 
-from . import _prompt
-from ._io import err_console, section
+from memorytalk.cli import console
+from memorytalk.cli.console import err_console, section
 from .helpers import diff_settings, write_settings_atomic
 from .steps.embedding import _step_embedding, _step_probe_embedding
 from .steps.provider import _step_choice
@@ -62,7 +62,7 @@ def _wizard(
     # 3. server port
     section("Server")
     server_block = base.get("server") or {}
-    port_str = _prompt.text(
+    port_str = console.text(
         "server port",
         default=str(int(server_block.get("port", 7788))),
         validate=lambda v: (v.strip().isdigit() and 1 <= int(v) <= 65535)

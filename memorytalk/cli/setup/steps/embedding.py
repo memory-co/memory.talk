@@ -1,6 +1,6 @@
 """Wizard step: pick embedding provider + probe it.
 
-Uses the ``_prompt`` shim throughout. Provider/endpoint/auth/model are
+Uses the ``console`` shim throughout. Provider/endpoint/auth/model are
 arrow-key selects with a final "Other..." entry that drops to free text
 — so the common cases are one keypress and the long tail still works.
 ``dim`` is auto-derived from the chosen model when picked from the known
@@ -28,8 +28,8 @@ from memorytalk.provider.embedding import (
     EmbedderValidationError, validate_embedder,
 )
 
-from .. import _prompt
-from .._io import err_console, section
+from memorytalk.cli import console
+from memorytalk.cli.console import err_console, section
 
 
 def _fmt_latency(seconds: float) -> str:
@@ -61,8 +61,8 @@ KNOWN_LOCAL_MODELS: dict[str, int] = {
 
 # Raw URLs — no alias / brand title. The URL is what the user is choosing.
 KNOWN_ENDPOINTS = [
-    _prompt.Option("https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings"),
-    _prompt.Option("https://api.openai.com/v1/embeddings"),
+    console.Option("https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings"),
+    console.Option("https://api.openai.com/v1/embeddings"),
 ]
 
 _OTHER = "__other__"
@@ -70,7 +70,7 @@ _OTHER = "__other__"
 
 def _select_or_text(
     label: str,
-    known: list[_prompt.Option],
+    known: list[console.Option],
     *,
     current: str | None = None,
 ) -> str:
@@ -86,17 +86,17 @@ def _select_or_text(
     - If no ``current`` → fall back to the first known as default.
     - "Other..." always offered → drops to free text.
     """
-    options: list[_prompt.Option] = []
+    options: list[console.Option] = []
     if current and not any(o.value == current for o in known):
-        options.append(_prompt.Option(current, description="(current)"))
+        options.append(console.Option(current, description="(current)"))
     options.extend(known)
-    options.append(_prompt.Option(_OTHER, title="Other... (type your own)"))
+    options.append(console.Option(_OTHER, title="Other... (type your own)"))
 
     sel_default = current if current else (known[0].value if known else _OTHER)
 
-    sel = _prompt.select(label, options, default=sel_default)
+    sel = console.select(label, options, default=sel_default)
     if sel == _OTHER:
-        return _prompt.text(f"{label} (custom)", default=current or "")
+        return console.text(f"{label} (custom)", default=current or "")
     return sel
 
 
@@ -105,14 +105,14 @@ def _select_model_and_dim(
     default_model: str,
     default_dim: int,
 ) -> tuple[str, int]:
-    options = [_prompt.Option(m, description=f"dim {d}") for m, d in known.items()]
-    options.append(_prompt.Option(_OTHER, title="Other... (type your own)"))
+    options = [console.Option(m, description=f"dim {d}") for m, d in known.items()]
+    options.append(console.Option(_OTHER, title="Other... (type your own)"))
     sel_default = default_model if default_model in known else _OTHER
-    sel = _prompt.select("embedding model", options, default=sel_default)
+    sel = console.select("embedding model", options, default=sel_default)
     if sel != _OTHER:
         return sel, known[sel]
-    model = _prompt.text("embedding model (custom)", default=default_model)
-    dim_str = _prompt.text(
+    model = console.text("embedding model (custom)", default=default_model)
+    dim_str = console.text(
         "embedding dim", default=str(default_dim),
         validate=lambda v: (v.strip().isdigit() and int(v) > 0) or "must be a positive integer",
     )
@@ -127,11 +127,11 @@ def _step_embedding(base: dict) -> dict:
     cur_provider = cur_emb.get("provider")
     default_provider = cur_provider if cur_provider in ("local", "openai") else "openai"
 
-    provider = _prompt.select(
+    provider = console.select(
         "embedding provider",
         [
-            _prompt.Option("openai", description="OpenAI-compatible HTTP API"),
-            _prompt.Option("local", description="sentence-transformers (local CPU/GPU)"),
+            console.Option("openai", description="OpenAI-compatible HTTP API"),
+            console.Option("local", description="sentence-transformers (local CPU/GPU)"),
         ],
         default=default_provider,
     )
@@ -153,7 +153,7 @@ def _step_embedding(base: dict) -> dict:
             "[dim]auth key: paste the literal API key, "
             "or use [/dim][bold]${VAR_NAME}[/bold][dim] to read from an env var[/dim]"
         )
-        auth_key = _prompt.text(
+        auth_key = console.text(
             "auth key",
             default=cur_emb.get("auth_key") or "",
         )
@@ -197,7 +197,7 @@ def _step_probe_embedding(cfg: Config, new_settings: dict) -> None:
             return
         except EmbedderValidationError as e:
             err_console.print(f"[red]embedding probe failed:[/red] {e}")
-            if not _prompt.confirm("Re-edit embedding fields?", default=True):
+            if not console.confirm("Re-edit embedding fields?", default=True):
                 sys.exit(1)
             new_settings.update(_step_embedding(new_settings))
             cfg._settings = Settings(**new_settings)  # type: ignore[attr-defined]

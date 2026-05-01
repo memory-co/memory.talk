@@ -38,9 +38,9 @@ def takeover_env(tmp_path, monkeypatch):
 
     # Patch the prompt shim used by path_takeover: yes by default unless
     # a test overrides ``confirm_answer``.
-    from memorytalk.cli.setup import _prompt
+    from memorytalk.cli import console
     state = {"confirm_answer": True}
-    monkeypatch.setattr(_prompt, "confirm", lambda *a, **kw: state["confirm_answer"])
+    monkeypatch.setattr(console, "confirm", lambda *a, **kw: state["confirm_answer"])
 
     class Env:
         pass

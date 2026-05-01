@@ -15,18 +15,18 @@ from memorytalk.cli._render import emit_md_err
 from memorytalk.cli.server import pid_alive, start_server_proc, stop_server_proc
 from memorytalk.config import Config
 
-from .. import _prompt
-from .._io import err_console
+from memorytalk.cli import console
+from memorytalk.cli.console import err_console
 
 
 _YES_NO_RESTART = [
-    _prompt.Option("yes", description="stop the running server and start a fresh one with the new settings"),
-    _prompt.Option("no",  description="leave the running server alone (settings will only apply on next restart)"),
+    console.Option("yes", description="stop the running server and start a fresh one with the new settings"),
+    console.Option("no",  description="leave the running server alone (settings will only apply on next restart)"),
 ]
 
 _YES_NO_START = [
-    _prompt.Option("yes", description="start the memory-talk server in the background now"),
-    _prompt.Option("no",  description="skip — start it manually later with `memory-talk server start`"),
+    console.Option("yes", description="start the memory-talk server in the background now"),
+    console.Option("no",  description="skip — start it manually later with `memory-talk server start`"),
 ]
 
 
@@ -41,7 +41,7 @@ def _step_server(cfg: Config, settings_changed: bool) -> dict | None:
             cfg.pid_path.unlink(missing_ok=True)
 
     if is_running and settings_changed:
-        choice = _prompt.select(
+        choice = console.select(
             f"server is running (pid {pid}). settings changed — restart now?",
             _YES_NO_RESTART, default="yes",
         )
@@ -62,7 +62,7 @@ def _step_server(cfg: Config, settings_changed: bool) -> dict | None:
     if is_running and not settings_changed:
         return {"status": "running", "pid": pid}
 
-    choice = _prompt.select("start server now?", _YES_NO_START, default="yes")
+    choice = console.select("start server now?", _YES_NO_START, default="yes")
     if choice == "yes":
         start_payload = start_server_proc(cfg)
         if start_payload.get("status") == "failed":

@@ -6,13 +6,13 @@ becomes a real arrow-key select.
 """
 from __future__ import annotations
 
-from .. import _prompt
-from .._io import err_console
+from memorytalk.cli import console
+from memorytalk.cli.console import err_console
 
 
 def _step_choice(label: str, choices: list[str], default: str) -> str:
     if len(choices) == 1:
         err_console.print(f"[bold]{label}[/bold]: only `{choices[0]}` available")
         return choices[0]
-    options = [_prompt.Option(c) for c in choices]
-    return _prompt.select(label, options, default=default)
+    options = [console.Option(c) for c in choices]
+    return console.select(label, options, default=default)

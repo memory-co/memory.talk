@@ -23,12 +23,15 @@ remains overridable via the ``MEMORY_TALK_DATA_ROOT`` env var; setup
 honors it for where ``settings.json`` lands.
 
 Submodules:
-- ``_io``       — shared stderr Console
 - ``helpers``   — pure settings.json + symlink helpers (no rich, no click)
 - ``venv``      — venv path resolution + bootstrap + re-exec + current-env helper
 - ``steps/``    — one module per wizard step
 - ``wizard``    — composes the steps in order
 - ``summary``   — final Markdown table emitted on stdout
+
+The shared rich Console + questionary prompts live in
+``memorytalk.cli.console`` (sibling package), shared with any other CLI
+subcommand that wants the same look and feel.
 
 The venv helpers are re-imported here so tests can monkeypatch them on
 the package itself (``setup_module._already_in_venv = ...``).
@@ -43,8 +46,9 @@ from memorytalk.cli._format import fmt_error
 from memorytalk.cli._render import emit_md, emit_md_err
 from memorytalk.config import Config
 
-from . import _prompt
-from ._io import err_console
+from memorytalk.cli import console
+from memorytalk.cli.console import err_console
+
 from .helpers import read_settings_raw
 from .steps.path_takeover import _step_path_takeover
 from .summary import _summary_md
@@ -56,11 +60,11 @@ from .wizard import _wizard
 
 
 _BOOTSTRAP_OPTIONS = [
-    _prompt.Option(
+    console.Option(
         "yes",
         description="install memorytalk into a managed venv (recommended — isolates from system Python)",
     ),
-    _prompt.Option(
+    console.Option(
         "no",
         description="keep using the current python env (you manage your own setup)",
     ),
@@ -76,7 +80,7 @@ def setup() -> None:
     #      after execv the new process re-enters this function with
     #      `_already_in_venv()` returning True and skips the prompt.
     if not _already_in_venv():
-        choice = _prompt.select(
+        choice = console.select(
             f"Bootstrap a dedicated venv at {_venv_root()}?",
             _BOOTSTRAP_OPTIONS, default="yes",
         )
@@ -113,7 +117,7 @@ def setup() -> None:
     try:
         old_raw = read_settings_raw(cfg.settings_path)
     except ValueError:
-        if not _prompt.confirm(
+        if not console.confirm(
             "settings.json is corrupted. Back it up to settings.json.bak and re-initialize?",
             default=True,
         ):

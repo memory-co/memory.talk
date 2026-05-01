@@ -7,8 +7,8 @@ the dev's real home, and os.execv would replace pytest itself). So this
 fixture stubs them out, plus the server lifecycle and the PATH takeover
 (stubbed to a no-op; the takeover logic has its own dedicated test).
 
-Wizard answers go through the ``_prompt`` shim now (replaces rich.prompt
-under the hood with questionary). The fixture exposes a ``prompts`` list
+Wizard answers go through the ``memorytalk.cli.console`` shim (which
+wraps questionary). The fixture exposes a ``prompts`` list
 on the env object — tests append answers in call order, then invoke the
 CLI. Each answer must match the call site:
 
@@ -57,13 +57,13 @@ def setup_env(tmp_path, monkeypatch):
     # CliRunner's stderr redirect and pytest's capfd both miss its output.
     # Redirect the Console's file at the instance level to a StringIO the
     # test can read via env.stderr.
-    from memorytalk.cli.setup._io import err_console
+    from memorytalk.cli.console import err_console
     env.stderr_buf = io.StringIO()
     monkeypatch.setattr(err_console, "file", env.stderr_buf)
     env.stderr = lambda: env.stderr_buf.getvalue()
 
+    from memorytalk.cli import console as console_mod
     from memorytalk.cli import setup as setup_pkg
-    from memorytalk.cli.setup import _prompt
     from memorytalk.cli.setup.steps import server as server_step
 
     # Pretend we're already inside the venv → skip the bootstrap branch
@@ -127,9 +127,9 @@ def setup_env(tmp_path, monkeypatch):
             )
         return ans
 
-    monkeypatch.setattr(_prompt, "select", _select)
-    monkeypatch.setattr(_prompt, "text", _text)
-    monkeypatch.setattr(_prompt, "confirm", _confirm)
+    monkeypatch.setattr(console_mod, "select", _select)
+    monkeypatch.setattr(console_mod, "text", _text)
+    monkeypatch.setattr(console_mod, "confirm", _confirm)
 
     def mock_openai_probe(dim: int = 1024) -> None:
         resp = MagicMock()

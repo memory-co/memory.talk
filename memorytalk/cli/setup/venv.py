@@ -20,7 +20,7 @@ from pathlib import Path
 from memorytalk.cli._format import fmt_error
 from memorytalk.cli._render import emit_md_err
 
-from ._io import err_console
+from memorytalk.cli.console import err_console
 
 
 def _venv_root() -> Path:

@@ -1,23 +1,26 @@
-"""Thin wrapper around questionary for the wizard.
+"""Wizard / CLI console: rich output channel + questionary-backed prompts.
 
-Why a wrapper?
+Two concerns live here:
 
-- **Testability.** Tests monkey-patch ``select / text / confirm`` here
-  instead of touching questionary internals. The wizard only knows about
-  this module, so swapping the underlying library later is a one-file
-  change.
-- **Non-TTY fallback.** questionary uses prompt_toolkit and needs a real
-  terminal — under piped stdin (e.g. the real-subprocess bootstrap test)
-  it raises EOFError. The fallback below reads numbered or named lines
-  from stdin so non-TTY consumers still work.
-- **Consistent shape.** ``Option(value, title?, description?)`` lets
-  callers express the choice's stored value separately from how it's
-  displayed, which is what the wizard's "common values + Other..."
-  pattern needs.
+1. **Output channel.** ``err_console`` is the single rich Console writing
+   to stderr; ``section()`` prints the ``── Title ──`` banner that groups
+   prompts. Wizard chatter goes here so the final markdown summary on
+   stdout stays clean.
 
-Wizard / step modules import this as ``from .. import _prompt`` and call
-``_prompt.select(...)`` etc. — that lets tests rebind the names on this
-module and have all callers see the patched versions.
+2. **Input prompts.** ``select / text / confirm`` wrap questionary so the
+   wizard has one place to swap libraries and tests have one place to
+   monkey-patch. ``Option`` separates a choice's stored value from its
+   displayed label/description (used by the wizard's "common values +
+   Other..." pattern).
+
+Non-TTY fallback (piped stdin, e.g. the real-subprocess bootstrap test):
+questionary needs prompt_toolkit which needs a real terminal. When
+stdin/stdout aren't both ttys, ``select / text / confirm`` fall back to
+plain numbered prompts echoed via ``err_console`` and read from stdin.
+
+Wizard / step modules import as ``from memorytalk.cli import console``
+and call ``console.select(...)`` etc. — that lets tests rebind names on
+this module and have all callers see the patched versions.
 """
 from __future__ import annotations
 import sys
@@ -26,8 +29,26 @@ from typing import Callable
 
 import questionary
 from questionary import Choice
+from rich.console import Console
 
-from ._io import err_console
+
+# --- output channel ---
+
+err_console = Console(file=sys.stderr)
+
+
+def section(title: str) -> None:
+    """Print a category banner to stderr to group related prompts.
+
+    Used by the wizard / step modules so the user always knows which
+    bucket the next few questions belong to (Embedding / Storage /
+    Server / PATH takeover). Goes to stderr so it doesn't pollute the
+    final Markdown summary on stdout.
+    """
+    err_console.print(f"\n[bold cyan]── {title} ──[/bold cyan]")
+
+
+# --- input prompts ---
 
 
 @dataclass
