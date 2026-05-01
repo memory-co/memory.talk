@@ -60,7 +60,11 @@ def _run_hook_mode(top_k: int | None, data_root: str | None) -> None:
     """UserPromptSubmit hook entry. Always exits 0; emits hook JSON on stdout.
 
     Errors funnel through _emit("") so Claude never sees a non-zero exit
-    or a malformed stdout.
+    or a malformed stdout. The body is wrapped in an outer
+    BaseException net as a belt-and-braces guarantee — if anything
+    unforeseen raises (e.g. Config() against a corrupt settings.json,
+    a bug in this function, an OS-level error not caught below), we
+    still emit a valid hook JSON and return cleanly.
     """
     def _emit(ctx: str) -> None:
         sys.stdout.write(json.dumps({
@@ -71,40 +75,54 @@ def _run_hook_mode(top_k: int | None, data_root: str | None) -> None:
         }) + "\n")
         sys.stdout.flush()
 
-    # Parse stdin
     try:
-        raw = sys.stdin.read()
-        payload = json.loads(raw)
-        session_id = payload["session_id"]
-        prompt = payload["prompt"]
-        if not isinstance(session_id, str) or not isinstance(prompt, str):
-            raise TypeError("session_id and prompt must be strings")
-    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
-        sys.stderr.write(f"memory-talk hook: malformed stdin ({e})\n")
-        _emit("")
-        return
+        # Parse stdin
+        try:
+            raw = sys.stdin.read()
+            payload = json.loads(raw)
+            session_id = payload["session_id"]
+            prompt = payload["prompt"]
+            if not isinstance(session_id, str) or not isinstance(prompt, str):
+                raise TypeError("session_id and prompt must be strings")
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
+            sys.stderr.write(f"memory-talk hook: malformed stdin ({e})\n")
+            _emit("")
+            return
 
-    # Call recall API with short timeout (server may be down — fail fast)
-    cfg = Config(data_root) if data_root else Config()
-    body: dict = {"session_id": session_id, "query": prompt}
-    if top_k is not None:
-        body["top_k"] = top_k
-    try:
-        result = api("POST", "/v2/recall", cfg, json_body=body, timeout=2.0)
-    except Exception as e:  # noqa: BLE001 — never propagate to Claude
-        sys.stderr.write(f"memory-talk hook: recall failed ({e})\n")
-        _emit("")
-        return
+        # Call recall API with short timeout (server may be down — fail fast)
+        cfg = Config(data_root) if data_root else Config()
+        body: dict = {"session_id": session_id, "query": prompt}
+        if top_k is not None:
+            body["top_k"] = top_k
+        try:
+            result = api("POST", "/v2/recall", cfg, json_body=body, timeout=2.0)
+        except Exception as e:  # noqa: BLE001
+            # DO NOT narrow this. Hook contract: any exception here MUST funnel
+            # to _emit("") + return (exit 0). Narrowing risks a future exception
+            # type (OSError, KeyError on malformed response, ssl errors, ...)
+            # escaping and breaking the UserPromptSubmit hook silently.
+            sys.stderr.write(f"memory-talk hook: recall failed ({e})\n")
+            _emit("")
+            return
 
-    # Format response
-    recalled = result.get("recalled") or []
-    if not recalled:
-        _emit("")
-        return
+        # Format response
+        recalled = result.get("recalled") or []
+        if not recalled:
+            _emit("")
+            return
 
-    lines = ["Recalled from prior sessions:", ""]
-    for hit in recalled:
-        cid = hit.get("card_id", "?")
-        summary = hit.get("summary", "")
-        lines.append(f"- [{cid}] {summary}")
-    _emit("\n".join(lines))
+        lines = ["Recalled from prior sessions:", ""]
+        for hit in recalled:
+            cid = hit.get("card_id", "?")
+            summary = hit.get("summary", "")
+            lines.append(f"- [{cid}] {summary}")
+        _emit("\n".join(lines))
+    except BaseException as e:  # noqa: BLE001
+        # Outer net — covers Config() failures, OS errors, anything the
+        # inner blocks didn't anticipate. The hook MUST emit valid JSON
+        # and return 0 even when something completely unexpected blows up.
+        sys.stderr.write(f"memory-talk hook: unexpected error ({type(e).__name__}: {e})\n")
+        try:
+            _emit("")
+        except Exception:
+            pass

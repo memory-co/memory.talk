@@ -123,3 +123,23 @@ def test_hook_server_down_returns_empty(cli_env, monkeypatch):
     assert result.exit_code == 0
     out = _parse_stdout_json(result)
     assert out["hookSpecificOutput"]["additionalContext"] == ""
+
+
+def test_hook_outer_exception_net_emits_empty(cli_env, monkeypatch):
+    """If something unforeseen raises before the inner try/except blocks
+    (e.g. Config() construction itself fails), the outer BaseException
+    net still emits valid hook JSON + exit 0."""
+    from memorytalk.cli import recall as recall_mod
+
+    class BoomConfig:
+        def __init__(self, *a, **kw):
+            raise RuntimeError("simulated config failure")
+
+    monkeypatch.setattr(recall_mod, "Config", BoomConfig)
+
+    payload = json.dumps({"session_id": "x", "prompt": "q"})
+    result = _invoke_hook(cli_env, payload)
+
+    assert result.exit_code == 0
+    out = _parse_stdout_json(result)
+    assert out["hookSpecificOutput"]["additionalContext"] == ""
