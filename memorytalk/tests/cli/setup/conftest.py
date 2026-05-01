@@ -54,7 +54,6 @@ def setup_env(tmp_path, monkeypatch):
 
     from memorytalk.cli import setup as setup_pkg
     from memorytalk.cli.setup import _prompt
-    from memorytalk.cli.setup import wizard as wizard_mod
     from memorytalk.cli.setup.steps import server as server_step
 
     # Pretend we're already inside the venv → skip the bootstrap branch
@@ -76,9 +75,10 @@ def setup_env(tmp_path, monkeypatch):
     monkeypatch.setattr(server_step, "pid_alive", lambda pid: False)
 
     # Skip the PATH takeover — `_step_path_takeover` is called from
-    # setup.wizard. The dedicated takeover test exercises it directly.
+    # the setup entry point right after the venv decision. The dedicated
+    # takeover test exercises it directly.
     monkeypatch.setattr(
-        wizard_mod, "_step_path_takeover",
+        setup_pkg, "_step_path_takeover",
         lambda *a, **kw: {"target": str(a[0]) if a else "", "actions": []},
     )
 

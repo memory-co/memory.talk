@@ -8,9 +8,11 @@ point that:
    - otherwise → ask once whether to bootstrap that dedicated venv
      (default yes; answering no keeps the current env)
 2. If the user opted in: bootstraps the venv, then re-execs into it.
-3. Drives the configuration wizard (rich prompts) in whichever env we
-   end up in. The `memory_talk_bin` path of *that* env is threaded
-   through to the symlink step + summary so they reflect reality.
+3. **Runs the PATH takeover** so every ``memory-talk`` on the user's
+   ``$PATH`` redirects to the chosen target. This happens *before* the
+   wizard because PATH state is independent of settings — putting it
+   inside the wizard tied it to "settings changed", which was wrong.
+4. Drives the configuration wizard in the chosen env.
 
 Upgrades are not handled here — there will be a separate command for
 that (``memory-talk upgrade`` or similar).
@@ -44,6 +46,7 @@ from memorytalk.config import Config
 from . import _prompt
 from ._io import err_console
 from .helpers import read_settings_raw
+from .steps.path_takeover import _step_path_takeover
 from .summary import _summary_md
 from .venv import (
     _already_in_venv, _bootstrap_venv, _data_root, _reexec_into_venv,
@@ -90,10 +93,16 @@ def setup() -> None:
             return  # not reached on success
 
     # 2. Resolve which `memory-talk` script we're actually running, so the
-    #    symlink step + summary point at the right binary.
+    #    PATH takeover + summary point at the right binary.
     memory_talk_bin = current_memory_talk_bin()
 
-    # 3. Refuse to run against a v1 data root.
+    # 3. PATH takeover — make every memory-talk on $PATH point at the
+    #    chosen target. Independent of settings, runs every setup
+    #    invocation. The function is idempotent: silent + no prompt when
+    #    everything's already correct.
+    takeover_result = _step_path_takeover(memory_talk_bin)
+
+    # 4. Refuse to run against a v1 data root.
     cfg = Config(_data_root())
     try:
         cfg.validate()
@@ -122,5 +131,9 @@ def setup() -> None:
     except KeyboardInterrupt:
         err_console.print("\n[dim]aborted by user — no changes written[/dim]")
         sys.exit(130)
+
+    # Summary reads `path_takeover` from the result dict; takeover ran
+    # upstream of the wizard, so we inject it here.
+    result["path_takeover"] = takeover_result
 
     emit_md(_summary_md(cfg, result, memory_talk_bin=memory_talk_bin))

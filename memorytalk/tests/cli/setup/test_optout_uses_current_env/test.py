@@ -17,7 +17,6 @@ async def _noop_validate(cfg):
 
 def test_optout_keeps_current_env(setup_env, monkeypatch):
     from memorytalk.cli import setup as setup_pkg
-    from memorytalk.cli.setup import wizard as wizard_mod
     from memorytalk.cli.setup.steps import embedding as embedding_step
 
     # Force the entry point to take the "not in dedicated venv" branch.
@@ -34,11 +33,13 @@ def test_optout_keeps_current_env(setup_env, monkeypatch):
     monkeypatch.setattr(setup_pkg, "_bootstrap_venv", fake_bootstrap)
     monkeypatch.setattr(setup_pkg, "_reexec_into_venv", fake_reexec)
 
-    # Capture what _step_path_takeover gets called with.
+    # Capture what _step_path_takeover gets called with. After the
+    # restructure, takeover is invoked from the setup entry point
+    # (``setup_pkg``), not from the wizard.
     def capturing_takeover(memory_talk_bin: Path) -> dict:
         calls["takeover_arg"] = memory_talk_bin
         return {"target": str(memory_talk_bin), "actions": []}
-    monkeypatch.setattr(wizard_mod, "_step_path_takeover", capturing_takeover)
+    monkeypatch.setattr(setup_pkg, "_step_path_takeover", capturing_takeover)
 
     # Skip the embedder probe (we're using local provider).
     monkeypatch.setattr(embedding_step, "validate_embedder", _noop_validate)
