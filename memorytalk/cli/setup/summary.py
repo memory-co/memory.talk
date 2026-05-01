@@ -8,7 +8,11 @@ from pathlib import Path
 
 from memorytalk.config import Config
 
-from .helpers import humanize_paths
+def _humanize_paths(paths: list[str]) -> str:
+    """For the wizard summary: '4 fields (a.b, c, d.e, f)'."""
+    if not paths:
+        return "nothing"
+    return f"{len(paths)} field" + ("s" if len(paths) != 1 else "") + " (" + ", ".join(paths) + ")"
 
 
 def _summary_md(cfg: Config, result: dict, *, memory_talk_bin: Path) -> str:
@@ -104,7 +108,7 @@ def _changed_label(result: dict) -> str:
     bits = []
     fields = result.get("settings_changed") or []
     if fields:
-        bits.append(humanize_paths(fields))
+        bits.append(_humanize_paths(fields))
     server = result.get("server") or {}
     if server.get("restarted"):
         bits.append("server restarted")

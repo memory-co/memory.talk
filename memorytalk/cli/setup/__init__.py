@@ -23,14 +23,13 @@ remains overridable via the ``MEMORY_TALK_DATA_ROOT`` env var; setup
 honors it for where ``settings.json`` lands.
 
 Submodules:
-- ``helpers``   — pure settings.json + symlink helpers (no rich, no click)
 - ``venv``      — venv path resolution + bootstrap + re-exec + current-env helper
 - ``steps/``    — one module per wizard step
 - ``wizard``    — composes the steps in order
 - ``summary``   — final Markdown table emitted on stdout
 
-Shared rich Console + questionary prompt shim live in
-``memorytalk.util.console``.
+Shared utilities (rich Console + questionary prompts, settings.json
+read/write/diff) live under ``memorytalk.util``.
 
 The venv helpers are re-imported here so tests can monkeypatch them on
 the package itself (``setup_module._already_in_venv = ...``).
@@ -48,7 +47,7 @@ from memorytalk.config import Config
 from memorytalk.util import console
 from memorytalk.util.console import err_console
 
-from .helpers import read_settings_raw
+from memorytalk.util.settings_io import read_settings_raw
 from .steps.path_takeover import _step_path_takeover
 from .summary import _summary_md
 from .venv import (

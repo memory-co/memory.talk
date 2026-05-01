@@ -25,7 +25,7 @@ from memorytalk.config import Config, Settings
 
 from memorytalk.util import console
 from memorytalk.util.console import err_console, section
-from .helpers import diff_settings, write_settings_atomic
+from memorytalk.util.settings_io import diff_settings, write_settings_atomic
 from .steps.embedding import _step_embedding, _step_probe_embedding
 from .steps.provider import _step_choice
 from .steps.server import _step_server
