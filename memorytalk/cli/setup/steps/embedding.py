@@ -23,6 +23,8 @@ import asyncio
 import sys
 import time
 
+import click
+
 from memorytalk.config import Config, Settings
 from memorytalk.provider.embedding import (
     EmbedderValidationError, validate_embedder,
@@ -185,7 +187,15 @@ def _step_probe_embedding(cfg: Config, new_settings: dict) -> None:
     cfg._settings = Settings(**new_settings)  # type: ignore[attr-defined]
     while True:
         try:
-            asyncio.run(validate_embedder(cfg))
+            t0 = time.perf_counter()
+            with err_console.status("[dim]validating embedding endpoint…[/dim]"):
+                asyncio.run(validate_embedder(cfg))
+            elapsed = time.perf_counter() - t0
+            emb = new_settings["embedding"]
+            click.echo(
+                f"✓ embedding verified · "
+                f"{emb['model']} · dim {emb['dim']} · {_fmt_latency(elapsed)}"
+            )
             return
         except EmbedderValidationError as e:
             err_console.print(f"[red]embedding probe failed:[/red] {e}")

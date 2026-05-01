@@ -40,3 +40,8 @@ def test_first_install_openai_writes_settings(setup_env):
     assert "# setup · **ok**" in result.stdout
     assert "openai" in result.stdout
     assert "text-embedding-v4" in result.stdout
+    # Probe 成功反馈行：含 "embedding verified" + 模型名 + dim + 延迟单位
+    assert "embedding verified" in result.stdout
+    assert "dim 1024" in result.stdout
+    # mock 的 httpx probe 同步返回 → 延迟必然 < 1s，单位一定是 "ms"
+    assert "ms" in result.stdout
