@@ -29,9 +29,8 @@ Submodules:
 - ``wizard``    — composes the steps in order
 - ``summary``   — final Markdown table emitted on stdout
 
-The shared rich Console + questionary prompts live in
-``memorytalk.cli.console`` (sibling package), shared with any other CLI
-subcommand that wants the same look and feel.
+Shared rich Console + questionary prompt shim live in
+``memorytalk.util.console``.
 
 The venv helpers are re-imported here so tests can monkeypatch them on
 the package itself (``setup_module._already_in_venv = ...``).
@@ -46,8 +45,8 @@ from memorytalk.cli._format import fmt_error
 from memorytalk.cli._render import emit_md, emit_md_err
 from memorytalk.config import Config
 
-from memorytalk.cli import console
-from memorytalk.cli.console import err_console
+from memorytalk.util import console
+from memorytalk.util.console import err_console
 
 from .helpers import read_settings_raw
 from .steps.path_takeover import _step_path_takeover

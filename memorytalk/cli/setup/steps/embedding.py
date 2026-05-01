@@ -28,8 +28,8 @@ from memorytalk.provider.embedding import (
     EmbedderValidationError, validate_embedder,
 )
 
-from memorytalk.cli import console
-from memorytalk.cli.console import err_console, section
+from memorytalk.util import console
+from memorytalk.util.console import err_console, section
 
 
 def _fmt_latency(seconds: float) -> str:

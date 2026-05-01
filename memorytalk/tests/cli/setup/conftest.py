@@ -57,14 +57,14 @@ def setup_env(tmp_path, monkeypatch):
     # CliRunner's stderr redirect and pytest's capfd both miss its output.
     # Redirect the Console's file at the instance level to a StringIO the
     # test can read via env.stderr.
-    from memorytalk.cli.console import err_console
+    from memorytalk.util.console import err_console
     env.stderr_buf = io.StringIO()
     monkeypatch.setattr(err_console, "file", env.stderr_buf)
     env.stderr = lambda: env.stderr_buf.getvalue()
 
-    from memorytalk.cli import console as console_mod
     from memorytalk.cli import setup as setup_pkg
     from memorytalk.cli.setup.steps import server as server_step
+    from memorytalk.util import console as console_mod
 
     # Pretend we're already inside the venv → skip the bootstrap branch
     # entirely (no answer needed in env.prompts for it). Tests that want

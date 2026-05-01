@@ -6,8 +6,8 @@ becomes a real arrow-key select.
 """
 from __future__ import annotations
 
-from memorytalk.cli import console
-from memorytalk.cli.console import err_console
+from memorytalk.util import console
+from memorytalk.util.console import err_console
 
 
 def _step_choice(label: str, choices: list[str], default: str) -> str:

@@ -32,8 +32,8 @@ import os
 import sys
 from pathlib import Path
 
-from memorytalk.cli import console
-from memorytalk.cli.console import err_console, section
+from memorytalk.util import console
+from memorytalk.util.console import err_console, section
 
 
 def _find_all_on_path(name: str) -> list[Path]:

@@ -15,8 +15,8 @@ from memorytalk.cli._render import emit_md_err
 from memorytalk.cli.server import pid_alive, start_server_proc, stop_server_proc
 from memorytalk.config import Config
 
-from memorytalk.cli import console
-from memorytalk.cli.console import err_console
+from memorytalk.util import console
+from memorytalk.util.console import err_console
 
 
 _YES_NO_RESTART = [
