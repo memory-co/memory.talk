@@ -1,35 +1,104 @@
 """Wizard step: pick embedding provider + probe it.
 
-`_step_embedding` walks the user through provider/model/dim/auth and
-returns a fresh ``new_settings`` dict with the ``embedding`` block
-filled in. `_step_probe_embedding` then exercises the provider with a
-real (mocked in tests) request — if it fails the user gets a chance to
-edit fields and retry.
+Uses the ``_prompt`` shim throughout. Provider/endpoint/auth/model are
+arrow-key selects with a final "Other..." entry that drops to free text
+— so the common cases are one keypress and the long tail still works.
+``dim`` is auto-derived from the chosen model when picked from the known
+list; only "Other..." asks for it.
+
+The probe loop is kept identical: validate, on failure ask whether to
+re-edit the embedding section, retry until success or user gives up.
 """
 from __future__ import annotations
 import asyncio
 import sys
-
-from rich.prompt import Confirm, IntPrompt, Prompt
 
 from memorytalk.config import Config, Settings
 from memorytalk.provider.embedding import (
     EmbedderValidationError, validate_embedder,
 )
 
+from .. import _prompt
 from .._io import err_console
 
 
+# Known model → canonical embedding dim. Keeps users from having to know
+# the exact dim for the model they picked (it's a footgun otherwise).
+KNOWN_OPENAI_MODELS: dict[str, int] = {
+    "text-embedding-v4": 1024,         # Dashscope/Qwen
+    "text-embedding-v3": 1024,         # Dashscope/Qwen
+    "text-embedding-3-large": 3072,    # OpenAI
+    "text-embedding-3-small": 1536,    # OpenAI
+    "text-embedding-ada-002": 1536,    # OpenAI legacy
+}
+
+KNOWN_LOCAL_MODELS: dict[str, int] = {
+    "all-MiniLM-L6-v2": 384,
+    "all-mpnet-base-v2": 768,
+    "BAAI/bge-large-en-v1.5": 1024,
+}
+
+KNOWN_ENDPOINTS = [
+    _prompt.Option(
+        "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
+        title="Dashscope (Aliyun, Qwen-compatible)",
+    ),
+    _prompt.Option(
+        "https://api.openai.com/v1/embeddings",
+        title="OpenAI",
+    ),
+]
+
+KNOWN_AUTH_KEYS = [
+    _prompt.Option("QWEN_KEY", description="Dashscope/Qwen API key"),
+    _prompt.Option("OPENAI_API_KEY", description="OpenAI API key"),
+]
+
+_OTHER = "__other__"
+
+
+def _select_or_text(label: str, options: list[_prompt.Option], default: str) -> str:
+    """Show known options + 'Other...' entry; drop to free text on Other."""
+    extended = options + [_prompt.Option(_OTHER, title="Other... (type your own)")]
+    sel_default = default if any(o.value == default for o in options) else _OTHER
+    sel = _prompt.select(label, extended, default=sel_default)
+    if sel == _OTHER:
+        return _prompt.text(f"{label} (custom)", default=default)
+    return sel
+
+
+def _select_model_and_dim(
+    known: dict[str, int],
+    default_model: str,
+    default_dim: int,
+) -> tuple[str, int]:
+    options = [_prompt.Option(m, description=f"dim {d}") for m, d in known.items()]
+    options.append(_prompt.Option(_OTHER, title="Other... (type your own)"))
+    sel_default = default_model if default_model in known else _OTHER
+    sel = _prompt.select("model", options, default=sel_default)
+    if sel != _OTHER:
+        return sel, known[sel]
+    model = _prompt.text("model (custom)", default=default_model)
+    dim_str = _prompt.text(
+        "dim", default=str(default_dim),
+        validate=lambda v: (v.strip().isdigit() and int(v) > 0) or "must be a positive integer",
+    )
+    return model, int(dim_str)
+
+
 def _step_embedding(base: dict) -> dict:
-    out = {k: v for k, v in base.items()}
+    out = dict(base)
     cur_emb = base.get("embedding") or {}
     cur_provider = cur_emb.get("provider")
     default_provider = cur_provider if cur_provider in ("local", "openai") else "openai"
 
-    provider = Prompt.ask(
+    provider = _prompt.select(
         "embedding provider",
-        choices=["local", "openai"], default=default_provider,
-        console=err_console,
+        [
+            _prompt.Option("openai", description="OpenAI-compatible HTTP API"),
+            _prompt.Option("local", description="sentence-transformers (local CPU/GPU)"),
+        ],
+        default=default_provider,
     )
 
     # Provider-specific defaults shouldn't bleed across providers.
@@ -37,23 +106,20 @@ def _step_embedding(base: dict) -> dict:
         cur_emb = {}
 
     if provider == "openai":
-        endpoint = Prompt.ask(
+        endpoint = _select_or_text(
             "endpoint",
-            default=cur_emb.get("endpoint") or "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
-            console=err_console,
+            KNOWN_ENDPOINTS,
+            cur_emb.get("endpoint") or KNOWN_ENDPOINTS[0].value,
         )
-        auth_env_key = Prompt.ask(
+        auth_env_key = _select_or_text(
             "auth env var name",
-            default=cur_emb.get("auth_env_key") or "QWEN_KEY",
-            console=err_console,
+            KNOWN_AUTH_KEYS,
+            cur_emb.get("auth_env_key") or "QWEN_KEY",
         )
-        model = Prompt.ask(
-            "model", default=cur_emb.get("model") or "text-embedding-v4",
-            console=err_console,
-        )
-        dim = IntPrompt.ask(
-            "dim", default=int(cur_emb.get("dim") or 1024),
-            console=err_console,
+        model, dim = _select_model_and_dim(
+            KNOWN_OPENAI_MODELS,
+            cur_emb.get("model") or "text-embedding-v4",
+            int(cur_emb.get("dim") or 1024),
         )
         out["embedding"] = {
             "provider": "openai", "endpoint": endpoint,
@@ -61,13 +127,10 @@ def _step_embedding(base: dict) -> dict:
             "timeout": cur_emb.get("timeout", 30.0),
         }
     else:
-        model = Prompt.ask(
-            "model", default=cur_emb.get("model") or "all-MiniLM-L6-v2",
-            console=err_console,
-        )
-        dim = IntPrompt.ask(
-            "dim", default=int(cur_emb.get("dim") or 384),
-            console=err_console,
+        model, dim = _select_model_and_dim(
+            KNOWN_LOCAL_MODELS,
+            cur_emb.get("model") or "all-MiniLM-L6-v2",
+            int(cur_emb.get("dim") or 384),
         )
         out["embedding"] = {
             "provider": "local", "model": model, "dim": dim,
@@ -85,7 +148,7 @@ def _step_probe_embedding(cfg: Config, new_settings: dict) -> None:
             return
         except EmbedderValidationError as e:
             err_console.print(f"[red]embedding probe failed:[/red] {e}")
-            if not Confirm.ask("Re-edit embedding fields?", console=err_console, default=True):
+            if not _prompt.confirm("Re-edit embedding fields?", default=True):
                 sys.exit(1)
             new_settings.update(_step_embedding(new_settings))
             cfg._settings = Settings(**new_settings)  # type: ignore[attr-defined]

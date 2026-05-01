@@ -30,17 +30,16 @@ def test_reconfigure_no_change_does_not_rewrite(setup_env):
     original_mtime = settings_path.stat().st_mtime_ns
     original_text = settings_path.read_text()
 
-    answers = "\n".join([
-        "",        # provider default (openai)
-        "",        # endpoint default
-        "",        # auth_env_key default
-        "",        # model default
-        "",        # dim default
-        # vector / relation auto-pick — no input consumed
-        "",        # port default
-    ]) + "\n"
+    setup_env.prompts.extend([
+        "openai",                                                              # provider
+        "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",        # endpoint
+        "QWEN_KEY",                                                            # auth_env_key
+        "text-embedding-v4",                                                   # model (dim 1024 unchanged)
+        "",                                                                    # port (default)
+        # wizard short-circuits — no start-server prompt
+    ])
 
-    result = setup_env.runner.invoke(setup_env.main, ["setup"], input=answers)
+    result = setup_env.runner.invoke(setup_env.main, ["setup"])
 
     assert result.exit_code == 0, (result.stdout, result.exception)
     # File untouched

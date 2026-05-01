@@ -4,23 +4,24 @@ Setup's first action is to bootstrap a venv at ``~/.memory-talk/.venv``
 and re-exec into it. For the **wizard** tests we don't want either of
 those to actually happen (real venv creation is slow + would write to
 the dev's real home, and os.execv would replace pytest itself). So this
-fixture stubs them out.
+fixture stubs them out, plus the server lifecycle and the symlink write.
 
-Patch sites map to where each name is *resolved at call time*, not where
-it's defined:
+Wizard answers go through the ``_prompt`` shim now (replaces rich.prompt
+under the hood with questionary). The fixture exposes a ``prompts`` list
+on the env object — tests append answers in call order, then invoke the
+CLI. Each answer must match the call site:
 
-- ``_already_in_venv`` / ``_bootstrap_venv`` / ``_reexec_into_venv``:
-  the click entry point in ``memorytalk.cli.setup`` imports them into
-  its own namespace, so we patch them on the package itself.
-- ``start_server_proc`` / ``stop_server_proc`` / ``pid_alive``: called
-  inside ``_step_server`` which lives in
-  ``memorytalk.cli.setup.steps.server``.
-- ``_step_alias``: called inside ``_wizard`` in
-  ``memorytalk.cli.setup.wizard``.
+- ``select`` → the chosen Option's ``value`` (string)
+- ``text``   → string; empty string falls back to the call's default
+- ``confirm``→ bool
 
-The bootstrap path itself is exercised by a separate scenario,
+If a test runs out of answers before the wizard runs out of prompts,
+the fixture raises so the failure is obvious. Same goes for type mismatch
+(e.g. feeding a bool to a ``select``).
+
+The bootstrap+execv path itself is exercised by a separate scenario,
 ``tests/cli/setup/test_bootstrap_real_venv``, which spins up a real
-outer venv via subprocess.
+outer venv via subprocess and goes through the shim's non-TTY fallback.
 """
 from __future__ import annotations
 from pathlib import Path
@@ -48,17 +49,21 @@ def setup_env(tmp_path, monkeypatch):
     env.data_root = fake_home / ".memory-talk"   # Config(_data_root()) default
     env.runner = runner
     env.main = main
+    env.prompts: list = []        # tests .extend(...) with canned answers
 
     from memorytalk.cli import setup as setup_pkg
+    from memorytalk.cli.setup import _prompt
     from memorytalk.cli.setup import wizard as wizard_mod
     from memorytalk.cli.setup.steps import server as server_step
 
-    # Pretend we're already inside the venv → skip bootstrap entirely.
+    # Pretend we're already inside the venv → skip the bootstrap branch
+    # entirely (no answer needed in env.prompts for it). Tests that want
+    # to exercise the bootstrap prompt re-monkeypatch this to False.
     monkeypatch.setattr(setup_pkg, "_already_in_venv", lambda: True)
     monkeypatch.setattr(setup_pkg, "_bootstrap_venv", lambda: None)
     monkeypatch.setattr(setup_pkg, "_reexec_into_venv", lambda: None)
 
-    # Neutralize server lifecycle (called from setup.steps.server).
+    # Server lifecycle is patched on its call-site module.
     monkeypatch.setattr(
         server_step, "start_server_proc",
         lambda cfg: {"status": "started", "pid": 99999, "port": cfg.settings.server.port},
@@ -70,13 +75,51 @@ def setup_env(tmp_path, monkeypatch):
     monkeypatch.setattr(server_step, "pid_alive", lambda pid: False)
 
     # Skip the symlink write — `_step_alias` is called from setup.wizard.
-    # Signature is `_step_alias(memory_talk_bin)`; absorb whatever's passed.
     monkeypatch.setattr(
         wizard_mod, "_step_alias",
         lambda *a, **kw: {
             "status": "noop", "link_path": "/tmp/memory.talk", "target": "/tmp/memory-talk",
         },
     )
+
+    # ----- prompt shim: drain env.prompts in call order -----
+
+    def _next(kind: str, label: str):
+        if not env.prompts:
+            raise AssertionError(
+                f"{kind}({label!r}) — no canned answer left in env.prompts"
+            )
+        return env.prompts.pop(0)
+
+    def _select(label, options, default=None):
+        ans = _next("select", label)
+        valid = [o.value for o in options]
+        if ans not in valid:
+            raise AssertionError(
+                f"select({label!r}) — answer {ans!r} not in options {valid!r}"
+            )
+        return ans
+
+    def _text(label, default="", validate=None):
+        ans = _next("text", label)
+        result = default if ans in (None, "") else ans
+        if validate is not None:
+            v = validate(result)
+            if v is not True:
+                raise AssertionError(f"text({label!r}) failed validation: {v}")
+        return result
+
+    def _confirm(label, default=True):
+        ans = _next("confirm", label)
+        if not isinstance(ans, bool):
+            raise AssertionError(
+                f"confirm({label!r}) — expected bool, got {ans!r}"
+            )
+        return ans
+
+    monkeypatch.setattr(_prompt, "select", _select)
+    monkeypatch.setattr(_prompt, "text", _text)
+    monkeypatch.setattr(_prompt, "confirm", _confirm)
 
     def mock_openai_probe(dim: int = 1024) -> None:
         resp = MagicMock()

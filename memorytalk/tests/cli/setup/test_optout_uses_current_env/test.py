@@ -1,4 +1,4 @@
-"""Opt-out path: user answers 'n' to the bootstrap prompt.
+"""Opt-out path: user picks 'no' on the bootstrap prompt.
 
 The wizard must run in the *current* python env without ever calling
 ``_bootstrap_venv`` or ``_reexec_into_venv``, and the alias step must
@@ -23,7 +23,7 @@ def test_optout_keeps_current_env(setup_env, monkeypatch):
     # Force the entry point to take the "not in dedicated venv" branch.
     monkeypatch.setattr(setup_pkg, "_already_in_venv", lambda: False)
 
-    # Track that bootstrap + execv are NOT triggered when the user says 'n'.
+    # Track that bootstrap + execv are NOT triggered when the user says 'no'.
     calls: dict = {"bootstrap": 0, "reexec": 0, "alias_arg": None}
 
     def fake_bootstrap():
@@ -47,17 +47,15 @@ def test_optout_keeps_current_env(setup_env, monkeypatch):
     # Skip the embedder probe (we're using local provider).
     monkeypatch.setattr(embedding_step, "validate_embedder", _noop_validate)
 
-    answers = "\n".join([
-        "n",        # bootstrap dedicated venv? → no, keep current env
-        "local",    # embedding provider
-        "",         # model default
-        "",         # dim default
-        # vector / relation single-option auto-pick — no input consumed
-        "",         # port default
-        "n",        # don't start server
-    ]) + "\n"
+    setup_env.prompts.extend([
+        "no",                   # bootstrap select → keep current env
+        "local",                # provider select
+        "all-MiniLM-L6-v2",     # model select (dim 384 auto)
+        "",                     # port text → default
+        "no",                   # start server select → don't start
+    ])
 
-    result = setup_env.runner.invoke(setup_env.main, ["setup"], input=answers)
+    result = setup_env.runner.invoke(setup_env.main, ["setup"])
 
     assert result.exit_code == 0, (result.stdout, result.exception)
 

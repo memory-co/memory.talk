@@ -24,18 +24,16 @@ def test_reconfigure_changed_writes_new_value(setup_env):
     setup_env.mock_openai_probe(dim=1024)
     _seed_settings(setup_env.data_root)
 
-    answers = "\n".join([
-        "",                        # provider default (openai)
-        "",                        # endpoint default
-        "",                        # auth_env_key default
-        "text-embedding-v3",       # NEW model
-        "",                        # dim default
-        # vector / relation auto-pick
-        "",                        # port default
-        "n",                       # don't start server
-    ]) + "\n"
+    setup_env.prompts.extend([
+        "openai",                                                              # provider
+        "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",        # endpoint
+        "QWEN_KEY",                                                            # auth_env_key
+        "text-embedding-v3",                                                   # NEW model (dim 1024 same)
+        "",                                                                    # port (default)
+        "no",                                                                  # don't start server
+    ])
 
-    result = setup_env.runner.invoke(setup_env.main, ["setup"], input=answers)
+    result = setup_env.runner.invoke(setup_env.main, ["setup"])
 
     assert result.exit_code == 0, (result.stdout, result.exception)
     data = json.loads((setup_env.data_root / "settings.json").read_text())

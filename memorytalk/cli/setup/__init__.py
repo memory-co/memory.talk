@@ -36,12 +36,12 @@ import subprocess
 import sys
 
 import click
-from rich.prompt import Confirm
 
 from memorytalk.cli._format import fmt_error
 from memorytalk.cli._render import emit_md, emit_md_err
 from memorytalk.config import Config
 
+from . import _prompt
 from ._io import err_console
 from .helpers import read_settings_raw
 from .summary import _summary_md
@@ -50,6 +50,18 @@ from .venv import (
     _venv_root, current_memory_talk_bin,
 )
 from .wizard import _wizard
+
+
+_BOOTSTRAP_OPTIONS = [
+    _prompt.Option(
+        "yes",
+        description="install memorytalk into a managed venv (recommended — isolates from system Python)",
+    ),
+    _prompt.Option(
+        "no",
+        description="keep using the current python env (you manage your own setup)",
+    ),
+]
 
 
 @click.command("setup")
@@ -61,12 +73,11 @@ def setup() -> None:
     #      after execv the new process re-enters this function with
     #      `_already_in_venv()` returning True and skips the prompt.
     if not _already_in_venv():
-        if Confirm.ask(
-            f"Bootstrap a dedicated venv at {_venv_root()}?\n"
-            "  yes → install memorytalk into a managed venv (recommended)\n"
-            "  no  → keep using the current python env",
-            console=err_console, default=True,
-        ):
+        choice = _prompt.select(
+            f"Bootstrap a dedicated venv at {_venv_root()}?",
+            _BOOTSTRAP_OPTIONS, default="yes",
+        )
+        if choice == "yes":
             try:
                 _bootstrap_venv()
             except subprocess.CalledProcessError as e:
@@ -93,9 +104,9 @@ def setup() -> None:
     try:
         old_raw = read_settings_raw(cfg.settings_path)
     except ValueError:
-        if not Confirm.ask(
+        if not _prompt.confirm(
             "settings.json is corrupted. Back it up to settings.json.bak and re-initialize?",
-            console=err_console, default=True,
+            default=True,
         ):
             sys.exit(1)
         bak = cfg.settings_path.with_suffix(".json.bak")

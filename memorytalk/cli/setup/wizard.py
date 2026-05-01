@@ -14,10 +14,9 @@ The flow:
 from __future__ import annotations
 from pathlib import Path
 
-from rich.prompt import IntPrompt
-
 from memorytalk.config import Config, Settings
 
+from . import _prompt
 from ._io import err_console
 from .helpers import diff_settings, write_settings_atomic
 from .steps.alias import _step_alias
@@ -53,12 +52,13 @@ def _wizard(
 
     # 3. server port
     server_block = base.get("server") or {}
-    new_settings["server"] = {
-        "port": IntPrompt.ask(
-            "server port", default=int(server_block.get("port", 7788)),
-            console=err_console,
-        ),
-    }
+    port_str = _prompt.text(
+        "server port",
+        default=str(int(server_block.get("port", 7788))),
+        validate=lambda v: (v.strip().isdigit() and 1 <= int(v) <= 65535)
+        or "must be an integer in 1..65535",
+    )
+    new_settings["server"] = {"port": int(port_str)}
 
     # Carry over other sections (ttl / search / recall) untouched.
     for key in ("ttl", "search", "recall"):

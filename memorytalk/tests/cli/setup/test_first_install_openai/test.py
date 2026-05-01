@@ -10,20 +10,16 @@ import json
 def test_first_install_openai_writes_settings(setup_env):
     setup_env.mock_openai_probe(dim=1024)
 
-    # No more install_mode prompt — skip that line. First prompt is now
-    # the embedding provider.
-    answers = "\n".join([
-        "openai",             # embedding provider
-        "",                   # endpoint default
-        "",                   # auth_env_key default
-        "",                   # model default
-        "",                   # dim default
-        # vector / relation single-option steps don't prompt
-        "",                   # port default
-        "y",                  # start server
-    ]) + "\n"
+    setup_env.prompts.extend([
+        "openai",                                                              # provider select
+        "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",        # endpoint select
+        "QWEN_KEY",                                                            # auth_env_key select
+        "text-embedding-v4",                                                   # model select (dim 1024 auto)
+        "",                                                                    # port text → default
+        "yes",                                                                 # start server select
+    ])
 
-    result = setup_env.runner.invoke(setup_env.main, ["setup"], input=answers)
+    result = setup_env.runner.invoke(setup_env.main, ["setup"])
 
     assert result.exit_code == 0, (result.stdout, result.exception)
 
