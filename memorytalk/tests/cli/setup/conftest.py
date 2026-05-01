@@ -25,6 +25,7 @@ The bootstrap+execv path itself is exercised by a separate scenario,
 outer venv via subprocess and goes through the shim's non-TTY fallback.
 """
 from __future__ import annotations
+import io
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -51,6 +52,15 @@ def setup_env(tmp_path, monkeypatch):
     env.runner = runner
     env.main = main
     env.prompts: list = []        # tests .extend(...) with canned answers
+
+    # err_console captured a real sys.stderr at module-import time, so
+    # CliRunner's stderr redirect and pytest's capfd both miss its output.
+    # Redirect the Console's file at the instance level to a StringIO the
+    # test can read via env.stderr.
+    from memorytalk.cli.setup._io import err_console
+    env.stderr_buf = io.StringIO()
+    monkeypatch.setattr(err_console, "file", env.stderr_buf)
+    env.stderr = lambda: env.stderr_buf.getvalue()
 
     from memorytalk.cli import setup as setup_pkg
     from memorytalk.cli.setup import _prompt

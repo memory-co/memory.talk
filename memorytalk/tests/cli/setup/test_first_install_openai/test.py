@@ -40,8 +40,11 @@ def test_first_install_openai_writes_settings(setup_env):
     assert "# setup · **ok**" in result.stdout
     assert "openai" in result.stdout
     assert "text-embedding-v4" in result.stdout
-    # Probe 成功反馈行：含 "embedding verified" + 模型名 + dim + 延迟单位
-    assert "embedding verified" in result.stdout
-    assert "dim 1024" in result.stdout
+    # Probe 成功反馈行 —— conftest 把 err_console.file 绑到 env.stderr_buf，
+    # 因为 rich.Console 在模块导入时锁定了真实 sys.stderr 引用，绕开了
+    # CliRunner 的重定向。
+    err = setup_env.stderr()
+    assert "embedding verified" in err
+    assert "dim 1024" in err
     # mock 的 httpx probe 同步返回 → 延迟必然 < 1s，单位一定是 "ms"
-    assert "ms" in result.stdout
+    assert "ms" in err
