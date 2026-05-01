@@ -375,7 +375,12 @@ def fmt_review_detail(resp: dict) -> str:
             out.append(f"> {q}")
             out.append("")
         for hit in r.get("hits") or []:
-            out.append(f"{hit.get('rank', '?')}. `{hit.get('card_id', '')}`")
+            cid = hit.get("card_id", "")
+            summary = (hit.get("summary") or "").replace("\n", " ").strip()
+            line = f"{hit.get('rank', '?')}. `{cid}`"
+            if summary:
+                line += f" — {summary}"
+            out.append(line)
         out.append("")
     return _join(*out)
 

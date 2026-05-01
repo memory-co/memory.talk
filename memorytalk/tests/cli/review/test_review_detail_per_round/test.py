@@ -75,9 +75,16 @@ async def test_review_detail_two_rounds_descending(cli_env):
     assert rounds[1]["round_count"] == 1
     assert rounds[0]["query"] == "topic-beta"
     assert rounds[1]["query"] == "topic-alpha"
-    # each round has at least one hit with card_id + rank
+    # each round has at least one hit with card_id + rank + summary
     for r in rounds:
         assert r["hits"]
         for h in r["hits"]:
             assert h["card_id"].startswith("card_")
             assert h["rank"] >= 1
+            # summary denormalized at recall time → review can read it back
+            assert h["summary"]
+    # round 1 → card_alpha (summary "alpha card"); round 2 → card_beta ("beta card")
+    assert rounds[0]["hits"][0]["card_id"] == "card_beta"
+    assert rounds[0]["hits"][0]["summary"] == "beta card"
+    assert rounds[1]["hits"][0]["card_id"] == "card_alpha"
+    assert rounds[1]["hits"][0]["summary"] == "alpha card"

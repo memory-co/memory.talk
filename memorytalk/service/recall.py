@@ -88,22 +88,33 @@ class RecallService:
             if len(fresh) >= top_k:
                 break
 
-        # 6. record actually-injected hits (skipped rows are not persisted —
-        #    they are reproducible from the same recall_hit history).
-        if fresh:
-            await self.db.recall.record_hits(
-                session_id,
-                round_count=round_count, query=payload.query, now_iso=now_iso,
-                hits=[(cid, rank) for rank, cid in enumerate(fresh, start=1)],
-            )
-
-        # 7. assemble response — pull summaries from cards table.
-        hits: list[RecallHit] = []
+        # 6. fetch summaries for the fresh cards — used both in the response
+        #    and denormalized into recall_hit so review detail can replay
+        #    "what Claude saw at the time".
+        fresh_with_summary: list[tuple[str, str]] = []
         for cid in fresh:
             card = await self.db.cards.get(cid)
             if card is None:
                 continue
-            hits.append(RecallHit(card_id=cid, summary=card["summary"]))
+            fresh_with_summary.append((cid, card["summary"]))
+
+        # 7. record actually-injected hits with their summaries (skipped rows
+        #    are not persisted — they are reproducible from recall_hit history).
+        if fresh_with_summary:
+            await self.db.recall.record_hits(
+                session_id,
+                round_count=round_count, query=payload.query, now_iso=now_iso,
+                hits=[
+                    (cid, rank, summary)
+                    for rank, (cid, summary) in enumerate(fresh_with_summary, start=1)
+                ],
+            )
+
+        # 8. assemble response from the same fetched summaries.
+        hits = [
+            RecallHit(card_id=cid, summary=summary)
+            for cid, summary in fresh_with_summary
+        ]
 
         return RecallResponse(
             session_id=session_id,

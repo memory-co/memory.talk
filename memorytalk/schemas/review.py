@@ -21,6 +21,7 @@ class ReviewListResponse(BaseModel):
 class ReviewHit(BaseModel):
     card_id: str
     rank: int
+    summary: str = ""  # denormalized from cards.summary at recall time
 
 
 class ReviewRound(BaseModel):

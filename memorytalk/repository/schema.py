@@ -85,6 +85,7 @@ DDL = [
         rank         INTEGER NOT NULL,
         query        TEXT NOT NULL,
         recalled_at  TEXT NOT NULL,
+        summary      TEXT NOT NULL DEFAULT '',
         PRIMARY KEY (session_id, card_id, round_count)
     )
     """,

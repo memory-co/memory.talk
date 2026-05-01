@@ -129,7 +129,7 @@ class RecallStore:
             placeholders = ",".join("?" * len(round_ids))
             async with self.conn.execute(
                 f"""
-                SELECT round_count, query, recalled_at, card_id, rank
+                SELECT round_count, query, recalled_at, card_id, rank, summary
                 FROM recall_hit
                 WHERE session_id = ? AND round_count IN ({placeholders})
                 ORDER BY round_count DESC, rank ASC
@@ -150,6 +150,7 @@ class RecallStore:
                 by_round[rc]["hits"].append({
                     "card_id": h["card_id"],
                     "rank": int(h["rank"]),
+                    "summary": h["summary"] or "",
                 })
             rounds = [by_round[rc] for rc in round_ids]
         out["rounds"] = rounds
@@ -170,19 +171,25 @@ class RecallStore:
     async def record_hits(
         self, session_id: str, *,
         round_count: int, query: str, now_iso: str,
-        hits: Iterable[tuple[str, int]],   # iterable of (card_id, rank)
+        hits: Iterable[tuple[str, int, str]],   # iterable of (card_id, rank, summary)
     ) -> None:
+        """Persist what was injected into the prompt at this round.
+
+        ``summary`` is denormalized from the ``cards`` table at write time
+        so ``review detail`` can faithfully replay "what Claude saw at the
+        time", even if the card is later edited or deleted.
+        """
         rows = [
-            (session_id, card_id, round_count, rank, query, now_iso)
-            for card_id, rank in hits
+            (session_id, card_id, round_count, rank, query, now_iso, summary)
+            for card_id, rank, summary in hits
         ]
         if not rows:
             return
         await self.conn.executemany(
             """
             INSERT INTO recall_hit
-                (session_id, card_id, round_count, rank, query, recalled_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+                (session_id, card_id, round_count, rank, query, recalled_at, summary)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             rows,
         )
