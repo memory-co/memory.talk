@@ -21,6 +21,7 @@ re-edit the embedding section, retry until success or user gives up.
 from __future__ import annotations
 import asyncio
 import sys
+import time
 
 from memorytalk.config import Config, Settings
 from memorytalk.provider.embedding import (
@@ -29,6 +30,17 @@ from memorytalk.provider.embedding import (
 
 from .. import _prompt
 from .._io import err_console, section
+
+
+def _fmt_latency(seconds: float) -> str:
+    """Format latency in seconds to a human-readable string.
+
+    < 1000ms renders as "{int}ms"; >= 1.0s renders as "{x.x}s" (1 decimal).
+    """
+    ms = seconds * 1000
+    if ms < 1000:
+        return f"{int(ms)}ms"
+    return f"{seconds:.1f}s"
 
 
 # Known model → canonical embedding dim. Keeps users from having to know
