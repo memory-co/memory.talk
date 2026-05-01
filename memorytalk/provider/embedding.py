@@ -6,23 +6,9 @@ openai — OpenAI-compatible HTTP endpoint via httpx.AsyncClient.
 """
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from string import Template
 import asyncio
 import hashlib
-import os
 import httpx
-
-
-def _resolve_auth_key(auth_key: str) -> str:
-    """Render ``${VAR}`` env-var references in an auth key.
-
-    Uses ``string.Template.substitute`` (strict, not safe_substitute) so
-    a missing env var raises ``KeyError`` — callers turn that into a
-    clear error rather than silently sending an empty Bearer. Strings
-    without any ``$`` pass through untouched. Embed a literal ``$`` as
-    ``$$`` if needed.
-    """
-    return Template(auth_key).substitute(os.environ)
 
 
 class Embedder(ABC):
@@ -83,19 +69,11 @@ class OpenAIEmbedder(Embedder):
         self.timeout = timeout
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        try:
-            api_key = _resolve_auth_key(self.auth_key)
-        except KeyError as e:
-            raise RuntimeError(
-                f"auth_key references env var ${{{e.args[0]}}} which is not set"
-            ) from e
-        if not api_key:
-            raise RuntimeError("auth_key resolved to an empty string")
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 self.endpoint,
                 headers={
-                    "Authorization": f"Bearer {api_key}",
+                    "Authorization": f"Bearer {self.auth_key}",
                     "Content-Type": "application/json",
                 },
                 json={"model": self.model, "input": list(texts), "encoding_format": "float"},
@@ -149,24 +127,14 @@ async def validate_embedder(config) -> None:
         return
 
     if p == "openai":
-        try:
-            api_key = _resolve_auth_key(emb.auth_key or "")
-        except KeyError as e:
-            raise EmbedderValidationError(
-                f"openai embedder: auth_key references env var ${{{e.args[0]}}} "
-                "which is not set"
-            )
-        if not api_key:
-            raise EmbedderValidationError(
-                "openai embedder: auth_key is empty (set a literal value or "
-                "${VAR} in settings.json)"
-            )
+        if not emb.auth_key:
+            raise EmbedderValidationError("openai embedder: auth_key is empty")
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
                     emb.endpoint,
                     headers={
-                        "Authorization": f"Bearer {api_key}",
+                        "Authorization": f"Bearer {emb.auth_key}",
                         "Content-Type": "application/json",
                     },
                     json={"model": emb.model, "input": ["ping"], "encoding_format": "float"},

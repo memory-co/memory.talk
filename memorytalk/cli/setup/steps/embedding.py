@@ -146,13 +146,10 @@ def _step_embedding(base: dict) -> dict:
             KNOWN_ENDPOINTS,
             current=cur_emb.get("endpoint"),
         )
-        # auth_key holds the literal API key. ``${VAR}`` references are
-        # rendered via string.Template.substitute(os.environ) at request
-        # time — useful for tests / users who want env indirection.
-        err_console.print(
-            "[dim]auth key: paste the literal API key, "
-            "or use [/dim][bold]${VAR_NAME}[/bold][dim] to read from an env var[/dim]"
-        )
+        # auth_key holds the literal API key. ${VAR} interpolation still
+        # exists for tests but is not advertised — the cross-context env
+        # mismatch (setup shell vs server-runtime context) is a footgun
+        # we don't want users routinely reaching for.
         auth_key = console.text(
             "auth key",
             default=cur_emb.get("auth_key") or "",

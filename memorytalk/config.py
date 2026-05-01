@@ -29,11 +29,12 @@ class EmbeddingConfig(BaseModel):
     provider: str = "dummy"
     model: str = "all-MiniLM-L6-v2"
     endpoint: str | None = None
-    # The literal API key, OR a ``${VAR}`` reference rendered from
-    # ``os.environ`` at request time via ``string.Template``. Letting
-    # users paste the literal removes the cross-environment fragility
-    # of "is the right env var set in this shell / cron / IDE / ...";
-    # ``${VAR}`` is kept for tests and for users who want indirection.
+    # The literal API key. ``${VAR}`` references in settings.json are
+    # rendered at disk-load time (see ``Config._load_settings``); by
+    # the time the field is read off the model it's a literal. Provider
+    # code does not render. ``${VAR}`` exists for tests; user-facing
+    # docs deliberately don't advertise it (cross-process-context
+    # mismatch is a footgun).
     auth_key: str | None = None
     dim: int = 384
     timeout: float = 30.0
@@ -149,20 +150,14 @@ class Config:
                 "Move or remove the old data root (no auto-migration)."
             )
 
-    def save(self) -> None:
-        self.data_root.mkdir(parents=True, exist_ok=True)
-        self.settings_path.write_text(
-            json.dumps(self.settings.model_dump(), indent=2, ensure_ascii=False)
-        )
-
     def _load_settings(self) -> Settings:
         if self.settings_path.exists():
             data = json.loads(self.settings_path.read_text())
+            emb = data.get("embedding") or {}
             # Strict migration: `embedding.auth_env_key` was replaced by
             # `embedding.auth_key`. Refuse to start until the user re-runs
             # setup, so a stale env-name doesn't get silently turned into
             # an empty literal at runtime.
-            emb = data.get("embedding") or {}
             if "auth_env_key" in emb:
                 raise ConfigValidationError(
                     "settings.json uses the legacy field "
@@ -171,5 +166,18 @@ class Config:
                     "from os.environ via string.Template). "
                     "Re-run `memory-talk setup` to migrate."
                 )
+            # Render ${VAR} references against os.environ across the
+            # whole settings dict — generic, no per-field plumbing.
+            # Rendering at the disk-load boundary (not at request time
+            # in providers) keeps the active value visible from one
+            # place (the live process's env) and avoids cross-context
+            # mismatches between setup and server-runtime shells.
+            from memorytalk.util.env_template import render_env_in_obj
+            try:
+                render_env_in_obj(data)
+            except KeyError as e:
+                raise ConfigValidationError(
+                    f"settings.json references env var ${{{e.args[0]}}} which is not set"
+                ) from e
             return Settings(**data)
         return Settings()

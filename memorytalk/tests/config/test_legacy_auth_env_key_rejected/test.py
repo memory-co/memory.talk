@@ -27,14 +27,16 @@ def test_legacy_auth_env_key_field_is_rejected(tmp_path):
 
 
 def test_new_auth_key_field_loads_fine(tmp_path):
+    """Literal value flows through unchanged. Env-var rendering is a
+    separate concern, covered in tests/config/test_env_var_rendering."""
     (tmp_path / "settings.json").write_text(json.dumps({
         "embedding": {
             "provider": "openai",
             "endpoint": "https://x/v1/embeddings",
-            "auth_key": "${QWEN_KEY}",
+            "auth_key": "sk-literal-test-key",
             "model": "text-embedding-v4",
             "dim": 1024,
         },
     }))
     cfg = Config(tmp_path)
-    assert cfg.settings.embedding.auth_key == "${QWEN_KEY}"
+    assert cfg.settings.embedding.auth_key == "sk-literal-test-key"
