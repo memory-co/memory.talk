@@ -1,5 +1,11 @@
-"""CLI: recall <session_id> <prompt> [--top-k N] [--json] → POST /v2/recall."""
+"""CLI: recall <session_id> <prompt> [--top-k N] [--json] → POST /v2/recall.
+
+--hook mode: read Claude Code UserPromptSubmit JSON payload from stdin,
+emit Claude hookSpecificOutput JSON to stdout, exit 0 on every error
+(must never block the user prompt).
+"""
 from __future__ import annotations
+import json
 import sys
 
 import click
@@ -11,14 +17,26 @@ from memorytalk.config import Config
 
 
 @click.command("recall")
-@click.argument("session_id")
-@click.argument("prompt")
+@click.argument("session_id", required=False, default=None)
+@click.argument("prompt", required=False, default=None)
 @click.option("--top-k", type=int, default=None, help="Top-k (default from settings.recall)")
 @click.option("--data-root", type=click.Path(), default=None)
 @click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON instead of Markdown")
-def recall(session_id: str, prompt: str, top_k: int | None,
-           data_root: str | None, json_out: bool) -> None:
+@click.option("--hook", "hook_mode", is_flag=True, default=False,
+              help="Read Claude Code UserPromptSubmit payload from stdin; "
+                   "emit Claude hookSpecificOutput JSON. Always exits 0.")
+def recall(session_id: str | None, prompt: str | None, top_k: int | None,
+           data_root: str | None, json_out: bool, hook_mode: bool) -> None:
     """Hook-stage memory recall: top-K cards inlined for the AI context."""
+    if hook_mode:
+        _run_hook_mode(top_k, data_root)
+        return
+
+    # CLI mode — args required
+    if session_id is None or prompt is None:
+        emit_md_err(fmt_error("recall requires SESSION_ID and PROMPT (or pass --hook)"))
+        sys.exit(2)
+
     cfg = Config(data_root) if data_root else Config()
     body = {"session_id": session_id, "query": prompt}
     if top_k is not None:
@@ -36,3 +54,57 @@ def recall(session_id: str, prompt: str, top_k: int | None,
         emit_json(result)
     else:
         emit_md(fmt_recall(result))
+
+
+def _run_hook_mode(top_k: int | None, data_root: str | None) -> None:
+    """UserPromptSubmit hook entry. Always exits 0; emits hook JSON on stdout.
+
+    Errors funnel through _emit("") so Claude never sees a non-zero exit
+    or a malformed stdout.
+    """
+    def _emit(ctx: str) -> None:
+        sys.stdout.write(json.dumps({
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": ctx,
+            }
+        }) + "\n")
+        sys.stdout.flush()
+
+    # Parse stdin
+    try:
+        raw = sys.stdin.read()
+        payload = json.loads(raw)
+        session_id = payload["session_id"]
+        prompt = payload["prompt"]
+        if not isinstance(session_id, str) or not isinstance(prompt, str):
+            raise TypeError("session_id and prompt must be strings")
+    except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
+        sys.stderr.write(f"memory-talk hook: malformed stdin ({e})\n")
+        _emit("")
+        return
+
+    # Call recall API with short timeout (server may be down — fail fast)
+    cfg = Config(data_root) if data_root else Config()
+    body: dict = {"session_id": session_id, "query": prompt}
+    if top_k is not None:
+        body["top_k"] = top_k
+    try:
+        result = api("POST", "/v2/recall", cfg, json_body=body, timeout=2.0)
+    except Exception as e:  # noqa: BLE001 — never propagate to Claude
+        sys.stderr.write(f"memory-talk hook: recall failed ({e})\n")
+        _emit("")
+        return
+
+    # Format response
+    recalled = result.get("recalled") or []
+    if not recalled:
+        _emit("")
+        return
+
+    lines = ["Recalled from prior sessions:", ""]
+    for hit in recalled:
+        cid = hit.get("card_id", "?")
+        summary = hit.get("summary", "")
+        lines.append(f"- [{cid}] {summary}")
+    _emit("\n".join(lines))
