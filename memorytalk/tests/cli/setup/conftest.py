@@ -132,12 +132,22 @@ def setup_env(tmp_path, monkeypatch):
     monkeypatch.setattr(console_mod, "confirm", _confirm)
 
     # Stub out the Claude hook step so wizard tests don't touch real ~/.claude/.
-    # Tests that want to exercise the hook step explicitly re-monkeypatch this.
+    # The stub records its invocations on env.claude_hook_calls so tests can
+    # assert wizard.py actually called it (catches a regression where the call
+    # is removed but the summary's `or {"status": "unchanged"}` fallback hides it).
+    #
+    # To exercise the REAL step, re-monkeypatch wizard_mod._step_claude_hook
+    # (NOT claude_hook._step_claude_hook) — wizard.py imported the function
+    # by name, so the late-bound attribute on wizard_mod is what gets called.
     from memorytalk.cli.setup import wizard as wizard_mod
-    monkeypatch.setattr(
-        wizard_mod, "_step_claude_hook",
-        lambda: {"status": "skipped", "reason": "stubbed in tests"},
-    )
+
+    env.claude_hook_calls = []
+
+    def _stub_claude_hook():
+        env.claude_hook_calls.append(1)
+        return {"status": "skipped", "reason": "stubbed in tests"}
+
+    monkeypatch.setattr(wizard_mod, "_step_claude_hook", _stub_claude_hook)
 
     def mock_openai_probe(dim: int = 1024) -> None:
         resp = MagicMock()

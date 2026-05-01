@@ -12,6 +12,8 @@ The flow:
   6. short-circuit if nothing changed
   7. atomic write + ensure_dirs
   8. server start/restart
+  9. Claude Code hook install — best-effort, soft-skip if Claude not
+     detected. Last so it wires into a server that's already running.
 
 PATH takeover is *not* part of this flow — it runs in ``__init__.py``
 right after the venv decision, because PATH state is a system-level

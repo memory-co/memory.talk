@@ -49,6 +49,15 @@ def test_first_install_openai_writes_settings(setup_env):
     # mock 的 httpx probe 同步返回 → 延迟必然 < 1s，单位一定是 "ms"
     assert "ms" in err
 
-    # Wizard summary now includes a `claude hook` row (stubbed to skipped in conftest).
-    assert "claude hook" in result.stdout
-    assert "skipped" in result.stdout  # stub 出来的状态
+    # Wizard called the Claude hook step (stubbed to skipped in conftest).
+    assert len(setup_env.claude_hook_calls) == 1, (
+        "wizard did not call _step_claude_hook"
+    )
+    # Summary table has a `claude hook | skipped (stubbed in tests)` row.
+    # The regex anchors the assertion to the row label so a "skipped" from
+    # any other row (e.g. PATH takeover) cannot satisfy it.
+    import re
+    assert re.search(
+        r"\|\s*claude hook\s*\|\s*skipped \(stubbed in tests\)\s*\|",
+        result.stdout,
+    ), result.stdout
