@@ -44,7 +44,10 @@ def _parse_stdout_json(result):
 
 # -------- 成功路径 --------
 
-async def test_hook_success_emits_recalled_cards_as_bullets(cli_env):
+async def test_hook_success_emits_recalled_cards_via_fmt_recall(cli_env):
+    """Hook reuses fmt_recall — bash code block with `memory-talk view
+    <card>  # <one-line summary>` lines that Claude can both read for
+    context and run to expand."""
     await _seed(cli_env)
     payload = json.dumps({
         "session_id": "in-flight-session",
@@ -58,8 +61,11 @@ async def test_hook_success_emits_recalled_cards_as_bullets(cli_env):
     out = _parse_stdout_json(result)
     assert out["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
     ctx = out["hookSpecificOutput"]["additionalContext"]
-    assert "Recalled from prior sessions:" in ctx
-    assert "card_" in ctx  # 至少有一条 card_id
+    # fmt_recall wraps in a ```bash block with the "Relevant memories" header
+    assert "```bash" in ctx
+    assert "Relevant memories" in ctx
+    # cards are rendered as runnable view commands, not bare bullets
+    assert "memory-talk view card_" in ctx
 
 
 # -------- 空命中 --------

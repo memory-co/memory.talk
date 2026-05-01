@@ -105,18 +105,12 @@ def _run_hook_mode(top_k: int | None, data_root: str | None) -> None:
             _emit("")
             return
 
-        # Format response
-        recalled = result.get("recalled") or []
-        if not recalled:
-            _emit("")
-            return
-
-        lines = ["Recalled from prior sessions:", ""]
-        for hit in recalled:
-            cid = hit.get("card_id", "?")
-            summary = hit.get("summary", "")
-            lines.append(f"- [{cid}] {summary}")
-        _emit("\n".join(lines))
+        # Format response — reuse the same fmt_recall used by the human-
+        # facing CLI mode, so Claude sees the bash-block "memory-talk view
+        # <card>  # <summary>" shape (concise, single-line summaries,
+        # cards as runnable commands). fmt_recall returns "" on empty
+        # hits, matching our empty-additionalContext contract.
+        _emit(fmt_recall(result))
     except BaseException as e:  # noqa: BLE001
         # Outer net — covers Config() failures, OS errors, anything the
         # inner blocks didn't anticipate. The hook MUST emit valid JSON
