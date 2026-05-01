@@ -46,3 +46,5 @@ def test_reconfigure_no_change_does_not_rewrite(setup_env):
     assert settings_path.stat().st_mtime_ns == original_mtime
     assert settings_path.read_text() == original_text
     assert "nothing" in result.stdout.lower() and "unchanged" in result.stdout.lower()
+    # 即便 settings 没变，probe 也应跑过（健康检查语义）
+    assert "embedding verified" in setup_env.stderr()

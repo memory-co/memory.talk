@@ -5,10 +5,12 @@ The flow:
   2. vector + relation provider (single-option in v1 but surfaced)
   3. server port
   4. carry over untouched sections (ttl/search/recall)
-  5. diff vs old settings — short-circuit if nothing changed
-  6. probe the embedding provider if it (or first install) changed
-  7. atomic write + ensure_dirs
-  8. server start/restart
+  5. diff vs old settings
+  6. probe the embedding provider — always, even on no-op reconfigure,
+     so re-running ``setup`` works as a health check
+  7. short-circuit if nothing changed
+  8. atomic write + ensure_dirs
+  9. server start/restart
 
 PATH takeover is *not* part of this flow — it runs in ``__init__.py``
 right after the venv decision, because PATH state is a system-level
@@ -73,6 +75,10 @@ def _wizard(
     # 4. diff
     changed = diff_settings(old_raw or {}, new_settings) if old_raw else ["(initial)"]
 
+    # 5. embedding probe — runs every time, even on no-op reconfigure, so
+    #    the user gets a positive health-check signal each setup run.
+    _step_probe_embedding(cfg, new_settings)
+
     if old_raw is not None and not changed:
         err_console.print("\n[dim]config unchanged — nothing to write[/dim]")
         return {
@@ -82,11 +88,6 @@ def _wizard(
             "server": None,
             "first_install": False,
         }
-
-    # 5. embedding probe (only if embedding section actually differs OR first install)
-    embedding_changed = old_raw is None or new_settings.get("embedding") != (old_raw.get("embedding") or {})
-    if embedding_changed:
-        _step_probe_embedding(cfg, new_settings)
 
     # 6. write + ensure_dirs
     write_settings_atomic(cfg.settings_path, new_settings)
