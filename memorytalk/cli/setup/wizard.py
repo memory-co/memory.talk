@@ -1,16 +1,17 @@
 """Wizard orchestrator — composes the per-step modules into one flow.
 
 The flow:
-  1. embedding (always asked)
+  1. embedding (always asked) → probe immediately so the user sees a
+     ✓ embedding verified line before being asked anything else.
+     Probe runs every time, even on no-op reconfigure, so re-running
+     ``setup`` works as a health check.
   2. vector + relation provider (single-option in v1 but surfaced)
   3. server port
   4. carry over untouched sections (ttl/search/recall)
   5. diff vs old settings
-  6. probe the embedding provider — always, even on no-op reconfigure,
-     so re-running ``setup`` works as a health check
-  7. short-circuit if nothing changed
-  8. atomic write + ensure_dirs
-  9. server start/restart
+  6. short-circuit if nothing changed
+  7. atomic write + ensure_dirs
+  8. server start/restart
 
 PATH takeover is *not* part of this flow — it runs in ``__init__.py``
 right after the venv decision, because PATH state is a system-level
@@ -44,8 +45,10 @@ def _wizard(
 
     base = dict(old_raw) if old_raw else Settings().model_dump()
 
-    # 1. embedding provider
+    # 1. embedding provider — collect + probe immediately, so the user
+    #    sees ✓ verification before being asked storage / server fields.
     new_settings = _step_embedding(base)
+    _step_probe_embedding(cfg, new_settings)
 
     # 2. vector / relation (single-option but exposed)
     section("Storage")
@@ -74,10 +77,6 @@ def _wizard(
 
     # 4. diff
     changed = diff_settings(old_raw or {}, new_settings) if old_raw else ["(initial)"]
-
-    # 5. embedding probe — runs every time, even on no-op reconfigure, so
-    #    the user gets a positive health-check signal each setup run.
-    _step_probe_embedding(cfg, new_settings)
 
     if old_raw is not None and not changed:
         err_console.print("\n[dim]config unchanged — nothing to write[/dim]")
