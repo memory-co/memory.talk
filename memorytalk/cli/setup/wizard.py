@@ -9,11 +9,12 @@ The flow:
   3. server port
   4. carry over untouched sections (ttl/search/recall)
   5. diff vs old settings
-  6. short-circuit if nothing changed
-  7. atomic write + ensure_dirs
-  8. server start/restart
-  9. Claude Code hook install — best-effort, soft-skip if Claude not
-     detected. Last so it wires into a server that's already running.
+  6. Claude Code hook install — best-effort, runs every time (Claude
+     may be installed/uninstalled between setup runs; the hook wiring
+     is on ~/.claude/, independent of memory-talk's state).
+  7. short-circuit if nothing changed
+  8. atomic write + ensure_dirs
+  9. server start/restart
 
 PATH takeover is *not* part of this flow — it runs in ``__init__.py``
 right after the venv decision, because PATH state is a system-level
@@ -81,6 +82,12 @@ def _wizard(
     # 4. diff
     changed = diff_settings(old_raw or {}, new_settings) if old_raw else ["(initial)"]
 
+    # 5. Claude Code hook install — always runs (independent of diff).
+    #    Whether Claude is installed and whether our hook is wired is a
+    #    side-effect on ~/.claude/, not on memory-talk state. User may
+    #    install/uninstall Claude between setup runs; we re-check every time.
+    hook_payload = _step_claude_hook()
+
     if old_raw is not None and not changed:
         err_console.print("\n[dim]config unchanged — nothing to write[/dim]")
         return {
@@ -88,6 +95,7 @@ def _wizard(
             "wrote_settings": False,
             "ensured_dirs": False,
             "server": None,
+            "claude_hook": hook_payload,
             "first_install": False,
         }
 
@@ -98,9 +106,6 @@ def _wizard(
 
     # 7. server start/restart prompt
     server_payload = _step_server(cfg, old_raw is not None and bool(changed))
-
-    # 8. Claude Code hook install (last — wires Claude Code into the now-running server)
-    hook_payload = _step_claude_hook()
 
     return {
         "settings_changed": changed,

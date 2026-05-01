@@ -48,3 +48,7 @@ def test_reconfigure_no_change_does_not_rewrite(setup_env):
     assert "nothing" in result.stdout.lower() and "unchanged" in result.stdout.lower()
     # 即便 settings 没变，probe 也应跑过（健康检查语义）
     assert "embedding verified" in setup_env.stderr()
+    # 同样的语义：claude hook 检测每次都跑，不依赖 settings diff
+    assert len(setup_env.claude_hook_calls) == 1, (
+        "wizard did not call _step_claude_hook on no-change reconfigure"
+    )
