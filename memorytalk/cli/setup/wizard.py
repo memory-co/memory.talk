@@ -29,6 +29,7 @@ from memorytalk.util.settings_io import diff_settings, write_settings_atomic
 from .steps.embedding import _step_embedding, _step_probe_embedding
 from .steps.provider import _step_choice
 from .steps.server import _step_server
+from .steps.claude_hook import _step_claude_hook
 
 
 def _wizard(
@@ -96,10 +97,14 @@ def _wizard(
     # 7. server start/restart prompt
     server_payload = _step_server(cfg, old_raw is not None and bool(changed))
 
+    # 8. Claude Code hook install (last — wires Claude Code into the now-running server)
+    hook_payload = _step_claude_hook()
+
     return {
         "settings_changed": changed,
         "wrote_settings": True,
         "ensured_dirs": True,
         "server": server_payload,
+        "claude_hook": hook_payload,
         "first_install": is_first_install,
     }

@@ -131,6 +131,14 @@ def setup_env(tmp_path, monkeypatch):
     monkeypatch.setattr(console_mod, "text", _text)
     monkeypatch.setattr(console_mod, "confirm", _confirm)
 
+    # Stub out the Claude hook step so wizard tests don't touch real ~/.claude/.
+    # Tests that want to exercise the hook step explicitly re-monkeypatch this.
+    from memorytalk.cli.setup import wizard as wizard_mod
+    monkeypatch.setattr(
+        wizard_mod, "_step_claude_hook",
+        lambda: {"status": "skipped", "reason": "stubbed in tests"},
+    )
+
     def mock_openai_probe(dim: int = 1024) -> None:
         resp = MagicMock()
         resp.raise_for_status.return_value = None

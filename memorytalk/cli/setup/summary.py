@@ -33,6 +33,9 @@ def _summary_md(cfg: Config, result: dict, *, memory_talk_bin: Path) -> str:
     takeover = result.get("path_takeover") or {}
     rows.append(("PATH takeover", _takeover_label(takeover)))
 
+    hook = result.get("claude_hook") or {"status": "unchanged"}
+    rows.append(("claude hook", _hook_label(hook)))
+
     rows.append(("changed", _changed_label(result)))
 
     out = ["# setup · **ok**", "", "| field | value |", "|---|---|"]
@@ -94,6 +97,16 @@ def _takeover_label(takeover: dict) -> str:
     if counts.get("windows"):
         bits.append("windows — skipped")
     return ", ".join(bits) if bits else "nothing to do"
+
+
+def _hook_label(payload: dict) -> str:
+    status = payload.get("status", "unchanged")
+    if status in ("installed", "updated", "unchanged"):
+        return status
+    if status == "skipped":
+        reason = payload.get("reason", "")
+        return f"skipped ({reason})" if reason else "skipped"
+    return status
 
 
 def _changed_label(result: dict) -> str:

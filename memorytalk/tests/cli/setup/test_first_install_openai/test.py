@@ -48,3 +48,7 @@ def test_first_install_openai_writes_settings(setup_env):
     assert "dim 1024" in err
     # mock 的 httpx probe 同步返回 → 延迟必然 < 1s，单位一定是 "ms"
     assert "ms" in err
+
+    # Wizard summary now includes a `claude hook` row (stubbed to skipped in conftest).
+    assert "claude hook" in result.stdout
+    assert "skipped" in result.stdout  # stub 出来的状态
