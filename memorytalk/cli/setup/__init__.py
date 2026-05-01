@@ -129,7 +129,12 @@ def setup() -> None:
     try:
         result = _wizard(cfg, old_raw, is_first_install, memory_talk_bin=memory_talk_bin)
     except KeyboardInterrupt:
-        err_console.print("\n[dim]aborted by user — no changes written[/dim]")
+        # PATH takeover already ran above and may have committed; only
+        # the wizard's settings write is being skipped.
+        err_console.print(
+            "\n[dim]aborted by user — settings.json not written "
+            "(any PATH takeover above is already committed)[/dim]"
+        )
         sys.exit(130)
 
     # Summary reads `path_takeover` from the result dict; takeover ran

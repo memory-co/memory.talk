@@ -140,8 +140,41 @@ def _step_path_takeover(target: Path) -> dict:
         )
         return {"target": str(target), "actions": actions}
 
+    # Apply each change immediately and emit per-action feedback so the
+    # user sees the takeover land in real time (not buried in the final
+    # summary, which they may never see if they Ctrl-C the wizard).
+    n_redirected = 0
+    n_replaced = 0
+    n_failed = 0
     for p, kind in needs_redirect:
-        actions.append(_redirect_one(p, target, kind))
+        action = _redirect_one(p, target, kind)
+        actions.append(action)
+        status = action["status"]
+        if status == "redirected":
+            err_console.print(
+                f"  [green]✓[/green] {p} [dim]→ symlink updated → {target}[/dim]"
+            )
+            n_redirected += 1
+        elif status == "replaced":
+            err_console.print(
+                f"  [green]✓[/green] {p} [dim]→ backup as {Path(action['backup']).name}; "
+                f"symlink → {target}[/dim]"
+            )
+            n_replaced += 1
+        else:  # no_perm
+            err_console.print(
+                f"  [red]✗[/red] {p}: {action.get('message', 'failed')}"
+            )
+            n_failed += 1
+
+    bits: list[str] = []
+    if n_replaced:
+        bits.append(f"{n_replaced} file replaced")
+    if n_redirected:
+        bits.append(f"{n_redirected} symlink redirected")
+    if n_failed:
+        bits.append(f"[red]{n_failed} failed[/red]")
+    err_console.print(f"\n[bold]PATH takeover[/bold] · " + ", ".join(bits))
     return {"target": str(target), "actions": actions}
 
 
