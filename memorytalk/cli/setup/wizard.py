@@ -9,7 +9,7 @@ The flow:
   6. probe the embedding provider if it (or first install) changed
   7. atomic write + ensure_dirs
   8. server start/restart
-  9. memory.talk symlink
+  9. PATH takeover — point every memory-talk on $PATH at the chosen target
 """
 from __future__ import annotations
 from pathlib import Path
@@ -19,8 +19,8 @@ from memorytalk.config import Config, Settings
 from . import _prompt
 from ._io import err_console
 from .helpers import diff_settings, write_settings_atomic
-from .steps.alias import _step_alias
 from .steps.embedding import _step_embedding, _step_probe_embedding
+from .steps.path_takeover import _step_path_takeover
 from .steps.provider import _step_choice
 from .steps.server import _step_server
 
@@ -75,7 +75,7 @@ def _wizard(
             "wrote_settings": False,
             "ensured_dirs": False,
             "server": None,
-            "alias": None,
+            "path_takeover": None,
             "first_install": False,
         }
 
@@ -92,14 +92,14 @@ def _wizard(
     # 7. server start/restart prompt
     server_payload = _step_server(cfg, old_raw is not None and bool(changed))
 
-    # 8. symlink (alongside whichever memory-talk we're currently running)
-    alias_result = _step_alias(memory_talk_bin)
+    # 8. PATH takeover — redirect every memory-talk on $PATH at the chosen target
+    takeover_result = _step_path_takeover(memory_talk_bin)
 
     return {
         "settings_changed": changed,
         "wrote_settings": True,
         "ensured_dirs": True,
         "server": server_payload,
-        "alias": alias_result,
+        "path_takeover": takeover_result,
         "first_install": is_first_install,
     }

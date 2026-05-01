@@ -4,7 +4,8 @@ Setup's first action is to bootstrap a venv at ``~/.memory-talk/.venv``
 and re-exec into it. For the **wizard** tests we don't want either of
 those to actually happen (real venv creation is slow + would write to
 the dev's real home, and os.execv would replace pytest itself). So this
-fixture stubs them out, plus the server lifecycle and the symlink write.
+fixture stubs them out, plus the server lifecycle and the PATH takeover
+(stubbed to a no-op; the takeover logic has its own dedicated test).
 
 Wizard answers go through the ``_prompt`` shim now (replaces rich.prompt
 under the hood with questionary). The fixture exposes a ``prompts`` list
@@ -74,12 +75,11 @@ def setup_env(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(server_step, "pid_alive", lambda pid: False)
 
-    # Skip the symlink write — `_step_alias` is called from setup.wizard.
+    # Skip the PATH takeover — `_step_path_takeover` is called from
+    # setup.wizard. The dedicated takeover test exercises it directly.
     monkeypatch.setattr(
-        wizard_mod, "_step_alias",
-        lambda *a, **kw: {
-            "status": "noop", "link_path": "/tmp/memory.talk", "target": "/tmp/memory-talk",
-        },
+        wizard_mod, "_step_path_takeover",
+        lambda *a, **kw: {"target": str(a[0]) if a else "", "actions": []},
     )
 
     # ----- prompt shim: drain env.prompts in call order -----

@@ -26,8 +26,8 @@ def _summary_md(cfg: Config, result: dict, *, memory_talk_bin: Path) -> str:
     server = result.get("server")
     rows.append(("server", _server_label(server)))
 
-    alias = result.get("alias") or {}
-    rows.append(("alias", _alias_label(alias)))
+    takeover = result.get("path_takeover") or {}
+    rows.append(("PATH takeover", _takeover_label(takeover)))
 
     rows.append(("changed", _changed_label(result)))
 
@@ -66,27 +66,30 @@ def _server_label(payload: dict | None) -> str:
     return status
 
 
-def _alias_label(alias: dict) -> str:
-    status = alias.get("status", "")
-    link = alias.get("link_path", "")
-    target = alias.get("target", "")
-    if status == "created":
-        return f"`{link} → {Path(target).name}`"
-    if status == "noop":
-        return f"`{link}` (already points to `{Path(target).name}`)"
-    if status == "overwrote":
-        return f"`{link} → {Path(target).name}` (replaced)"
-    if status == "skipped_other_target":
-        return f"skipped — {link} points elsewhere"
-    if status == "skipped_no_perm":
-        return f"skipped (no write permission) — run manually: `ln -s {target} {link}`"
-    if status == "skipped_regular_file":
-        return f"skipped — `{link}` is a regular file"
-    if status == "skipped_windows":
-        return "skipped (windows — use a .bat or PowerShell alias instead)"
-    if status == "skipped_not_found":
-        return f"skipped — {alias.get('message', 'memory-talk not on PATH')}"
-    return status
+def _takeover_label(takeover: dict) -> str:
+    actions = takeover.get("actions") or []
+    if not actions:
+        return "unchanged"
+    counts: dict[str, int] = {}
+    for a in actions:
+        s = a.get("status", "?")
+        counts[s] = counts.get(s, 0) + 1
+    bits: list[str] = []
+    if counts.get("ok"):
+        bits.append(f"{counts['ok']} already correct")
+    if counts.get("redirected"):
+        bits.append(f"{counts['redirected']} symlink redirected")
+    if counts.get("replaced"):
+        bits.append(f"{counts['replaced']} file replaced (.bak created)")
+    if counts.get("skipped"):
+        bits.append(f"{counts['skipped']} skipped (declined)")
+    if counts.get("no_perm"):
+        bits.append(f"{counts['no_perm']} no permission")
+    if counts.get("not_found"):
+        bits.append("none on $PATH — add target dir to PATH manually")
+    if counts.get("windows"):
+        bits.append("windows — skipped")
+    return ", ".join(bits) if bits else "nothing to do"
 
 
 def _changed_label(result: dict) -> str:

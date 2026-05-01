@@ -1,9 +1,9 @@
 """Opt-out path: user picks 'no' on the bootstrap prompt.
 
 The wizard must run in the *current* python env without ever calling
-``_bootstrap_venv`` or ``_reexec_into_venv``, and the alias step must
-target the current env's ``memory-talk`` script (not the dedicated
-~/.memory-talk/.venv one).
+``_bootstrap_venv`` or ``_reexec_into_venv``, and the PATH-takeover
+step must be invoked with the current env's ``memory-talk`` script as
+its target (not the dedicated ~/.memory-talk/.venv one).
 """
 from __future__ import annotations
 import json
@@ -24,7 +24,7 @@ def test_optout_keeps_current_env(setup_env, monkeypatch):
     monkeypatch.setattr(setup_pkg, "_already_in_venv", lambda: False)
 
     # Track that bootstrap + execv are NOT triggered when the user says 'no'.
-    calls: dict = {"bootstrap": 0, "reexec": 0, "alias_arg": None}
+    calls: dict = {"bootstrap": 0, "reexec": 0, "takeover_arg": None}
 
     def fake_bootstrap():
         calls["bootstrap"] += 1
@@ -34,15 +34,11 @@ def test_optout_keeps_current_env(setup_env, monkeypatch):
     monkeypatch.setattr(setup_pkg, "_bootstrap_venv", fake_bootstrap)
     monkeypatch.setattr(setup_pkg, "_reexec_into_venv", fake_reexec)
 
-    # Capture what _step_alias gets called with.
-    def capturing_alias(memory_talk_bin: Path) -> dict:
-        calls["alias_arg"] = memory_talk_bin
-        return {
-            "status": "noop",
-            "link_path": str(memory_talk_bin.parent / "memory.talk"),
-            "target": str(memory_talk_bin),
-        }
-    monkeypatch.setattr(wizard_mod, "_step_alias", capturing_alias)
+    # Capture what _step_path_takeover gets called with.
+    def capturing_takeover(memory_talk_bin: Path) -> dict:
+        calls["takeover_arg"] = memory_talk_bin
+        return {"target": str(memory_talk_bin), "actions": []}
+    monkeypatch.setattr(wizard_mod, "_step_path_takeover", capturing_takeover)
 
     # Skip the embedder probe (we're using local provider).
     monkeypatch.setattr(embedding_step, "validate_embedder", _noop_validate)
@@ -63,11 +59,11 @@ def test_optout_keeps_current_env(setup_env, monkeypatch):
     assert calls["bootstrap"] == 0
     assert calls["reexec"] == 0
 
-    # Alias targeted the *current* env, not ~/.memory-talk/.venv.
+    # PATH takeover targeted the *current* env, not ~/.memory-talk/.venv.
     expected_bin = Path(sys.executable).parent / "memory-talk"
-    assert calls["alias_arg"] == expected_bin
+    assert calls["takeover_arg"] == expected_bin
     dedicated_venv = setup_env.fake_home / ".memory-talk" / ".venv"
-    assert dedicated_venv not in calls["alias_arg"].parents
+    assert dedicated_venv not in calls["takeover_arg"].parents
 
     # Settings still landed under fake HOME (data_root is independent of env).
     data = json.loads((setup_env.data_root / "settings.json").read_text())
