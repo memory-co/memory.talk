@@ -34,6 +34,17 @@ memory-talk
 │   └── remove <session_id> <tag ...>         # 去掉 tag
 ├── link create <json>                        # 写入用户 link
 ├── sync [--data-root PATH]                   # 从平台本地文件导入 session
+├── filter
+│   ├── list                                  # 取景框:列出已注册 filter
+│   ├── run <name>                            # 跑某个 filter 看框里有谁
+│   ├── mark <name> <id>...                   # 按 meta.json 给 subject 打 / 撤 tag
+│   └── unmark <name> [<id>...]               # 反向 mark
+├── explore
+│   ├── list                                  # 列出已有探索记录
+│   ├── detail <session_id>                   # 查看某次记录(cards / 流程)
+│   ├── auto [--limit N]                      # 自动抽 card(claude -p,non-interactive)
+│   ├── manual                                # 进入 claude(交互)
+│   └── resume <session_id>                   # 续上某次记录(交互)
 ├── rebuild                                   # 阻塞式重建索引
 └── server start | stop | status              # 管理本地 API 服务
 ```

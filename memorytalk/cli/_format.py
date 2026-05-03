@@ -459,6 +459,41 @@ def fmt_sync(resp: dict) -> str:
     return _join(*out)
 
 
+def fmt_explore_list(resp: dict) -> str:
+    records = resp.get("records") or []
+    out = [f"# explore ({len(records)})", ""]
+    if not records:
+        out.append("*(no exploration records — run `memory-talk explore manual` to start one)*")
+        out.append("")
+        return _join(*out)
+    out.append("| session_id | started | rounds | cards | status |")
+    out.append("|---|---|---|---|---|")
+    for r in records:
+        sid = r.get("session_id", "")
+        started = (r.get("started_at") or "").replace("T", " ").split(".")[0].rstrip("Z")
+        rounds = r.get("rounds", 0)
+        cards = r.get("cards", 0)
+        status = r.get("status", "")
+        out.append(f"| `{sid}` | {started} | {rounds} | {cards} | {status} |")
+    out.append("")
+    return _join(*out)
+
+
+def fmt_explore_detail(resp: dict) -> str:
+    sid = resp.get("session_id", "")
+    out = [
+        f"# `{sid}`",
+        "",
+        "| field | value |",
+        "|---|---|",
+    ]
+    for key in ("started_at", "last_at", "rounds", "cards", "status", "path"):
+        if resp.get(key) is not None:
+            out.append(f"| {key} | {resp[key]} |")
+    out.append("")
+    return _join(*out)
+
+
 def fmt_rebuild(resp: dict) -> str:
     out = [
         f"# rebuild · **{resp.get('status', 'ok')}**",

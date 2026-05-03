@@ -91,6 +91,23 @@ def _run_hook_mode(top_k: int | None, data_root: str | None) -> None:
 
         # Call recall API with short timeout (server may be down — fail fast)
         cfg = Config(data_root) if data_root else Config()
+
+        # Suppress recall when the calling cwd is the explore workspace.
+        # explore is meant to be a "look at memory deliberately" mode, not
+        # a "memory autocompletes my work" mode — running recall there
+        # would inject context we explicitly came to read manually.
+        # Best-effort: if cwd lookup fails for any reason, fall through to
+        # the normal recall path (matches the broader hook contract of
+        # never blocking the user prompt).
+        try:
+            from memorytalk.util.cc_project import is_same_path
+            caller_cwd = payload.get("cwd")
+            if caller_cwd and is_same_path(caller_cwd, cfg.settings.explore.cwd):
+                _emit("")
+                return
+        except Exception:  # noqa: BLE001
+            pass
+
         body: dict = {"session_id": session_id, "query": prompt}
         if top_k is not None:
             body["top_k"] = top_k

@@ -13,7 +13,7 @@ def main() -> None:
 main.add_command(server)
 
 # Other command groups are attached as they're implemented.
-for _name in ("card", "tag", "link", "sync", "search", "recall", "review", "view", "log", "rebuild", "setup", "filter"):
+for _name in ("card", "tag", "link", "sync", "search", "recall", "review", "view", "log", "rebuild", "setup", "filter", "explore"):
     try:
         _mod = __import__(f"memorytalk.cli.{_name}", fromlist=[_name])
         # `filter` shadows a builtin → the command object is named `filter_`

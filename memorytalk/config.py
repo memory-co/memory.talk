@@ -56,6 +56,13 @@ class RecallConfig(BaseModel):
     fetch_multiplier: int = 3   # candidates pulled = top_k * multiplier; dedup-filter then trim
 
 
+class ExploreConfig(BaseModel):
+    # Default kept as a str (not Path) so settings.json round-trips cleanly
+    # with `~/` notation. Resolution to an absolute Path happens at use time
+    # in the explore CLI, not at config load.
+    cwd: str = "~/.memory-talk/explore"
+
+
 class Settings(BaseModel):
     server: ServerConfig = ServerConfig()
     vector: ProviderConfig = ProviderConfig(provider="lancedb")
@@ -64,6 +71,7 @@ class Settings(BaseModel):
     ttl: TTLSettings = TTLSettings()
     search: SearchConfig = SearchConfig()
     recall: RecallConfig = RecallConfig()
+    explore: ExploreConfig = ExploreConfig()
 
 
 # Tables that only v1 used. If memory.db contains any of these, the data root
