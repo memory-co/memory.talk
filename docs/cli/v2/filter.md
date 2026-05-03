@@ -253,25 +253,16 @@ memory-talk filter unmark new-session
 ### `<data_root>/filters/new-session/filter.py`
 
 ```python
-#!/usr/bin/env python3
-"""new-session: 框出还没打 _filter:new-session 标的 session。"""
-import json
-import subprocess
+"""new-session: 框出还没打 _filter-new-session 标的 session。"""
+from typing import Callable
 
 
-def main() -> int:
-    proc = subprocess.run(
-        ["memory-talk", "search", "",
-         "--where", 'NOT (tag = "_filter:new-session")', "--json"],
-        capture_output=True, text=True, check=True,
-    )
-    for s in json.loads(proc.stdout)["sessions"]["results"]:
-        print(s["session_id"])
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+def select(client: Callable) -> list[str]:
+    resp = client("POST", "/v2/search", json_body={
+        "query": "",
+        "where": 'tag != "_filter-new-session"',
+    })
+    return [s["session_id"] for s in resp["sessions"]["results"]]
 ```
 
 ### `<data_root>/filters/new-session/meta.json`
