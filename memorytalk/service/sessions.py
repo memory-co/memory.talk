@@ -1,4 +1,7 @@
-"""Session service — ingest (write), view / log (read), tag add/remove. All async."""
+"""Session service — ingest (write), view / log (read). All async.
+
+Tag operations live in TagService (cli/setup/steps/.. wait it's in service/tags.py).
+"""
 from __future__ import annotations
 import json
 from typing import Any
@@ -8,8 +11,8 @@ from memorytalk.provider.lancedb import LanceStore
 from memorytalk.repository import SQLiteStore
 from memorytalk.schemas import (
     ContentBlock, EventEntry, IngestRound, IngestSessionRequest,
-    IngestSessionResponse, LogResponse, SessionRound, SessionView,
-    TagsRequest, TagsResponse, ViewResponse,
+    IngestSessionResponse, LogResponse, SessionRound, SessionView, TagPair,
+    ViewResponse,
 )
 from memorytalk.service.events import EventWriter
 from memorytalk.service.links import link_to_ref, refresh_active_user_links
@@ -99,7 +102,7 @@ class SessionService:
 
             meta_new: dict[str, Any] = {
                 "session_id": session_id, "source": source, "created_at": created_at,
-                "metadata": metadata, "tags": [], "round_count": len(assigned),
+                "metadata": metadata, "round_count": len(assigned),
                 "synced_at": now_iso,
             }
             if sha256:
@@ -109,7 +112,7 @@ class SessionService:
 
             await self.db.sessions.upsert(
                 session_id=session_id, source=source, created_at=created_at,
-                synced_at=now_iso, metadata=metadata, tags=[], round_count=len(assigned),
+                synced_at=now_iso, metadata=metadata, round_count=len(assigned),
             )
             await self.db.sessions.upsert_rounds(session_id, assigned)
             await self.vectors.add_session(session_id, _rounds_to_text(assigned))
@@ -226,6 +229,8 @@ class SessionService:
             now=now,
         )
 
+        tag_pairs = await self.db.tags.list_for_subject(session_id)
+
         return ViewResponse(
             type="session",
             read_at=dt_to_iso(now),
@@ -233,7 +238,7 @@ class SessionService:
                 session_id=session["session_id"],
                 source=session["source"],
                 created_at=session["created_at"],
-                tags=session["tags"],
+                tags=[TagPair(**p) for p in tag_pairs],
                 metadata=session["metadata"],
                 rounds=[SessionRound(
                     index=r["idx"], round_id=r["round_id"], parent_id=r["parent_id"],
@@ -259,51 +264,3 @@ class SessionService:
             events=[EventEntry(at=e["at"], kind=e["kind"], detail=e["detail"]) for e in events],
         )
 
-    # -------- tags --------
-
-    async def add_tags(self, payload: TagsRequest) -> TagsResponse:
-        session = await self._require_session(payload.session_id, "tag only applies to sessions")
-        incoming = payload.tags
-        if not incoming:
-            raise SessionServiceError("tags must be non-empty")
-
-        existing = list(session["tags"])
-        newly_added = [t for t in incoming if t not in existing]
-        ordered = existing + [t for t in newly_added if t not in existing]
-
-        await self._persist_tags(session, ordered)
-        now_iso = dt_to_iso(now_utc())
-        for t in newly_added:
-            await self.events.emit(payload.session_id, "tag_added", {"tag": t}, at=now_iso)
-        return TagsResponse(status="ok", tags=ordered)
-
-    async def remove_tags(self, payload: TagsRequest) -> TagsResponse:
-        session = await self._require_session(payload.session_id, "tag only applies to sessions")
-        incoming = payload.tags
-        if not incoming:
-            raise SessionServiceError("tags must be non-empty")
-
-        existing = list(session["tags"])
-        removal_set = set(incoming)
-        truly_removed = [t for t in existing if t in removal_set]
-        remaining = [t for t in existing if t not in removal_set]
-
-        await self._persist_tags(session, remaining)
-        now_iso = dt_to_iso(now_utc())
-        for t in truly_removed:
-            await self.events.emit(payload.session_id, "tag_removed", {"tag": t}, at=now_iso)
-        return TagsResponse(status="ok", tags=remaining)
-
-    async def _require_session(self, session_id: str, type_error_msg: str) -> dict:
-        if not session_id.startswith(SESSION_PREFIX):
-            raise SessionServiceError(f"type mismatch: {type_error_msg}")
-        s = await self.db.sessions.get(session_id)
-        if s is None:
-            raise SessionNotFound(f"session not found: {session_id}")
-        return s
-
-    async def _persist_tags(self, session: dict, tags: list[str]) -> None:
-        await self.db.sessions.update_tags(session["session_id"], tags)
-        meta = await self.db.sessions.read_meta(session["source"], session["session_id"]) or {}
-        meta["tags"] = tags
-        await self.db.sessions.write_meta(session["source"], session["session_id"], meta)

@@ -27,7 +27,7 @@ from memorytalk.schemas.shared import (
     CardRound, ContentBlock, LinkRef, LinkTargetType, ObjectKind, SessionRound,
 )
 from memorytalk.schemas.status import StatusResponse
-from memorytalk.schemas.tags import TagsRequest, TagsResponse
+from memorytalk.schemas.tags import TagPair, TagsAddRequest, TagsResponse
 from memorytalk.schemas.view import (
     CardView, SessionView, ViewRequest, ViewResponse,
 )
@@ -44,7 +44,7 @@ __all__ = [
     # links
     "CreateLinkRequest", "CreateLinkResponse",
     # tags
-    "TagsRequest", "TagsResponse",
+    "TagPair", "TagsAddRequest", "TagsResponse",
     # search
     "SearchRequest", "CardHit", "SessionHit", "SearchBucket", "SearchResponse",
     # recall

@@ -57,13 +57,14 @@ _make_client: Optional[Callable[[Config], httpx.Client]] = None
 
 
 def api(method: str, path: str, config: Config,
-        json_body: dict | None = None, timeout: float = 30.0) -> dict:
+        json_body: dict | None = None, timeout: float = 30.0,
+        params: dict | list[tuple[str, str]] | None = None) -> dict:
     factory = _make_client or _default_client
     client = factory(config)
     # No `with` — ASGI test transport has no context-manager support, and
     # the CLI is a short-lived process where leaked TCP sockets get reaped
     # at exit. Tests share a long-lived ASGI client across calls.
-    resp = client.request(method, path, json=json_body, timeout=timeout)
+    resp = client.request(method, path, json=json_body, timeout=timeout, params=params)
     if resp.status_code >= 400:
         try:
             payload = resp.json()

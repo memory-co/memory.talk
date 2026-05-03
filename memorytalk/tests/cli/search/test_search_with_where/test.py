@@ -28,7 +28,7 @@ async def _seed(cli_env):
             )],
         ))
     # Only tag sess_platform-a with "decision"
-    await cli_env.app.state.db.sessions.update_tags("sess_platform-a", ["decision"])
+    await cli_env.app.state.tags.add_tags("sess_platform-a", ["decision"])
 
 
 async def _run_search(cli_env, query: str, where: str) -> tuple[int, dict]:

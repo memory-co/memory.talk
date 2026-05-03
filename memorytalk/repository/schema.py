@@ -12,7 +12,6 @@ DDL = [
         created_at   TEXT NOT NULL,
         synced_at    TEXT NOT NULL,
         metadata     TEXT NOT NULL DEFAULT '{}',
-        tags         TEXT NOT NULL DEFAULT '[]',
         round_count  INTEGER NOT NULL DEFAULT 0
     )
     """,
@@ -90,6 +89,21 @@ DDL = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_recall_hit_session_round ON recall_hit(session_id, round_count)",
+    """
+    CREATE TABLE IF NOT EXISTS tags (
+        subject_id  TEXT NOT NULL,
+        type        TEXT NOT NULL,
+        key         TEXT NOT NULL,
+        value       TEXT NOT NULL DEFAULT '',
+        seq         INTEGER NOT NULL,
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL,
+        PRIMARY KEY (subject_id, key)
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_tags_key_value ON tags(key, value)",
+    "CREATE INDEX IF NOT EXISTS idx_tags_type_key  ON tags(type, key, value)",
+    "CREATE INDEX IF NOT EXISTS idx_tags_subject   ON tags(subject_id, seq)",
 ]
 
 

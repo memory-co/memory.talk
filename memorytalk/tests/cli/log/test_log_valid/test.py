@@ -4,7 +4,7 @@ import json
 
 from memorytalk.schemas import (
     CardRoundsItem, ContentBlock, CreateCardRequest, CreateLinkRequest,
-    IngestRound, IngestSessionRequest, TagsRequest,
+    IngestRound, IngestSessionRequest,
 )
 
 
@@ -28,9 +28,7 @@ async def _seed(cli_env):
         source_id=card_id, source_type="card",
         target_id=sid, target_type="session", comment="x",
     ))
-    await cli_env.app.state.sessions.add_tags(TagsRequest(
-        session_id=sid, tags=["decision"],
-    ))
+    await cli_env.app.state.tags.add_tags(sid, ["decision"])
     return sid, card_id
 
 

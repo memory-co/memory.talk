@@ -10,7 +10,10 @@ def test_compile_for_sessions_with_source():
     assert result is not None
     sql, params = result
     assert "sessions.source = ?" in sql
-    assert "json_each(sessions.tags)" in sql
+    # tag now joins the standalone `tags` table by key
+    assert "FROM tags" in sql
+    assert "tags.subject_id = sessions.session_id" in sql
+    assert "tags.key = ?" in sql
     assert params == ["claude-code", "decision"]
 
 
@@ -23,3 +26,14 @@ def test_compile_for_cards_rejects_sessions_only_field():
 def test_compile_for_sessions_rejects_cards_only_field():
     preds = parse('card_id = "card_x"')
     assert compile_for(preds, "sessions") is None
+
+
+def test_compile_for_cards_with_tag():
+    """tag is now allowed on cards too — joins the same tags table."""
+    preds = parse('tag = "topic"')
+    result = compile_for(preds, "cards")
+    assert result is not None
+    sql, params = result
+    assert "FROM tags" in sql
+    assert "tags.subject_id = cards.card_id" in sql
+    assert params == ["topic"]

@@ -13,6 +13,7 @@ from memorytalk.service.search import SearchError, SearchService
 from memorytalk.service.sessions import (
     SessionNotFound, SessionService, SessionServiceError,
 )
+from memorytalk.service.tags import TagService, TagServiceError
 
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "SearchService", "SearchError",
     "RecallService", "RecallError",
     "RebuildService",
+    "TagService", "TagServiceError",
 ]

@@ -10,10 +10,12 @@ from memorytalk.repository.schema import init_schema
 from memorytalk.repository.search_log import SearchLogStore
 from memorytalk.repository.sessions import SessionStore
 from memorytalk.repository.store import SQLiteStore
+from memorytalk.repository.tags import SubjectTagsRepo
 
 
 __all__ = [
     "SQLiteStore",
     "SessionStore", "CardStore", "LinkStore", "SearchLogStore", "RecallStore",
+    "SubjectTagsRepo",
     "init_schema",
 ]

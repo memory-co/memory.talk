@@ -30,7 +30,7 @@ async def _seed(services):
         summary="selected LanceDB for embedded vector store",
         rounds=[CardRoundsItem(session_id=sid_db, indexes="1")],
     ))
-    await services.db.sessions.update_tags(sid_db, ["decision"])
+    await services.tags.add_tags(sid_db, ["decision"])
 
 
 async def test_search_returns_both_buckets_and_persists(services):

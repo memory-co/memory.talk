@@ -11,7 +11,7 @@ from memorytalk.provider.storage import LocalStorage
 from memorytalk.repository import SQLiteStore
 from memorytalk.service import (
     CardService, EventWriter, LinkService, RebuildService,
-    SearchService, SessionService,
+    SearchService, SessionService, TagService,
 )
 
 
@@ -64,5 +64,6 @@ async def services(tmp_path: Path):
     b.rebuild = RebuildService(
         config=cfg, db=db, vectors=vectors, embedder=embedder,
     )
+    b.tags = TagService(db=db, storage=storage, events=events)
     yield b
     await db.close()

@@ -43,7 +43,7 @@ META_STRIP = {"synced_at"}
 META_METADATA_STRIP = {"path"}
 EVENT_STRIP = {"event_id", "at"}
 TABLE_STRIP = {"sessions": {"synced_at"}, "rounds": set()}
-JSON_COLS = {"sessions": ["metadata", "tags"], "rounds": ["content", "usage"]}
+JSON_COLS = {"sessions": ["metadata"], "rounds": ["content", "usage"]}
 TABLES = ["sessions", "rounds"]
 
 

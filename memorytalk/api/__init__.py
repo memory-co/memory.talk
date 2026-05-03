@@ -15,7 +15,7 @@ from memorytalk.provider.embedding import (
 )
 from memorytalk.service import (
     CardService, EventWriter, LinkService, RebuildService,
-    RecallService, SearchService, SessionService,
+    RecallService, SearchService, SessionService, TagService,
 )
 from memorytalk.provider.lancedb import LanceStore
 from memorytalk.provider.storage import LocalStorage
@@ -68,6 +68,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         app.state.rebuild = RebuildService(
             config=config, db=db, vectors=vectors, embedder=embedder,
         )
+        app.state.tags = TagService(db=db, storage=storage, events=events)
 
         yield
 

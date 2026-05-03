@@ -38,8 +38,9 @@ class Predicate:
 
 FIELDS = {"session_id", "card_id", "tag", "source", "created_at"}
 CARDS_ONLY_FIELDS = {"card_id"}
-# tag is sessions-only in v2: cards carry no tags column.
-SESSIONS_ONLY_FIELDS = {"source", "tag"}
+# tag now applies to BOTH sessions and cards via the standalone `tags`
+# table (subject_id + key). source is still sessions-only.
+SESSIONS_ONLY_FIELDS = {"source"}
 COMPARE_OPS = {"=", "!=", ">", ">=", "<", "<="}
 KEYWORDS = {"AND", "LIKE", "NOT", "IN"}
 
@@ -273,26 +274,36 @@ def compile_for(
         if table == "cards" and p.field in SESSIONS_ONLY_FIELDS:
             return None
         if p.field == "tag":
+            # `tag` is matched against the new `tags` table by KEY only:
+            #   - `tag = "decision"` → key="decision" (any value, including empty)
+            # Subject id column differs per table.
+            id_col = "session_id" if table == "sessions" else "card_id"
             if p.op == "=":
                 clauses.append(
-                    f"EXISTS (SELECT 1 FROM json_each({table}.tags) WHERE value = ?)"
+                    f"EXISTS (SELECT 1 FROM tags "
+                    f"WHERE tags.subject_id = {table}.{id_col} AND tags.key = ?)"
                 )
                 params.append(p.value)
             elif p.op == "!=":
                 clauses.append(
-                    f"NOT EXISTS (SELECT 1 FROM json_each({table}.tags) WHERE value = ?)"
+                    f"NOT EXISTS (SELECT 1 FROM tags "
+                    f"WHERE tags.subject_id = {table}.{id_col} AND tags.key = ?)"
                 )
                 params.append(p.value)
             elif p.op == "IN":
                 placeholders = ",".join("?" * len(p.value))
                 clauses.append(
-                    f"EXISTS (SELECT 1 FROM json_each({table}.tags) WHERE value IN ({placeholders}))"
+                    f"EXISTS (SELECT 1 FROM tags "
+                    f"WHERE tags.subject_id = {table}.{id_col} "
+                    f"AND tags.key IN ({placeholders}))"
                 )
                 params.extend(p.value)
             elif p.op == "NOTIN":
                 placeholders = ",".join("?" * len(p.value))
                 clauses.append(
-                    f"NOT EXISTS (SELECT 1 FROM json_each({table}.tags) WHERE value IN ({placeholders}))"
+                    f"NOT EXISTS (SELECT 1 FROM tags "
+                    f"WHERE tags.subject_id = {table}.{id_col} "
+                    f"AND tags.key IN ({placeholders}))"
                 )
                 params.extend(p.value)
             else:

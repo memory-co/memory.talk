@@ -32,13 +32,19 @@ def test_sessions_then_cards_then_tags_then_links(app_client):
     card_id = r.json()["card_id"]
 
     # Tag the session
-    r = app_client.post("/v2/tags/add", json={"session_id": sid, "tags": ["decision"]})
+    r = app_client.post(f"/v2/sessions/{sid}/tags", json={"tags": ["decision"]})
     assert r.status_code == 200
-    assert r.json()["tags"] == ["decision"]
+    assert r.json()["tags"] == [{"key": "decision", "value": ""}]
 
-    # Bad prefix (card) → 400
-    r = app_client.post("/v2/tags/add", json={"session_id": card_id, "tags": ["x"]})
-    assert r.status_code == 400
+    # Tag a card too — kv form, supported as of this iteration
+    r = app_client.post(f"/v2/cards/{card_id}/tags",
+                        json={"tags": ["topic:lancedb"]})
+    assert r.status_code == 200
+    assert r.json()["tags"] == [{"key": "topic", "value": "lancedb"}]
+
+    # Bad subject prefix → 400 (TagService rejects)
+    r = app_client.post("/v2/sessions/foo_bad/tags", json={"tags": ["x"]})
+    assert r.status_code in (400, 404)
 
     # Create a card-to-session link
     r = app_client.post("/v2/links", json={

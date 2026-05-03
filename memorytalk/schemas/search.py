@@ -5,6 +5,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from memorytalk.schemas.shared import LinkRef
+from memorytalk.schemas.tags import TagPair
 
 
 class SearchRequest(BaseModel):
@@ -27,7 +28,7 @@ class SessionHit(BaseModel):
     rank: int
     score: float
     source: str
-    tags: list[str] = Field(default_factory=list)
+    tags: list[TagPair] = Field(default_factory=list)
     snippets: list[str] = Field(default_factory=list)
     links: list[LinkRef] = Field(default_factory=list)
 

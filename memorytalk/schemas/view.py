@@ -5,6 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from memorytalk.schemas.shared import CardRound, LinkRef, SessionRound
+from memorytalk.schemas.tags import TagPair
 
 
 class ViewRequest(BaseModel):
@@ -17,13 +18,14 @@ class CardView(BaseModel):
     rounds: list[CardRound] = Field(default_factory=list)
     created_at: str
     ttl: int
+    tags: list[TagPair] = Field(default_factory=list)
 
 
 class SessionView(BaseModel):
     session_id: str
     source: str
     created_at: str
-    tags: list[str] = Field(default_factory=list)
+    tags: list[TagPair] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
     rounds: list[SessionRound] = Field(default_factory=list)
 

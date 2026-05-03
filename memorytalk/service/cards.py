@@ -8,7 +8,7 @@ from memorytalk.provider.lancedb import LanceStore
 from memorytalk.repository import SQLiteStore
 from memorytalk.schemas import (
     CardRound, CardView, ContentBlock, CreateCardRequest, CreateCardResponse,
-    EventEntry, LogResponse, ViewResponse,
+    EventEntry, LogResponse, TagPair, ViewResponse,
 )
 from memorytalk.service.events import EventWriter
 from memorytalk.service.links import link_to_ref, refresh_active_user_links
@@ -237,6 +237,8 @@ class CardService:
             now=now,
         )
 
+        tag_pairs = await self.db.tags.list_for_subject(card_id)
+
         return ViewResponse(
             type="card",
             read_at=dt_to_iso(now),
@@ -246,6 +248,7 @@ class CardService:
                 rounds=[CardRound(**r) for r in card["rounds"]],
                 created_at=card["created_at"],
                 ttl=current_ttl(card["expires_at"], now),
+                tags=[TagPair(**p) for p in tag_pairs],
             ),
             links=[link_to_ref(l, card_id, now) for l in links],
         )

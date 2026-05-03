@@ -1,8 +1,15 @@
-"""`memory-talk tag {add,remove} <sess_id> <tags...>` — happy path + idempotency."""
+"""`memory-talk tag {add,remove} <subject_id> <tag/key>...` — happy path + idempotency.
+
+Tags are kv-shaped now. The CLI input syntax is ``key`` or ``key:value``;
+the API stores `(key, value)` rows. The remove path takes keys only.
+"""
 from __future__ import annotations
 import json
 
-from memorytalk.schemas import ContentBlock, IngestRound, IngestSessionRequest
+from memorytalk.schemas import (
+    CardRoundsItem, ContentBlock, CreateCardRequest,
+    IngestRound, IngestSessionRequest,
+)
 
 
 async def _seed_session(cli_env):
@@ -19,6 +26,15 @@ async def _seed_session(cli_env):
     return "sess_platform-a"
 
 
+async def _seed_card(cli_env):
+    sid = await _seed_session(cli_env)
+    r = await cli_env.app.state.cards.create(CreateCardRequest(
+        summary="card for tag tests",
+        rounds=[CardRoundsItem(session_id=sid, indexes="1")],
+    ))
+    return r.card_id
+
+
 async def _run_add(cli_env, sid: str, *tags: str) -> tuple[int, dict]:
     result = cli_env.runner.invoke(cli_env.main, [
         "tag", "add", sid, *tags,
@@ -28,48 +44,64 @@ async def _run_add(cli_env, sid: str, *tags: str) -> tuple[int, dict]:
     return result.exit_code, json.loads(result.stdout)
 
 
-async def _run_remove(cli_env, sid: str, *tags: str) -> tuple[int, dict]:
+async def _run_remove(cli_env, sid: str, *keys: str) -> tuple[int, dict]:
     result = cli_env.runner.invoke(cli_env.main, [
-        "tag", "remove", sid, *tags,
+        "tag", "remove", sid, *keys,
         "--data-root", str(cli_env.config.data_root),
         "--json",
     ])
     return result.exit_code, json.loads(result.stdout)
 
 
-async def _session_events(cli_env, sid: str) -> list[dict]:
+async def _events(cli_env, subject_id: str) -> list[dict]:
     db = cli_env.app.state.db
-    s = await db.sessions.get(sid)
-    return await db.sessions.read_events(s["source"], sid)
+    if subject_id.startswith("sess_"):
+        s = await db.sessions.get(subject_id)
+        return await db.sessions.read_events(s["source"], subject_id)
+    return await db.cards.read_events(subject_id)
 
+
+def _kv(out) -> list[tuple[str, str]]:
+    return [(t["key"], t["value"]) for t in out["tags"]]
+
+
+# -------- session: add --------
 
 async def test_add_single_tag(cli_env):
     sid = await _seed_session(cli_env)
     exit_code, out = await _run_add(cli_env, sid, "decision")
     assert exit_code == 0
     assert out["status"] == "ok"
-    assert out["tags"] == ["decision"]
+    assert _kv(out) == [("decision", "")]
 
 
 async def test_add_multiple_tags_in_one_call(cli_env):
     sid = await _seed_session(cli_env)
     exit_code, out = await _run_add(cli_env, sid, "decision", "project:mt", "v2")
     assert exit_code == 0
-    assert out["tags"] == ["decision", "project:mt", "v2"]
-    # Each real addition emits one event
-    kinds = [e["kind"] for e in await _session_events(cli_env, sid) if e["kind"] == "tag_added"]
+    assert _kv(out) == [("decision", ""), ("project", "mt"), ("v2", "")]
+    kinds = [e["kind"] for e in await _events(cli_env, sid) if e["kind"].startswith("tag_")]
     assert kinds == ["tag_added", "tag_added", "tag_added"]
 
 
-async def test_add_existing_tag_is_idempotent(cli_env):
+async def test_add_existing_tag_same_value_is_idempotent(cli_env):
     sid = await _seed_session(cli_env)
     await _run_add(cli_env, sid, "decision")
-    # Re-add the same tag — no-op on state, no new event
     exit_code, out = await _run_add(cli_env, sid, "decision")
     assert exit_code == 0
-    assert out["tags"] == ["decision"]
-    kinds = [e["kind"] for e in await _session_events(cli_env, sid) if e["kind"] == "tag_added"]
-    assert kinds == ["tag_added"]  # only the first add emitted
+    assert _kv(out) == [("decision", "")]
+    kinds = [e["kind"] for e in await _events(cli_env, sid) if e["kind"].startswith("tag_")]
+    assert kinds == ["tag_added"]
+
+
+async def test_add_existing_tag_different_value_is_updated(cli_env):
+    sid = await _seed_session(cli_env)
+    await _run_add(cli_env, sid, "project:foo")
+    exit_code, out = await _run_add(cli_env, sid, "project:bar")
+    assert exit_code == 0
+    assert _kv(out) == [("project", "bar")]
+    kinds = [e["kind"] for e in await _events(cli_env, sid) if e["kind"].startswith("tag_")]
+    assert kinds == ["tag_added", "tag_updated"]
 
 
 async def test_add_mixed_new_and_existing(cli_env):
@@ -77,19 +109,20 @@ async def test_add_mixed_new_and_existing(cli_env):
     await _run_add(cli_env, sid, "decision")
     exit_code, out = await _run_add(cli_env, sid, "decision", "important")
     assert exit_code == 0
-    assert out["tags"] == ["decision", "important"]
-    # Only "important" was actually new the second call — 1 new event
-    kinds = [e["kind"] for e in await _session_events(cli_env, sid) if e["kind"] == "tag_added"]
-    assert kinds == ["tag_added", "tag_added"]  # one from first call, one from second
+    assert _kv(out) == [("decision", ""), ("important", "")]
+    kinds = [e["kind"] for e in await _events(cli_env, sid) if e["kind"] == "tag_added"]
+    assert kinds == ["tag_added", "tag_added"]
 
+
+# -------- session: remove --------
 
 async def test_remove_tag(cli_env):
     sid = await _seed_session(cli_env)
     await _run_add(cli_env, sid, "decision", "important")
     exit_code, out = await _run_remove(cli_env, sid, "decision")
     assert exit_code == 0
-    assert out["tags"] == ["important"]
-    kinds = [e["kind"] for e in await _session_events(cli_env, sid) if e["kind"].startswith("tag_")]
+    assert _kv(out) == [("important", "")]
+    kinds = [e["kind"] for e in await _events(cli_env, sid) if e["kind"].startswith("tag_")]
     assert kinds == ["tag_added", "tag_added", "tag_removed"]
 
 
@@ -98,21 +131,39 @@ async def test_remove_nonexistent_tag_is_idempotent(cli_env):
     await _run_add(cli_env, sid, "decision")
     exit_code, out = await _run_remove(cli_env, sid, "never-was-here")
     assert exit_code == 0
-    assert out["tags"] == ["decision"]  # unchanged
-    kinds = [e["kind"] for e in await _session_events(cli_env, sid) if e["kind"] == "tag_removed"]
-    assert kinds == []  # no event for a no-op removal
+    assert _kv(out) == [("decision", "")]
+    kinds = [e["kind"] for e in await _events(cli_env, sid) if e["kind"] == "tag_removed"]
+    assert kinds == []
 
 
 async def test_full_lifecycle(cli_env):
     sid = await _seed_session(cli_env)
     _, o1 = await _run_add(cli_env, sid, "a", "b")
-    assert o1["tags"] == ["a", "b"]
-    _, o2 = await _run_add(cli_env, sid, "b", "c")  # b existing, c new
-    assert o2["tags"] == ["a", "b", "c"]
-    _, o3 = await _run_remove(cli_env, sid, "a", "missing")  # a real, missing no-op
-    assert o3["tags"] == ["b", "c"]
+    assert _kv(o1) == [("a", ""), ("b", "")]
+    _, o2 = await _run_add(cli_env, sid, "b", "c")
+    assert _kv(o2) == [("a", ""), ("b", ""), ("c", "")]
+    _, o3 = await _run_remove(cli_env, sid, "a", "missing")
+    assert _kv(o3) == [("b", ""), ("c", "")]
     _, o4 = await _run_remove(cli_env, sid, "b", "c")
-    assert o4["tags"] == []
-    kinds = [e["kind"] for e in await _session_events(cli_env, sid) if e["kind"].startswith("tag_")]
-    # Events are only emitted for real state changes: a,b,c added; a,b,c removed
+    assert _kv(o4) == []
+    kinds = [e["kind"] for e in await _events(cli_env, sid) if e["kind"].startswith("tag_")]
     assert kinds == ["tag_added"] * 3 + ["tag_removed"] * 3
+
+
+# -------- card mirror --------
+
+async def test_add_to_card(cli_env):
+    cid = await _seed_card(cli_env)
+    exit_code, out = await _run_add(cli_env, cid, "topic:lancedb", "status:reviewed")
+    assert exit_code == 0
+    assert _kv(out) == [("topic", "lancedb"), ("status", "reviewed")]
+    kinds = [e["kind"] for e in await _events(cli_env, cid) if e["kind"].startswith("tag_")]
+    assert kinds == ["tag_added", "tag_added"]
+
+
+async def test_remove_from_card(cli_env):
+    cid = await _seed_card(cli_env)
+    await _run_add(cli_env, cid, "topic:lancedb", "status:reviewed")
+    exit_code, out = await _run_remove(cli_env, cid, "topic")
+    assert exit_code == 0
+    assert _kv(out) == [("status", "reviewed")]

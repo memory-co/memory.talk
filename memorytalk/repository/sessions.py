@@ -93,16 +93,14 @@ class SessionStore:
         created_at: str,
         synced_at: str,
         metadata: dict,
-        tags: list[str],
         round_count: int,
     ) -> None:
         await self.conn.execute(
             "INSERT OR REPLACE INTO sessions "
-            "(session_id, source, created_at, synced_at, metadata, tags, round_count) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "(session_id, source, created_at, synced_at, metadata, round_count) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
             (session_id, source, created_at, synced_at,
              json.dumps(metadata, ensure_ascii=False),
-             json.dumps(tags, ensure_ascii=False),
              round_count),
         )
         await self.conn.commit()
@@ -113,13 +111,6 @@ class SessionStore:
         ) as cursor:
             row = await cursor.fetchone()
         return self._row(row) if row else None
-
-    async def update_tags(self, session_id: str, tags: list[str]) -> None:
-        await self.conn.execute(
-            "UPDATE sessions SET tags = ? WHERE session_id = ?",
-            (json.dumps(tags, ensure_ascii=False), session_id),
-        )
-        await self.conn.commit()
 
     async def update_round_count(self, session_id: str, count: int, synced_at: str) -> None:
         await self.conn.execute(
@@ -141,7 +132,6 @@ class SessionStore:
             "created_at": row["created_at"],
             "synced_at": row["synced_at"],
             "metadata": json.loads(row["metadata"] or "{}"),
-            "tags": json.loads(row["tags"] or "[]"),
             "round_count": row["round_count"],
         }
 
@@ -223,7 +213,7 @@ class SessionStore:
 
     async def metadata_filtered(self, whitelist: list[str] | None, top_k: int) -> list[dict]:
         """Empty-query path: list sessions sorted by created_at DESC, optionally whitelisted."""
-        sql = "SELECT session_id, source, tags, created_at FROM sessions"
+        sql = "SELECT session_id, source, created_at FROM sessions"
         params: list = []
         if whitelist is not None:
             placeholders = ",".join("?" * len(whitelist)) or "NULL"
@@ -235,6 +225,6 @@ class SessionStore:
             rows = await cursor.fetchall()
         return [
             {"session_id": r["session_id"], "source": r["source"],
-             "tags": json.loads(r["tags"] or "[]"), "created_at": r["created_at"]}
+             "created_at": r["created_at"]}
             for r in rows
         ]

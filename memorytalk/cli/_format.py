@@ -141,6 +141,10 @@ def fmt_view_card(resp: dict) -> str:
     if card.get("summary"):
         out.append(f"**Summary:** {card['summary']}")
         out.append("")
+    tags = card.get("tags") or []
+    if tags:
+        out.append("**Tags:** " + ", ".join(f"`{_tag_label(t)}`" for t in tags))
+        out.append("")
 
     links = resp.get("links") or []
     out.append(f"## links ({len(links)})")
@@ -180,7 +184,7 @@ def fmt_view_session(resp: dict) -> str:
         out.append("")
     tags = sess.get("tags") or []
     if tags:
-        out.append("**Tags:** " + ", ".join(f"`{t}`" for t in tags))
+        out.append("**Tags:** " + ", ".join(f"`{_tag_label(t)}`" for t in tags))
         out.append("")
     metadata = sess.get("metadata") or {}
     if metadata:
@@ -415,11 +419,18 @@ def fmt_link_create(resp: dict) -> str:
     return f"ok: linked `{resp.get('link_id', '')}`\n"
 
 
+def _tag_label(pair: dict) -> str:
+    """Render `{"key": "k", "value": "v"}` as ``k:v`` (or just ``k`` if value is empty)."""
+    key = pair.get("key", "")
+    value = pair.get("value", "") or ""
+    return f"{key}:{value}" if value else key
+
+
 def fmt_tag(resp: dict) -> str:
     tags = resp.get("tags") or []
     if not tags:
         return "ok: tags = *(empty)*\n"
-    return "ok: tags = " + ", ".join(f"`{t}`" for t in tags) + "\n"
+    return "ok: tags = " + ", ".join(f"`{_tag_label(p)}`" for p in tags) + "\n"
 
 
 # ---------- sync / rebuild ----------

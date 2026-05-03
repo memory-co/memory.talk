@@ -7,7 +7,7 @@ from memorytalk.provider.embedding import Embedder
 from memorytalk.provider.lancedb import LanceStore
 from memorytalk.repository import SQLiteStore
 from memorytalk.schemas import (
-    CardHit, SearchBucket, SearchRequest, SearchResponse, SessionHit,
+    CardHit, SearchBucket, SearchRequest, SearchResponse, SessionHit, TagPair,
 )
 from memorytalk.service.links import link_to_ref
 from memorytalk.util.dsl import DSLError, compile_for, parse
@@ -164,19 +164,23 @@ class SearchService:
                 if not s:
                     continue
                 rounds = await self.db.sessions.list_rounds(sid)
+                tag_pairs = await self.db.tags.list_for_subject(sid)
                 hits.append(SessionHit(
                     session_id=sid, rank=rank,
                     score=float(h.get("_score") or 0.0),
-                    source=s["source"], tags=s["tags"],
+                    source=s["source"],
+                    tags=[TagPair(**p) for p in tag_pairs],
                     snippets=extract_snippets(_session_text_for_snippet(rounds), query),
                     links=await self._active_links(sid, now),
                 ))
         else:
             rows = await self.db.sessions.metadata_filtered(whitelist, top_k)
             for rank, r in enumerate(rows, start=1):
+                tag_pairs = await self.db.tags.list_for_subject(r["session_id"])
                 hits.append(SessionHit(
                     session_id=r["session_id"], rank=rank, score=0.0,
-                    source=r["source"], tags=r["tags"],
+                    source=r["source"],
+                    tags=[TagPair(**p) for p in tag_pairs],
                     snippets=[], links=await self._active_links(r["session_id"], now),
                 ))
         return hits
