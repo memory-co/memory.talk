@@ -1,18 +1,22 @@
 """CLI: filter list / run / mark / unmark.
 
 Filter is a viewfinder: it does NOT do work. filter.py is a pure
-selector that outputs subject_ids; meta.json declares a mark_tag
-schema (lists of tags to add/remove). `mark` applies the schema to
-specific subjects; `unmark` reverses.
+Python module that exports ``select(client) -> list[str]``; meta.json
+declares a mark_tag schema (lists of tags to add/remove). `mark`
+applies the schema to specific subjects; `unmark` reverses.
+
+filter.py runs **in-process** via importlib (no subprocess) — that
+way it shares the CLI's HTTP client (and any test-time monkeypatch
+of ``_make_client``), keeping the test path identical to production.
 
 Built-in filters live in ``memorytalk/filters/`` (shipped with the
 package); user filters live in ``<data_root>/filters/``. User filters
 override built-ins on name conflict.
 """
 from __future__ import annotations
+import importlib.util
 import json
 import re
-import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -118,25 +122,61 @@ def _resolve_filter(cfg: Config, name: str) -> FilterInfo:
 
 # ---------- run filter.py ----------
 
-def _run_filter_py(info: FilterInfo) -> list[str]:
-    """Execute filter.py; return parsed subject_ids (one per line, # comments
-    and empty lines skipped). Raises ClickException on non-zero exit."""
-    proc = subprocess.run(
-        [sys.executable, str(info.dir / "filter.py")],
-        cwd=str(info.dir),
-        capture_output=True, text=True,
-    )
-    if proc.returncode != 0:
-        msg = (proc.stderr or proc.stdout or "(no output)").strip()
+def _import_filter_module(info: FilterInfo):
+    """Load filter.py as a fresh module via importlib (no subprocess)."""
+    mod_name = f"_memorytalk_filter_{info.name.replace('-', '_')}"
+    spec = importlib.util.spec_from_file_location(mod_name, info.dir / "filter.py")
+    if spec is None or spec.loader is None:
         raise click.ClickException(
-            f"filter.py for {info.name!r} exited {proc.returncode}\n{msg}"
+            f"filter {info.name!r}: cannot load {info.dir / 'filter.py'}"
+        )
+    module = importlib.util.module_from_spec(spec)
+    # Re-import each time — filters are short-lived selectors; we don't
+    # want stale module state between two `filter run` calls in the same
+    # process (mostly relevant in tests).
+    sys.modules.pop(mod_name, None)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _run_filter_py(info: FilterInfo, cfg: Config) -> list[str]:
+    """Import filter.py and call its ``select(client)`` function.
+
+    The ``client`` callable is a thin wrapper around ``cli/_http.api()``
+    so filters share the CLI's transport (and any test-time monkeypatch
+    of ``_make_client``). Filter authors get a single function-call
+    signature instead of having to manage subprocess / HTTP themselves.
+    """
+    module = _import_filter_module(info)
+    select = getattr(module, "select", None)
+    if not callable(select):
+        raise click.ClickException(
+            f"filter {info.name!r}: filter.py must define a callable `select(client)`"
+        )
+
+    def client(method: str, path: str, *, json_body=None, params=None):
+        return api(method, path, cfg, json_body=json_body, params=params)
+
+    try:
+        result = select(client)
+    except Exception as e:  # noqa: BLE001 — surface filter author bugs as CLI errors
+        raise click.ClickException(
+            f"filter {info.name!r}: select() raised {type(e).__name__}: {e}"
+        )
+
+    if not isinstance(result, list):
+        raise click.ClickException(
+            f"filter {info.name!r}: select() must return list[str], got {type(result).__name__}"
         )
     out: list[str] = []
-    for line in proc.stdout.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        out.append(line)
+    for item in result:
+        if not isinstance(item, str):
+            raise click.ClickException(
+                f"filter {info.name!r}: select() returned non-string item: {item!r}"
+            )
+        item = item.strip()
+        if item:
+            out.append(item)
     return out
 
 
@@ -236,7 +276,7 @@ def filter_run(name: str, data_root: str | None, json_out: bool) -> None:
     """Run filter.py and display subject_ids in frame."""
     cfg = Config(data_root) if data_root else Config()
     info = _resolve_filter(cfg, name)
-    subject_ids = _run_filter_py(info)
+    subject_ids = _run_filter_py(info, cfg)
     if json_out:
         emit_json({"filter": info.name, "subject_ids": subject_ids})
         return

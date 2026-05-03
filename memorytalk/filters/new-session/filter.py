@@ -1,26 +1,24 @@
-#!/usr/bin/env python3
 """new-session: viewfinder over sessions not yet processed by this filter.
 
-Outputs session_ids that haven't been tagged with `_filter-new-session`.
-The filter itself is just a selector — actually doing something with
+Returns session_ids that haven't been tagged with `_filter-new-session`.
+The filter itself is a pure selector — actually doing something with
 each session (extracting cards, summarizing, etc.) is the user's job
 between `filter run` and `filter mark`.
 """
-import json
-import subprocess
-import sys
+from __future__ import annotations
+from typing import Callable
 
 
-def main() -> int:
-    proc = subprocess.run(
-        ["memory-talk", "search", "",
-         "--where", 'NOT (tag = "_filter-new-session")', "--json"],
-        capture_output=True, text=True, check=True,
-    )
-    for s in json.loads(proc.stdout)["sessions"]["results"]:
-        print(s["session_id"])
-    return 0
+def select(client: Callable) -> list[str]:
+    """Return subject_ids currently in this filter's frame.
 
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+    ``client`` is a callable wrapping memory-talk's HTTP API:
+        client(method: str, path: str, *,
+               json_body: dict | None = None,
+               params: list | dict | None = None) -> dict
+    """
+    resp = client("POST", "/v2/search", json_body={
+        "query": "",
+        "where": 'tag != "_filter-new-session"',
+    })
+    return [s["session_id"] for s in resp["sessions"]["results"]]
