@@ -7,11 +7,15 @@ Session 是从平台导入的一段原始对话，由 `sync` 命令写入。
 ```
 sessions/{source}/{id[0:2]}/{session_id}/
 ├── meta.json
-└── rounds.jsonl
+├── rounds.jsonl
+├── events.jsonl
+└── tags.json   (仅当 session 有 tag 时存在)
 ```
 
-- `meta.json`：会话元数据（session_id, source, tags, round_count 等）
+- `meta.json`：会话元数据（session_id, source, round_count, metadata 等）
 - `rounds.jsonl`：每行一个 Round JSON 对象
+- `events.jsonl`：append-only 事件流（imported / rounds_appended / tag_added 等）
+- `tags.json`：tag mirror，dict 形态 `{"key": "value", ...}`。详见 [tag.md](tag.md)
 
 ## Schema
 
@@ -23,7 +27,6 @@ sessions/{source}/{id[0:2]}/{session_id}/
   "metadata": {
     "project": "/home/user/myapp"
   },
-  "tags": ["claude", "project:myapp"],
   "rounds": [
     {
       "index": 1,
@@ -65,10 +68,18 @@ sessions/{source}/{id[0:2]}/{session_id}/
 | `source` | string | 来源平台（`claude-code` / `codex` / `openclaw`） |
 | `created_at` | string | 对话创建时间（取第一条 round 的时间戳） |
 | `metadata` | object | 平台特有的扩展信息（project、model、title、agent_name、version 等） |
-| `tags` | string[] | 自由标签，`key:value` 格式 |
 | `rounds` | Round[] | 对话轮次，每条通过 `parent_id` 指向上一条形成链表 |
 | `round_count` | integer | 总轮次数 |
 | `synced_at` | string | 导入时间 |
+
+## Tags（独立结构）
+
+session 上的 tag **不**作为 session 字段返回，而是单独存放：
+
+- 落盘镜像：`sessions/.../{session_id}/tags.json`（dict 形态 `{"key": "value", ...}`）
+- 持久化主体：sqlite `tags` 表（`(subject_id, type, key, value, seq, ...)`）
+
+`view session` 的响应里会带一个 `tags: list[{key, value}]` 字段（service 层 join 出来），但 session 自身的 schema 不再持有 tag 数据。完整说明见 [tag.md](tag.md)。
 
 ## Round（Session 中）
 
