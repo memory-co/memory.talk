@@ -251,8 +251,18 @@ def _detail_summary(kind: str, detail: dict) -> str:
     if kind == "rounds_overwrite_skipped":
         idxs = detail.get("indexes", [])
         return f"indexes={','.join(str(i) for i in idxs)}"
-    if kind == "tag_added" or kind == "tag_removed":
-        return f"`{detail.get('tag', '')}`"
+    if kind in ("tag_added", "tag_removed"):
+        key = detail.get("key", "")
+        value = detail.get("value", "") or ""
+        label = f"{key}:{value}" if value else key
+        return f"`{label}`"
+    if kind == "tag_updated":
+        key = detail.get("key", "")
+        value = detail.get("value", "") or ""
+        prior = detail.get("prior_value", "") or ""
+        new_label = f"{key}:{value}" if value else key
+        old_label = f"{key}:{prior}" if prior else key
+        return f"`{old_label}` → `{new_label}`"
     if kind == "card_extracted":
         return f"`{detail.get('card_id', '')}` · indexes={detail.get('indexes', '')}"
     if kind == "linked":
