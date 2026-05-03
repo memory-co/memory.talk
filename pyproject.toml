@@ -40,6 +40,12 @@ local = [
 include = ["memorytalk*"]
 exclude = ["memorytalk.tests*"]
 
+[tool.setuptools.package-data]
+# Built-in filters live under memorytalk/filters/<name>/. Each is a plain
+# directory (not a Python package), so we include filter.py + meta.json
+# explicitly so wheels keep them.
+memorytalk = ["filters/*/filter.py", "filters/*/meta.json"]
+
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
