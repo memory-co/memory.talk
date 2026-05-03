@@ -31,6 +31,10 @@ def test_sessions_then_cards_then_tags_then_links(app_client):
     assert r.status_code == 200, r.text
     card_id = r.json()["card_id"]
 
+    # Strip the auto-stamped sync_session tag for a clean assertion below.
+    r = app_client.delete(f"/v2/sessions/{sid}/tags?key=sync_session")
+    assert r.status_code == 200
+
     # Tag the session
     r = app_client.post(f"/v2/sessions/{sid}/tags", json={"tags": ["decision"]})
     assert r.status_code == 200

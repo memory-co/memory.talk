@@ -1,2 +1,4 @@
 {"kind": "imported", "detail": {"source": "claude-code", "round_count": 2}}
+{"kind": "tag_added", "detail": {"key": "sync_session", "value": "new"}}
 {"kind": "rounds_appended", "detail": {"from_index": 3, "to_index": 4, "added_count": 2}}
+{"kind": "tag_updated", "detail": {"key": "sync_session", "value": "update", "prior_value": "new"}}

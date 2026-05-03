@@ -1,5 +1,5 @@
 {
   "mark_tag": {
-    "add": ["_filter-new-session"]
+    "remove": ["sync_session"]
   }
 }

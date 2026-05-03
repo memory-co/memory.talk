@@ -52,8 +52,12 @@ def create_app(config: Config | None = None) -> FastAPI:
         app.state.db = db
         app.state.vectors = vectors
         app.state.embedder = embedder
+        # TagService must be wired before SessionService (the latter holds
+        # a reference so ingest can stamp `sync_session` tags).
+        app.state.tags = TagService(db=db, storage=storage, events=events)
         app.state.sessions = SessionService(
             config=config, db=db, vectors=vectors, events=events,
+            tags=app.state.tags,
         )
         app.state.cards = CardService(
             config=config, db=db, vectors=vectors, embedder=embedder, events=events,
@@ -68,7 +72,6 @@ def create_app(config: Config | None = None) -> FastAPI:
         app.state.rebuild = RebuildService(
             config=config, db=db, vectors=vectors, embedder=embedder,
         )
-        app.state.tags = TagService(db=db, storage=storage, events=events)
 
         yield
 

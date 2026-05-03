@@ -36,6 +36,9 @@ async def _seed_session(services):
             is_sidechain=False,
         )],
     ))
+    # ingest() auto-stamps `sync_session: new` for the new-session filter.
+    # These tests are about tag ops in isolation, so strip it.
+    await services.tags.remove_tags(r.session_id, ["sync_session"])
     return r.session_id
 
 
@@ -52,13 +55,21 @@ def _values(resp) -> list[tuple[str, str]]:
     return [(p.key, p.value) for p in resp.tags]
 
 
+def _tag_events(events: list[dict]) -> list[dict]:
+    """Filter to tag_* events excluding sync_session (auto-stamped + seed cleanup noise)."""
+    return [
+        e for e in events
+        if e["kind"].startswith("tag_") and e.get("detail", {}).get("key") != "sync_session"
+    ]
+
+
 # -------- happy path: add --------
 
 async def test_add_kv_tag_on_session(services):
     sid = await _seed_session(services)
     r = await services.tags.add_tags(sid, ["project:memory-talk", "decision"])
     assert _values(r) == [("project", "memory-talk"), ("decision", "")]
-    kinds = [e["kind"] for e in await services.events_for(sid) if e["kind"].startswith("tag_")]
+    kinds = [e["kind"] for e in _tag_events(await services.events_for(sid))]
     assert kinds == ["tag_added", "tag_added"]
 
 
@@ -66,7 +77,7 @@ async def test_add_kv_tag_on_card(services):
     cid = await _seed_card(services)
     r = await services.tags.add_tags(cid, ["topic:lancedb", "status:reviewed"])
     assert _values(r) == [("topic", "lancedb"), ("status", "reviewed")]
-    kinds = [e["kind"] for e in await services.events_for(cid) if e["kind"].startswith("tag_")]
+    kinds = [e["kind"] for e in _tag_events(await services.events_for(cid))]
     assert kinds == ["tag_added", "tag_added"]
 
 
@@ -77,7 +88,7 @@ async def test_add_existing_key_same_value_is_noop(services):
     await services.tags.add_tags(sid, ["project:memory-talk"])
     r = await services.tags.add_tags(sid, ["project:memory-talk"])
     assert _values(r) == [("project", "memory-talk")]
-    kinds = [e["kind"] for e in await services.events_for(sid) if e["kind"].startswith("tag_")]
+    kinds = [e["kind"] for e in _tag_events(await services.events_for(sid))]
     assert kinds == ["tag_added"]  # only first add emitted
 
 
@@ -86,7 +97,7 @@ async def test_add_existing_key_new_value_emits_updated(services):
     await services.tags.add_tags(sid, ["project:foo"])
     r = await services.tags.add_tags(sid, ["project:bar"])
     assert _values(r) == [("project", "bar")]
-    events = [e for e in await services.events_for(sid) if e["kind"].startswith("tag_")]
+    events = _tag_events(await services.events_for(sid))
     assert [e["kind"] for e in events] == ["tag_added", "tag_updated"]
     assert events[1]["detail"] == {"key": "project", "value": "bar", "prior_value": "foo"}
 
@@ -116,7 +127,8 @@ async def test_remove_nonexistent_key_is_idempotent(services):
     await services.tags.add_tags(sid, ["a"])
     r = await services.tags.remove_tags(sid, ["never-was-here"])
     assert _values(r) == [("a", "")]
-    kinds = [e["kind"] for e in await services.events_for(sid) if e["kind"] == "tag_removed"]
+    kinds = [e["kind"] for e in _tag_events(await services.events_for(sid))
+             if e["kind"] == "tag_removed"]
     assert kinds == []
 
 

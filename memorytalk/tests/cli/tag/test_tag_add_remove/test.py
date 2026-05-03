@@ -23,6 +23,9 @@ async def _seed_session(cli_env):
             is_sidechain=False,
         )],
     ))
+    # ingest() auto-stamps `sync_session: new`; strip it so these tests
+    # only see the tag ops they explicitly perform.
+    await cli_env.app.state.tags.remove_tags("sess_platform-a", ["sync_session"])
     return "sess_platform-a"
 
 
@@ -65,6 +68,15 @@ def _kv(out) -> list[tuple[str, str]]:
     return [(t["key"], t["value"]) for t in out["tags"]]
 
 
+def _tag_kinds(events: list[dict]) -> list[str]:
+    """tag_* events excluding sync_session (auto-stamped + seed cleanup noise)."""
+    return [
+        e["kind"] for e in events
+        if e["kind"].startswith("tag_")
+        and e.get("detail", {}).get("key") != "sync_session"
+    ]
+
+
 # -------- session: add --------
 
 async def test_add_single_tag(cli_env):
@@ -80,7 +92,7 @@ async def test_add_multiple_tags_in_one_call(cli_env):
     exit_code, out = await _run_add(cli_env, sid, "decision", "project:mt", "v2")
     assert exit_code == 0
     assert _kv(out) == [("decision", ""), ("project", "mt"), ("v2", "")]
-    kinds = [e["kind"] for e in await _events(cli_env, sid) if e["kind"].startswith("tag_")]
+    kinds = _tag_kinds(await _events(cli_env, sid))
     assert kinds == ["tag_added", "tag_added", "tag_added"]
 
 
@@ -90,7 +102,7 @@ async def test_add_existing_tag_same_value_is_idempotent(cli_env):
     exit_code, out = await _run_add(cli_env, sid, "decision")
     assert exit_code == 0
     assert _kv(out) == [("decision", "")]
-    kinds = [e["kind"] for e in await _events(cli_env, sid) if e["kind"].startswith("tag_")]
+    kinds = _tag_kinds(await _events(cli_env, sid))
     assert kinds == ["tag_added"]
 
 
@@ -100,7 +112,7 @@ async def test_add_existing_tag_different_value_is_updated(cli_env):
     exit_code, out = await _run_add(cli_env, sid, "project:bar")
     assert exit_code == 0
     assert _kv(out) == [("project", "bar")]
-    kinds = [e["kind"] for e in await _events(cli_env, sid) if e["kind"].startswith("tag_")]
+    kinds = _tag_kinds(await _events(cli_env, sid))
     assert kinds == ["tag_added", "tag_updated"]
 
 
@@ -110,7 +122,7 @@ async def test_add_mixed_new_and_existing(cli_env):
     exit_code, out = await _run_add(cli_env, sid, "decision", "important")
     assert exit_code == 0
     assert _kv(out) == [("decision", ""), ("important", "")]
-    kinds = [e["kind"] for e in await _events(cli_env, sid) if e["kind"] == "tag_added"]
+    kinds = [k for k in _tag_kinds(await _events(cli_env, sid)) if k == "tag_added"]
     assert kinds == ["tag_added", "tag_added"]
 
 
@@ -122,7 +134,7 @@ async def test_remove_tag(cli_env):
     exit_code, out = await _run_remove(cli_env, sid, "decision")
     assert exit_code == 0
     assert _kv(out) == [("important", "")]
-    kinds = [e["kind"] for e in await _events(cli_env, sid) if e["kind"].startswith("tag_")]
+    kinds = _tag_kinds(await _events(cli_env, sid))
     assert kinds == ["tag_added", "tag_added", "tag_removed"]
 
 
@@ -132,7 +144,7 @@ async def test_remove_nonexistent_tag_is_idempotent(cli_env):
     exit_code, out = await _run_remove(cli_env, sid, "never-was-here")
     assert exit_code == 0
     assert _kv(out) == [("decision", "")]
-    kinds = [e["kind"] for e in await _events(cli_env, sid) if e["kind"] == "tag_removed"]
+    kinds = [k for k in _tag_kinds(await _events(cli_env, sid)) if k == "tag_removed"]
     assert kinds == []
 
 
@@ -146,7 +158,7 @@ async def test_full_lifecycle(cli_env):
     assert _kv(o3) == [("b", ""), ("c", "")]
     _, o4 = await _run_remove(cli_env, sid, "b", "c")
     assert _kv(o4) == []
-    kinds = [e["kind"] for e in await _events(cli_env, sid) if e["kind"].startswith("tag_")]
+    kinds = _tag_kinds(await _events(cli_env, sid))
     assert kinds == ["tag_added"] * 3 + ["tag_removed"] * 3
 
 
@@ -157,7 +169,7 @@ async def test_add_to_card(cli_env):
     exit_code, out = await _run_add(cli_env, cid, "topic:lancedb", "status:reviewed")
     assert exit_code == 0
     assert _kv(out) == [("topic", "lancedb"), ("status", "reviewed")]
-    kinds = [e["kind"] for e in await _events(cli_env, cid) if e["kind"].startswith("tag_")]
+    kinds = _tag_kinds(await _events(cli_env, cid))
     assert kinds == ["tag_added", "tag_added"]
 
 

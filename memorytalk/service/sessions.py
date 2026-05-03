@@ -1,10 +1,14 @@
 """Session service — ingest (write), view / log (read). All async.
 
-Tag operations live in TagService (cli/setup/steps/.. wait it's in service/tags.py).
+Tag operations live in TagService (memorytalk/service/tags.py). SessionService
+holds a reference to TagService so ingest can stamp `sync_session: new`
+or `sync_session: update` on each successful sync action — fueling the
+built-in ``new-session`` filter's "what got synced and isn't yet
+processed" view.
 """
 from __future__ import annotations
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from memorytalk.config import Config
 from memorytalk.provider.lancedb import LanceStore
@@ -18,6 +22,11 @@ from memorytalk.service.events import EventWriter
 from memorytalk.service.links import link_to_ref, refresh_active_user_links
 from memorytalk.util.ids import SESSION_PREFIX, prefix_session_id
 from memorytalk.util.ttl import dt_to_iso, now_utc
+
+if TYPE_CHECKING:
+    # Late-binding to avoid circular import — TagService imports SessionNotFound
+    # from this module, so we cannot import TagService at module load time.
+    from memorytalk.service.tags import TagService
 
 
 class SessionServiceError(ValueError):
@@ -64,11 +73,19 @@ class SessionService:
         db: SQLiteStore,
         vectors: LanceStore,
         events: EventWriter,
+        tags: "TagService",
     ):
         self.config = config
         self.db = db
         self.vectors = vectors
         self.events = events
+        self.tags = tags
+
+    async def _stamp_sync_tag(self, session_id: str, value: str) -> None:
+        """Write `sync_session: <value>` via TagService (so sqlite +
+        tags.json mirror + tag_added/tag_updated events all stay in
+        sync). Called from ingest() after each successful action."""
+        await self.tags.add_tags(session_id, [f"sync_session:{value}"])
 
     # -------- writes --------
 
@@ -120,6 +137,7 @@ class SessionService:
             await self.events.emit(session_id, "imported", {
                 "source": source, "round_count": len(assigned),
             })
+            await self._stamp_sync_tag(session_id, "new")
 
             return IngestSessionResponse(
                 status="ok", session_id=session_id, action="imported",
@@ -186,6 +204,11 @@ class SessionService:
             await self.events.emit(session_id, "rounds_overwrite_skipped", {"indexes": overwrite_skipped})
         else:
             action = "skipped"
+
+        # Stamp sync_session tag for any action that materialized changes.
+        # `skipped` (no rounds touched) leaves the existing tag alone.
+        if action in ("appended", "partial_append"):
+            await self._stamp_sync_tag(session_id, "update")
 
         return IngestSessionResponse(
             status="ok", session_id=session_id, action=action,

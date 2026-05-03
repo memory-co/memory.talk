@@ -53,7 +53,10 @@ async def services(tmp_path: Path):
     b.embedder = embedder
     b.events = events
     b.events_for = _events_for
-    b.sessions = SessionService(config=cfg, db=db, vectors=vectors, events=events)
+    b.tags = TagService(db=db, storage=storage, events=events)
+    b.sessions = SessionService(
+        config=cfg, db=db, vectors=vectors, events=events, tags=b.tags,
+    )
     b.cards = CardService(
         config=cfg, db=db, vectors=vectors, embedder=embedder, events=events,
     )
@@ -64,6 +67,5 @@ async def services(tmp_path: Path):
     b.rebuild = RebuildService(
         config=cfg, db=db, vectors=vectors, embedder=embedder,
     )
-    b.tags = TagService(db=db, storage=storage, events=events)
     yield b
     await db.close()

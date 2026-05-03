@@ -69,3 +69,12 @@ sync 的数据合并只向前追加,不回写已有 round:
 导入后新 session 立即可被 `search` 命中;向量侧会在后台异步写入,几秒内生效。
 
 sync **不做索引重建**——只做增量导入。需要重建 FTS / 向量索引时用 [rebuild](rebuild.md)。
+
+## sync_session tag(filter 钩子)
+
+每条被 sync 触达的 session 会自动打上 `sync_session` tag:
+
+- 首次导入(`imported`)→ `sync_session: new`
+- 追加新 round(`appended` / `partial_append`)→ `sync_session: update`
+
+这条 tag 喂给内置的 [`new-session` filter](filter.md#完整示例new-session),用作"还没处理过的 session"取景框。处理完一条 session 后用 `filter mark new-session <sid>` 把 tag 调走;下次 sync 又触达时(无论新导还是追加),tag 自动打回来。
