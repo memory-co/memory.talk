@@ -126,6 +126,14 @@ class Config:
     def pid_path(self) -> Path:
         return self.data_root / "server.pid"
 
+    @property
+    def port_path(self) -> Path:
+        # Sibling to server.pid, written by `server start`. Lets `server
+        # status` discover the running port without parsing settings.json
+        # — so a settings.json that fails to render (missing ${VAR},
+        # legacy field, etc.) doesn't make a live server look dead.
+        return self.data_root / "server.port"
+
     def ensure_dirs(self) -> None:
         for d in [
             self.data_root, self.vectors_dir, self.sessions_dir,

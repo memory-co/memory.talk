@@ -46,8 +46,31 @@ def extract_error_message(payload: Any) -> str:
     return str(payload)
 
 
+def resolve_port(cfg: Config) -> int:
+    """Return the port the daemon is (or should be) listening on.
+
+    Discovery order:
+      1. ``server.port`` file written by ``server start`` — preferred,
+         independent of settings.json. This means a settings.json that
+         fails to render (missing ``${VAR}``, legacy ``auth_env_key``,
+         etc.) does not break CLI commands that only need to talk to a
+         live server — the env var matters at server-startup time, not
+         at every CLI invocation.
+      2. ``cfg.settings.server.port`` — fallback for installs that
+         predate the port file or where it got removed while the daemon
+         is still running. May raise ``ConfigValidationError``; callers
+         that want graceful degradation should catch it.
+    """
+    if cfg.port_path.exists():
+        try:
+            return int(cfg.port_path.read_text().strip())
+        except ValueError:
+            pass  # fall through to settings
+    return cfg.settings.server.port
+
+
 def _default_client(cfg: Config) -> httpx.Client:
-    base = f"http://127.0.0.1:{cfg.settings.server.port}"
+    base = f"http://127.0.0.1:{resolve_port(cfg)}"
     return httpx.Client(base_url=base, timeout=30.0)
 
 
