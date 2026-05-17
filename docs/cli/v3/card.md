@@ -77,12 +77,12 @@ ok: created `card_01jz8k2m`
 {"error": "index 99 out of range for session sess_abc123"}
 ```
 
-返回的 `card_id` 就是**以后所有地方用的读取凭据**——直接喂给 `read` / `log` 即可。
+返回的 `card_id` 就是**以后所有地方用的读取凭据**——直接喂给 `read` 即可。
 
 ## 副作用
 
 - 校验并展开 `rounds` 引用:失败则整条 card 不落库。
-- 展开后的每条 round 存为 `{role, text, session_id, index}`——直接把引用信息内联到 round 里(见 [talk-card.md](../../structure/v2/talk-card.md))。`session_id` 与 `index` 不进向量索引。
+- 展开后的每条 round 存为 `{role, text, session_id, index}`——直接把引用信息内联到 round 里。`session_id` 与 `index` 不进向量索引。
 - 校验 `source_cards` 里每个 `card_id` 存在、`relation` 合法;失败则整条 card 不落库。
 - 自动计算 insight 的 embedding 并写入向量库。
 - 在 log 里追加:本 card 的 `created` 事件、每个被引用 session 的 `card_extracted` 事件、每个 `source_cards` 项的 `card_linked` 事件(被引 card 的视角)。

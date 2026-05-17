@@ -9,7 +9,7 @@
 | 触发 | AI 推理过程主动调用 | harness hook 自动调用 |
 | 意识形态 | 有意识 / 决定要查 | 无意识 / 看到 prompt 即浮现 |
 | session_id | 可选(只为审计) | **必填**(用于跨次召回去重) |
-| 返回内容 | 完整(snippets / tags / source 等) | 极简(只 id + insight) |
+| 返回内容 | 完整(snippets / source / stats 等) | 极简(只 id + insight) |
 | 命中桶 | cards + sessions | **只 cards**(原始 session 太长不适合 inline 注入) |
 | 去重 | 无 | 同一 session_id 已经召回过的卡**不再返回** |
 
@@ -75,7 +75,7 @@ memory-talk read card_01jzq7rm  # 搜索引擎核心原理
 ```
 
 字段:
-- `recalled`:本次新返回的 cards,按相关度排序。`card_id` 带前缀,`insight` 是 card 的一句话洞见。**不含其它字段**(没有 score、snippets、tags、source、created_at) —— 极简就是契约。
+- `recalled`:本次新返回的 cards,按相关度排序。`card_id` 带前缀,`insight` 是 card 的一句话洞见。**不含其它字段**(没有 score、snippets、source、stats、created_at) —— 极简就是契约。
 - `skipped_already_recalled`:本次检索原本会命中、但**已经在本 session 之前的 recall 里返回过**因此被去重过滤掉的 card_id。供调试用,Markdown 视图不出。
 
 ## 去重(forward reference)
@@ -109,12 +109,11 @@ fi
 |---|---|---|---|
 | 缺 `<session_id>` 或 `<prompt>` | Click 阶段拦截 | 同 | 2 |
 | `top_k` 超出范围 | `**error:** top_k out of range` | `{"error":"top_k out of range"}` | 1 |
-| server 处于 `rebuilding` 状态 | `**error:** rebuilding` | `{"error":"rebuilding"}` | 1 |
 | DSL 不适用(recall 不接受 `--where`) | — | — | — |
 
 ## 副作用
 
-- 写一条 `recall_log` 记录(用于后续去重)。**SQLite-only**,不落 file-layer:recall 是会话级的瞬态状态,session 结束后无意义,丢了重新召回一次也无害。`/v2/rebuild` 会清空 recall_log,接受这个权衡。
+- 写一条 `recall_log` 记录(用于后续去重)。**SQLite-only**,不落 file-layer:recall 是会话级的瞬态状态,session 结束后无意义,丢了重新召回一次也无害。embedding 重算时(`setup` 触发)会清空 recall_log,接受这个权衡。
 - **对每条本次新返回的 card 累加 `card.stats.recall_count += 1`** —— recall 是论坛动力学里"被路过"的典型形态(自动召回 ≠ 用户主动 read,所以走单独的计数器,不并入 `read_count`)。被 `skipped_already_recalled` 跳掉的 card 不动 stats。
 - **不发任何 events**(recall 不是状态变更,只是临时召回快照)。
 - **不落 `search_log`**:recall 跟 search 是两条概念路径,`search_log` 只记 search 的审计;recall 自己写 `recall_log`。

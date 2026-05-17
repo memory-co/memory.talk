@@ -67,8 +67,6 @@ db = lancedb.connect("./data")
 
 **Created:** `2026-04-10`
 
-**Tags:** `decision`, `project:memory-talk`
-
 **Metadata:**
 
 - project: `/home/user/myapp`
@@ -89,7 +87,7 @@ ChromaDB vs LanceDB?
 ````
 
 约定:
-- 顺序固定:**头部元数据**(`Insight` / `Stats` / `From` 或 `Created` / `Tags` / `Metadata` / `Source`)→ **`## reviews`**(card 独有,无 review 时省略)→ **`## rounds`**。每段元数据之间用空行隔开;rounds 是最后一段,后面没有 footer。session 的 `Source` 跟其它元数据并排放头部(放最末尾会被长 rounds 推得看不见)。
+- 顺序固定:**头部元数据**(`Insight` / `Stats` / `From` 或 `Created` / `Metadata` / `Source`)→ **`## reviews`**(card 独有,无 review 时省略)→ **`## rounds`**。每段元数据之间用空行隔开;rounds 是最后一段,后面没有 footer。session 的 `Source` 跟其它元数据并排放头部(放最末尾会被长 rounds 推得看不见)。
 - `**Stats:**` 仅 card 有,inline 单行:`↑<review_up> ↓<review_down> · reviews <review_count> · reads <read_count> · recalls <recall_count>`。这是 card 当前在论坛里的位置信号 —— 真讨论(`reviews` / `↑↓`)和路过(`reads` / `recalls`)分两类显示。
 - `**From:**` 仅 card 有,展示 `source_cards`,每条形如 `\`<relation>\` → \`<card_id>\``;无 `source_cards` 时**整段省略**。`relation` 加反引号是为了让 `supersedes` / `derives_from` 这种非自然词更容易被扫到。
 - `## reviews` 仅 card 有,按 `created_at` 倒序排列,标题里只附数量 `(N)`(净得分 / 分布看上面 `Stats:` 行,不重复)。每条形如 `**±N** \`<sess_id>\` #<indexes> — <comment>`;`score=0` 时显示 `**0**`;`comment` 缺失时省略破折号那一段。无 review 时**整段省略**。新增 review 走 [review](review.md)。
@@ -148,7 +146,6 @@ ChromaDB vs LanceDB?
     "session_id": "sess_187c6576",
     "source": "claude-code",
     "created_at": "2026-04-10T14:30:00Z",
-    "tags": ["decision", "project:memory-talk"],
     "metadata": {"project": "/home/user/myapp"},
     "rounds": [
       {
@@ -172,10 +169,9 @@ ChromaDB vs LanceDB?
 
 ## 要点
 
-- 响应直接暴露**带前缀的裸 id**(`card_id` / `session_id`),拿到就能喂给下一次 `read` / `log`。
+- 响应直接暴露**带前缀的裸 id**(`card_id` / `session_id`),拿到就能喂给下一次 `read`。
 - read card **不修改 card 内容** —— `insight` / `rounds` / `source_cards` 不可改。但会**累加 `card.stats.read_count`**(每次 read 一次 +1) —— 这是论坛"被路过"的活跃度信号,跟 review 的"真讨论"信号分两类(详见上面 `Stats:` 行)。
 - read session 完全只读,不更新任何 stats(session 不参与 card 论坛动力学)。
 - `card.reviews` 是按 `created_at` 倒序的快照;新增 review 走 [review](review.md)。
 - Session 的 rounds 一次性全部返回,不支持窗口参数。若 session 过长,在 search 侧用更精准的 `query` / `--where` 缩小命中。
 
-Round / ContentBlock 结构见 [session.md](../../structure/v2/session.md),Card 结构见 [talk-card.md](../../structure/v2/talk-card.md)。

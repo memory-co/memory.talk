@@ -1,6 +1,6 @@
 # search
 
-v2 主检索入口。hybrid FTS + 向量检索 + 元数据 DSL 过滤,结果分两支返回(cards 和 sessions)。命中的 `card_id` / `session_id` 直接返回给调用方——拿到就能喂给 `read` / `log` / `tag`。
+v3 主检索入口。hybrid FTS + 向量检索 + 元数据 DSL 过滤,结果分两支返回(cards 和 sessions)。命中的 `card_id` / `session_id` 直接返回给调用方——拿到就能喂给 `read`。
 
 ```bash
 memory-talk search <query> [--where DSL] [--top-k N] [--json]
@@ -43,8 +43,6 @@ memory-talk search <query> [--where DSL] [--top-k N] [--json]
 
 ### 1. SESSION `sess_187c6576`
 
-**Tags:** `decision`
-
 **Snippets:**
 
 - ...讨论 **LanceDB** 零依赖...
@@ -56,7 +54,7 @@ memory-talk search <query> [--where DSL] [--top-k N] [--json]
 约定:
 - 每个结果的标题形如 `### N. CARD \`<card_id>\`` / `### N. SESSION \`<sess_id>\``,大写类型字样 + 反引号包住 id,渲染后类型和 id 都最显眼,不用再扫细节。
 - 每个结果下面都用 **加粗 inline 标签**(`**Insight:**` / `**Snippets:**` 等)分小节,渲染前后都好读 —— 标签自带分段语义,不依赖颜色和排版。
-- card 的元信息是 `Insight`(必有,顶部);session 的"重要元信息"是 `Tags`(顶部),**`Source` 弱信号、放结果末尾**——同一份 corpus 里 Source 大都重复(`claude-code` / `codex` 占绝大多数),扫读时把它放最显眼位置反而干扰。
+- card 的元信息是 `Insight`(必有,顶部);session 顶部只放 `Snippets`,**`Source` 弱信号、放结果末尾**——同一份 corpus 里 Source 大都重复(`claude-code` / `codex` 占绝大多数),扫读时把它放最显眼位置反而干扰。
 - `Snippets` 是一个无序列表(`- ...`),每条 snippet 一行。`**...**` 是 highlight 标记,跟 API 返回保持一致。
 - `score` 不在 Markdown 输出里 —— hybrid RRF 的分数对人类读者价值低,反而干扰扫读。仍然保留在 `--json` 响应里供脚本 / 调试用。
 - 空命中桶仍然出 header(`## cards (0)`),不打"no results"占位文字。
@@ -87,7 +85,6 @@ memory-talk search <query> [--where DSL] [--top-k N] [--json]
         "rank": 1,
         "score": 0.0289,
         "source": "claude-code",
-        "tags": ["decision"],
         "snippets": ["...讨论 **LanceDB** 零依赖..."]
       }
     ]
@@ -96,8 +93,8 @@ memory-talk search <query> [--where DSL] [--top-k N] [--json]
 ```
 
 注意：
-- 返回体里的 `card_id` / `session_id` 都是**带前缀的裸 id**,直接喂给 `read` / `log` 即可,不需要任何中间转换。
-- `search_id` 是本次查询的**审计 id**——只出现在服务端 `search_log` 表和 `log` 命令的 detail 里,**不用于任何后续读取**。
+- 返回体里的 `card_id` / `session_id` 都是**带前缀的裸 id**,直接喂给 `read` 即可,不需要任何中间转换。
+- `search_id` 是本次查询的**审计 id**——只出现在服务端 `search_log` 表里,**不用于任何后续读取**。
 - `rank` 从 1 开始,对齐 `results` 数组位置。
 
 ## 排序
@@ -122,7 +119,7 @@ relevance + 0.1 * (review_up - review_down) + 0.02 * log(read_count + 1) - 0.005
 
 ## 追踪语义
 
-每次 search 都会在服务端 `search_log` 表 + `logs/search/<UTC 日期>.jsonl` 里追加一条——**存的是完整的响应体**(含 `snippets` / `score` / `insight` / `tags` 等一切呈现给使用者的内容),不是只存命中 id。这样事后审计能完整复原"当时用户看到了什么",即便后续索引变了、对象被改了也能追回原样。详见 [search-result.md](../../structure/v2/search-result.md) 和 [rebuild.md](rebuild.md) 的目录布局。
+每次 search 都会在服务端 `search_log` 表 + `logs/search/<UTC 日期>.jsonl` 里追加一条——**存的是完整的响应体**(含 `snippets` / `score` / `insight` 等一切呈现给使用者的内容),不是只存命中 id。这样事后审计能完整复原"当时用户看到了什么",即便后续索引变了、对象被改了也能追回原样。
 
 这是**纯审计**——不做"凭据发行",不参与任何后续调用的校验。想看"这次 AI 会话用了哪些数据"——看 AI 自己的 tool-use 对话记录(sync 之后存成一个 session),那里有每次 `read` / `search` 的输入输出原文。服务端不再造重复的追踪层。
 
@@ -132,7 +129,7 @@ search_log 默认永久保留。老化策略见 `settings.search.search_log_rete
 
 支持字段:
 
-- 元数据:`session_id`、`card_id`、`tag`、`source`、`created_at`
+- 元数据:`session_id`、`card_id`、`source`、`created_at`
 - card 论坛信号(只对 cards 桶有意义,sessions 桶上访问报错):`review_up`、`review_down`、`review_neutral`、`review_count`、`read_count`、`recall_count`
 
 运算符:`=`、`!=`、`<`、`>`、`<=`、`>=`、`LIKE`、`IN`、`NOT IN`、`AND`。
@@ -140,7 +137,7 @@ search_log 默认永久保留。老化策略见 `settings.search.search_log_rete
 示例:
 
 ```bash
-memory-talk search "LanceDB" -w 'tag = "decision" AND source = "claude-code"'
+memory-talk search "LanceDB" -w 'source = "claude-code"'
 memory-talk search "" -w 'created_at > "2026-04-01"'
 memory-talk search "bug" -w 'session_id = "sess_abc123"'
 
@@ -166,4 +163,3 @@ DSL 解析失败:
 {"error": "DSL parse error: unknown field 'foo'"}
 ```
 
-search 输入 / 输出 / 落库结构的完整定义见 [search-result.md](../../structure/v2/search-result.md)。
