@@ -135,6 +135,22 @@ class Config:
         return self.logs_dir / "search"
 
     @property
+    def server_log_path(self) -> Path:
+        """Daemon's main rotated log (uvicorn + memorytalk app loggers)."""
+        return self.logs_dir / "server.log"
+
+    @property
+    def sync_log_dir(self) -> Path:
+        return self.logs_dir / "sync"
+
+    @property
+    def sync_watch_log_path(self) -> Path:
+        """Watchdog event trail (file events received, ingest outcomes,
+        backfill progress) — rotates independently of server.log so a
+        chatty watcher doesn't crowd out request/error logs."""
+        return self.sync_log_dir / "watch.log"
+
+    @property
     def pid_path(self) -> Path:
         return self.data_root / "server.pid"
 
@@ -149,6 +165,7 @@ class Config:
         for d in [
             self.data_root, self.vectors_dir, self.sessions_dir,
             self.cards_dir, self.logs_dir, self.search_log_dir,
+            self.sync_log_dir,
         ]:
             d.mkdir(parents=True, exist_ok=True)
 

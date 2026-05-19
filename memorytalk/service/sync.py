@@ -22,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import collections
 import datetime as _dt
+import logging
 import time
 from pathlib import Path
 from typing import Iterable
@@ -33,6 +34,11 @@ from memorytalk.service.sessions import IngestService
 
 
 _ISO = lambda: _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+# Dedicated trail for watchdog activity. Routed to ``logs/sync/watch.log``
+# by the daemon shim (memorytalk/server.py). Outside the daemon (tests,
+# ad-hoc CLI use) this logger has no handlers and silently no-ops.
+_watch_log = logging.getLogger("memorytalk.sync.watch")
 
 
 class SyncWatcher:
@@ -137,6 +143,12 @@ class SyncWatcher:
         # Backfill in the background — return now.
         self._backfill_task = asyncio.create_task(self._run_backfill())
 
+        _watch_log.info(
+            "watcher started adapters=%s watching=%s",
+            self.adapter_names(),
+            [str(p) for a in self.adapters for p in a.watch_roots()],
+        )
+
         return {
             "status": "started",
             "phase": "backfilling",
@@ -149,17 +161,32 @@ class SyncWatcher:
         ``_ingest_one``; this wrapper isolates per-adapter failures
         (e.g. ``iter_sessions`` itself blowing up) so one bad adapter
         doesn't sink the whole backfill."""
+        _watch_log.info(
+            "backfill start adapters=%s", self.adapter_names(),
+        )
         try:
             for adapter in self.adapters:
                 try:
+                    count = 0
                     for payload in adapter.iter_sessions():
                         stats = await self._ingest_one(payload)
                         _accumulate(self._totals, stats)
+                        count += 1
+                    _watch_log.info(
+                        "backfill adapter=%s sessions=%d totals=%s",
+                        adapter.source_name, count, dict(self._totals),
+                    )
                 except Exception as e:
+                    _watch_log.exception(
+                        "backfill failed adapter=%s", adapter.source_name,
+                    )
                     self._record_error(adapter.source_name, f"backfill: {e}")
                     continue
         finally:
             self.phase = "watching"
+            _watch_log.info(
+                "backfill finished, phase=watching totals=%s", dict(self._totals),
+            )
 
     async def pause(self) -> None:
         """Graceful shutdown without flipping the persisted flag.
@@ -218,6 +245,9 @@ class SyncWatcher:
             "duration_seconds": uptime, "totals": totals,
         }
         self._start_ts = None
+        _watch_log.info(
+            "watcher stopped uptime=%.1fs totals=%s", uptime, totals,
+        )
         return totals, uptime
 
     # ────────── inbound from watchdog (threaded) ──────────
@@ -225,7 +255,14 @@ class SyncWatcher:
     def on_event(self, adapter: BaseAdapter, path: Path) -> None:
         """Called from the watchdog thread via the bridging handler."""
         if not self.running or self._loop is None or self._queue is None:
+            _watch_log.debug(
+                "event dropped (watcher idle) adapter=%s path=%s",
+                adapter.source_name, path,
+            )
             return
+        _watch_log.info(
+            "event adapter=%s path=%s", adapter.source_name, path,
+        )
         # Bounce to the event loop. Idempotent — multiple events for the same
         # file path collapse via the queue's worker debounce.
         self._loop.call_soon_threadsafe(self._enqueue, adapter, path)
@@ -252,12 +289,27 @@ class SyncWatcher:
             try:
                 payload = adapter.convert_file(path)
             except Exception as e:
+                _watch_log.exception(
+                    "convert failed adapter=%s path=%s",
+                    adapter.source_name, path,
+                )
                 self._record_error(path, str(e))
                 continue
             if payload is None:
+                _watch_log.debug(
+                    "convert produced no payload adapter=%s path=%s",
+                    adapter.source_name, path,
+                )
                 continue
             stats = await self._ingest_one(payload)
             _accumulate(self._totals, stats)
+            _watch_log.info(
+                "ingested adapter=%s session=%s "
+                "imported=%d appended=%d skipped=%d errors=%d",
+                adapter.source_name, payload.get("session_id", "?"),
+                stats.get("imported", 0), stats.get("appended", 0),
+                stats.get("skipped", 0), stats.get("errors", 0),
+            )
 
     async def _await_settled(self, path: Path) -> None:
         """Wait until the file hasn't been re-touched for one debounce window."""

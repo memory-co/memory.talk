@@ -123,6 +123,36 @@ async def test_lifespan_auto_starts_watcher_and_backfills(sync_client_with_claud
     assert r.json()["sessions_total"] == 1
 
 
+async def test_watcher_logs_lifecycle_and_events(sync_client_with_claude, fake_claude_root, caplog):
+    """The `memorytalk.sync.watch` logger emits at every major transition:
+    watcher start, backfill milestones, file events received, ingest
+    outcomes. The dictConfig that routes these to ``logs/sync/watch.log``
+    is the daemon shim's job — here we just verify the call sites fire."""
+    _, session_file = fake_claude_root
+    caplog.set_level("INFO", logger="memorytalk.sync.watch")
+    await _wait_for_phase(sync_client_with_claude, "watching")
+
+    # Trigger a fresh file event so on_event/_worker_loop log paths run.
+    with session_file.open("a") as f:
+        f.write(json.dumps(_msg("u9", "a1", "user", "another round")) + "\n")
+    for _ in range(20):
+        await asyncio.sleep(0.2)
+        r = await sync_client_with_claude.post("/v3/read", json={"id": "sess_abc-123"})
+        if len(r.json()["session"]["rounds"]) == 3:
+            break
+
+    records = [r.getMessage() for r in caplog.records
+               if r.name == "memorytalk.sync.watch"]
+    joined = "\n".join(records)
+    # Note: ``watcher started`` is logged during lifespan startup which
+    # runs in the fixture *before* caplog activates — so it won't appear
+    # in records. We still see the backfill / event / ingest lines
+    # because those fire during the test body.
+    assert "backfill finished" in joined, joined
+    assert any("event adapter=claude-code" in m for m in records), joined
+    assert any("ingested adapter=claude-code" in m for m in records), joined
+
+
 async def test_watcher_picks_up_appended_round(sync_client_with_claude, fake_claude_root):
     _, session_file = fake_claude_root
     await _wait_for_phase(sync_client_with_claude, "watching")

@@ -17,32 +17,64 @@ import pytest
 from click.testing import CliRunner
 
 
+def _drain_loggers(*names: str) -> None:
+    """Flush + close handlers on the named loggers so the file contents
+    are readable from the test process."""
+    for name in names:
+        for h in list(logging.getLogger(name).handlers):
+            h.flush()
+            h.close()
+
+
 def test_build_log_config_writes_through_to_file(tmp_path, monkeypatch):
-    """Wire the dictConfig and emit a message via each named logger —
-    all four should land in the file."""
+    """Wire the dictConfig and emit a message via each named app/uvicorn
+    logger — all four should land in server.log. The sync.watch logger
+    is asserted in its own test below to keep this one focused."""
     monkeypatch.setenv("MEMORY_TALK_DATA_ROOT", str(tmp_path))
     from memorytalk.server import build_log_config
 
-    log_path = tmp_path / "logs" / "server.log"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    logging.config.dictConfig(build_log_config(log_path))
+    server_log = tmp_path / "logs" / "server.log"
+    watch_log = tmp_path / "logs" / "sync" / "watch.log"
+    for p in (server_log, watch_log):
+        p.parent.mkdir(parents=True, exist_ok=True)
+    logging.config.dictConfig(build_log_config(server_log, watch_log))
     try:
         logging.getLogger("memorytalk").info("app-message")
         logging.getLogger("uvicorn").info("uvicorn-message")
         logging.getLogger("uvicorn.error").info("uvicorn-error-message")
         logging.getLogger("uvicorn.access").info("uvicorn-access-message")
     finally:
-        # Flush so the file is readable. Closing the handler also
-        # releases the file lock on Windows.
-        for h in list(logging.getLogger("memorytalk").handlers):
-            h.flush()
-            h.close()
+        _drain_loggers("memorytalk", "uvicorn", "uvicorn.error", "uvicorn.access")
 
-    content = log_path.read_text()
+    content = server_log.read_text()
     assert "app-message" in content
     assert "uvicorn-message" in content
     assert "uvicorn-error-message" in content
     assert "uvicorn-access-message" in content
+
+
+def test_sync_watch_log_isolated_from_server_log(tmp_path, monkeypatch):
+    """``memorytalk.sync.watch`` writes to its own file and does NOT
+    propagate up to ``memorytalk`` (which would duplicate every event
+    into server.log)."""
+    monkeypatch.setenv("MEMORY_TALK_DATA_ROOT", str(tmp_path))
+    from memorytalk.server import build_log_config
+
+    server_log = tmp_path / "logs" / "server.log"
+    watch_log = tmp_path / "logs" / "sync" / "watch.log"
+    for p in (server_log, watch_log):
+        p.parent.mkdir(parents=True, exist_ok=True)
+    logging.config.dictConfig(build_log_config(server_log, watch_log))
+    try:
+        logging.getLogger("memorytalk.sync.watch").info("watch-line")
+    finally:
+        _drain_loggers("memorytalk.sync.watch", "memorytalk")
+
+    assert "watch-line" in watch_log.read_text()
+    assert "watch-line" not in server_log.read_text(), (
+        "sync.watch must not propagate into server.log — chatty watcher "
+        "would crowd out app/request errors"
+    )
 
 
 def test_server_logs_command_no_file(tmp_path, monkeypatch):

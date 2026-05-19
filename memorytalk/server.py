@@ -53,10 +53,32 @@ def _redirect_os_fds_to(log_path: Path) -> None:
         os.close(fd)
 
 
-def build_log_config(log_path: Path) -> dict:
+def build_log_config(server_log_path: Path, sync_watch_log_path: Path) -> dict:
     """``logging.config.dictConfig`` payload — also accepted by
     ``uvicorn.run(log_config=...)``. Exposed so tests can stage it
-    against a tmp path without spinning up the full server."""
+    against tmp paths without spinning up the full server.
+
+    Two rotating files:
+
+    - ``server.log`` — ``memorytalk`` app + ``uvicorn.*`` (request /
+      error logs).
+    - ``sync/watch.log`` — ``memorytalk.sync.watch`` only: file events
+      received from watchdog, ingest outcomes, backfill milestones. A
+      chatty watcher (e.g. lots of small Claude Code sessions landing)
+      shouldn't crowd out request/error logs in the main file, so it
+      gets its own rotation budget. ``propagate: False`` keeps the
+      lines from being duplicated into ``server.log``.
+    """
+    def _rotating(filename: Path) -> dict:
+        return {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": str(filename),
+            "maxBytes": _LOG_MAX_BYTES,
+            "backupCount": _LOG_BACKUPS,
+            "encoding": "utf-8",
+            "formatter": "default",
+        }
+
     return {
         "version": 1,
         "disable_existing_loggers": False,
@@ -64,17 +86,16 @@ def build_log_config(log_path: Path) -> dict:
             "default": {"format": _LOG_FORMAT, "datefmt": _LOG_DATEFMT},
         },
         "handlers": {
-            "file": {
-                "class": "logging.handlers.RotatingFileHandler",
-                "filename": str(log_path),
-                "maxBytes": _LOG_MAX_BYTES,
-                "backupCount": _LOG_BACKUPS,
-                "encoding": "utf-8",
-                "formatter": "default",
-            },
+            "file": _rotating(server_log_path),
+            "sync_watch_file": _rotating(sync_watch_log_path),
         },
         "loggers": {
             "memorytalk": {"level": "INFO", "handlers": ["file"], "propagate": False},
+            "memorytalk.sync.watch": {
+                "level": "INFO",
+                "handlers": ["sync_watch_file"],
+                "propagate": False,
+            },
             "uvicorn": {"level": "INFO", "handlers": ["file"], "propagate": False},
             "uvicorn.error": {"level": "INFO", "handlers": ["file"], "propagate": False},
             "uvicorn.access": {"level": "INFO", "handlers": ["file"], "propagate": False},
@@ -85,13 +106,12 @@ def build_log_config(log_path: Path) -> dict:
 def main() -> None:
     cfg = Config()
     cfg.ensure_dirs()
-    log_path = cfg.logs_dir / "server.log"
-    _redirect_os_fds_to(log_path)
+    _redirect_os_fds_to(cfg.server_log_path)
     uvicorn.run(
         "memorytalk.api:app",
         host="127.0.0.1",
         port=cfg.settings.server.port,
-        log_config=build_log_config(log_path),
+        log_config=build_log_config(cfg.server_log_path, cfg.sync_watch_log_path),
     )
 
 
