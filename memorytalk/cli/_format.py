@@ -176,61 +176,27 @@ def _flatten_blocks(blocks: list[Any]) -> str:
 
 # ────────── sync ──────────
 
-def fmt_sync_start(payload: dict) -> str:
-    status = payload.get("status", "")
-    if status == "started":
-        adapters = ", ".join(payload.get("adapters") or [])
-        bf = payload.get("backfill") or {}
-        bf_line = (
-            f"discovered {bf.get('discovered', 0)} · imported {bf.get('imported', 0)} · "
-            f"appended {bf.get('appended', 0)} · skipped {bf.get('skipped', 0)} · "
-            f"errors {bf.get('errors', 0)}"
-        )
-        return f"**started** · adapters `{adapters}` · backfill: {bf_line}\n"
-    if status == "already_running":
-        adapters = ", ".join(payload.get("adapters") or [])
-        secs = int(payload.get("uptime_seconds") or 0)
-        return f"**already_running** · adapters `{adapters}` · uptime {_humanize_secs(secs)}\n"
-    return f"**{status}**\n"
-
-
-def fmt_sync_stop(payload: dict) -> str:
-    status = payload.get("status", "")
-    if status == "stopped":
-        secs = int(payload.get("uptime_seconds") or 0)
-        totals = payload.get("totals") or {}
-        return (
-            f"**stopped** · uptime {_humanize_secs(secs)} · "
-            f"imported {totals.get('imported', 0)}, appended {totals.get('appended', 0)}, "
-            f"overwrite_warnings {totals.get('overwrite_warnings', 0)}\n"
-        )
-    if status == "not_running":
-        return "**not_running**\n"
-    return f"**{status}**\n"
-
-
 def fmt_sync_status(payload: dict) -> str:
-    if payload.get("status") == "stopped":
-        last = payload.get("last_run")
-        if last:
-            t = last.get("totals", {})
-            return (
-                f"# sync · **stopped**\n\n"
-                f"last run: {last['start']} → {last['stop']} "
-                f"({_humanize_secs(int(last.get('duration_seconds') or 0))})\n"
-                f"totals: imported {t.get('imported', 0)}, appended {t.get('appended', 0)}, "
-                f"overwrite_warnings {t.get('overwrite_warnings', 0)}, errors {t.get('errors', 0)}\n"
-            )
-        return "# sync · **stopped**\n\nno previous runs in this server lifespan.\n"
+    status = payload.get("status", "")
+    if status == "disabled":
+        return (
+            "# sync · **disabled**\n\n"
+            "hint: enable via `memory-talk setup` or set `sync.enabled` "
+            "in `settings.json` and restart the server.\n"
+        )
+    if status == "error":
+        err = payload.get("error") or "unknown error"
+        return f"# sync · **error**\n\n{err}\n"
 
     # running
+    phase = payload.get("phase") or "watching"
     secs = int(payload.get("uptime_seconds") or 0)
     adapters = ", ".join(payload.get("adapters") or [])
     totals = payload.get("totals") or {}
     watching = payload.get("watching") or []
 
     lines = [
-        "# sync · **running**", "",
+        f"# sync · **running** · phase `{phase}`", "",
         "| field | value |", "|---|---|",
         f"| uptime | {_humanize_secs(secs)} |",
         f"| adapters | {adapters} |",

@@ -81,12 +81,14 @@ def create_app(config: Config | None = None) -> FastAPI:
             config=config, db=db, vectors=vectors, embedder=embedder,
         )
 
-        # Auto-resume if the persisted sync flag is on.
-        if app.state.sync.state.load().get("enabled"):
+        # Spin up the watcher if settings says so. start() returns fast
+        # now — backfill runs as a background task; uvicorn's "startup
+        # complete" log is no longer gated on the initial ingest.
+        if config.settings.sync.enabled:
             try:
                 await app.state.sync.start()
             except Exception as e:
-                print(f"[memory-talk] auto-resume sync failed: {e}", file=sys.stderr)
+                print(f"[memory-talk] sync auto-start failed: {e}", file=sys.stderr)
 
         yield
 

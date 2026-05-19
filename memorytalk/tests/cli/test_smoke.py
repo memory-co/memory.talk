@@ -62,9 +62,11 @@ def test_setup_wizard_non_interactive_first_install(tmp_path, monkeypatch):
         *setup_mod._EMB_OPTIONS,
     ]
 
-    # Inputs: select dummy (1) / blank model / blank dim /
-    #         blank vector / blank relation / blank port.
-    stdin = "1\n\n\n\n\n\n"
+    # Inputs: select dummy (1) / blank model / blank dim / blank vector /
+    #         blank relation / blank port / "y" for sync-confirm
+    #         (modify-mode default is N because the seeded settings.json
+    #         predates the sync.enabled field).
+    stdin = "1\n\n\n\n\n\ny\n"
     from memorytalk.cli import main
     runner = CliRunner()
     result = runner.invoke(main, ["setup"], input=stdin)
@@ -73,3 +75,5 @@ def test_setup_wizard_non_interactive_first_install(tmp_path, monkeypatch):
     raw = pathlib.Path(tmp_path, "settings.json").read_text()
     parsed = json.loads(raw)
     assert parsed["embedding"]["provider"] == "dummy"
+    # The new Sync section defaulted to enabled on first install.
+    assert parsed["sync"]["enabled"] is True

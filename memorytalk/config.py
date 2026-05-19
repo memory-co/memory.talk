@@ -57,6 +57,7 @@ class RecallConfig(BaseModel):
 
 
 class SyncConfig(BaseModel):
+    enabled: bool = False
     debounce_ms: int = 200
 
 
@@ -144,10 +145,6 @@ class Config:
         # ${VAR} render in settings doesn't make a live server look dead.
         return self.data_root / "server.port"
 
-    @property
-    def sync_state_path(self) -> Path:
-        return self.data_root / "sync_state.json"
-
     def ensure_dirs(self) -> None:
         for d in [
             self.data_root, self.vectors_dir, self.sessions_dir,
@@ -164,6 +161,11 @@ class Config:
             raise ConfigValidationError(
                 f"settings.json at {self.settings_path} is not valid JSON: {e}"
             ) from e
+
+        # One-shot migration: the legacy sync_state.json held the on/off
+        # flag separately. Fold it into settings.sync.enabled if the user
+        # hasn't already configured it, then delete the legacy file.
+        self._migrate_legacy_sync_state(data)
 
         # Render ${VAR} references against os.environ across the whole
         # settings dict. Rendering at the disk-load boundary (not at request
@@ -182,3 +184,29 @@ class Config:
             raise ConfigValidationError(
                 f"settings.json at {self.settings_path} does not match schema: {e}"
             ) from e
+
+    def _migrate_legacy_sync_state(self, settings_data: dict) -> None:
+        """Pre-0.5 stored sync's on/off in ``sync_state.json``. If that file
+        is still present and the current settings.json doesn't yet set
+        ``sync.enabled``, fold the legacy value in and remove the old file.
+        Mutates ``settings_data`` in place and writes back to disk."""
+        legacy = self.data_root / "sync_state.json"
+        if not legacy.exists():
+            return
+        sync_block = settings_data.get("sync") or {}
+        if "enabled" in sync_block:
+            # User has already configured the new field; treat legacy as
+            # stale and just remove it.
+            legacy.unlink(missing_ok=True)
+            return
+        try:
+            legacy_enabled = bool(
+                json.loads(legacy.read_text(encoding="utf-8")).get("enabled")
+            )
+        except Exception:
+            legacy_enabled = False
+        sync_block["enabled"] = legacy_enabled
+        settings_data["sync"] = sync_block
+        from memorytalk.util.settings_io import write_settings_atomic
+        write_settings_atomic(self.settings_path, settings_data)
+        legacy.unlink(missing_ok=True)

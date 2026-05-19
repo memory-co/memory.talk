@@ -11,8 +11,7 @@ router = APIRouter()
 async def get_status(request: Request) -> StatusResponse:
     config = request.app.state.config
     db = request.app.state.db
-    sync_svc = request.app.state.sync
-    sync_enabled = bool(sync_svc and getattr(sync_svc, "running", False))
+    sync_enabled = bool(config.settings.sync.enabled)
     return StatusResponse(
         data_root=str(config.data_root),
         settings_path=str(config.settings_path),

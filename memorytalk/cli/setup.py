@@ -121,10 +121,23 @@ def _wizard(cfg: Config, old_raw: dict | None, is_first_install: bool) -> dict:
     )
     new["server"] = {"port": int(port_str)}
 
-    # Carry over sections we don't prompt for (search / recall / sync /
-    # explore). They keep whatever the existing file had; defaults filled
-    # in by the Settings model on first install.
-    for key in ("search", "recall", "sync", "explore"):
+    # ── sync ────────────────────────────────────────────────────────────
+    section("Sync")
+    old_sync = base.get("sync") or {}
+    enabled_default = old_sync.get("enabled", True if is_first_install else False)
+    sync_enabled = console.confirm(
+        "Enable backend sync? (auto-ingest Claude Code sessions etc.)",
+        default=enabled_default,
+    )
+    new["sync"] = {
+        "enabled": sync_enabled,
+        "debounce_ms": old_sync.get("debounce_ms", 200),
+    }
+
+    # Carry over sections we don't prompt for (search / recall / explore).
+    # They keep whatever the existing file had; defaults filled in by the
+    # Settings model on first install.
+    for key in ("search", "recall", "explore"):
         if key in base:
             new[key] = base[key]
         else:

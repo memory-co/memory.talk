@@ -12,7 +12,9 @@ Architecture:
 - One async worker drains the queue, debounces same-path events, calls
   the matching adapter's ``convert_file``, then dispatches into the
   ``IngestService`` directly (in-process — no HTTP roundtrip).
-- ``running`` flag + ``sync_state.json`` persist across server restarts.
+- Enable flag is persisted in ``settings.json`` under ``sync.enabled``;
+  lifespan reads it on every server start to decide whether to spin the
+  watcher up. There is no longer a side-state file.
 - ``recent`` is a small ring buffer (≤ 20) for ``GET /v3/sync/status``;
   full history lives in ``ingest_log`` + ``events.jsonl``.
 """
@@ -20,7 +22,6 @@ from __future__ import annotations
 import asyncio
 import collections
 import datetime as _dt
-import json
 import time
 from pathlib import Path
 from typing import Iterable
@@ -32,25 +33,6 @@ from memorytalk.service.sessions import IngestService
 
 
 _ISO = lambda: _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-
-
-class SyncState:
-    """Persisted (across server restarts) sync state — just the enabled flag."""
-
-    def __init__(self, path: Path):
-        self.path = path
-
-    def load(self) -> dict:
-        if not self.path.exists():
-            return {"enabled": False}
-        try:
-            return json.loads(self.path.read_text())
-        except Exception:
-            return {"enabled": False}
-
-    def save(self, enabled: bool) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps({"enabled": enabled}))
 
 
 class SyncWatcher:
@@ -70,13 +52,16 @@ class SyncWatcher:
             else [cls() for cls in ADAPTERS.values()]
         )
         self.debounce_seconds = (debounce_ms or config.settings.sync.debounce_ms) / 1000.0
-        self.state = SyncState(config.sync_state_path)
 
         self.running: bool = False
+        # "stopped" before start; "backfilling" during the initial scan;
+        # "watching" once backfill finishes and the observer is steady state.
+        self.phase: str = "stopped"
         self._start_ts: float | None = None
         self._observer = None  # watchdog Observer (lazy import)
         self._queue: asyncio.Queue[tuple[BaseAdapter, Path]] | None = None
         self._worker_task: asyncio.Task | None = None
+        self._backfill_task: asyncio.Task | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._pending_at: dict[Path, float] = {}
         # totals over current start→stop window
@@ -118,55 +103,63 @@ class SyncWatcher:
         return self._last_run
 
     async def start(self) -> dict:
-        """Start the watcher. Idempotent: returns ``already_running`` if running.
-
-        Returns a dict matching :class:`SyncStartResponse` payload shape.
+        """Start the watcher. Returns immediately after scheduling the
+        initial backfill as a background task — observer + worker are
+        already live at that point so events arriving during backfill
+        aren't dropped. Idempotent: returns ``already_running`` if running.
         """
         if self.running:
             return {
                 "status": "already_running",
+                "phase": self.phase,
                 "adapters": self.adapter_names(),
                 "uptime_seconds": self.uptime_seconds,
             }
 
         self.running = True
+        self.phase = "backfilling"
         self._start_ts = time.monotonic()
         self._totals = _new_totals()
         self._recent.clear()
         self._loop = asyncio.get_running_loop()
         self._queue = asyncio.Queue()
-        self.state.save(enabled=True)
 
-        # ── 1. Backfill (initial discovery) ────────────────────────────
-        backfill = _new_totals()
-        for a in self.adapters:
-            for payload in a.iter_sessions():
-                stats = await self._ingest_one(payload)
-                _accumulate(backfill, stats)
-        self._totals = dict(backfill)  # totals carries backfill counts forward
-
-        # ── 2. Watcher (PollingObserver) ───────────────────────────────
+        # Observer + worker FIRST. Live events during backfill enqueue
+        # here; the worker may double-process files that backfill is also
+        # about to touch, but _ingest_one is content-hash idempotent
+        # (see service/sessions.py:154-167) so duplicates collapse to
+        # "skipped".
         self._observer = _make_observer(self)
         if self._observer is not None:
             self._observer.start()
-
-        # ── 3. Worker ─────────────────────────────────────────────────
         self._worker_task = asyncio.create_task(self._worker_loop())
+
+        # Backfill in the background — return now.
+        self._backfill_task = asyncio.create_task(self._run_backfill())
 
         return {
             "status": "started",
+            "phase": "backfilling",
             "adapters": self.adapter_names(),
-            "backfill": backfill,
         }
 
-    async def stop(self) -> dict:
-        """Explicit user-initiated stop. Clears the persisted enable flag —
-        the server won't auto-resume the watcher on next start."""
-        if not self.running:
-            return {"status": "not_running"}
-        totals, uptime = await self._teardown()
-        self.state.save(enabled=False)
-        return {"status": "stopped", "uptime_seconds": uptime, "totals": totals}
+    async def _run_backfill(self) -> None:
+        """Iterate every adapter's existing sessions and feed them through
+        ingest. Per-session errors are already captured inside
+        ``_ingest_one``; this wrapper isolates per-adapter failures
+        (e.g. ``iter_sessions`` itself blowing up) so one bad adapter
+        doesn't sink the whole backfill."""
+        try:
+            for adapter in self.adapters:
+                try:
+                    for payload in adapter.iter_sessions():
+                        stats = await self._ingest_one(payload)
+                        _accumulate(self._totals, stats)
+                except Exception as e:
+                    self._record_error(adapter.source_name, f"backfill: {e}")
+                    continue
+        finally:
+            self.phase = "watching"
 
     async def pause(self) -> None:
         """Graceful shutdown without flipping the persisted flag.
@@ -191,6 +184,7 @@ class SyncWatcher:
         stop_iso = _ISO()
 
         self.running = False
+        self.phase = "stopped"
 
         if self._observer is not None:
             try:
@@ -199,6 +193,16 @@ class SyncWatcher:
             except Exception:
                 pass
             self._observer = None
+
+        # Cancel backfill before the worker — if backfill is mid-await
+        # on _ingest_one, cancellation propagates cleanly.
+        if self._backfill_task:
+            self._backfill_task.cancel()
+            try:
+                await self._backfill_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._backfill_task = None
 
         if self._worker_task:
             self._worker_task.cancel()
