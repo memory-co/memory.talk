@@ -1,57 +1,65 @@
-"""CLI: sync [--json] — iterate platform adapter and POST each session to /v2/sessions."""
+"""CLI: sync start / stop / status [--json]."""
 from __future__ import annotations
 import sys
-from pathlib import Path
 
 import click
 
-from memorytalk.adapters import get_adapter
-from memorytalk.cli._format import fmt_error, fmt_sync
+from memorytalk.cli._format import (
+    fmt_error, fmt_sync_start, fmt_sync_status, fmt_sync_stop,
+)
 from memorytalk.cli._http import ApiError, api, extract_error_message
 from memorytalk.cli._render import emit_json, emit_json_err, emit_md, emit_md_err
 from memorytalk.config import Config
 
 
-@click.command("sync")
-@click.option("--source", default="claude-code", show_default=True,
-              help="Platform adapter name")
-@click.option("--platform-root", type=click.Path(), default=None,
-              help="Override platform root path (default: adapter default)")
-@click.option("--data-root", type=click.Path(), default=None)
-@click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON instead of Markdown")
-def sync(source: str, platform_root: str | None, data_root: str | None, json_out: bool) -> None:
-    """Discover and ingest sessions from a platform source."""
-    cfg = Config(data_root) if data_root else Config()
+@click.group()
+def sync() -> None:
+    """Backend watchdog control plane (start / stop / status)."""
+
+
+def _call(method: str, path: str, json_out: bool, fmt, body: dict | None = None,
+          params: dict | None = None) -> dict | None:
+    cfg = Config()
     try:
-        adapter = get_adapter(source)
-    except ValueError as e:
+        result = api(method, path, cfg, json_body=body, params=params)
+    except ApiError as e:
+        if json_out:
+            emit_json_err(e.payload)
+        else:
+            emit_md_err(fmt_error(extract_error_message(e.payload)))
+        sys.exit(1)
+    except Exception as e:
         if json_out:
             emit_json_err(str(e))
         else:
-            emit_md_err(fmt_error(str(e)))
+            emit_md_err(fmt_error(f"cannot reach server: {e}"))
         sys.exit(1)
-
-    counts = {"imported": 0, "appended": 0, "skipped": 0, "partial_append": 0}
-    errors: list[dict] = []
-
-    root_path = Path(platform_root) if platform_root else None
-    for payload in adapter.iter_sessions(root_path):
-        try:
-            result = api("POST", "/v2/sessions", cfg, json_body=payload, timeout=60.0)
-            action = result.get("action")
-            if action in counts:
-                counts[action] += 1
-        except ApiError as e:
-            errors.append({"session_id": payload.get("session_id"), "error": e.payload})
-
-    summary = {"status": "ok", **counts, "errors": errors}
     if json_out:
-        emit_json(summary)
+        emit_json(result)
     else:
-        # The Markdown formatter expects a flat 'errors' count; keep both views.
-        md_payload = {**summary, "errors": len(errors)}
-        emit_md(fmt_sync(md_payload))
-        for err in errors:
-            emit_md_err(fmt_error(
-                f"{err.get('session_id', '?')}: {extract_error_message(err.get('error'))}"
-            ))
+        emit_md(fmt(result))
+    return result
+
+
+@sync.command("start")
+@click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON")
+def sync_start(json_out: bool) -> None:
+    """Start the backend watcher (runs an initial backfill, then watches)."""
+    _call("POST", "/v3/sync/start", json_out, fmt_sync_start)
+
+
+@sync.command("stop")
+@click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON")
+def sync_stop(json_out: bool) -> None:
+    """Stop the backend watcher (already-ingested data is untouched)."""
+    _call("POST", "/v3/sync/stop", json_out, fmt_sync_stop)
+
+
+@sync.command("status")
+@click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON")
+@click.option("--limit", type=int, default=5,
+              help="Recent-events tail size (default 5)")
+def sync_status(json_out: bool, limit: int) -> None:
+    """Show watcher state + accumulated totals + recent events."""
+    _call("GET", "/v3/sync/status", json_out, fmt_sync_status,
+          params={"limit": str(limit)})

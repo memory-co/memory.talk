@@ -50,3 +50,5 @@ codes
 
 # Git worktrees
 .worktrees/
+
+*.bak

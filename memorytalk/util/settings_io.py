@@ -1,10 +1,9 @@
 """Generic JSON dict I/O + diff used by the setup wizard.
 
-Three functions, no domain knowledge — every helper here treats the
-file as "an arbitrary JSON dict" and never knows or asserts anything
-about the settings schema. Lifted out of ``cli/setup/helpers.py`` to
-the shared util package so any other CLI that wants atomic-write JSON
-or recursive dict diff can reuse them without depending on setup.
+Three helpers, no domain knowledge — every function treats the file as
+"an arbitrary JSON dict" and never asserts anything about the settings
+schema. Reusable by any CLI that wants atomic-write JSON or recursive
+dict diff.
 """
 from __future__ import annotations
 import json
@@ -15,7 +14,7 @@ from pathlib import Path
 def read_settings_raw(path: Path) -> dict | None:
     """Return the raw JSON content of ``path``, or None if missing/empty.
 
-    None means "no existing config" — used by setup to decide between
+    None means "no existing config" — used by setup to choose between
     first-install and reconfigure paths. A corrupt file raises
     ``ValueError`` (caller decides whether to back it up + re-init).
     """

@@ -1,63 +1,34 @@
-"""v2 Pydantic schemas — API wire format.
-
-Split by endpoint group to mirror api/ and service/. Shared types
-(ContentBlock, SessionRound, CardRound, LinkRef) live in shared.py.
-Handlers can import from the submodule or from this package root.
-"""
+"""Pydantic schemas — request / response shapes for the v3 HTTP API."""
+from memorytalk.schemas.card import Card, CardStats, SourceCard, CardRound
 from memorytalk.schemas.cards import (
-    CardRoundsItem, CreateCardRequest, CreateCardResponse,
+    CardRoundRef, CreateCardRequest, CreateCardResponse,
 )
-from memorytalk.schemas.links import CreateLinkRequest, CreateLinkResponse
-from memorytalk.schemas.log import EventEntry, LogRequest, LogResponse
-from memorytalk.schemas.rebuild import RebuildResponse
-from memorytalk.schemas.recall import (
-    RecallHit, RecallRequest, RecallResponse,
-)
-from memorytalk.schemas.review import (
-    ReviewDetailResponse, ReviewHit, ReviewListResponse, ReviewRound,
-    ReviewSessionSummary,
-)
+from memorytalk.schemas.read import ReadRequest, ReadResponse
+from memorytalk.schemas.recall import RecalledCard, RecallRequest, RecallResponse
+from memorytalk.schemas.review import Review
+from memorytalk.schemas.reviews import CreateReviewRequest, CreateReviewResponse
 from memorytalk.schemas.search import (
-    CardHit, SearchBucket, SearchRequest, SearchResponse, SessionHit,
+    CardResult, SearchRequest, SearchResponse, SessionHit, SessionResult,
 )
-from memorytalk.schemas.sessions import (
-    IngestRound, IngestSessionRequest, IngestSessionResponse,
-)
-from memorytalk.schemas.shared import (
-    CardRound, ContentBlock, LinkRef, LinkTargetType, ObjectKind, SessionRound,
+from memorytalk.schemas.session import (
+    ContentBlock, IngestSessionRequest, IngestSessionResponse,
+    Round, RoundInput, Session,
 )
 from memorytalk.schemas.status import StatusResponse
-from memorytalk.schemas.tags import TagPair, TagsAddRequest, TagsResponse
-from memorytalk.schemas.view import (
-    CardView, SessionView, ViewRequest, ViewResponse,
+from memorytalk.schemas.sync import (
+    SyncStartResponse, SyncStatusResponse, SyncStopResponse,
 )
 
 
 __all__ = [
-    # shared
-    "LinkTargetType", "ObjectKind",
-    "ContentBlock", "SessionRound", "CardRound", "LinkRef",
-    # sessions
-    "IngestRound", "IngestSessionRequest", "IngestSessionResponse",
-    # cards
-    "CardRoundsItem", "CreateCardRequest", "CreateCardResponse",
-    # links
-    "CreateLinkRequest", "CreateLinkResponse",
-    # tags
-    "TagPair", "TagsAddRequest", "TagsResponse",
-    # search
-    "SearchRequest", "CardHit", "SessionHit", "SearchBucket", "SearchResponse",
-    # recall
-    "RecallRequest", "RecallHit", "RecallResponse",
-    # review
-    "ReviewSessionSummary", "ReviewListResponse",
-    "ReviewHit", "ReviewRound", "ReviewDetailResponse",
-    # view
-    "ViewRequest", "CardView", "SessionView", "ViewResponse",
-    # log
-    "LogRequest", "EventEntry", "LogResponse",
-    # status
+    "Card", "CardStats", "SourceCard", "CardRound",
+    "CardRoundRef", "CreateCardRequest", "CreateCardResponse",
+    "ReadRequest", "ReadResponse",
+    "RecalledCard", "RecallRequest", "RecallResponse",
+    "Review", "CreateReviewRequest", "CreateReviewResponse",
+    "CardResult", "SearchRequest", "SearchResponse", "SessionHit", "SessionResult",
+    "ContentBlock", "IngestSessionRequest", "IngestSessionResponse",
+    "Round", "RoundInput", "Session",
     "StatusResponse",
-    # rebuild
-    "RebuildResponse",
+    "SyncStartResponse", "SyncStatusResponse", "SyncStopResponse",
 ]

@@ -1,14 +1,22 @@
-"""SessionStore — session + rounds persistence (file layer + SQLite).
+"""SessionStore — session metadata (SQL) + rounds (jsonl + small SQL index).
 
-File layout (under storage root):
-  sessions/<source>/<bucket>/<session_id>/meta.json
-  sessions/<source>/<bucket>/<session_id>/rounds.jsonl
-  sessions/<source>/<bucket>/<session_id>/events.jsonl
+Storage split (v3):
 
-SQL: ``sessions`` and ``rounds`` tables.
+  sessions/<source>/<bucket>/<session_id>/meta.json      ← session metadata mirror
+  sessions/<source>/<bucket>/<session_id>/rounds.jsonl   ← full rounds (source of truth)
+  sessions/<source>/<bucket>/<session_id>/events.jsonl   ← lifecycle events
+
+  SQLite ``sessions``       ← queryable session metadata (cwd / source / counts)
+  SQLite ``rounds_index``   ← {round_id, idx, content_hash} only — ingest-merge key
+  SQLite ``ingest_log``     ← sha256 + last_ingest, one per session
+
+  LanceDB ``rounds``        ← per-round {session_id, idx, role, text, vector}
+                              for FTS + semantic search (added by IngestService;
+                              this module doesn't touch it)
 """
 from __future__ import annotations
 import json
+from pathlib import Path
 from typing import Iterable
 
 import aiosqlite
@@ -23,7 +31,7 @@ class SessionStore:
         self.conn = conn
         self.storage = storage
 
-    # ---------- file-layer keys ----------
+    # ────────── file-layer keys ──────────
 
     @staticmethod
     def _bucket(session_id: str) -> str:
@@ -39,7 +47,7 @@ class SessionStore:
     def _events_key(self, source: str, session_id: str) -> str:
         return f"{self.PREFIX}/{source}/{self._bucket(session_id)}/{session_id}/events.jsonl"
 
-    # ---------- file-layer ops ----------
+    # ────────── file-layer ops ──────────
 
     async def write_meta(self, source: str, session_id: str, meta: dict) -> None:
         await self.storage.write_text(
@@ -56,6 +64,8 @@ class SessionStore:
         await self.storage.append_text(self._rounds_key(source, session_id), body)
 
     async def read_rounds_file(self, source: str, session_id: str) -> list[dict]:
+        """Source of truth for rounds. Returns the list in idx order
+        (which equals jsonl append order, since we never rewrite the file)."""
         text = await self.storage.read_text(self._rounds_key(source, session_id))
         if not text:
             return []
@@ -67,29 +77,13 @@ class SessionStore:
             json.dumps(event, ensure_ascii=False) + "\n",
         )
 
-    async def read_events(self, source: str, session_id: str) -> list[dict]:
-        text = await self.storage.read_text(self._events_key(source, session_id))
-        if not text:
-            return []
-        return [json.loads(line) for line in text.splitlines() if line.strip()]
-
-    async def iter_keys(self) -> list[tuple[str, str]]:
-        """Returns every (source, session_id) pair found on disk."""
-        keys = await self.storage.list_subkeys(self.PREFIX)
-        seen: set[tuple[str, str]] = set()
-        for k in keys:
-            parts = k.split("/")
-            # sessions/<source>/<bucket>/<session_id>/<filename>
-            if len(parts) >= 5 and parts[0] == self.PREFIX:
-                seen.add((parts[1], parts[3]))
-        return sorted(seen)
-
-    # ---------- sessions table ----------
+    # ────────── sessions table ──────────
 
     async def upsert(
         self,
         session_id: str,
         source: str,
+        cwd: str | None,
         created_at: str,
         synced_at: str,
         metadata: dict,
@@ -97,17 +91,16 @@ class SessionStore:
     ) -> None:
         await self.conn.execute(
             "INSERT OR REPLACE INTO sessions "
-            "(session_id, source, created_at, synced_at, metadata, round_count) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (session_id, source, created_at, synced_at,
-             json.dumps(metadata, ensure_ascii=False),
-             round_count),
+            "(session_id, source, cwd, created_at, synced_at, metadata, round_count) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (session_id, source, cwd, created_at, synced_at,
+             json.dumps(metadata, ensure_ascii=False), round_count),
         )
         await self.conn.commit()
 
     async def get(self, session_id: str) -> dict | None:
         async with self.conn.execute(
-            "SELECT * FROM sessions WHERE session_id = ?", (session_id,)
+            "SELECT * FROM sessions WHERE session_id = ?", (session_id,),
         ) as cursor:
             row = await cursor.fetchone()
         return self._row(row) if row else None
@@ -129,102 +122,57 @@ class SessionStore:
         return {
             "session_id": row["session_id"],
             "source": row["source"],
+            "cwd": row["cwd"],
             "created_at": row["created_at"],
             "synced_at": row["synced_at"],
             "metadata": json.loads(row["metadata"] or "{}"),
             "round_count": row["round_count"],
         }
 
-    # ---------- rounds table (session-scoped) ----------
+    # ────────── rounds_index (small SQL index for ingest merge) ──────────
 
-    async def upsert_rounds(self, session_id: str, rounds: Iterable[dict]) -> None:
-        rows = []
-        for r in rounds:
-            rows.append((
-                session_id, r["idx"], r["round_id"], r.get("parent_id"),
-                r.get("timestamp"), r.get("speaker"), r.get("role"),
-                json.dumps(r.get("content", []), ensure_ascii=False),
-                1 if r.get("is_sidechain") else 0,
-                r.get("cwd"),
-                json.dumps(r["usage"], ensure_ascii=False) if r.get("usage") is not None else None,
-            ))
-        await self.conn.executemany(
-            "INSERT OR REPLACE INTO rounds "
-            "(session_id, idx, round_id, parent_id, timestamp, speaker, role, content, is_sidechain, cwd, usage) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            rows,
+    async def upsert_round_index(
+        self, session_id: str, round_id: str, idx: int, content_hash: str,
+    ) -> None:
+        await self.conn.execute(
+            "INSERT OR REPLACE INTO rounds_index "
+            "(session_id, round_id, idx, content_hash) VALUES (?, ?, ?, ?)",
+            (session_id, round_id, idx, content_hash),
         )
         await self.conn.commit()
 
-    async def get_round_by_round_id(self, session_id: str, round_id: str) -> dict | None:
-        async with self.conn.execute(
-            "SELECT * FROM rounds WHERE session_id = ? AND round_id = ?",
-            (session_id, round_id),
-        ) as cursor:
-            row = await cursor.fetchone()
-        return self._round_row(row) if row else None
+    async def upsert_rounds_index(self, rows: Iterable[tuple[str, str, int, str]]) -> None:
+        """Batch upsert of (session_id, round_id, idx, content_hash)."""
+        await self.conn.executemany(
+            "INSERT OR REPLACE INTO rounds_index "
+            "(session_id, round_id, idx, content_hash) VALUES (?, ?, ?, ?)",
+            list(rows),
+        )
+        await self.conn.commit()
 
-    async def get_round(self, session_id: str, idx: int) -> dict | None:
+    async def get_round_index_map(self, session_id: str) -> dict[str, tuple[int, str]]:
+        """Return ``{round_id: (idx, content_hash)}`` for the session."""
         async with self.conn.execute(
-            "SELECT * FROM rounds WHERE session_id = ? AND idx = ?", (session_id, idx),
-        ) as cursor:
-            row = await cursor.fetchone()
-        return self._round_row(row) if row else None
-
-    async def list_rounds(self, session_id: str) -> list[dict]:
-        async with self.conn.execute(
-            "SELECT * FROM rounds WHERE session_id = ? ORDER BY idx ASC", (session_id,)
+            "SELECT round_id, idx, content_hash FROM rounds_index "
+            "WHERE session_id = ?",
+            (session_id,),
         ) as cursor:
             rows = await cursor.fetchall()
-        return [self._round_row(r) for r in rows]
+        return {r["round_id"]: (r["idx"], r["content_hash"]) for r in rows}
 
-    async def max_round_idx(self, session_id: str) -> int:
+    # ────────── ingest_log ──────────
+
+    async def get_ingest(self, session_id: str) -> dict | None:
         async with self.conn.execute(
-            "SELECT COALESCE(MAX(idx), 0) FROM rounds WHERE session_id = ?", (session_id,)
+            "SELECT sha256, last_ingest FROM ingest_log WHERE session_id = ?", (session_id,),
         ) as cursor:
             row = await cursor.fetchone()
-        return row[0]
+        return {"sha256": row[0], "last_ingest": row[1]} if row else None
 
-    @staticmethod
-    def _round_row(row) -> dict:
-        return {
-            "session_id": row["session_id"],
-            "idx": row["idx"],
-            "round_id": row["round_id"],
-            "parent_id": row["parent_id"],
-            "timestamp": row["timestamp"],
-            "speaker": row["speaker"],
-            "role": row["role"],
-            "content": json.loads(row["content"] or "[]"),
-            "is_sidechain": bool(row["is_sidechain"]),
-            "cwd": row["cwd"],
-            "usage": json.loads(row["usage"]) if row["usage"] else None,
-        }
-
-    # ---------- search helpers ----------
-
-    async def dsl_whitelist(self, where_sql: str, params: list) -> list[str]:
-        """Evaluate a DSL-compiled WHERE fragment against sessions; return matching session_ids."""
-        async with self.conn.execute(
-            f"SELECT session_id FROM sessions WHERE {where_sql}", params,
-        ) as cursor:
-            rows = await cursor.fetchall()
-        return [r[0] for r in rows]
-
-    async def metadata_filtered(self, whitelist: list[str] | None, top_k: int) -> list[dict]:
-        """Empty-query path: list sessions sorted by created_at DESC, optionally whitelisted."""
-        sql = "SELECT session_id, source, created_at FROM sessions"
-        params: list = []
-        if whitelist is not None:
-            placeholders = ",".join("?" * len(whitelist)) or "NULL"
-            sql += f" WHERE session_id IN ({placeholders})"
-            params.extend(whitelist)
-        sql += " ORDER BY created_at DESC LIMIT ?"
-        params.append(top_k)
-        async with self.conn.execute(sql, params) as cursor:
-            rows = await cursor.fetchall()
-        return [
-            {"session_id": r["session_id"], "source": r["source"],
-             "created_at": r["created_at"]}
-            for r in rows
-        ]
+    async def upsert_ingest(self, session_id: str, sha256: str, last_ingest: str) -> None:
+        await self.conn.execute(
+            "INSERT OR REPLACE INTO ingest_log (session_id, sha256, last_ingest) "
+            "VALUES (?, ?, ?)",
+            (session_id, sha256, last_ingest),
+        )
+        await self.conn.commit()

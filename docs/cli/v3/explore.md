@@ -44,7 +44,9 @@ memory-talk explore
 └── resume <session_id>                 # 续接某条 explore 记录(交互式)
 ```
 
-适用的命令支持 `--data-root` / `--json`。**所有读路径都走 backend HTTP**,所有 namespace 判断都走 `metadata.cwd` 前缀匹配,不直接读 `~/.claude/projects/*.jsonl`。
+适用的命令支持 `--json`。**所有读路径都走 backend HTTP**,所有 namespace 判断都走 `metadata.cwd` 前缀匹配,不直接读 `~/.claude/projects/*.jsonl`。
+
+> data root **固定在 `~/.memory-talk`**(v3 不暴露 `--data-root` 参数)。后续如需配置,会在 [setup](setup.md) 里加入,其它命令不动。
 
 ### explore pending
 

@@ -1,12 +1,13 @@
 """SQLiteStore — owns the aiosqlite connection + per-noun stores.
 
-Each per-noun store now does BOTH file ops (via the injected Storage) and
-SQL ops (via aiosqlite). Services access them as:
-  await db.sessions.write_meta(source, sid, meta)   # file
-  await db.sessions.upsert(...)                      # SQL
-  await db.cards.write_doc(card)                    # file
-  await db.cards.insert(...)                         # SQL
-  await db.search_log.record(rec, now=...)          # file + SQL combined
+Each per-noun store does BOTH file ops (via the injected Storage) and
+SQL ops (via aiosqlite). Services access them as::
+
+    await db.sessions.write_meta(source, sid, meta)   # file
+    await db.sessions.upsert(...)                      # SQL
+    await db.cards.write_doc(card)                    # file
+    await db.cards.insert(...)                         # SQL
+    await db.reviews.insert(...)                      # SQL
 """
 from __future__ import annotations
 from pathlib import Path
@@ -15,12 +16,11 @@ import aiosqlite
 
 from memorytalk.provider.storage import Storage
 from memorytalk.repository.cards import CardStore
-from memorytalk.repository.links import LinkStore
 from memorytalk.repository.recall import RecallStore
+from memorytalk.repository.reviews import ReviewStore
 from memorytalk.repository.schema import init_schema
 from memorytalk.repository.search_log import SearchLogStore
 from memorytalk.repository.sessions import SessionStore
-from memorytalk.repository.tags import SubjectTagsRepo
 
 
 class SQLiteStore:
@@ -30,10 +30,9 @@ class SQLiteStore:
         self.storage = storage
         self.sessions = SessionStore(conn, storage)
         self.cards = CardStore(conn, storage)
-        self.links = LinkStore(conn, storage)
-        self.search_log = SearchLogStore(conn, storage)
+        self.reviews = ReviewStore(conn)
+        self.search_log = SearchLogStore(conn)
         self.recall = RecallStore(conn)
-        self.tags = SubjectTagsRepo(conn)
 
     @classmethod
     async def create(cls, db_path: Path, storage: Storage) -> "SQLiteStore":
@@ -41,14 +40,11 @@ class SQLiteStore:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         conn = await aiosqlite.connect(str(db_path))
         conn.row_factory = aiosqlite.Row
+        # PRAGMA foreign_keys=ON gates the FOREIGN KEY clauses in our schema.
+        # SQLite default-off; we want referential integrity at the boundary.
+        await conn.execute("PRAGMA foreign_keys = ON")
         await init_schema(conn)
         return cls(conn, db_path, storage)
 
     async def close(self) -> None:
         await self.conn.close()
-
-    async def clear_all(self) -> None:
-        """Used by /v2/rebuild — drop all v2 table contents."""
-        for t in ("tags", "recall_hit", "recall", "search_log", "links", "cards", "rounds", "sessions"):
-            await self.conn.execute(f"DELETE FROM {t}")
-        await self.conn.commit()

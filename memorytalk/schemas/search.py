@@ -1,45 +1,55 @@
-"""POST /v2/search request/response schemas."""
+"""POST /v3/search — request + response."""
 from __future__ import annotations
-from typing import Any
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from memorytalk.schemas.shared import LinkRef
-from memorytalk.schemas.tags import TagPair
+from memorytalk.schemas.card import CardStats
 
 
 class SearchRequest(BaseModel):
-    query: str
+    query: str = ""
     where: str | None = None
-    top_k: int | None = None
+    top_k: int | None = None  # falls back to settings.search.default_top_k
 
 
-class CardHit(BaseModel):
-    card_id: str
-    rank: int
-    score: float
-    summary: str
-    snippets: list[str] = Field(default_factory=list)
-    links: list[LinkRef] = Field(default_factory=list)
+class _SessionHitContext(BaseModel):
+    index: int
+    role: str
+    text: str
 
 
 class SessionHit(BaseModel):
-    session_id: str
+    index: int
+    role: str
+    text: str
+    score: float
+    context_before: _SessionHitContext | None = None
+    context_after: _SessionHitContext | None = None
+
+
+class CardResult(BaseModel):
+    type: Literal["card"] = "card"
     rank: int
     score: float
+    card_id: str
+    insight: str
+    stats: CardStats = Field(default_factory=CardStats)
+
+
+class SessionResult(BaseModel):
+    type: Literal["session"] = "session"
+    rank: int
+    score: float
+    session_id: str
     source: str
-    tags: list[TagPair] = Field(default_factory=list)
-    snippets: list[str] = Field(default_factory=list)
-    links: list[LinkRef] = Field(default_factory=list)
-
-
-class SearchBucket(BaseModel):
-    count: int
-    results: list[Any]
+    hit_count: int
+    hits_shown: int
+    hits: list[SessionHit] = Field(default_factory=list)
 
 
 class SearchResponse(BaseModel):
     search_id: str
     query: str
-    cards: SearchBucket
-    sessions: SearchBucket
+    count: int
+    results: list[CardResult | SessionResult] = Field(default_factory=list)

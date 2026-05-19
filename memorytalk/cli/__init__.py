@@ -1,24 +1,27 @@
-"""memory-talk v2 CLI root."""
+"""memory-talk v3 CLI root.
+
+Each command is in its own submodule and registered here. Missing
+modules are skipped silently so partial-build environments still expose
+``--help`` (useful during incremental implementation).
+"""
 from __future__ import annotations
 import click
 
-from memorytalk.cli.server import server
-
 
 @click.group()
+@click.version_option(message="%(version)s")
 def main() -> None:
-    """memory-talk v2."""
+    """memory-talk v3."""
 
 
-main.add_command(server)
+# Register subcommands. Module name = command name (with one exception
+# noted inline). Missing modules are ignored so an in-flight v3 build
+# still has a usable `--help`.
+_COMMANDS = ("server", "read", "setup", "sync", "search", "card", "review", "recall")
 
-# Other command groups are attached as they're implemented.
-for _name in ("card", "tag", "link", "sync", "search", "recall", "review", "view", "log", "rebuild", "setup", "filter", "explore"):
+for _name in _COMMANDS:
     try:
         _mod = __import__(f"memorytalk.cli.{_name}", fromlist=[_name])
-        # `filter` shadows a builtin → the command object is named `filter_`
-        # in the module; everything else uses the same name as the module.
-        attr = "filter_" if _name == "filter" else _name
-        main.add_command(getattr(_mod, attr))
+        main.add_command(getattr(_mod, _name))
     except ImportError:
         pass

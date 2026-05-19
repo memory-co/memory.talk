@@ -1,17 +1,29 @@
-def test_v2_status_ok(app_client, tmp_data_root):
-    resp = app_client.get("/v2/status")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["status"] == "running"
-    assert data["embedding_provider"] == "dummy"
-    assert data["vector_provider"] == "lancedb"
-    assert data["data_root"] == str(tmp_data_root)
-    assert data["sessions_total"] == 0
-    assert data["cards_total"] == 0
-    assert data["links_total"] == 0
-    assert data["searches_total"] == 0
+"""GET /v3/status + CLI module-import smoke."""
+from __future__ import annotations
+import pytest
+
+
+@pytest.mark.asyncio
+async def test_status_running(client):
+    r = await client.get("/v3/status")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "running"
+    assert body["sessions_total"] == 0
+    assert body["cards_total"] == 0
+    assert body["reviews_total"] == 0
+    assert body["embedding_provider"] == "dummy"
+    assert body["sync_enabled"] is False
 
 
 def test_cli_main_imports():
-    from memorytalk.cli import main
-    assert main is not None
+    """Smoke: importing every CLI submodule and the main group succeeds.
+
+    Equivalent to v2's ``test_cli_main_imports`` — catches missing modules
+    or top-level syntax errors that would only otherwise show up when a
+    user actually runs the command."""
+    from memorytalk.cli import main  # registration walks all submodules
+    # Force-instantiate each subcommand so click decorators run.
+    cmd_names = list(main.commands.keys())
+    assert {"server", "read", "setup", "sync", "search", "card",
+            "review", "recall"}.issubset(set(cmd_names))

@@ -14,7 +14,7 @@
 | 去重 | 无 | 同一 session_id 已经召回过的卡**不再返回** |
 
 ```bash
-memory-talk recall <session_id> <prompt> [--top-k N] [--data-root PATH] [--json]
+memory-talk recall <session_id> <prompt> [--top-k N] [--json]
 ```
 
 | 参数 | 默认 | 说明 |

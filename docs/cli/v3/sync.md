@@ -19,7 +19,7 @@ adapter session 目录 ── 文件事件 →   watchdog Observer ─→ 防抖
 - **`sync start`**:server 起一个 watchdog Observer,挂到每个已注册 adapter 暴露的根目录。**先做一次全量 discovery 补齐**(等价于 v2 跑一次 `sync`),然后切到事件驱动。
 - **文件 create / modify** → 防抖 200ms 合并同一文件的连续写 → 调 adapter.convert → 走 [Append-only 策略](#append-only-策略) 落盘 → 在 `ingest_log` 写事件。
 - **`sync stop`**:摘掉 Observer,已经落盘的数据不动。
-- **状态持久化**:`sync_enabled` flag 持久化到 `<data_root>/sync_state.json`。`server start` 时若 flag 为 true 自动 resume,直到显式 `sync stop` —— 用户只需要在首次安装后跑一次 `sync start`。
+- **状态持久化**:`sync_enabled` flag 持久化到 `~/.memory-talk/sync_state.json`。`server start` 时若 flag 为 true 自动 resume,直到显式 `sync stop` —— 用户只需要在首次安装后跑一次 `sync start`。
 
 > v2 的阻塞式 `memory-talk sync`(一次扫一次导)在 v3 **下线**。需要"手动触发一次全量"时,跑 `sync stop && sync start` 即可,start 自带初始全量。
 
@@ -28,7 +28,7 @@ adapter session 目录 ── 文件事件 →   watchdog Observer ─→ 防抖
 启动后端 watcher。
 
 ```bash
-memory-talk sync start [--data-root PATH] [--json]
+memory-talk sync start [--json]
 ```
 
 ### Markdown(默认)
@@ -74,7 +74,7 @@ backfill 那一段就是首次启动时的初始全量结果;**已在运行**时
 停止后端 watcher。已落盘的 session / card 不动。
 
 ```bash
-memory-talk sync stop [--data-root PATH] [--json]
+memory-talk sync stop [--json]
 ```
 
 ### Markdown
@@ -110,7 +110,7 @@ memory-talk sync stop [--data-root PATH] [--json]
 看 watcher 状态 + 累计统计 + 最近事件。
 
 ```bash
-memory-talk sync status [--data-root PATH] [--json] [--limit N]
+memory-talk sync status [--json] [--limit N]
 ```
 
 | 参数 | 默认 | 说明 |

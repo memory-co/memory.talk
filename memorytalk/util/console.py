@@ -1,26 +1,19 @@
 """Wizard / CLI console: rich output channel + questionary-backed prompts.
 
-Two concerns live here:
+Two concerns:
 
 1. **Output channel.** ``err_console`` is the single rich Console writing
    to stderr; ``section()`` prints the ``── Title ──`` banner that groups
-   prompts. Wizard chatter goes here so the final markdown summary on
+   prompts. Wizard chatter goes here so the final Markdown summary on
    stdout stays clean.
 
 2. **Input prompts.** ``select / text / confirm`` wrap questionary so the
    wizard has one place to swap libraries and tests have one place to
-   monkey-patch. ``Option`` separates a choice's stored value from its
-   displayed label/description (used by the wizard's "common values +
-   Other..." pattern).
+   monkey-patch.
 
-Non-TTY fallback (piped stdin, e.g. the real-subprocess bootstrap test):
-questionary needs prompt_toolkit which needs a real terminal. When
-stdin/stdout aren't both ttys, ``select / text / confirm`` fall back to
-plain numbered prompts echoed via ``err_console`` and read from stdin.
-
-Wizard / step modules import as ``from memorytalk.cli import console``
-and call ``console.select(...)`` etc. — that lets tests rebind names on
-this module and have all callers see the patched versions.
+Non-TTY fallback: questionary needs prompt_toolkit which needs a real
+terminal. When stdin/stdout aren't both ttys, the helpers fall back to
+plain numbered prompts via ``err_console`` + stdin.
 """
 from __future__ import annotations
 import sys
@@ -32,23 +25,12 @@ from questionary import Choice
 from rich.console import Console
 
 
-# --- output channel ---
-
 err_console = Console(file=sys.stderr)
 
 
 def section(title: str) -> None:
-    """Print a category banner to stderr to group related prompts.
-
-    Used by the wizard / step modules so the user always knows which
-    bucket the next few questions belong to (Embedding / Storage /
-    Server / PATH takeover). Goes to stderr so it doesn't pollute the
-    final Markdown summary on stdout.
-    """
+    """Print a category banner to stderr to group related prompts."""
     err_console.print(f"\n[bold cyan]── {title} ──[/bold cyan]")
-
-
-# --- input prompts ---
 
 
 @dataclass
@@ -71,12 +53,7 @@ def _is_interactive() -> bool:
 
 
 def select(label: str, options: list[Option], default: str | None = None) -> str:
-    """Arrow-key menu. Returns the chosen Option's ``value``.
-
-    Non-interactive fallback: prints a numbered list and reads a line.
-    Empty input (when a default is given) → default. Raises ``ValueError``
-    on unrecognized input. EOF → ``KeyboardInterrupt``.
-    """
+    """Arrow-key menu. Returns the chosen Option's ``value``."""
     if _is_interactive():
         choices = [Choice(title=o.display, value=o.value) for o in options]
         default_choice = next((c for c in choices if c.value == default), None)
@@ -112,10 +89,7 @@ def text(
     default: str = "",
     validate: Callable[[str], bool | str] | None = None,
 ) -> str:
-    """Free-text prompt. Empty input falls back to ``default``.
-
-    ``validate`` may return ``True`` (ok) or an error message string.
-    """
+    """Free-text prompt. Empty input falls back to ``default``."""
     if _is_interactive():
         answer = questionary.text(label, default=default, validate=validate).ask()
         if answer is None:
@@ -136,9 +110,7 @@ def text(
 
 
 def confirm(label: str, default: bool = True) -> bool:
-    """y/n prompt — kept only for cases where the action is fully
-    self-described in the label. For anything where description per
-    option helps, use ``select`` with yes/no Options instead."""
+    """y/n prompt."""
     if _is_interactive():
         answer = questionary.confirm(label, default=default).ask()
         if answer is None:

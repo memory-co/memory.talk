@@ -1,21 +1,19 @@
 """Storage abstraction — primitives only, no domain knowledge.
 
-The point of this layer is so that swapping local-fs for S3 (or any other
-backend) doesn't require touching domain code. Domain operations like
-"write a session's meta.json" live in `repository/<kind>.py` and call
-into Storage with full keys.
+Swapping local-fs for S3 (or another backend) should not require touching
+domain code. Domain operations like "write a session's meta.json" live
+in ``repository/<kind>.py`` and call into Storage with full keys.
 
-Storage primitives:
-- ``write_text(key, content)``  atomic put
-- ``read_text(key)``            get; None if missing
-- ``append_text(key, content)`` append-only — caller pre-formats lines
-- ``exists(key)``               head
-- ``delete(key)``               best-effort; missing is OK
-- ``list_subkeys(prefix)``      recursive list of file keys under prefix
+Primitives:
+- ``write_text(key, content)`` — atomic put
+- ``read_text(key)``           — get; None if missing
+- ``append_text(key, content)``— append-only (caller pre-formats lines)
+- ``exists(key)``              — head
+- ``delete(key)``              — best-effort; missing is OK
+- ``list_subkeys(prefix)``     — recursive list of file keys under prefix
 
 Keys are forward-slash strings rooted at the data root, e.g.
-"sessions/claude-code/la/sess_lancedb/meta.json". The local impl maps
-them onto disk; an S3 impl would use them as object keys directly.
+``sessions/claude-code/la/sess_lancedb/meta.json``.
 """
 from __future__ import annotations
 from pathlib import Path
@@ -37,7 +35,7 @@ class Storage(Protocol):
 class LocalStorage:
     """Local-filesystem implementation of Storage.
 
-    Atomic writes go via temp + rename. Appends use O_APPEND. List scans
+    Atomic writes go via tmp + rename. Appends use O_APPEND. List scans
     the prefix subtree and returns sorted relative file keys.
     """
 

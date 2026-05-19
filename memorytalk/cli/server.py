@@ -1,8 +1,8 @@
 """CLI: server start / stop / status [--json].
 
-The lifecycle primitives (`start_server_proc` / `stop_server_proc` /
-`pid_alive`) are exported separately so other commands (notably
-`memory-talk setup`) can reuse them without subprocess-ing themselves.
+Lifecycle primitives (``start_server_proc`` / ``stop_server_proc`` /
+``pid_alive``) are exported separately so other commands (notably
+``memory-talk setup``) can reuse them without subprocess-ing themselves.
 """
 from __future__ import annotations
 import os
@@ -13,13 +13,10 @@ import time
 
 import click
 
-from memorytalk.cli._format import (
-    fmt_server_start, fmt_server_stop, fmt_status,
-)
-from memorytalk.cli import _http
-from memorytalk.cli._http import api
+from memorytalk.cli._format import fmt_server_start, fmt_server_stop, fmt_status
+from memorytalk.cli._http import ApiError, api
 from memorytalk.cli._render import emit_json, emit_md
-from memorytalk.config import Config, ConfigValidationError
+from memorytalk.config import Config
 
 
 @click.group()
@@ -38,9 +35,9 @@ def pid_alive(pid: int) -> bool:
 def start_server_proc(cfg: Config) -> dict:
     """Start the API server as a daemon. Returns one of:
 
-      {"status": "started",         "pid": <int>, "port": <int>}
-      {"status": "already_running", "pid": <int>, "port": <int>}
-      {"status": "failed",          "exit_code": <int>, "error": <str>}
+        {"status": "started",         "pid": int, "port": int}
+        {"status": "already_running", "pid": int, "port": int}
+        {"status": "failed",          "exit_code": int, "error": str}
     """
     cfg.ensure_dirs()
     port = cfg.settings.server.port
@@ -82,11 +79,6 @@ def start_server_proc(cfg: Config) -> dict:
 
 
 def stop_server_proc(cfg: Config) -> dict:
-    """SIGTERM the daemon and clean up the pid file. Returns:
-
-      {"status": "stopped",     "pid": <int>}
-      {"status": "not_running"}
-    """
     if not cfg.pid_path.exists():
         return {"status": "not_running"}
     try:
@@ -111,10 +103,9 @@ def _emit(payload: dict, json_out: bool, md_formatter) -> None:
 
 
 @server.command("start")
-@click.option("--data-root", type=click.Path(), default=None)
-@click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON instead of Markdown")
-def server_start(data_root: str | None, json_out: bool) -> None:
-    cfg = Config(data_root) if data_root else Config()
+@click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON")
+def server_start(json_out: bool) -> None:
+    cfg = Config()
     payload = start_server_proc(cfg)
     _emit(payload, json_out, fmt_server_start)
     if payload.get("status") == "failed":
@@ -122,66 +113,24 @@ def server_start(data_root: str | None, json_out: bool) -> None:
 
 
 @server.command("stop")
-@click.option("--data-root", type=click.Path(), default=None)
-@click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON instead of Markdown")
-def server_stop(data_root: str | None, json_out: bool) -> None:
-    cfg = Config(data_root) if data_root else Config()
+@click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON")
+def server_stop(json_out: bool) -> None:
+    cfg = Config()
     payload = stop_server_proc(cfg)
     _emit(payload, json_out, fmt_server_stop)
 
 
-def _daemon_alive(cfg: Config) -> bool:
-    """True iff the pid file points at a live process. Pid is the source
-    of truth for 'should be alive'; HTTP is the source of truth for
-    'actually serving' — `server status` checks both."""
-    if not cfg.pid_path.exists():
-        return False
-    try:
-        pid = int(cfg.pid_path.read_text().strip())
-    except ValueError:
-        return False
-    return pid_alive(pid)
-
-
 @server.command("status")
-@click.option("--data-root", type=click.Path(), default=None)
-@click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON instead of Markdown")
-def server_status(data_root: str | None, json_out: bool) -> None:
-    cfg = Config(data_root) if data_root else Config()
-
-    not_running = {
-        "data_root": str(cfg.data_root),
-        "settings_path": str(cfg.settings_path),
-        "status": "not_running",
-    }
-
-    # In tests, ``_make_client`` is monkeypatched to an ASGI transport,
-    # so there is no real daemon and no pid file. Skip the local-process
-    # liveness check on that path — production calls always leave
-    # ``_make_client`` as None.
-    asgi_test_mode = _http._make_client is not None
-    if not asgi_test_mode and not _daemon_alive(cfg):
-        data = not_running
-    else:
-        # Daemon process is alive — try to resolve its port and probe
-        # /v2/status. resolve_port() prefers the port file and only
-        # falls back to settings.json, so a broken settings.json no
-        # longer hides a live server.
-        try:
-            data = api("GET", "/v2/status", cfg, timeout=3.0)
-        except ConfigValidationError as e:
-            # Pid alive, no port file, and settings.json won't render.
-            # Surface the real error rather than lying about the daemon
-            # state — masking as 'not_running' here is what made the
-            # original bug so confusing to diagnose.
-            emit_md(f"# memory-talk · **error**\n\n{e}\n")
-            sys.exit(1)
-        except Exception:
-            # Pid alive but HTTP didn't answer — daemon is wedged or
-            # mid-shutdown. Surface as not_running.
-            data = not_running
-
-    if json_out:
-        emit_json(data)
-    else:
-        emit_md(fmt_status(data))
+@click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON")
+def server_status(json_out: bool) -> None:
+    cfg = Config()
+    try:
+        payload = api("GET", "/v3/status", cfg)
+    except (ApiError, Exception):
+        # Anything that prevents us from reaching the server → not_running
+        payload = {
+            "status": "not_running",
+            "data_root": str(cfg.data_root),
+            "settings_path": str(cfg.settings_path),
+        }
+    _emit(payload, json_out, fmt_status)

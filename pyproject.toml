@@ -1,7 +1,7 @@
 [project]
 name = "memorytalk"
-version = "0.4.2"
-description = "Persistent cross-session memory for AI agents via Talk-Card architecture (v2)"
+version = "0.5.0"
+description = "Persistent cross-session memory for AI agents — Talk-Card architecture with forum-dynamics sinking/floating (v3)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
@@ -21,6 +21,7 @@ dependencies = [
     "aiofiles>=23.0.0",
     "rich>=13.0.0",
     "questionary>=2.0.0",
+    "watchdog>=4.0.0",
 ]
 
 [project.scripts]
@@ -39,12 +40,6 @@ local = [
 [tool.setuptools.packages.find]
 include = ["memorytalk*"]
 exclude = ["memorytalk.tests*"]
-
-[tool.setuptools.package-data]
-# Built-in filters live under memorytalk/filters/<name>/. Each is a plain
-# directory (not a Python package), so we include filter.py + meta.json
-# explicitly so wheels keep them.
-memorytalk = ["filters/*/filter.py", "filters/*/meta.json"]
 
 [build-system]
 requires = ["setuptools>=68.0"]

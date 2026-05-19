@@ -1,7 +1,14 @@
-"""Async LanceDB store for card vectors + FTS, and session FTS.
+"""Async LanceDB store for the v3 search backend.
 
-Only cards have vector embeddings. Sessions are FTS-only.
-Uses lancedb.connect_async for true async I/O throughout.
+Two tables, both indexed for FTS and vector queries:
+
+- ``cards``  — one row per card.   ``{card_id, text, vector}``
+- ``rounds`` — one row per round.  ``{session_id, idx, role, text, vector}``
+
+This is the v3 search source of truth — search.md's per-round recall maps
+directly onto rows of the ``rounds`` table, and the card-level ad slots
+in search results come from the ``cards`` table. SQLite holds zero search
+state; jsonl files hold zero search state.
 """
 from __future__ import annotations
 from pathlib import Path
@@ -11,7 +18,7 @@ import pyarrow as pa
 
 
 def _segment(text: str) -> str:
-    """jieba 预分词,空格连接。同步(jieba.cut 是纯 CPU,亚毫秒级)。"""
+    """jieba 预分词,空格连接(jieba.cut 同步,亚毫秒级)。"""
     import jieba
     return " ".join(jieba.cut(text or ""))
 
@@ -25,7 +32,7 @@ def _in_clause(ids: list[str], column: str) -> Optional[str]:
 
 class LanceStore:
     CARDS = "cards"
-    SESSIONS = "sessions"
+    ROUNDS = "rounds"
 
     def __init__(self, db, data_dir: Path, dim: int):
         self.db = db
@@ -36,9 +43,14 @@ class LanceStore:
             pa.field("text", pa.string()),
             pa.field("vector", pa.list_(pa.float32(), dim)),
         ])
-        self._sessions_schema = pa.schema([
+        # One row per round. ``idx`` is the session-internal index; pair
+        # ``(session_id, idx)`` uniquely identifies a round.
+        self._rounds_schema = pa.schema([
             pa.field("session_id", pa.string()),
+            pa.field("idx", pa.int32()),
+            pa.field("role", pa.string()),
             pa.field("text", pa.string()),
+            pa.field("vector", pa.list_(pa.float32(), dim)),
         ])
 
     @classmethod
@@ -56,12 +68,12 @@ class LanceStore:
             return await self.db.open_table(self.CARDS)
         return await self.db.create_table(self.CARDS, schema=self._cards_schema)
 
-    async def _get_or_create_sessions(self):
-        if await self._exists(self.SESSIONS):
-            return await self.db.open_table(self.SESSIONS)
-        return await self.db.create_table(self.SESSIONS, schema=self._sessions_schema)
+    async def _get_or_create_rounds(self):
+        if await self._exists(self.ROUNDS):
+            return await self.db.open_table(self.ROUNDS)
+        return await self.db.create_table(self.ROUNDS, schema=self._rounds_schema)
 
-    # ---------- cards ----------
+    # ────────── cards ──────────
 
     async def add_card(self, card_id: str, text: str, embedding: list[float]) -> None:
         table = await self._get_or_create_cards()
@@ -75,108 +87,140 @@ class LanceStore:
         expr = " OR ".join(f"card_id = '{cid}'" for cid in card_ids)
         await table.delete(expr)
 
-    async def drop_cards(self) -> None:
-        if await self._exists(self.CARDS):
-            await self.db.drop_table(self.CARDS)
+    # ────────── rounds ──────────
 
-    async def hybrid_search_cards(
-        self,
-        vector: list[float],
-        text: str,
-        whitelist: Optional[list[str]] = None,
-        top_k: int = 10,
-    ) -> list[dict]:
-        """FTS + vector hybrid with RRF reranker. whitelist is card_id pre-filter."""
-        if not await self._exists(self.CARDS):
-            return []
-        from lancedb.rerankers import RRFReranker
+    async def add_rounds(self, rows: list[dict]) -> None:
+        """Bulk insert per-round rows.
 
-        table = await self.db.open_table(self.CARDS)
-        builder = (
-            await table.query()
-            .nearest_to(vector)
-            .nearest_to_text(_segment(text))
-            .rerank(reranker=RRFReranker(K=60))
-            .limit(top_k)
-        ) if False else None  # async builder chain is slightly different
+        Each row: ``{session_id, idx, role, text, vector}`` where ``text``
+        is already segmented (caller's responsibility — typically via
+        ``_segment``) and ``vector`` is a list[float] of length ``dim``.
 
-        # Async LanceDB hybrid search: use the explicit query builder API.
-        q = table.query().nearest_to(vector).nearest_to_text(_segment(text))
-        where_expr = _in_clause(whitelist, "card_id") if whitelist is not None else None
-        if where_expr:
-            q = q.where(where_expr)
-        q = q.rerank(reranker=RRFReranker(K=60)).limit(top_k)
-        return await q.to_list()
-
-    # ---------- sessions ----------
-
-    async def add_session(self, session_id: str, text: str) -> None:
-        table = await self._get_or_create_sessions()
-        await table.delete(f"session_id = '{session_id}'")
-        await table.add([{"session_id": session_id, "text": _segment(text)}])
-
-    async def delete_sessions(self, session_ids: list[str]) -> None:
-        if not await self._exists(self.SESSIONS) or not session_ids:
+        Idempotent on (session_id, idx): callers should ``delete_rounds``
+        first if they want to replace existing rows. The default ingest
+        path doesn't replace existing rounds (v3 is append-only), so this
+        is just ``add``.
+        """
+        if not rows:
             return
-        table = await self.db.open_table(self.SESSIONS)
-        expr = " OR ".join(f"session_id = '{sid}'" for sid in session_ids)
-        await table.delete(expr)
+        table = await self._get_or_create_rounds()
+        await table.add(rows)
 
-    async def drop_sessions(self) -> None:
-        if await self._exists(self.SESSIONS):
-            await self.db.drop_table(self.SESSIONS)
+    async def delete_session_rounds(self, session_id: str) -> None:
+        if not await self._exists(self.ROUNDS):
+            return
+        table = await self.db.open_table(self.ROUNDS)
+        await table.delete(f"session_id = '{session_id}'")
 
-    async def fts_search_sessions(
-        self,
-        text: str,
-        whitelist: Optional[list[str]] = None,
-        top_k: int = 10,
-    ) -> list[dict]:
-        if not await self._exists(self.SESSIONS):
-            return []
-        table = await self.db.open_table(self.SESSIONS)
-        q = table.query().nearest_to_text(_segment(text))
-        where_expr = _in_clause(whitelist, "session_id") if whitelist is not None else None
-        if where_expr:
-            q = q.where(where_expr)
-        q = q.limit(top_k)
-        return await q.to_list()
+    # ────────── FTS index maintenance ──────────
 
-    # ---------- FTS index maintenance ----------
+    async def ensure_fts_index(self, table_name: str) -> None:
+        """Create the FTS index on the ``text`` column if absent.
 
-    async def ensure_fts_index(self, table_name: str, replace: bool = False) -> None:
-        """Create (or rebuild) an FTS inverted index on `text`.
-
-        Idempotent. If an index exists and `replace` is False, just run
-        optimize() to absorb any appended rows since the last index build.
-        `replace=True` drops and rebuilds the index (used by /v2/rebuild).
+        LanceDB's hybrid search needs an FTS index on the text column.
+        Calling this once before queries is enough (the index is shared
+        across queries; LanceDB picks up new rows automatically). Cheap
+        no-op when the index already exists.
         """
         if not await self._exists(table_name):
             return
         from lancedb.index import FTS
-
         table = await self.db.open_table(table_name)
-
-        has_fts = False
         try:
             indices = await table.list_indices()
             for idx in indices:
                 cols = getattr(idx, "columns", None) or []
                 if "text" in cols:
-                    has_fts = True
-                    break
+                    return  # already indexed
         except Exception:
-            pass
-
-        if has_fts and not replace:
-            try:
-                await table.optimize()
-            except Exception:
-                pass
-            return
-
+            pass  # treat as "no index" and create one
+        # whitespace tokenizer because ingest already segments via jieba.
         await table.create_index(
-            "text",
-            config=FTS(base_tokenizer="whitespace", with_position=True),
+            "text", config=FTS(base_tokenizer="whitespace", with_position=True),
             replace=True,
         )
+
+    # ────────── search ──────────
+
+    async def search_cards(
+        self,
+        query: str,
+        vector: list[float] | None,
+        top_k: int,
+        where: str | None = None,
+    ) -> list[dict]:
+        """Hybrid FTS+vector search on the cards table.
+
+        Returns a list of ``{card_id, _score}`` rows (LanceDB also returns
+        text/vector but callers usually just need card_id + relevance).
+        Empty query → vector-only; no query and no vector → empty result.
+        """
+        if not await self._exists(self.CARDS):
+            return []
+        table = await self.db.open_table(self.CARDS)
+        return await _run_hybrid(table, query, vector, top_k, where)
+
+    async def search_rounds(
+        self,
+        query: str,
+        vector: list[float] | None,
+        top_k: int,
+        where: str | None = None,
+    ) -> list[dict]:
+        """Hybrid FTS+vector search on the rounds table.
+
+        Returns ``{session_id, idx, role, text, _score}`` rows. Caller is
+        responsible for aggregating per session, dereffing the text from
+        jsonl for display, etc.
+        """
+        if not await self._exists(self.ROUNDS):
+            return []
+        table = await self.db.open_table(self.ROUNDS)
+        return await _run_hybrid(table, query, vector, top_k, where)
+
+
+async def _run_hybrid(
+    table, query: str, vector: list[float] | None,
+    top_k: int, where: str | None,
+) -> list[dict]:
+    """Internal: hybrid FTS + vector with RRF reranking."""
+    from lancedb.rerankers import RRFReranker
+
+    q = table.query()
+    has_vector = vector is not None and len(vector) > 0
+    has_text = bool(query and query.strip())
+
+    if has_vector:
+        q = q.nearest_to(vector)
+    if has_text:
+        q = q.nearest_to_text(_segment(query))
+    if not has_vector and not has_text:
+        # Pure scan — no relevance to compute, only useful when a `where`
+        # filter narrows things. RRF reranker would crash without anchors.
+        if where:
+            q = q.where(where)
+        q = q.limit(top_k)
+        rows = await q.to_list()
+        for r in rows:
+            r["_score"] = 0.0
+        return rows
+    if has_vector and has_text:
+        q = q.rerank(reranker=RRFReranker(K=60))
+    if where:
+        q = q.where(where)
+    q = q.limit(top_k)
+    rows = await q.to_list()
+    # Normalize the score field: LanceDB returns it under different names
+    # depending on mode (_distance / _relevance_score / _score). Project
+    # to a single ``_score`` so the caller doesn't care.
+    for r in rows:
+        if "_score" in r:
+            continue
+        if "_relevance_score" in r:
+            r["_score"] = float(r["_relevance_score"])
+        elif "_distance" in r:
+            # cosine distance in [0,2] → similarity in [-1,1]; map to [0,1].
+            r["_score"] = max(0.0, 1.0 - float(r["_distance"]) / 2.0)
+        else:
+            r["_score"] = 0.0
+    return rows

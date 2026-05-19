@@ -1,4 +1,4 @@
-"""CLI: search <query> [--where DSL] [--top-k N] [--json] → POST /v2/search."""
+"""CLI: search <query> [--where DSL] [--top-k N] [--json]."""
 from __future__ import annotations
 import sys
 
@@ -11,27 +11,33 @@ from memorytalk.config import Config
 
 
 @click.command("search")
-@click.argument("query")
-@click.option("--where", default=None, help="Metadata DSL filter")
-@click.option("--top-k", type=int, default=None, help="Top-k per bucket")
-@click.option("--data-root", type=click.Path(), default=None)
-@click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON instead of Markdown")
-def search(query: str, where: str | None, top_k: int | None,
-           data_root: str | None, json_out: bool) -> None:
-    """Hybrid search over cards + sessions."""
-    cfg = Config(data_root) if data_root else Config()
-    body = {"query": query}
+@click.argument("query", required=False, default="")
+@click.option("--where", "-w", "where", type=str, default=None,
+              help="DSL filter (see docs/cli/v3/search.md#DSL)")
+@click.option("--top-k", "top_k", type=int, default=None,
+              help="Total result cap (default = settings.search.default_top_k)")
+@click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON")
+def search(query: str, where: str | None, top_k: int | None, json_out: bool) -> None:
+    """Hybrid FTS + vector search across cards and sessions."""
+    cfg = Config()
+    body: dict = {"query": query or ""}
     if where:
         body["where"] = where
     if top_k is not None:
         body["top_k"] = top_k
     try:
-        result = api("POST", "/v2/search", cfg, json_body=body, timeout=60.0)
+        result = api("POST", "/v3/search", cfg, json_body=body)
     except ApiError as e:
         if json_out:
             emit_json_err(e.payload)
         else:
             emit_md_err(fmt_error(extract_error_message(e.payload)))
+        sys.exit(1)
+    except Exception as e:
+        if json_out:
+            emit_json_err(str(e))
+        else:
+            emit_md_err(fmt_error(f"cannot reach server: {e}"))
         sys.exit(1)
 
     if json_out:

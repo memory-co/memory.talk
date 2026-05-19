@@ -1,186 +1,361 @@
-"""Search service — hybrid FTS + vector over cards, FTS-only over sessions. All async."""
+"""SearchService — POST /v3/search.
+
+Single ranked stream of card + session candidates, ordered by
+``settings.search.ranking_formula``. Sessions are aggregated from the
+LanceDB rounds table (one row per round); their relevance is a bounded
+``1 - prod(1 - s_i)`` over per-round hit scores.
+
+Pipeline:
+
+  1. Parse DSL → predicates + bucket-applicability hints.
+  2. LanceDB hybrid search:
+       - cards table  → candidate cards with relevance
+       - rounds table → candidate hits, grouped by session
+  3. Build Candidate objects (cards + sessions) with relevance / stats /
+     age_days; apply DSL predicates → filter.
+  4. Evaluate ``ranking_formula`` against each candidate's variable dict.
+  5. Sort by final score, take top_k, assign rank.
+  6. For session candidates: dereference hit-round text from jsonl,
+     attach context_before / context_after (also from jsonl).
+  7. For card candidates: highlight insight with the query.
+  8. Append the full response to ``search_log`` + ``logs/search/<date>.jsonl``.
+"""
 from __future__ import annotations
+import datetime as _dt
 import json
+import math
+from pathlib import Path
 
 from memorytalk.config import Config
 from memorytalk.provider.embedding import Embedder
 from memorytalk.provider.lancedb import LanceStore
 from memorytalk.repository import SQLiteStore
 from memorytalk.schemas import (
-    CardHit, SearchBucket, SearchRequest, SearchResponse, SessionHit, TagPair,
+    CardResult, CardStats, SearchResponse, SessionHit, SessionResult,
 )
-from memorytalk.service.links import link_to_ref
-from memorytalk.util.dsl import DSLError, compile_for, parse
+from memorytalk.util import dsl as dsl_mod
+from memorytalk.util.formula import FormulaError, compile_formula
+from memorytalk.util.highlight import highlight_keywords, truncate
 from memorytalk.util.ids import new_search_id
-from memorytalk.util.snippet import extract_snippets
-from memorytalk.util.ttl import dt_to_iso, now_utc
 
 
-class SearchError(ValueError):
-    """400 — invalid input or DSL parse error."""
+# Oversample multipliers — pull more candidates than top_k from each
+# pipeline so the formula stage has room to rerank across both buckets.
+_CARD_OVERSAMPLE = 3
+_ROUNDS_OVERSAMPLE = 5
+# Per-session hit display limit (search.md约定:每 session 最多展示 3 个窗).
+_HITS_PER_SESSION = 3
+# Context window: 1 round before + 1 round after the hit.
+_CONTEXT_TRUNCATE = 200
 
 
-def _cards_text_for_snippet(card: dict) -> str:
-    rounds_text = "\n".join(r.get("text") or "" for r in card["rounds"])
-    return card["summary"] + ("\n" + rounds_text if rounds_text else "")
+def _utc_iso() -> str:
+    return _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def _session_text_for_snippet(rounds: list[dict]) -> str:
-    parts: list[str] = []
-    for r in rounds:
-        for b in r.get("content") or []:
-            t = b.get("type")
-            if t in ("text", "code"):
-                parts.append(b.get("text") or "")
-            elif t == "thinking":
-                parts.append(b.get("thinking") or "")
-    return "\n".join(p for p in parts if p)
+def _age_days(created_at_iso: str, now: _dt.datetime | None = None) -> float:
+    if not created_at_iso:
+        return 0.0
+    try:
+        # Tolerate both 'Z' suffix and explicit offset.
+        s = created_at_iso.replace("Z", "+00:00")
+        dt = _dt.datetime.fromisoformat(s)
+    except ValueError:
+        return 0.0
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_dt.UTC)
+    now = now or _dt.datetime.now(_dt.UTC)
+    return max(0.0, (now - dt).total_seconds() / 86400.0)
+
+
+def _aggregate_session_relevance(scores: list[float]) -> float:
+    """1 - prod(1 - s_i): bounded 'any of them' aggregator.
+
+    Multiple round hits in the same session multiply the chance that
+    *some* round of this session matches, with diminishing returns. Maps
+    to [0, 1] and never exceeds the strongest single hit by much.
+    """
+    if not scores:
+        return 0.0
+    p = 1.0
+    for s in scores:
+        # Clamp into [0, 1] — RRF scores are normally in this range; defensive
+        # in case a provider returns negatives or very large numbers.
+        s = max(0.0, min(1.0, s))
+        p *= (1.0 - s)
+    return 1.0 - p
 
 
 class SearchService:
     def __init__(
-        self, *,
+        self,
         config: Config,
         db: SQLiteStore,
-        vectors: LanceStore,
-        embedder: Embedder,
+        vectors: LanceStore | None,
+        embedder: Embedder | None,
     ):
         self.config = config
         self.db = db
         self.vectors = vectors
         self.embedder = embedder
-
-    async def search(self, payload: SearchRequest) -> SearchResponse:
-        query = payload.query or ""
-        where = payload.where
-        top_k = payload.top_k or self.config.settings.search.default_top_k
-        if top_k <= 0 or top_k > 1000:
-            raise SearchError("top_k out of range (1..1000)")
-
+        # Compile formula once. If user gave us garbage in settings, fail
+        # loudly here so the FastAPI lifespan dies — better than blowing
+        # up on the first query at 3am.
         try:
-            card_wl, sess_wl = await self._dsl_whitelists(where)
-        except DSLError as e:
-            raise SearchError(f"DSL parse error: {e}")
+            self._formula = compile_formula(config.settings.search.ranking_formula)
+        except FormulaError as e:
+            raise FormulaError(
+                f"settings.search.ranking_formula is invalid: {e}"
+            ) from e
 
-        now = now_utc()
-        created_at = dt_to_iso(now)
+    async def search(
+        self, query: str, where: str | None, top_k: int | None,
+    ) -> SearchResponse:
+        top_k = top_k or self.config.settings.search.default_top_k
+        flt = dsl_mod.parse(where or "")
+
+        # ──────── 1. Pull candidates from both buckets ────────
+        card_candidates: list[dict] = []
+        session_candidates: list[dict] = []
+
+        # Embedding for vector half of hybrid search. Empty query → no
+        # vector (relevance comes from a stats-only formula or pure DSL filter).
+        qvec: list[float] | None = None
+        if query and query.strip() and self.embedder is not None:
+            try:
+                qvec = await self.embedder.embed_one(query)
+            except Exception:
+                qvec = None
+
+        if flt.scope_includes("card"):
+            card_candidates = await self._collect_card_candidates(query, qvec, top_k)
+        if flt.scope_includes("session"):
+            session_candidates = await self._collect_session_candidates(query, qvec, top_k)
+
+        # ──────── 2. DSL filter ────────
+        card_candidates = [c for c in card_candidates if flt.evaluate(c, "card")]
+        session_candidates = [c for c in session_candidates if flt.evaluate(c, "session")]
+
+        # ──────── 3. Score via ranking formula ────────
+        for c in card_candidates:
+            c["final_score"] = self._score(c, kind="card")
+        for c in session_candidates:
+            c["final_score"] = self._score(c, kind="session")
+
+        # ──────── 4. Merge + sort + cut ────────
+        merged: list[tuple[str, dict]] = (
+            [("card", c) for c in card_candidates]
+            + [("session", c) for c in session_candidates]
+        )
+        merged.sort(key=lambda x: x[1]["final_score"], reverse=True)
+        merged = merged[:top_k]
+
+        # ──────── 5. Build response objects ────────
+        results = []
+        # Per-session jsonl cache so we read each jsonl once even if multiple
+        # hits land in the same session.
+        rounds_cache: dict[str, list[dict]] = {}
+        for rank, (kind, c) in enumerate(merged, start=1):
+            if kind == "card":
+                results.append(self._build_card_result(c, rank, query))
+            else:
+                results.append(await self._build_session_result(c, rank, query, rounds_cache))
+
         search_id = new_search_id()
-
-        await self.vectors.ensure_fts_index("cards")
-        await self.vectors.ensure_fts_index("sessions")
-
-        card_hits = await self._search_cards(query, card_wl, top_k, now)
-        sess_hits = await self._search_sessions(query, sess_wl, top_k, now)
-
         response = SearchResponse(
-            search_id=search_id, query=query,
-            cards=SearchBucket(count=len(card_hits), results=card_hits),
-            sessions=SearchBucket(count=len(sess_hits), results=sess_hits),
+            search_id=search_id, query=query, count=len(results), results=results,
         )
 
-        persisted = {
-            "search_id": search_id, "query": query, "where": where,
-            "top_k": top_k, "created_at": created_at,
-            "cards": response.cards.model_dump(),
-            "sessions": response.sessions.model_dump(),
-        }
-        await self.db.search_log.record(
-            persisted, now=now,
-            response_json=json.dumps(persisted, ensure_ascii=False),
-        )
+        # ──────── 6. Audit log ────────
+        await self._log(search_id, query, where, top_k, response)
 
         return response
 
-    async def _dsl_whitelists(self, where: str | None) -> tuple[list[str] | None, list[str] | None]:
-        if not where:
-            return None, None
-        preds = parse(where)
-        card_result = compile_for(preds, "cards")
-        sess_result = compile_for(preds, "sessions")
+    # ──────── candidate builders ────────
 
-        card_wl: list[str] | None
-        if card_result is None:
-            card_wl = []
-        else:
-            sql, params = card_result
-            card_wl = await self.db.cards.dsl_whitelist(sql, params)
-
-        sess_wl: list[str] | None
-        if sess_result is None:
-            sess_wl = []
-        else:
-            sql, params = sess_result
-            sess_wl = await self.db.sessions.dsl_whitelist(sql, params)
-        return card_wl, sess_wl
-
-    async def _active_links(self, object_id: str, now) -> list:
-        out = []
-        for l in await self.db.links.touching(object_id):
-            ref = link_to_ref(l, object_id, now)
-            if ref.ttl < 0:
+    async def _collect_card_candidates(
+        self, query: str, qvec: list[float] | None, top_k: int,
+    ) -> list[dict]:
+        if self.vectors is None:
+            return []
+        # Make sure FTS index exists before the first query of the process.
+        try:
+            await self.vectors.ensure_fts_index(self.vectors.CARDS)
+        except Exception:
+            pass
+        hits = await self.vectors.search_cards(
+            query=query, vector=qvec, top_k=top_k * _CARD_OVERSAMPLE,
+        )
+        out: list[dict] = []
+        for row in hits:
+            card_id = row.get("card_id")
+            if not card_id:
                 continue
-            out.append(ref)
+            card_row = await self.db.cards.get(card_id)
+            if card_row is None:
+                continue  # LanceDB might point at a card that was rolled back
+            stats = await self.db.cards.get_stats(card_id)
+            out.append({
+                "card_id": card_id,
+                "insight": card_row["insight"],
+                "created_at": card_row["created_at"],
+                "relevance": float(row["_score"]),
+                "stats": stats,
+                # Flatten stats so DSL `where: 'review_count = 0'` works without
+                # the predicate having to know about nested dicts.
+                **{k: stats.get(k, 0) for k in (
+                    "review_up", "review_down", "review_neutral",
+                    "review_count", "read_count", "recall_count",
+                )},
+            })
         return out
 
-    async def _search_cards(self, query, whitelist, top_k, now) -> list[CardHit]:
-        hits: list[CardHit] = []
-        if whitelist is not None and len(whitelist) == 0:
-            return hits
-        if query.strip():
-            vector = await self.embedder.embed_one(query)
-            raw = await self.vectors.hybrid_search_cards(vector, query, whitelist=whitelist, top_k=top_k)
-            for rank, h in enumerate(raw, start=1):
-                cid = h.get("card_id")
-                c = await self.db.cards.get(cid)
-                if not c:
-                    continue
-                hits.append(CardHit(
-                    card_id=cid, rank=rank,
-                    score=float(h.get("_relevance_score") or h.get("_score") or 0.0),
-                    summary=c["summary"],
-                    snippets=extract_snippets(_cards_text_for_snippet(c), query),
-                    links=await self._active_links(cid, now),
-                ))
-        else:
-            rows = await self.db.cards.metadata_filtered(whitelist, top_k)
-            for rank, r in enumerate(rows, start=1):
-                cid = r["card_id"]
-                hits.append(CardHit(
-                    card_id=cid, rank=rank, score=0.0,
-                    summary=r["summary"], snippets=[],
-                    links=await self._active_links(cid, now),
-                ))
-        return hits
+    async def _collect_session_candidates(
+        self, query: str, qvec: list[float] | None, top_k: int,
+    ) -> list[dict]:
+        if self.vectors is None:
+            return []
+        try:
+            await self.vectors.ensure_fts_index(self.vectors.ROUNDS)
+        except Exception:
+            pass
+        hits = await self.vectors.search_rounds(
+            query=query, vector=qvec, top_k=top_k * _ROUNDS_OVERSAMPLE,
+        )
+        # Group by session_id.
+        by_session: dict[str, list[dict]] = {}
+        for row in hits:
+            sid = row.get("session_id")
+            if not sid:
+                continue
+            by_session.setdefault(sid, []).append({
+                "index": int(row["idx"]),
+                "role": row.get("role") or "",
+                "score": float(row["_score"]),
+            })
 
-    async def _search_sessions(self, query, whitelist, top_k, now) -> list[SessionHit]:
-        hits: list[SessionHit] = []
-        if whitelist is not None and len(whitelist) == 0:
-            return hits
-        if query.strip():
-            raw = await self.vectors.fts_search_sessions(query, whitelist=whitelist, top_k=top_k)
-            for rank, h in enumerate(raw, start=1):
-                sid = h.get("session_id")
-                s = await self.db.sessions.get(sid)
-                if not s:
-                    continue
-                rounds = await self.db.sessions.list_rounds(sid)
-                tag_pairs = await self.db.tags.list_for_subject(sid)
-                hits.append(SessionHit(
-                    session_id=sid, rank=rank,
-                    score=float(h.get("_score") or 0.0),
-                    source=s["source"],
-                    tags=[TagPair(**p) for p in tag_pairs],
-                    snippets=extract_snippets(_session_text_for_snippet(rounds), query),
-                    links=await self._active_links(sid, now),
-                ))
+        out: list[dict] = []
+        for sid, hit_list in by_session.items():
+            session_row = await self.db.sessions.get(sid)
+            if session_row is None:
+                continue
+            hit_list.sort(key=lambda h: h["score"], reverse=True)
+            relevance = _aggregate_session_relevance([h["score"] for h in hit_list])
+            out.append({
+                "session_id": sid,
+                "source": session_row["source"],
+                "created_at": session_row["created_at"],
+                "round_count": session_row["round_count"],
+                "relevance": relevance,
+                "hits": hit_list,
+            })
+        return out
+
+    # ──────── scoring ────────
+
+    def _score(self, cand: dict, kind: str) -> float:
+        # Build the variable namespace the formula sees. Missing stat
+        # fields (sessions don't have any) default to 0 inside _eval().
+        env = {
+            "relevance": float(cand.get("relevance", 0.0)),
+            "age_days": _age_days(cand.get("created_at", "")),
+        }
+        if kind == "card":
+            for k in ("review_up", "review_down", "review_neutral",
+                      "review_count", "read_count", "recall_count"):
+                env[k] = float(cand.get(k, 0))
+        # Pad explicit zeros for the session bucket so an author-edited
+        # formula that references stats won't NameError on sessions.
         else:
-            rows = await self.db.sessions.metadata_filtered(whitelist, top_k)
-            for rank, r in enumerate(rows, start=1):
-                tag_pairs = await self.db.tags.list_for_subject(r["session_id"])
-                hits.append(SessionHit(
-                    session_id=r["session_id"], rank=rank, score=0.0,
-                    source=r["source"],
-                    tags=[TagPair(**p) for p in tag_pairs],
-                    snippets=[], links=await self._active_links(r["session_id"], now),
-                ))
-        return hits
+            for k in ("review_up", "review_down", "review_neutral",
+                      "review_count", "read_count", "recall_count"):
+                env[k] = 0.0
+        return self._formula(env)
+
+    # ──────── result builders ────────
+
+    def _build_card_result(self, cand: dict, rank: int, query: str) -> CardResult:
+        return CardResult(
+            rank=rank,
+            score=float(cand["final_score"]),
+            card_id=cand["card_id"],
+            insight=highlight_keywords(cand["insight"], query),
+            stats=CardStats(**cand["stats"]),
+        )
+
+    async def _build_session_result(
+        self, cand: dict, rank: int, query: str, cache: dict[str, list[dict]],
+    ) -> SessionResult:
+        sid = cand["session_id"]
+        rounds = await self._load_rounds(sid, cache)
+        by_idx = {r["idx"]: r for r in rounds}
+
+        hits_shown = cand["hits"][:_HITS_PER_SESSION]
+        session_hits: list[SessionHit] = []
+        for h in hits_shown:
+            cur = by_idx.get(h["index"])
+            if cur is None:
+                continue
+            session_hits.append(SessionHit(
+                index=h["index"],
+                role=cur.get("role") or h["role"],
+                text=highlight_keywords(cur.get("text") or "", query),
+                score=float(h["score"]),
+                context_before=self._context(by_idx.get(h["index"] - 1), query),
+                context_after=self._context(by_idx.get(h["index"] + 1), query),
+            ))
+
+        return SessionResult(
+            rank=rank,
+            score=float(cand["final_score"]),
+            session_id=sid,
+            source=cand["source"],
+            hit_count=len(cand["hits"]),
+            hits_shown=len(session_hits),
+            hits=session_hits,
+        )
+
+    def _context(self, round_dict: dict | None, query: str):
+        if round_dict is None:
+            return None
+        from memorytalk.schemas.search import _SessionHitContext
+        text = round_dict.get("text") or ""
+        return _SessionHitContext(
+            index=round_dict["idx"],
+            role=round_dict.get("role") or "",
+            text=truncate(highlight_keywords(text, query), limit=_CONTEXT_TRUNCATE),
+        )
+
+    async def _load_rounds(self, session_id: str, cache: dict) -> list[dict]:
+        if session_id in cache:
+            return cache[session_id]
+        srow = await self.db.sessions.get(session_id)
+        if srow is None:
+            cache[session_id] = []
+            return []
+        rounds = await self.db.sessions.read_rounds_file(srow["source"], session_id)
+        cache[session_id] = rounds
+        return rounds
+
+    # ──────── audit log ────────
+
+    async def _log(
+        self, search_id: str, query: str, where: str | None,
+        top_k: int, response: SearchResponse,
+    ) -> None:
+        body = response.model_dump(mode="json")
+        now = _utc_iso()
+        await self.db.search_log.insert(
+            search_id=search_id, query=query, where_dsl=where,
+            top_k=top_k, created_at=now, response=body,
+        )
+        # File mirror — one jsonl per UTC date.
+        date_str = now[:10]
+        path = self.config.search_log_dir / f"{date_str}.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        record = {
+            "search_id": search_id, "query": query, "where_dsl": where,
+            "top_k": top_k, "created_at": now, "response": body,
+        }
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")

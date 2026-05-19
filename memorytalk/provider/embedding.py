@@ -1,20 +1,20 @@
 """Embedding providers and async startup validation.
 
-dummy — deterministic hash, pure CPU, near-instant.
-local — sentence-transformers (CPU/GPU). model.encode wrapped in asyncio.to_thread.
-openai — OpenAI-compatible HTTP endpoint via httpx.AsyncClient.
+- ``dummy`` — deterministic hash, pure CPU. Tests only.
+- ``local`` — sentence-transformers (CPU/GPU); ``encode`` runs in a thread.
+- ``openai`` — OpenAI-compatible HTTP endpoint via httpx.AsyncClient.
 """
 from __future__ import annotations
 from abc import ABC, abstractmethod
 import asyncio
 import hashlib
+
 import httpx
 
 
 class Embedder(ABC):
     @abstractmethod
-    async def embed(self, texts: list[str]) -> list[list[float]]:
-        ...
+    async def embed(self, texts: list[str]) -> list[list[float]]: ...
 
     async def embed_one(self, text: str) -> list[float]:
         out = await self.embed([text])
@@ -22,18 +22,19 @@ class Embedder(ABC):
 
 
 class DummyEmbedder(Embedder):
+    """Deterministic SHA-256-derived vectors. Submillisecond, no I/O."""
+
     def __init__(self, dim: int = 384):
         self.dim = dim
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        # Pure CPU, submillisecond — no need to offload.
-        results = []
+        out: list[list[float]] = []
         for text in texts:
             h = hashlib.sha256(text.encode()).digest()
             vec = [float(b) / 255.0 for b in h]
             vec = (vec * ((self.dim // len(vec)) + 1))[: self.dim]
-            results.append(vec)
-        return results
+            out.append(vec)
+        return out
 
 
 class LocalEmbedder(Embedder):
@@ -42,23 +43,16 @@ class LocalEmbedder(Embedder):
         self.model = SentenceTransformer(model_name)
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
-        # Model encode is CPU/GPU bound and can take 100ms+ — offload to a thread
-        # so the event loop keeps moving.
+        # encode() is CPU/GPU bound; offload so the event loop keeps moving.
         def _run():
-            return self.model.encode(texts, convert_to_numpy=True).tolist()
+            return self.model.encode(list(texts), convert_to_numpy=True).tolist()
         return await asyncio.to_thread(_run)
 
 
 class OpenAIEmbedder(Embedder):
     """OpenAI-compatible embeddings over HTTP (OpenAI / DashScope / vLLM)."""
 
-    def __init__(
-        self,
-        endpoint: str,
-        auth_key: str,
-        model: str,
-        timeout: float = 30.0,
-    ):
+    def __init__(self, endpoint: str, auth_key: str, model: str, timeout: float = 30.0):
         if not endpoint:
             raise ValueError("OpenAIEmbedder requires an endpoint")
         if not auth_key:
@@ -94,12 +88,10 @@ def get_embedder(config) -> Embedder:
         return LocalEmbedder(emb.model)
     if p == "openai":
         return OpenAIEmbedder(
-            endpoint=emb.endpoint,
-            auth_key=emb.auth_key,
-            model=emb.model,
-            timeout=emb.timeout,
+            endpoint=emb.endpoint, auth_key=emb.auth_key,
+            model=emb.model, timeout=emb.timeout,
         )
-    raise ValueError(f"Unknown embedding provider: {p}")
+    raise ValueError(f"unknown embedding provider: {p}")
 
 
 class EmbedderValidationError(RuntimeError):
@@ -107,7 +99,7 @@ class EmbedderValidationError(RuntimeError):
 
 
 async def validate_embedder(config) -> None:
-    """Fail-fast async probe."""
+    """Fail-fast async probe; called from the FastAPI lifespan."""
     emb = config.settings.embedding
     p = emb.provider
 
@@ -143,11 +135,12 @@ async def validate_embedder(config) -> None:
             resp.raise_for_status()
             data = resp.json().get("data", [])
             if not data:
-                raise EmbedderValidationError("openai embedder: probe response contained no data")
+                raise EmbedderValidationError("openai embedder: probe response had no data")
             probe_dim = len(data[0]["embedding"])
             if probe_dim != emb.dim:
                 raise EmbedderValidationError(
-                    f"openai embedder: dim mismatch — settings say {emb.dim}, endpoint returned {probe_dim}"
+                    f"openai embedder: dim mismatch — settings say {emb.dim}, "
+                    f"endpoint returned {probe_dim}"
                 )
         except EmbedderValidationError:
             raise

@@ -1,16 +1,15 @@
 """Render ``${VAR}`` env-var references in strings via string.Template.
 
-Strict (``substitute``, not ``safe_substitute``) — a missing env var
-raises ``KeyError``; callers turn that into a clear error rather than
-silently sending an empty value. Strings without any ``$`` pass through
-untouched. Embed a literal ``$`` as ``$$``.
+Strict (``substitute``, not ``safe_substitute``) — a missing env var raises
+``KeyError``; callers turn that into a clear error rather than silently
+sending an empty value. Strings without any ``$`` pass through untouched.
+Embed a literal ``$`` as ``$$``.
 
 Used at config-load time (``config._load_settings``) so the rest of the
 codebase treats ``Settings.embedding.auth_key`` as a literal API key,
-regardless of whether settings.json stored ``${QWEN_KEY}`` or the raw
-key. Also used by the wizard's pre-write probe (``validate_embedder``)
-because that path constructs ``Settings`` directly from the user's input
-dict, bypassing disk-load.
+regardless of whether settings.json stored ``${QWEN_KEY}`` or the raw key.
+Also used by the wizard's pre-write embedding probe (which constructs
+``Settings`` directly from input, bypassing disk-load).
 """
 from __future__ import annotations
 import os
@@ -21,15 +20,11 @@ def render_env_template(s: str) -> str:
     return Template(s).substitute(os.environ)
 
 
-def render_env_in_obj(obj):
-    """Recursively render ``${VAR}`` in every string within ``obj``,
-    mutating in place. Nested dicts and lists are traversed; non-string
-    leaves are left untouched. Strict — a missing env var raises
-    ``KeyError``.
+def render_env_in_obj(obj) -> None:
+    """Recursively render ``${VAR}`` in every string within ``obj``, in place.
 
-    Used by ``Config._load_settings`` so any field that happens to hold
-    a ``${VAR}`` reference gets rendered at the disk-load boundary,
-    without per-field plumbing.
+    Nested dicts and lists are traversed; non-string leaves are left
+    untouched. Strict — a missing env var raises ``KeyError``.
     """
     if isinstance(obj, dict):
         for k, v in obj.items():

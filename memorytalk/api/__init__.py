@@ -1,45 +1,56 @@
-"""FastAPI app factory for v2 — async setup via lifespan."""
+"""FastAPI app factory for v3.
+
+Async startup via lifespan: open SQLite + LanceDB, probe the embedding
+provider, wire services into ``app.state``.
+
+Optional services that depend on optional providers (vector store) are
+constructed defensively — if a dep is unavailable the app still starts
+and the dependent endpoint returns 503 ``unavailable`` (rather than the
+whole server failing to come up).
+"""
 from __future__ import annotations
 import os
 import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 
 from memorytalk.config import Config, ConfigValidationError
 from memorytalk.provider.embedding import (
-    EmbedderValidationError,
-    get_embedder,
-    validate_embedder,
-)
-from memorytalk.service import (
-    CardService, EventWriter, LinkService, RebuildService,
-    RecallService, SearchService, SessionService, TagService,
+    EmbedderValidationError, get_embedder, validate_embedder,
 )
 from memorytalk.provider.lancedb import LanceStore
 from memorytalk.provider.storage import LocalStorage
 from memorytalk.repository import SQLiteStore
+from memorytalk.service import (
+    CardService, EventWriter, IngestService, ReadService,
+    RecallService, ReviewService,
+)
+from memorytalk.service.search import SearchService
+from memorytalk.service.sync import SyncWatcher
 
 
 def create_app(config: Config | None = None) -> FastAPI:
     config = config or Config()
-    try:
-        config.validate()
-    except ConfigValidationError as e:
-        print(f"[memory-talk] config validation failed: {e}", file=sys.stderr)
-        raise SystemExit(2) from e
-
     config.ensure_dirs()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        # Async startup — open DB, LanceDB, probe embedding, wire services.
         storage = LocalStorage(config.data_root)
         db = await SQLiteStore.create(config.db_path, storage)
-        vectors = await LanceStore.create(config.vectors_dir, dim=config.settings.embedding.dim)
+
+        # LanceDB is optional at boot. If it can't open (missing pyarrow,
+        # bad dir perms, ...) we still want read/status to work.
+        vectors: LanceStore | None = None
+        try:
+            vectors = await LanceStore.create(
+                config.vectors_dir, dim=config.settings.embedding.dim,
+            )
+        except Exception as e:
+            print(f"[memory-talk] lancedb init failed: {e}", file=sys.stderr)
+
         embedder = get_embedder(config)
-        events = EventWriter(db)
 
         try:
             await validate_embedder(config)
@@ -47,61 +58,71 @@ def create_app(config: Config | None = None) -> FastAPI:
             print(f"[memory-talk] embedding startup check failed: {e}", file=sys.stderr)
             raise SystemExit(2) from e
 
+        events = EventWriter(db)
         app.state.config = config
         app.state.storage = storage
         app.state.db = db
         app.state.vectors = vectors
         app.state.embedder = embedder
-        # TagService must be wired before SessionService (the latter holds
-        # a reference so ingest can stamp `sync_session` tags).
-        app.state.tags = TagService(db=db, storage=storage, events=events)
-        app.state.sessions = SessionService(
-            config=config, db=db, vectors=vectors, events=events,
-            tags=app.state.tags,
+        app.state.events = events
+        app.state.read = ReadService(db=db, events=events)
+        app.state.ingest = IngestService(
+            db=db, vectors=vectors, embedder=embedder, events=events,
         )
-        app.state.cards = CardService(
-            config=config, db=db, vectors=vectors, embedder=embedder, events=events,
-        )
-        app.state.links = LinkService(config=config, db=db, events=events)
+        app.state.sync = SyncWatcher(config=config, ingest=app.state.ingest)
         app.state.search = SearchService(
             config=config, db=db, vectors=vectors, embedder=embedder,
         )
+        app.state.cards = CardService(
+            db=db, vectors=vectors, embedder=embedder, events=events,
+        )
+        app.state.reviews = ReviewService(db=db, events=events)
         app.state.recall = RecallService(
             config=config, db=db, vectors=vectors, embedder=embedder,
         )
-        app.state.rebuild = RebuildService(
-            config=config, db=db, vectors=vectors, embedder=embedder,
-        )
+
+        # Auto-resume if the persisted sync flag is on.
+        if app.state.sync.state.load().get("enabled"):
+            try:
+                await app.state.sync.start()
+            except Exception as e:
+                print(f"[memory-talk] auto-resume sync failed: {e}", file=sys.stderr)
 
         yield
 
+        # Pause (not stop) on shutdown — preserves the user's persisted
+        # enable choice so the next server start auto-resumes the watcher.
+        try:
+            await app.state.sync.pause()
+        except Exception:
+            pass
         await db.close()
 
-    app = FastAPI(title="memory.talk v2", lifespan=lifespan)
+    app = FastAPI(title="memory.talk v3", lifespan=lifespan)
     app.state.config = config
-    app.state.status = "running"
 
-    @app.middleware("http")
-    async def rebuild_gate(request: Request, call_next):
-        status = getattr(request.app.state, "status", "running")
-        if status == "running":
-            return await call_next(request)
-        if request.method == "GET" and request.url.path == "/v2/status":
-            return await call_next(request)
-        return JSONResponse({"error": "rebuilding"}, status_code=503)
-
+    # Mount the v3 routers. Each module exports a ``router``; missing
+    # modules are silently skipped so partial-build environments still
+    # come up (useful during incremental implementation).
     from memorytalk.api.status import router as status_router
-    app.include_router(status_router, prefix="/v2")
+    app.include_router(status_router, prefix="/v3")
+    from memorytalk.api.read import router as read_router
+    app.include_router(read_router, prefix="/v3")
+    from memorytalk.api.sessions import router as sessions_router
+    app.include_router(sessions_router, prefix="/v3")
 
-    for name in ("sessions", "cards", "links", "tags", "search", "recall", "review", "view", "log", "rebuild"):
+    # Optional routers — lazy import so missing ones don't break boot.
+    for name in ("sync", "search", "cards", "reviews", "recall"):
         try:
             mod = __import__(f"memorytalk.api.{name}", fromlist=["router"])
-            app.include_router(mod.router, prefix="/v2")
+            app.include_router(mod.router, prefix="/v3")
         except ImportError:
             pass
 
     return app
 
 
+# uvicorn entry point. The data_root env var is the same test hook
+# `Config.__init__` honors; user-facing CLI hardcodes ~/.memory-talk.
 _data_root = os.environ.get("MEMORY_TALK_DATA_ROOT")
 app = create_app(Config(_data_root) if _data_root else Config())

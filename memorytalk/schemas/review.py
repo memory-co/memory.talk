@@ -1,42 +1,21 @@
-"""Review request/response schemas — list + detail."""
+"""Review — a "reply" to a card with a stance (+1 / 0 / -1) and a comment.
+
+This is the core *real discussion* signal in v3's forum dynamics.
+"""
 from __future__ import annotations
+from typing import Literal
 
-from pydantic import BaseModel, Field
-
-
-class ReviewSessionSummary(BaseModel):
-    session_id: str
-    session_exist: bool
-    round_count: int
-    cards_injected: int
-    first_at: str
-    last_at: str
-    last_query: str | None = None
+from pydantic import BaseModel
 
 
-class ReviewListResponse(BaseModel):
-    sessions: list[ReviewSessionSummary] = Field(default_factory=list)
-
-
-class ReviewHit(BaseModel):
+class Review(BaseModel):
+    review_id: str
     card_id: str
-    rank: int
-    summary: str = ""  # denormalized from cards.summary at recall time
-
-
-class ReviewRound(BaseModel):
-    round_count: int
-    query: str
-    recalled_at: str
-    hits: list[ReviewHit] = Field(default_factory=list)
-
-
-class ReviewDetailResponse(BaseModel):
     session_id: str
-    session_exist: bool
-    round_count: int
-    cards_injected: int
-    first_at: str
-    last_at: str
-    last_query: str | None = None
-    rounds: list[ReviewRound] = Field(default_factory=list)
+    # Validated at the indexes-parser boundary; stored as the original string
+    # so the client display can echo "20-25" or "3,7,12" verbatim.
+    indexes: str
+    # Stance — 1 supports / 0 neutral (annotation only) / -1 refutes.
+    score: Literal[-1, 0, 1]
+    comment: str | None = None
+    created_at: str

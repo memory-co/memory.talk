@@ -1,29 +1,23 @@
-"""Service layer — one class per noun. Each class declares its own deps."""
+"""Service layer — orchestrates repository + provider; one class per noun."""
 from memorytalk.service.cards import (
-    CardConflictError, CardNotFound, CardService, CardServiceError,
+    CardConflict, CardService, CardServiceError,
 )
 from memorytalk.service.events import EventWriter
-from memorytalk.service.links import (
-    LinkNotFoundError, LinkService, LinkServiceError,
-    link_to_ref, refresh_active_user_links,
+from memorytalk.service.read import (
+    CardNotFound, ReadService, SessionNotFound, ReadServiceError,
 )
-from memorytalk.service.rebuild import RebuildService
-from memorytalk.service.recall import RecallError, RecallService
-from memorytalk.service.search import SearchError, SearchService
-from memorytalk.service.sessions import (
-    SessionNotFound, SessionService, SessionServiceError,
+from memorytalk.service.recall import RecallService, RecallServiceError
+from memorytalk.service.reviews import (
+    ReviewConflict, ReviewService, ReviewServiceError,
 )
-from memorytalk.service.tags import TagService, TagServiceError
+from memorytalk.service.sessions import IngestService, IngestServiceError
 
 
 __all__ = [
     "EventWriter",
-    "SessionService", "SessionServiceError", "SessionNotFound",
-    "CardService", "CardServiceError", "CardConflictError", "CardNotFound",
-    "LinkService", "LinkServiceError", "LinkNotFoundError",
-    "link_to_ref", "refresh_active_user_links",
-    "SearchService", "SearchError",
-    "RecallService", "RecallError",
-    "RebuildService",
-    "TagService", "TagServiceError",
+    "ReadService", "ReadServiceError", "CardNotFound", "SessionNotFound",
+    "IngestService", "IngestServiceError",
+    "CardService", "CardServiceError", "CardConflict",
+    "ReviewService", "ReviewServiceError", "ReviewConflict",
+    "RecallService", "RecallServiceError",
 ]

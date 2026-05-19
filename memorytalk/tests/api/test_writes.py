@@ -1,93 +1,63 @@
-"""Smoke tests for write endpoints wired through FastAPI."""
+"""End-to-end smoke: sync ingest → card → review → search → read.
+
+Mirrors v2's ``api/test_writes.py`` (``test_sessions_then_cards_then_tags_then_links``)
+but exercises v3's forum-dynamics pipeline instead of the v2 link/tag flow.
+A single test that walks the whole chain catches regressions in the
+service-layer wiring that individual focused tests would miss.
+"""
 from __future__ import annotations
+import pytest
+
+pytestmark = pytest.mark.asyncio
 
 
-def _ingest(client, session_id="platform-abc", sha256="h1"):
-    return client.post("/v2/sessions", json={
-        "session_id": session_id, "source": "claude-code",
-        "created_at": "2026-04-10T00:00:00Z",
-        "metadata": {"project": "demo"}, "sha256": sha256,
+async def test_full_pipeline_ingest_card_review_search_read(client):
+    # ── 1. sync ingest a session that mentions LanceDB ───────────────
+    r = await client.post("/v3/sessions", json={
+        "session_id": "e2e-sess", "source": "claude-code",
+        "created_at": "2026-05-18T09:00:00Z",
+        "metadata": {"cwd": "/work/proj"},
+        "sha256": "e2e-sha",
         "rounds": [
-            {"round_id": "r1", "parent_id": None, "timestamp": "",
-             "speaker": "user", "role": "human",
-             "content": [{"type": "text", "text": "hi"}], "is_sidechain": False},
-            {"round_id": "r2", "parent_id": "r1", "timestamp": "",
-             "speaker": "assistant", "role": "assistant",
-             "content": [{"type": "text", "text": "yo"}], "is_sidechain": False},
+            {"round_id": "r1", "role": "human",
+             "content": [{"type": "text", "text": "we need a vector db"}]},
+            {"round_id": "r2", "role": "assistant",
+             "content": [{"type": "text", "text": "LanceDB is embedded, zero deps"}]},
+            {"round_id": "r3", "role": "human",
+             "content": [{"type": "text", "text": "ok, LanceDB it is"}]},
         ],
     })
-
-
-def test_sessions_then_cards_then_tags_then_links(app_client):
-    r = _ingest(app_client)
-    assert r.status_code == 200
     sid = r.json()["session_id"]
 
-    # Create a card referencing rounds 1-2
-    r = app_client.post("/v2/cards", json={
-        "summary": "decided on LanceDB",
-        "rounds": [{"session_id": sid, "indexes": "1-2"}],
+    # ── 2. extract a card from rounds 2-3 ────────────────────────────
+    r = await client.post("/v3/cards", json={
+        "insight": "选定 LanceDB 做向量存储",
+        "rounds": [{"session_id": sid, "indexes": "2-3"}],
     })
-    assert r.status_code == 200, r.text
-    card_id = r.json()["card_id"]
+    cid = r.json()["card_id"]
 
-    # Strip the auto-stamped sync_session tag for a clean assertion below.
-    r = app_client.delete(f"/v2/sessions/{sid}/tags?key=sync_session")
-    assert r.status_code == 200
-
-    # Tag the session
-    r = app_client.post(f"/v2/sessions/{sid}/tags", json={"tags": ["decision"]})
-    assert r.status_code == 200
-    assert r.json()["tags"] == [{"key": "decision", "value": ""}]
-
-    # Tag a card too — kv form, supported as of this iteration
-    r = app_client.post(f"/v2/cards/{card_id}/tags",
-                        json={"tags": ["topic:lancedb"]})
-    assert r.status_code == 200
-    assert r.json()["tags"] == [{"key": "topic", "value": "lancedb"}]
-
-    # Bad subject prefix → 400 (TagService rejects)
-    r = app_client.post("/v2/sessions/foo_bad/tags", json={"tags": ["x"]})
-    assert r.status_code in (400, 404)
-
-    # Create a card-to-session link
-    r = app_client.post("/v2/links", json={
-        "source_id": card_id, "source_type": "card",
-        "target_id": sid, "target_type": "session",
-        "comment": "extracted from here",
+    # ── 3. write a +1 review citing round 2 ──────────────────────────
+    r = await client.post("/v3/reviews", json={
+        "card_id": cid, "session_id": sid, "indexes": "2", "score": 1,
+        "comment": "still stands three months in",
     })
-    assert r.status_code == 200
-    assert r.json()["ttl"] > 0
+    assert r.json()["status"] == "ok"
 
-    # Self-loop 400
-    r = app_client.post("/v2/links", json={
-        "source_id": card_id, "source_type": "card",
-        "target_id": card_id, "target_type": "card",
-    })
-    assert r.status_code == 400
+    # ── 4. search hits both the card and the session ────────────────
+    r = await client.post("/v3/search", json={"query": "LanceDB"})
+    body = r.json()
+    types = [it["type"] for it in body["results"]]
+    assert "card" in types
+    assert "session" in types
 
-
-def test_cards_out_of_range_400(app_client):
-    _ingest(app_client)
-    # Session only has 2 rounds; asking for 1-99 should 400
-    r = app_client.post("/v2/cards", json={
-        "summary": "x",
-        "rounds": [{"session_id": "sess_platform-abc", "indexes": "1-99"}],
-    })
-    assert r.status_code == 400
-    assert "out of range" in r.json()["detail"]
-
-
-def test_card_conflict_409(app_client):
-    r = _ingest(app_client)
-    sid = r.json()["session_id"]
-    first = app_client.post("/v2/cards", json={
-        "summary": "a", "card_id": "card_FIXED_X",
-        "rounds": [{"session_id": sid, "indexes": "1-2"}],
-    })
-    assert first.status_code == 200
-    dup = app_client.post("/v2/cards", json={
-        "summary": "b", "card_id": "card_FIXED_X",
-        "rounds": [{"session_id": sid, "indexes": "1-2"}],
-    })
-    assert dup.status_code == 409
+    # ── 5. read the card → stats reflect the review + the read here ─
+    r = await client.post("/v3/read", json={"id": cid})
+    c = r.json()["card"]
+    assert c["stats"]["review_up"] == 1
+    assert c["stats"]["review_count"] == 1
+    assert c["stats"]["read_count"] == 1
+    # The review materialized in the card's response.
+    assert len(c["reviews"]) == 1
+    assert c["reviews"][0]["comment"] == "still stands three months in"
+    # The card's rounds were expanded from the source session.
+    assert {r["index"] for r in c["rounds"]} == {2, 3}

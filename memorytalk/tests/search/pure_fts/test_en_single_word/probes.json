@@ -1,7 +1,0 @@
-[
-  ["LanceDB",     "sess_lancedb"],
-  ["FastAPI",     "sess_fastapi_mw"],
-  ["Pinecone",    "sess_pinecone"],
-  ["PostgreSQL",  "sess_postgres"],
-  ["Kubernetes",  "sess_k8s"]
-]

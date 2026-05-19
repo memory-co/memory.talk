@@ -1,575 +1,366 @@
-"""Markdown formatters for v2 CLI.
+"""Markdown formatters — one ``fmt_<cmd>`` per command output shape.
 
-Each function takes a response dict (typically straight from the API) and
-returns a Markdown string. The shapes are pinned to ``docs/cli/v2/<cmd>.md``
-— update those docs in lockstep when changing what's emitted here.
-
-Direction labels (`TO` / `FROM`) on link lines are intentionally not
-emitted yet — see the TODO(code) callouts in `docs/cli/v2/search.md` and
-`view.md`.
+Each formatter takes the parsed JSON payload and returns Markdown text
+that ``_render.emit_md()`` ships to stdout. The Markdown matches the
+contract in docs/cli/v3/<cmd>.md exactly — adjust the contract first,
+then the formatter.
 """
 from __future__ import annotations
 from typing import Any
 
 
-# ---------- helpers ----------
+# ────────── generic ──────────
 
-def _join(*lines: str) -> str:
-    """Join lines with '\n', collapse 3+ blanks to 2, ensure trailing newline."""
-    text = "\n".join(lines)
-    while "\n\n\n" in text:
-        text = text.replace("\n\n\n", "\n\n")
-    if not text.endswith("\n"):
-        text += "\n"
-    return text
+def fmt_error(msg: str) -> str:
+    return f"**error:** {msg}\n"
 
 
-def _link_line(link: dict) -> str:
-    """`<peer_id>` (type[ · expired]) [· comment]"""
-    peer = link.get("target_id", "")
-    ptype = link.get("target_type", "")
-    ttl = link.get("ttl")
-    comment = link.get("comment")
-
-    type_inner = ptype
-    if isinstance(ttl, (int, float)) and ttl < 0:
-        type_inner = f"{ptype} · expired"
-
-    parts = [f"`{peer}` ({type_inner})"]
-    if comment:
-        parts.append(comment)
-    return " · ".join(parts)
-
-
-def _links_section(links: list[dict], max_show: int = 3) -> list[str]:
-    if not links:
-        return []
-    out = ["**Links:**", ""]
-    for link in links[:max_show]:
-        out.append(f"- {_link_line(link)}")
-    if len(links) > max_show:
-        out.append(f"- +{len(links) - max_show} more")
-    out.append("")
-    return out
-
-
-# ---------- error ----------
-
-def fmt_error(message: str) -> str:
-    return f"**error:** {message}\n"
-
-
-# ---------- search ----------
-
-def fmt_search(resp: dict) -> str:
-    out: list[str] = []
-    query = resp.get("query") or "*(empty)*"
-    out.append(f"# search: {query}")
-    out.append("")
-    out.append(f"`search_id={resp.get('search_id', '')}`")
-    out.append("")
-
-    cards = resp.get("cards") or {"count": 0, "results": []}
-    out.append(f"## cards ({cards.get('count', 0)})")
-    out.append("")
-    for r in cards.get("results") or []:
-        out.append(f"### {r['rank']}. CARD `{r['card_id']}`")
-        out.append("")
-        if r.get("summary"):
-            out.append(f"**Summary:** {r['summary']}")
-            out.append("")
-        snippets = r.get("snippets") or []
-        if snippets:
-            out.append("**Snippets:**")
-            out.append("")
-            for s in snippets:
-                out.append(f"- {s}")
-            out.append("")
-        out.extend(_links_section(r.get("links") or []))
-
-    sessions = resp.get("sessions") or {"count": 0, "results": []}
-    out.append(f"## sessions ({sessions.get('count', 0)})")
-    out.append("")
-    for r in sessions.get("results") or []:
-        out.append(f"### {r['rank']}. SESSION `{r['session_id']}`")
-        out.append("")
-        tags = r.get("tags") or []
-        if tags:
-            out.append("**Tags:** " + ", ".join(f"`{t}`" for t in tags))
-            out.append("")
-        snippets = r.get("snippets") or []
-        if snippets:
-            out.append("**Snippets:**")
-            out.append("")
-            for s in snippets:
-                out.append(f"- {s}")
-            out.append("")
-        out.extend(_links_section(r.get("links") or []))
-        if r.get("source"):
-            out.append(f"**Source:** {r['source']}")
-            out.append("")
-
-    return _join(*out)
-
-
-# ---------- view ----------
-
-def _session_round_body(content: list[dict]) -> str:
-    """Render the text/code blocks of a session round as Markdown.
-
-    Non-text types (thinking, tool_use, tool_result, ...) are not included
-    in the body — their presence is announced via `+<type>` markers in the
-    round header instead.
-    """
-    parts = []
-    for b in content or []:
-        t = b.get("type")
-        text = b.get("text") or ""
-        if t == "text" and text:
-            parts.append(text)
-        elif t == "code" and text:
-            lang = b.get("language") or ""
-            parts.append(f"```{lang}\n{text}\n```")
-    return "\n\n".join(parts)
-
-
-def fmt_view_card(resp: dict) -> str:
-    card = resp.get("card") or {}
-    out: list[str] = []
-    out.append(f"# CARD `{card.get('card_id', '')}`")
-    out.append("")
-    if card.get("summary"):
-        out.append(f"**Summary:** {card['summary']}")
-        out.append("")
-    tags = card.get("tags") or []
-    if tags:
-        out.append("**Tags:** " + ", ".join(f"`{_tag_label(t)}`" for t in tags))
-        out.append("")
-
-    links = resp.get("links") or []
-    out.append(f"## links ({len(links)})")
-    out.append("")
-    for link in links:
-        out.append(f"- {_link_line(link)}")
-    out.append("")
-
-    rounds = card.get("rounds") or []
-    out.append(f"## rounds ({len(rounds)})")
-    out.append("")
-    for i, r in enumerate(rounds):
-        if i > 0:
-            out.append("---")
-            out.append("")
-        sid = r.get("session_id", "")
-        idx = r.get("index", "")
-        role = r.get("role") or ""
-        thinking_marker = " +thinking" if r.get("thinking") else ""
-        out.append(f"**[`{sid}`#{idx} {role}{thinking_marker}]**")
-        out.append("")
-        body = (r.get("text") or "").rstrip()
-        if body:
-            out.append(body)
-            out.append("")
-
-    return _join(*out)
-
-
-def fmt_view_session(resp: dict) -> str:
-    sess = resp.get("session") or {}
-    out: list[str] = []
-    out.append(f"# SESSION `{sess.get('session_id', '')}`")
-    out.append("")
-    if sess.get("created_at"):
-        out.append(f"**Created:** `{sess['created_at']}`")
-        out.append("")
-    tags = sess.get("tags") or []
-    if tags:
-        out.append("**Tags:** " + ", ".join(f"`{_tag_label(t)}`" for t in tags))
-        out.append("")
-    metadata = sess.get("metadata") or {}
-    if metadata:
-        out.append("**Metadata:**")
-        out.append("")
-        for k, v in metadata.items():
-            out.append(f"- {k}: `{v}`")
-        out.append("")
-    if sess.get("source"):
-        out.append(f"**Source:** {sess['source']}")
-        out.append("")
-
-    links = resp.get("links") or []
-    out.append(f"## links ({len(links)})")
-    out.append("")
-    for link in links:
-        out.append(f"- {_link_line(link)}")
-    out.append("")
-
-    rounds = sess.get("rounds") or []
-    out.append(f"## rounds ({len(rounds)})")
-    out.append("")
-    for i, r in enumerate(rounds):
-        if i > 0:
-            out.append("---")
-            out.append("")
-        idx = r.get("index", "")
-        role = r.get("role") or ""
-        content = r.get("content") or []
-        extras: list[str] = []
-        for b in content:
-            t = b.get("type")
-            if t and t not in ("text", "code") and t not in extras:
-                extras.append(t)
-        extras_marker = "".join(f" +{e}" for e in extras)
-        out.append(f"**[#{idx} {role}{extras_marker}]**")
-        out.append("")
-        body = _session_round_body(content).rstrip()
-        if body:
-            out.append(body)
-            out.append("")
-
-    return _join(*out)
-
-
-def fmt_view(resp: dict) -> str:
-    if resp.get("type") == "card":
-        return fmt_view_card(resp)
-    if resp.get("type") == "session":
-        return fmt_view_session(resp)
-    return fmt_error(f"unknown view type: {resp.get('type')!r}")
-
-
-# ---------- log ----------
-
-def _detail_summary(kind: str, detail: dict) -> str:
-    if kind == "imported":
-        return f"source={detail.get('source', '')} · round_count={detail.get('round_count', '')}"
-    if kind == "rounds_appended":
-        return (
-            f"indexes {detail.get('from_index', '?')}-{detail.get('to_index', '?')} "
-            f"(+{detail.get('added_count', '?')})"
-        )
-    if kind == "rounds_overwrite_skipped":
-        idxs = detail.get("indexes", [])
-        return f"indexes={','.join(str(i) for i in idxs)}"
-    if kind in ("tag_added", "tag_removed"):
-        key = detail.get("key", "")
-        value = detail.get("value", "") or ""
-        label = f"{key}:{value}" if value else key
-        return f"`{label}`"
-    if kind == "tag_updated":
-        key = detail.get("key", "")
-        value = detail.get("value", "") or ""
-        prior = detail.get("prior_value", "") or ""
-        new_label = f"{key}:{value}" if value else key
-        old_label = f"{key}:{prior}" if prior else key
-        return f"`{old_label}` → `{new_label}`"
-    if kind == "card_extracted":
-        return f"`{detail.get('card_id', '')}` · indexes={detail.get('indexes', '')}"
-    if kind == "linked":
-        direction = detail.get("direction") or ""
-        peer = detail.get("peer_id") or ""
-        comment = detail.get("comment") or ""
-        arrow = "←incoming" if direction == "incoming" else "→outgoing"
-        parts = [f"{arrow} `{peer}`"]
-        if comment:
-            parts.append(f"({comment})")
-        return " ".join(parts)
-    if kind == "created":
-        summary = detail.get("summary") or ""
-        rounds = detail.get("rounds") or []
-        rounds_part = ", ".join(f"`{r['session_id']}`/{r['indexes']}" for r in rounds) or "(none)"
-        n_default = len(detail.get("default_links") or [])
-        from_search = detail.get("from_search_id")
-        bits = [summary, f"rounds={rounds_part}", f"{n_default} default_link" + ("s" if n_default != 1 else "")]
-        if from_search:
-            bits.append(f"from `{from_search}`")
-        return " · ".join(bits)
-    # Fallback: compact key=val
-    if isinstance(detail, dict) and detail:
-        return " · ".join(f"{k}={v}" for k, v in detail.items())
-    return ""
-
-
-def _fmt_log_table(events: list[dict]) -> list[str]:
-    out = [
-        "| at | kind | detail |",
-        "|---|---|---|",
-    ]
-    for e in events:
-        at = e.get("at", "")
-        kind = e.get("kind", "")
-        detail = _detail_summary(kind, e.get("detail") or {})
-        # Escape pipes inside detail to keep table valid.
-        detail = detail.replace("|", "\\|")
-        out.append(f"| `{at}` | {kind} | {detail} |")
-    return out
-
-
-def fmt_log_card(resp: dict) -> str:
-    events = resp.get("events") or []
-    out = [
-        f"# CARD `{resp.get('card_id', '')}` · {len(events)} events",
-        "",
-    ]
-    out.extend(_fmt_log_table(events))
-    out.append("")
-    return _join(*out)
-
-
-def fmt_log_session(resp: dict) -> str:
-    events = resp.get("events") or []
-    out = [
-        f"# SESSION `{resp.get('session_id', '')}` · {len(events)} events",
-        "",
-    ]
-    out.extend(_fmt_log_table(events))
-    out.append("")
-    return _join(*out)
-
-
-def fmt_log(resp: dict) -> str:
-    if resp.get("type") == "card":
-        return fmt_log_card(resp)
-    if resp.get("type") == "session":
-        return fmt_log_session(resp)
-    return fmt_error(f"unknown log type: {resp.get('type')!r}")
-
-
-# ---------- review ----------
-
-def fmt_review_list(resp: dict) -> str:
-    sessions = resp.get("sessions") or []
-    out: list[str] = []
-    out.append(f"# Sessions with recall history ({len(sessions)})")
-    out.append("")
-    if not sessions:
-        out.append("*(no recall history yet — call `memory-talk recall <session_id> <prompt>` first)*")
-        out.append("")
-        return _join(*out)
-    for s in sessions:
-        sid = s.get("session_id", "")
-        exist = "true" if s.get("session_exist") else "false"
-        rc = s.get("round_count", 0)
-        ci = s.get("cards_injected", 0)
-        last = s.get("last_at", "")
-        last_q = (s.get("last_query") or "").replace("\n", " ").strip()
-        out.append(
-            f"- **`{sid}`** · `session_exist={exist}` · {rc} rounds · "
-            f"{ci} cards · last {last}"
-        )
-        if last_q:
-            out.append(f"  > {last_q}")
-        out.append("")
-    return _join(*out)
-
-
-def fmt_review_detail(resp: dict) -> str:
-    sid = resp.get("session_id", "")
-    exist = "true" if resp.get("session_exist") else "false"
-    out: list[str] = []
-    out.append(f"# `{sid}` · session_exist={exist}")
-    out.append("")
-    out.append(
-        f"{resp.get('round_count', 0)} rounds · "
-        f"{resp.get('cards_injected', 0)} cards (deduped) · "
-        f"first {resp.get('first_at', '')} · last {resp.get('last_at', '')}"
-    )
-    out.append("")
-    rounds = resp.get("rounds") or []
-    for i, r in enumerate(rounds):
-        if i > 0:
-            out.append("---")
-            out.append("")
-        rc = r.get("round_count", "?")
-        rec_at = r.get("recalled_at", "")
-        out.append(f"## Round {rc} · {rec_at}")
-        out.append("")
-        q = (r.get("query") or "").replace("\n", " ").strip()
-        if q:
-            out.append(f"> {q}")
-            out.append("")
-        for hit in r.get("hits") or []:
-            cid = hit.get("card_id", "")
-            summary = (hit.get("summary") or "").replace("\n", " ").strip()
-            line = f"{hit.get('rank', '?')}. `{cid}`"
-            if summary:
-                line += f" — {summary}"
-            out.append(line)
-        out.append("")
-    return _join(*out)
-
-
-# ---------- recall ----------
-
-def fmt_recall(resp: dict) -> str:
-    """Bash code-block style — designed to be inlined into LLM context.
-
-    Empty hit set → empty string (per docs: no '## Memory recall (0)'
-    placeholder; the harness gets nothing to inject).
-    """
-    hits = resp.get("recalled") or []
-    if not hits:
-        return ""
-    lines = ["```bash", "# Relevant memories — run any to expand detail:"]
-    for h in hits:
-        cid = h.get("card_id", "")
-        summary = (h.get("summary") or "").replace("\n", " ").strip()
-        lines.append(f"memory-talk view {cid}  # {summary}")
-    lines.append("```")
-    return _join(*lines)
-
-
-# ---------- write commands (single line ok) ----------
-
-def fmt_card_create(resp: dict) -> str:
-    return f"ok: created `{resp.get('card_id', '')}`\n"
-
-
-def fmt_link_create(resp: dict) -> str:
-    return f"ok: linked `{resp.get('link_id', '')}`\n"
-
-
-def _tag_label(pair: dict) -> str:
-    """Render `{"key": "k", "value": "v"}` as ``k:v`` (or just ``k`` if value is empty)."""
-    key = pair.get("key", "")
-    value = pair.get("value", "") or ""
-    return f"{key}:{value}" if value else key
-
-
-def fmt_tag(resp: dict) -> str:
-    tags = resp.get("tags") or []
-    if not tags:
-        return "ok: tags = *(empty)*\n"
-    return "ok: tags = " + ", ".join(f"`{_tag_label(p)}`" for p in tags) + "\n"
-
-
-# ---------- sync / rebuild ----------
-
-def fmt_sync(resp: dict) -> str:
-    out = [
-        f"# sync · **{resp.get('status', 'ok')}**",
-        "",
-        "| field | count |",
-        "|---|---|",
-    ]
-    for key in ("discovered", "imported", "skipped", "appended", "overwrite_warnings", "errors"):
-        if key in resp:
-            out.append(f"| {key} | {resp[key]} |")
-    out.append("")
-    return _join(*out)
-
-
-def fmt_explore_list(resp: dict) -> str:
-    records = resp.get("records") or []
-    out = [f"# explore ({len(records)})", ""]
-    if not records:
-        out.append("*(no exploration records — run `memory-talk explore manual` to start one)*")
-        out.append("")
-        return _join(*out)
-    out.append("| session_id | started | rounds | cards | status |")
-    out.append("|---|---|---|---|---|")
-    for r in records:
-        sid = r.get("session_id", "")
-        started = (r.get("started_at") or "").replace("T", " ").split(".")[0].rstrip("Z")
-        rounds = r.get("rounds", 0)
-        cards = r.get("cards", 0)
-        status = r.get("status", "")
-        out.append(f"| `{sid}` | {started} | {rounds} | {cards} | {status} |")
-    out.append("")
-    return _join(*out)
-
-
-def fmt_explore_detail(resp: dict) -> str:
-    sid = resp.get("session_id", "")
-    out = [
-        f"# `{sid}`",
-        "",
-        "| field | value |",
-        "|---|---|",
-    ]
-    for key in ("started_at", "last_at", "rounds", "cards", "status", "path"):
-        if resp.get(key) is not None:
-            out.append(f"| {key} | {resp[key]} |")
-    out.append("")
-    return _join(*out)
-
-
-def fmt_rebuild(resp: dict) -> str:
-    out = [
-        f"# rebuild · **{resp.get('status', 'ok')}**",
-        "",
-        "| field | count |",
-        "|---|---|",
-    ]
-    for key, label in (
-        ("sessions", "sessions"),
-        ("cards", "cards"),
-        ("searches_replayed", "searches_replayed"),
-        ("events_replayed", "events_replayed"),
-        ("errors_count", "errors"),
-    ):
-        if key in resp:
-            out.append(f"| {label} | {resp[key]} |")
-    out.append("")
-    return _join(*out)
-
-
-# ---------- server ----------
+# ────────── server ──────────
 
 def fmt_server_start(payload: dict) -> str:
     status = payload.get("status", "")
     if status == "started":
-        return f"**started** · pid `{payload.get('pid', '')}` · port `{payload.get('port', '')}`\n"
+        return f"**started** · pid `{payload['pid']}` · port `{payload['port']}`\n"
     if status == "already_running":
-        return f"**already_running** · pid `{payload.get('pid', '')}` · port `{payload.get('port', '')}`\n"
+        return f"**already_running** · pid `{payload['pid']}` · port `{payload['port']}`\n"
     if status == "failed":
-        # Render as an error block; caller handles exit code.
-        err = payload.get("error", "")
-        ec = payload.get("exit_code", "")
-        return _join(
-            f"**error:** server failed to start (exit_code={ec})",
-            "",
-            "```",
-            err,
-            "```",
-        )
-    return f"{status}\n"
+        err = payload.get("error", "").strip()
+        body = f"**error:** server failed to start (exit_code={payload.get('exit_code')})\n"
+        if err:
+            body += f"\n```\n{err}\n```\n"
+        return body
+    return f"**{status}**\n"
 
 
 def fmt_server_stop(payload: dict) -> str:
     status = payload.get("status", "")
     if status == "stopped":
-        return f"**stopped** · pid `{payload.get('pid', '')}`\n"
+        return f"**stopped** · pid `{payload['pid']}`\n"
     if status == "not_running":
         return "**not_running**\n"
-    return f"{status}\n"
+    return f"**{status}**\n"
 
 
 def fmt_status(payload: dict) -> str:
-    status = payload.get("status", "")
-    if status == "running":
-        out = [
-            f"# memory-talk · **running**",
-            "",
-            "| field | value |",
-            "|---|---|",
-            f"| data_root | `{payload.get('data_root', '')}` |",
-            f"| settings | `{payload.get('settings_path', '')}` |",
-            f"| sessions | {payload.get('sessions_total', 0)} |",
-            f"| cards | {payload.get('cards_total', 0)} |",
-            f"| links | {payload.get('links_total', 0)} |",
-            f"| searches | {payload.get('searches_total', 0)} |",
-            f"| embedding | {payload.get('embedding_provider', '')} |",
-            f"| vector | {payload.get('vector_provider', '')} |",
-            f"| relation | {payload.get('relation_provider', '')} |",
-            "",
-        ]
-        return _join(*out)
-    out = [
-        f"# memory-talk · **{status or 'unknown'}**",
+    if payload.get("status") == "not_running":
+        return (
+            "# memory-talk · **not_running**\n\n"
+            f"- data_root: `{payload.get('data_root', '')}`\n"
+            f"- settings: `{payload.get('settings_path', '')}`\n"
+        )
+    lines = [
+        "# memory-talk · **running**",
         "",
-        f"- data_root: `{payload.get('data_root', '')}`",
-        f"- settings: `{payload.get('settings_path', '')}`",
-        "",
+        "| field | value |",
+        "|---|---|",
+        f"| data_root | `{payload['data_root']}` |",
+        f"| settings | `{payload['settings_path']}` |",
+        f"| sessions | {payload['sessions_total']} |",
+        f"| cards | {payload['cards_total']} |",
+        f"| reviews | {payload['reviews_total']} |",
+        f"| searches | {payload['searches_total']} |",
+        f"| recalls | {payload['recalls_total']} |",
+        f"| embedding | {payload['embedding_provider']} · {payload['embedding_model']} · dim {payload['embedding_dim']} |",
+        f"| vector | {payload['vector_provider']} |",
+        f"| relation | {payload['relation_provider']} |",
+        f"| sync | {'enabled' if payload['sync_enabled'] else 'disabled'} |",
     ]
-    return _join(*out)
+    return "\n".join(lines) + "\n"
+
+
+# ────────── read ──────────
+
+def fmt_read(payload: dict) -> str:
+    if payload.get("type") == "card":
+        return _fmt_read_card(payload["card"])
+    if payload.get("type") == "session":
+        return _fmt_read_session(payload["session"])
+    return fmt_error(f"unknown read response type: {payload.get('type')!r}")
+
+
+def _fmt_read_card(card: dict) -> str:
+    parts: list[str] = [f"# CARD `{card['card_id']}`", ""]
+    parts.append(f"**Insight:** {card['insight']}")
+    parts.append("")
+    parts.append(_fmt_stats_inline(card.get("stats", {})))
+    parts.append("")
+
+    if card.get("source_cards"):
+        parts.append("**From:**")
+        parts.append("")
+        for sc in card["source_cards"]:
+            parts.append(f"- `{sc['relation']}` → `{sc['card_id']}`")
+        parts.append("")
+
+    reviews = card.get("reviews") or []
+    if reviews:
+        parts.append(f"## reviews ({len(reviews)})")
+        parts.append("")
+        for r in reviews:
+            score = r["score"]
+            marker = f"**+{score}**" if score > 0 else (f"**{score}**" if score < 0 else "**0**")
+            line = f"- {marker} `{r['session_id']}` #{r['indexes']}"
+            if r.get("comment"):
+                line += f" — {r['comment']}"
+            parts.append(line)
+        parts.append("")
+
+    rounds = card.get("rounds") or []
+    if rounds:
+        parts.append(f"## rounds ({len(rounds)})")
+        parts.append("")
+        for i, r in enumerate(rounds):
+            head = f"**[`{r['session_id']}`#{r['index']} {r['role']}]**"
+            parts.append(head)
+            parts.append("")
+            parts.append(r.get("text") or "")
+            if i < len(rounds) - 1:
+                parts.append("")
+                parts.append("---")
+                parts.append("")
+    return "\n".join(parts).rstrip() + "\n"
+
+
+def _fmt_stats_inline(stats: dict) -> str:
+    up = stats.get("review_up", 0)
+    down = stats.get("review_down", 0)
+    rc = stats.get("review_count", 0)
+    rd = stats.get("read_count", 0)
+    rcl = stats.get("recall_count", 0)
+    return f"**Stats:** ↑{up} ↓{down} · reviews {rc} · reads {rd} · recalls {rcl}"
+
+
+def _fmt_read_session(session: dict) -> str:
+    parts: list[str] = [f"# SESSION `{session['session_id']}`", ""]
+    if session.get("created_at"):
+        parts.append(f"**Created:** `{session['created_at']}`")
+        parts.append("")
+    if session.get("metadata"):
+        parts.append("**Metadata:**")
+        parts.append("")
+        for k, v in sorted(session["metadata"].items()):
+            parts.append(f"- {k}: `{v}`")
+        parts.append("")
+    if session.get("source"):
+        parts.append(f"**Source:** {session['source']}")
+        parts.append("")
+
+    rounds = session.get("rounds") or []
+    parts.append(f"## rounds ({len(rounds)})")
+    parts.append("")
+    for i, r in enumerate(rounds):
+        parts.append(f"**[#{r['index']} {r.get('role') or ''}]**")
+        parts.append("")
+        text = _flatten_blocks(r.get("content") or [])
+        parts.append(text)
+        if i < len(rounds) - 1:
+            parts.append("")
+            parts.append("---")
+            parts.append("")
+    return "\n".join(parts).rstrip() + "\n"
+
+
+def _flatten_blocks(blocks: list[Any]) -> str:
+    out: list[str] = []
+    for b in blocks:
+        if not isinstance(b, dict):
+            continue
+        t = b.get("text") or b.get("thinking")
+        if t:
+            out.append(str(t))
+            continue
+        ttype = b.get("type") or "block"
+        out.append(f"_({ttype})_")
+    return "\n\n".join(out)
+
+
+# ────────── sync ──────────
+
+def fmt_sync_start(payload: dict) -> str:
+    status = payload.get("status", "")
+    if status == "started":
+        adapters = ", ".join(payload.get("adapters") or [])
+        bf = payload.get("backfill") or {}
+        bf_line = (
+            f"discovered {bf.get('discovered', 0)} · imported {bf.get('imported', 0)} · "
+            f"appended {bf.get('appended', 0)} · skipped {bf.get('skipped', 0)} · "
+            f"errors {bf.get('errors', 0)}"
+        )
+        return f"**started** · adapters `{adapters}` · backfill: {bf_line}\n"
+    if status == "already_running":
+        adapters = ", ".join(payload.get("adapters") or [])
+        secs = int(payload.get("uptime_seconds") or 0)
+        return f"**already_running** · adapters `{adapters}` · uptime {_humanize_secs(secs)}\n"
+    return f"**{status}**\n"
+
+
+def fmt_sync_stop(payload: dict) -> str:
+    status = payload.get("status", "")
+    if status == "stopped":
+        secs = int(payload.get("uptime_seconds") or 0)
+        totals = payload.get("totals") or {}
+        return (
+            f"**stopped** · uptime {_humanize_secs(secs)} · "
+            f"imported {totals.get('imported', 0)}, appended {totals.get('appended', 0)}, "
+            f"overwrite_warnings {totals.get('overwrite_warnings', 0)}\n"
+        )
+    if status == "not_running":
+        return "**not_running**\n"
+    return f"**{status}**\n"
+
+
+def fmt_sync_status(payload: dict) -> str:
+    if payload.get("status") == "stopped":
+        last = payload.get("last_run")
+        if last:
+            t = last.get("totals", {})
+            return (
+                f"# sync · **stopped**\n\n"
+                f"last run: {last['start']} → {last['stop']} "
+                f"({_humanize_secs(int(last.get('duration_seconds') or 0))})\n"
+                f"totals: imported {t.get('imported', 0)}, appended {t.get('appended', 0)}, "
+                f"overwrite_warnings {t.get('overwrite_warnings', 0)}, errors {t.get('errors', 0)}\n"
+            )
+        return "# sync · **stopped**\n\nno previous runs in this server lifespan.\n"
+
+    # running
+    secs = int(payload.get("uptime_seconds") or 0)
+    adapters = ", ".join(payload.get("adapters") or [])
+    totals = payload.get("totals") or {}
+    watching = payload.get("watching") or []
+
+    lines = [
+        "# sync · **running**", "",
+        "| field | value |", "|---|---|",
+        f"| uptime | {_humanize_secs(secs)} |",
+        f"| adapters | {adapters} |",
+    ]
+    paths = []
+    for w in watching:
+        marker = "" if w.get("ok") else f" ({w.get('reason') or 'missing'})"
+        paths.append(f"`{w['path']}`{marker}")
+    lines.append(f"| watching | {', '.join(paths) if paths else '—'} |")
+    lines.append(f"| imported | {totals.get('imported', 0)} |")
+    lines.append(f"| appended | {totals.get('appended', 0)} |")
+    lines.append(f"| overwrite_warnings | {totals.get('overwrite_warnings', 0)} |")
+    lines.append(f"| errors | {totals.get('errors', 0)} |")
+    lines.append(f"| last_event_at | {payload.get('last_event_at') or '—'} |")
+
+    recent = payload.get("recent") or []
+    if recent:
+        lines.extend(["", "## recent", "", "| time | session_id | event | rounds |", "|---|---|---|---|"])
+        for ev in recent:
+            rounds = ev.get("rounds")
+            if rounds is None and ev.get("rounds_skipped") is not None:
+                rounds = f"(-{ev['rounds_skipped']} skipped)"
+            lines.append(f"| {ev['at']} | `{ev['session_id']}` | {ev['event']} | {rounds if rounds is not None else '—'} |")
+
+    return "\n".join(lines) + "\n"
+
+
+# ────────── card ──────────
+
+def fmt_card_created(payload: dict) -> str:
+    return f"ok: created `{payload['card_id']}`\n"
+
+
+# ────────── review ──────────
+
+def fmt_review_created(payload: dict) -> str:
+    score = payload.get("score", 0)
+    score_str = f"+{score}" if score > 0 else str(score)
+    return (
+        f"ok: created `{payload['review_id']}` · "
+        f"`{payload['card_id']}` **{score_str}** "
+        f"by `{payload['session_id']}`\n"
+    )
+
+
+# ────────── recall ──────────
+
+def fmt_recall(payload: dict) -> str:
+    """Bash-code-block layout: one ``memory-talk read <cid> # <insight>`` per
+    recalled card. Empty recall → empty string (the harness injects nothing).
+
+    Designed so the harness can inline this directly into an LLM's context
+    — the bash block tells the model these are runnable expansion commands
+    without adding any business-layer headers/footers.
+    """
+    recalled = payload.get("recalled") or []
+    if not recalled:
+        return ""
+    lines = ["```bash", "# Relevant memories — run any to expand detail:"]
+    for r in recalled:
+        lines.append(f"memory-talk read {r['card_id']}  # {r['insight']}")
+    lines.append("```")
+    return "\n".join(lines) + "\n"
+
+
+# ────────── search ──────────
+
+def fmt_search(payload: dict) -> str:
+    query = payload.get("query") or ""
+    count = payload.get("count", 0)
+    sid = payload.get("search_id", "")
+    parts: list[str] = [f"# search: {query}" if query else "# search",
+                        "",
+                        f"`search_id={sid}` · {count} results", ""]
+
+    if count == 0:
+        return "\n".join(parts) + "\n"
+
+    for entry in payload.get("results") or []:
+        parts.append("---")
+        parts.append("")
+        if entry.get("type") == "card":
+            parts.append(_fmt_search_card(entry))
+        elif entry.get("type") == "session":
+            parts.append(_fmt_search_session(entry))
+        parts.append("")
+    return "\n".join(parts).rstrip() + "\n"
+
+
+def _fmt_search_card(entry: dict) -> str:
+    stats = entry.get("stats") or {}
+    inline = (
+        f"`↑{stats.get('review_up', 0)} ↓{stats.get('review_down', 0)} · "
+        f"reviews {stats.get('review_count', 0)} · "
+        f"reads {stats.get('read_count', 0)} · "
+        f"recalls {stats.get('recall_count', 0)}`"
+    )
+    return (
+        f"### [CARD] `{entry['card_id']}` · {inline}\n\n"
+        f"{entry.get('insight', '')}"
+    )
+
+
+def _fmt_search_session(entry: dict) -> str:
+    head = (
+        f"### [SESSION] `{entry['session_id']}` · "
+        f"{entry.get('source', '')} · {entry.get('hit_count', 0)} hits"
+    )
+    lines: list[str] = [head, ""]
+    for hit in entry.get("hits") or []:
+        role = hit.get("role") or ""
+        lines.append(f"**#{hit['index']}** _({role})_")
+        ctx_before = hit.get("context_before")
+        ctx_after = hit.get("context_after")
+        if ctx_before:
+            lines.append(f"> _[{ctx_before['index']}] {ctx_before['text']}_")
+        lines.append(f"> [{hit['index']}] {hit.get('text') or ''}")
+        if ctx_after:
+            lines.append(f"> _[{ctx_after['index']}] {ctx_after['text']}_")
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+# ────────── helpers ──────────
+
+def _humanize_secs(s: int) -> str:
+    if s < 60:
+        return f"{s}s"
+    if s < 3600:
+        return f"{s // 60}m {s % 60}s"
+    h = s // 3600
+    m = (s % 3600) // 60
+    return f"{h}h {m}m"

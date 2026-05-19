@@ -1,338 +1,285 @@
-"""Metadata filter DSL for /v2/search.
+"""Tiny `WHERE` DSL parser for ``POST /v3/search``.
 
-Grammar (AND-only, no OR, no parens):
+Grammar (no precedence rules — left-to-right AND only):
 
-    expr       := predicate (AND? predicate)*
-    predicate  := field op value
-                | field (NOT)? LIKE string
-                | field (NOT)? IN ( value_list )
-    op         := = | != | > | >= | < | <=
-    value      := string | reltime
-    value_list := value (, value)*
-    field      := session_id | card_id | tag | source | created_at
-    string     := "..." (double-quoted, escape \\ and \")
-    reltime    := -<N>(d|h|m|w)      (days/hours/minutes/weeks, relative to now)
+    expr      := predicate ('AND' predicate)*
+    predicate := field op value | field 'IN' list | field 'NOT' 'IN' list | field 'LIKE' string
+    field     := identifier
+    op        := '=' | '!=' | '<' | '>' | '<=' | '>='
+    value     := string | number
+    list      := '(' value (',' value)* ')'
+    string    := '"' ... '"' | "'" ... "'"
 
-Fields:
-    session_id    — both tables
-    card_id       — cards ONLY (sessions-side builder returns None if present)
-    tag           — multivalue (contains semantics via json_each)
-    source        — sessions ONLY (v2 new; cards-side builder returns None if present)
-    created_at    — both tables
+Operators consciously omit ``OR`` — combining predicates by OR is rare for
+the kinds of filters v3 needs (status / stats / metadata slicing), and
+leaving it out keeps both grammar and execution model simple.
 
-Compiled to SQLite parameterized WHERE fragments. `tag` expands to
-EXISTS (SELECT 1 FROM json_each(<table>.tags) WHERE ...).
+Field domains decide which candidate types a predicate applies to:
+
+- ``type`` — universal, special-cased to filter the candidate stream
+- card-only stats: ``review_up`` / ``review_down`` / ``review_neutral``
+  / ``review_count`` / ``read_count`` / ``recall_count``,
+  card metadata: ``card_id``
+- session-only: ``session_id``, ``source``
+- both: ``created_at``
+
+If a predicate references a card-only field, *session* candidates fail
+that predicate vacuously (and vice-versa). This makes
+``review_count = 0`` auto-narrow to cards-only, ``source = "claude-code"``
+auto-narrow to sessions-only — see docs/cli/v3/search.md "字段应用域规则".
 """
 from __future__ import annotations
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Union
+import re
+from dataclasses import dataclass, field
+from typing import Any, Callable
+
+
+CARD_ONLY_FIELDS = {
+    "card_id", "review_up", "review_down", "review_neutral",
+    "review_count", "read_count", "recall_count",
+}
+SESSION_ONLY_FIELDS = {"session_id", "source"}
+SHARED_FIELDS = {"created_at", "type"}
+
+_ALL_FIELDS = CARD_ONLY_FIELDS | SESSION_ONLY_FIELDS | SHARED_FIELDS
+
+
+class DSLError(ValueError):
+    pass
 
 
 @dataclass
 class Predicate:
     field: str
-    op: str
-    value: Union[str, list[str]]
+    op: str            # =, !=, <, >, <=, >=, LIKE, IN, NOT_IN
+    value: Any         # str / number / list
 
+    def applies_to(self, kind: str) -> bool:
+        """True if this predicate is meaningful for a `card` or `session` candidate."""
+        if self.field in SHARED_FIELDS:
+            return True
+        if self.field in CARD_ONLY_FIELDS:
+            return kind == "card"
+        if self.field in SESSION_ONLY_FIELDS:
+            return kind == "session"
+        return True  # unknown — let evaluate decide
 
-FIELDS = {"session_id", "card_id", "tag", "source", "created_at"}
-CARDS_ONLY_FIELDS = {"card_id"}
-# tag now applies to BOTH sessions and cards via the standalone `tags`
-# table (subject_id + key). source is still sessions-only.
-SESSIONS_ONLY_FIELDS = {"source"}
-COMPARE_OPS = {"=", "!=", ">", ">=", "<", "<="}
-KEYWORDS = {"AND", "LIKE", "NOT", "IN"}
+    def evaluate(self, candidate: dict, kind: str) -> bool:
+        """Apply this predicate to a candidate dict. Fields not present
+        in the candidate dict make the predicate fail (vacuously false)
+        — that's how field-domain narrowing works."""
+        if not self.applies_to(kind):
+            return False  # vacuously fail: narrows to the other type
+        # ``type`` is a synthetic field — read from kind, not the dict.
+        if self.field == "type":
+            return self._apply(kind)
+        if self.field not in candidate:
+            return False
+        return self._apply(candidate[self.field])
 
-
-class DSLError(ValueError):
-    """Raised on any DSL syntax / semantic error."""
+    def _apply(self, v: Any) -> bool:
+        op, rhs = self.op, self.value
+        if op == "=":
+            return _eq(v, rhs)
+        if op == "!=":
+            return not _eq(v, rhs)
+        if op == "<":
+            return _num(v) < _num(rhs)
+        if op == ">":
+            return _num(v) > _num(rhs)
+        if op == "<=":
+            return _num(v) <= _num(rhs)
+        if op == ">=":
+            return _num(v) >= _num(rhs)
+        if op == "LIKE":
+            return _like(str(v), str(rhs))
+        if op == "IN":
+            return any(_eq(v, x) for x in rhs)
+        if op == "NOT_IN":
+            return not any(_eq(v, x) for x in rhs)
+        raise DSLError(f"unknown op: {op!r}")
 
 
 @dataclass
-class Token:
-    kind: str
-    value: str
+class Filter:
+    predicates: list[Predicate] = field(default_factory=list)
+
+    def empty(self) -> bool:
+        return not self.predicates
+
+    def scope_includes(self, kind: str) -> bool:
+        """True if at least one candidate of this kind could possibly pass.
+
+        Used to decide whether to even bother running the LanceDB search
+        for that bucket.
+        """
+        for p in self.predicates:
+            if not p.applies_to(kind):
+                return False
+        return True
+
+    def evaluate(self, candidate: dict, kind: str) -> bool:
+        return all(p.evaluate(candidate, kind) for p in self.predicates)
 
 
-def _tokenize(src: str) -> list[Token]:
-    i, n = 0, len(src)
-    tokens: list[Token] = []
-    while i < n:
-        c = src[i]
-        if c.isspace():
-            i += 1
-            continue
-        if c == '"':
-            j = i + 1
-            buf: list[str] = []
-            while j < n:
-                ch = src[j]
-                if ch == "\\" and j + 1 < n:
-                    nxt = src[j + 1]
-                    if nxt == '"' or nxt == "\\":
-                        buf.append(nxt)
-                        j += 2
-                        continue
-                    buf.append(ch)
-                    j += 1
-                    continue
-                if ch == '"':
-                    tokens.append(Token("STRING", "".join(buf)))
-                    i = j + 1
-                    break
-                buf.append(ch)
-                j += 1
+# ────────── tokenizer + parser ──────────
+
+_TOKEN_RE = re.compile(
+    r"""\s*(?:
+        (?P<str>"[^"]*"|'[^']*')                  # quoted string
+        | (?P<num>-?\d+(?:\.\d+)?)                # number
+        | (?P<op><=|>=|!=|=|<|>|\(|\)|,)          # operator / paren
+        | (?P<word>[A-Za-z_][A-Za-z0-9_]*)        # identifier / keyword
+    )""",
+    re.VERBOSE,
+)
+_KEYWORDS = {"AND", "OR", "IN", "NOT", "LIKE"}
+
+
+def _tokenize(s: str):
+    pos = 0
+    while pos < len(s):
+        m = _TOKEN_RE.match(s, pos)
+        if not m:
+            raise DSLError(f"DSL parse error: unexpected character at offset {pos}: {s[pos:pos+10]!r}")
+        pos = m.end()
+        if m.group("str"):
+            yield ("str", m.group("str")[1:-1])
+        elif m.group("num"):
+            yield ("num", float(m.group("num")) if "." in m.group("num") else int(m.group("num")))
+        elif m.group("op"):
+            yield ("op", m.group("op"))
+        elif m.group("word"):
+            w = m.group("word")
+            if w.upper() in _KEYWORDS:
+                yield ("kw", w.upper())
             else:
-                raise DSLError("unterminated string")
-            continue
-        if c == "(":
-            tokens.append(Token("LPAREN", "("))
-            i += 1
-            continue
-        if c == ")":
-            tokens.append(Token("RPAREN", ")"))
-            i += 1
-            continue
-        if c == ",":
-            tokens.append(Token("COMMA", ","))
-            i += 1
-            continue
-        if c in "=!<>":
-            if c == "!" and i + 1 < n and src[i + 1] == "=":
-                tokens.append(Token("OP", "!="))
-                i += 2
-                continue
-            if c in "<>" and i + 1 < n and src[i + 1] == "=":
-                tokens.append(Token("OP", c + "="))
-                i += 2
-                continue
-            if c == "=":
-                tokens.append(Token("OP", "="))
-                i += 1
-                continue
-            if c in "<>":
-                tokens.append(Token("OP", c))
-                i += 1
-                continue
-            raise DSLError(f"unexpected character {c!r}")
-        if c == "-" and i + 1 < n and src[i + 1].isdigit():
-            j = i + 1
-            while j < n and src[j].isdigit():
-                j += 1
-            if j < n and src[j] in "dhmw":
-                tokens.append(Token("RELTIME", src[i : j + 1]))
-                i = j + 1
-                continue
-            raise DSLError(f"bad reltime starting at {src[i:]!r}")
-        if c.isalpha() or c == "_":
-            j = i + 1
-            while j < n and (src[j].isalnum() or src[j] == "_"):
-                j += 1
-            word = src[i:j]
-            kind = "KW" if word in KEYWORDS else "IDENT"
-            tokens.append(Token(kind, word))
-            i = j
-            continue
-        raise DSLError(f"unexpected character {c!r} at position {i}")
-    return tokens
+                yield ("ident", w)
 
 
-def _resolve_reltime(rt: str, now: datetime | None = None) -> str:
-    unit = rt[-1]
-    n = int(rt[1:-1])
-    now = now or datetime.now(timezone.utc)
-    if unit == "d":
-        dt = now - timedelta(days=n)
-    elif unit == "h":
-        dt = now - timedelta(hours=n)
-    elif unit == "m":
-        dt = now - timedelta(minutes=n)
-    elif unit == "w":
-        dt = now - timedelta(weeks=n)
-    else:
-        raise DSLError(f"bad reltime unit: {unit}")
-    return dt.isoformat(timespec="seconds").replace("+00:00", "Z")
+def parse(expr: str) -> Filter:
+    """Parse ``expr`` into a :class:`Filter`. Empty / None → empty filter."""
+    if not expr or not expr.strip():
+        return Filter()
+    tokens = list(_tokenize(expr))
+    if not tokens:
+        return Filter()
 
-
-def parse(src: str, now: datetime | None = None) -> list[Predicate]:
-    """Parse DSL source into list[Predicate] (implicit AND between predicates)."""
-    if not src or not src.strip():
-        return []
-    tokens = _tokenize(src)
+    preds: list[Predicate] = []
     i = 0
-    out: list[Predicate] = []
 
-    def peek(offset: int = 0) -> Optional[Token]:
-        return tokens[i + offset] if i + offset < len(tokens) else None
+    def peek():
+        return tokens[i] if i < len(tokens) else (None, None)
+
+    def consume():
+        nonlocal i
+        if i >= len(tokens):
+            raise DSLError("DSL parse error: unexpected end of expression")
+        tok = tokens[i]
+        i += 1
+        return tok
+
+    def expect(kind, value=None):
+        tok = consume()
+        if tok[0] != kind or (value is not None and tok[1] != value):
+            raise DSLError(f"DSL parse error: expected {kind!r}={value!r}, got {tok!r}")
+        return tok
 
     while i < len(tokens):
-        t = peek()
-        if t is None:
-            break
-        if t.kind == "KW" and t.value == "AND":
-            if not out:
-                raise DSLError("leading AND")
-            i += 1
-            continue
-        if t.kind != "IDENT":
-            raise DSLError(f"expected field, got {t.kind} {t.value!r}")
-        field = t.value
-        if field not in FIELDS:
-            raise DSLError(f"unknown field: {field}")
-        i += 1
+        ident_tok = consume()
+        if ident_tok[0] != "ident":
+            raise DSLError(f"DSL parse error: expected field name, got {ident_tok!r}")
+        field_name = ident_tok[1]
+        if field_name not in _ALL_FIELDS:
+            raise DSLError(f"DSL parse error: unknown field {field_name!r}")
 
-        nxt = peek()
-        if nxt is None:
-            raise DSLError(f"expected operator after {field}")
-
-        if nxt.kind == "OP" and nxt.value in COMPARE_OPS:
-            op = nxt.value
-            i += 1
-            v = peek()
-            if v is None:
-                raise DSLError(f"expected value after {op}")
-            if v.kind == "STRING":
-                out.append(Predicate(field, op, v.value))
-            elif v.kind == "RELTIME":
-                out.append(Predicate(field, op, _resolve_reltime(v.value, now)))
-            else:
-                raise DSLError(f"expected value, got {v.kind}")
-            i += 1
-            continue
-
-        neg = False
-        if nxt.kind == "KW" and nxt.value == "NOT":
-            neg = True
-            i += 1
-            nxt = peek()
-            if nxt is None:
-                raise DSLError("dangling NOT")
-
-        if nxt.kind == "KW" and nxt.value == "LIKE":
-            i += 1
-            v = peek()
-            if v is None or v.kind != "STRING":
-                raise DSLError("LIKE requires string")
-            out.append(Predicate(field, "NOTLIKE" if neg else "LIKE", v.value))
-            i += 1
-            continue
-
-        if nxt.kind == "KW" and nxt.value == "IN":
-            i += 1
-            lp = peek()
-            if lp is None or lp.kind != "LPAREN":
-                raise DSLError("IN requires (")
-            i += 1
-            vals: list[str] = []
-            while True:
-                v = peek()
-                if v is None:
-                    raise DSLError("unterminated IN list")
-                if v.kind == "RPAREN":
-                    i += 1
-                    break
-                if v.kind == "STRING":
-                    vals.append(v.value)
-                elif v.kind == "RELTIME":
-                    vals.append(_resolve_reltime(v.value, now))
-                else:
-                    raise DSLError(f"unexpected {v.kind} in IN")
-                i += 1
-                sep = peek()
-                if sep and sep.kind == "COMMA":
-                    i += 1
-                    continue
-                if sep and sep.kind == "RPAREN":
-                    i += 1
-                    break
-            out.append(Predicate(field, "NOTIN" if neg else "IN", vals))
-            continue
-
-        raise DSLError(f"unexpected token after {field}: {nxt.kind} {nxt.value!r}")
-
-    return out
-
-
-def compile_for(
-    predicates: list[Predicate],
-    table: str,
-) -> Optional[tuple[str, list]]:
-    """Compile predicates to (sql_fragment, params) for `table` in {'cards','sessions'}.
-
-    Returns None if any predicate references a field that doesn't apply to this table
-    (e.g. `card_id` on sessions, `source` on cards) — caller treats None as "this DSL
-    can never match rows in this table".
-    """
-    if table not in ("cards", "sessions"):
-        raise ValueError(f"unknown table: {table}")
-    clauses: list[str] = []
-    params: list = []
-    for p in predicates:
-        if table == "sessions" and p.field in CARDS_ONLY_FIELDS:
-            return None
-        if table == "cards" and p.field in SESSIONS_ONLY_FIELDS:
-            return None
-        if p.field == "tag":
-            # `tag` is matched against the new `tags` table by KEY only:
-            #   - `tag = "decision"` → key="decision" (any value, including empty)
-            # Subject id column differs per table.
-            id_col = "session_id" if table == "sessions" else "card_id"
-            if p.op == "=":
-                clauses.append(
-                    f"EXISTS (SELECT 1 FROM tags "
-                    f"WHERE tags.subject_id = {table}.{id_col} AND tags.key = ?)"
-                )
-                params.append(p.value)
-            elif p.op == "!=":
-                clauses.append(
-                    f"NOT EXISTS (SELECT 1 FROM tags "
-                    f"WHERE tags.subject_id = {table}.{id_col} AND tags.key = ?)"
-                )
-                params.append(p.value)
-            elif p.op == "IN":
-                placeholders = ",".join("?" * len(p.value))
-                clauses.append(
-                    f"EXISTS (SELECT 1 FROM tags "
-                    f"WHERE tags.subject_id = {table}.{id_col} "
-                    f"AND tags.key IN ({placeholders}))"
-                )
-                params.extend(p.value)
-            elif p.op == "NOTIN":
-                placeholders = ",".join("?" * len(p.value))
-                clauses.append(
-                    f"NOT EXISTS (SELECT 1 FROM tags "
-                    f"WHERE tags.subject_id = {table}.{id_col} "
-                    f"AND tags.key IN ({placeholders}))"
-                )
-                params.extend(p.value)
-            else:
-                raise DSLError(f"tag does not support operator {p.op}")
-            continue
-        col = p.field if p.field != "card_id" or table == "cards" else None
-        if table == "cards" and p.field == "card_id":
-            col = "card_id"
-        if col is None:
-            col = p.field
-        if p.op in COMPARE_OPS:
-            clauses.append(f"{table}.{col} {p.op} ?")
-            params.append(p.value)
-        elif p.op == "LIKE":
-            clauses.append(f"{table}.{col} LIKE ?")
-            params.append(p.value)
-        elif p.op == "NOTLIKE":
-            clauses.append(f"{table}.{col} NOT LIKE ?")
-            params.append(p.value)
-        elif p.op == "IN":
-            placeholders = ",".join("?" * len(p.value))
-            clauses.append(f"{table}.{col} IN ({placeholders})")
-            params.extend(p.value)
-        elif p.op == "NOTIN":
-            placeholders = ",".join("?" * len(p.value))
-            clauses.append(f"{table}.{col} NOT IN ({placeholders})")
-            params.extend(p.value)
+        nxt = consume()
+        if nxt[0] == "op" and nxt[1] in {"=", "!=", "<", ">", "<=", ">="}:
+            rhs = consume()
+            if rhs[0] not in ("str", "num"):
+                raise DSLError(f"DSL parse error: expected value after {nxt[1]!r}, got {rhs!r}")
+            preds.append(Predicate(field=field_name, op=nxt[1], value=rhs[1]))
+        elif nxt[0] == "kw" and nxt[1] == "LIKE":
+            rhs = consume()
+            if rhs[0] != "str":
+                raise DSLError("DSL parse error: LIKE requires a string pattern")
+            preds.append(Predicate(field=field_name, op="LIKE", value=rhs[1]))
+        elif nxt[0] == "kw" and nxt[1] == "IN":
+            values = _parse_in_list(consume, expect)
+            preds.append(Predicate(field=field_name, op="IN", value=values))
+        elif nxt[0] == "kw" and nxt[1] == "NOT":
+            expect("kw", "IN")
+            values = _parse_in_list(consume, expect)
+            preds.append(Predicate(field=field_name, op="NOT_IN", value=values))
         else:
-            raise DSLError(f"unknown operator {p.op}")
-    if not clauses:
-        return ("1=1", [])
-    return (" AND ".join(clauses), params)
+            raise DSLError(f"DSL parse error: unexpected token after field {field_name!r}: {nxt!r}")
+
+        # Connector
+        if i < len(tokens):
+            nxt = consume()
+            if nxt[0] == "kw" and nxt[1] == "AND":
+                continue
+            raise DSLError(f"DSL parse error: expected 'AND' between predicates, got {nxt!r}")
+
+    return Filter(predicates=preds)
+
+
+def _parse_in_list(consume, expect):
+    expect("op", "(")
+    values: list[Any] = []
+    while True:
+        v = consume()
+        if v[0] not in ("str", "num"):
+            raise DSLError(f"DSL parse error: expected value in IN-list, got {v!r}")
+        values.append(v[1])
+        nxt = consume()
+        if nxt == ("op", ")"):
+            break
+        if nxt != ("op", ","):
+            raise DSLError(f"DSL parse error: expected ',' or ')' in IN-list, got {nxt!r}")
+    if not values:
+        raise DSLError("DSL parse error: IN-list cannot be empty")
+    return values
+
+
+# ────────── helpers ──────────
+
+def _num(x: Any) -> float:
+    try:
+        return float(x)
+    except (TypeError, ValueError) as e:
+        raise DSLError(f"non-numeric value: {x!r}") from e
+
+
+def _eq(a: Any, b: Any) -> bool:
+    # Permissive equality: try string compare first, then numeric. Allows
+    # `tag = "x"` regardless of whether the stored value is a str or int.
+    if isinstance(a, str) and isinstance(b, str):
+        return a == b
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        return a == b
+    try:
+        return str(a) == str(b)
+    except Exception:
+        return False
+
+
+def _like(value: str, pattern: str) -> bool:
+    """SQL-LIKE: ``%`` matches any sequence (incl. empty), ``_`` matches one char.
+
+    Case-insensitive. Built char-by-char rather than via ``re.escape`` +
+    string-replace — Python's ``re.escape`` does NOT escape ``_`` or ``%``
+    (neither is a regex metachar), so the naive replace can't reliably
+    distinguish "this percent came from the pattern" from "this percent
+    was already escaped". Walking the input is simpler and correct.
+    """
+    parts: list[str] = []
+    for ch in pattern:
+        if ch == "%":
+            parts.append(".*")
+        elif ch == "_":
+            parts.append(".")
+        else:
+            parts.append(re.escape(ch))
+    rx = "^" + "".join(parts) + "$"
+    return re.match(rx, value, re.IGNORECASE) is not None

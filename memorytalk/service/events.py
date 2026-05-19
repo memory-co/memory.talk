@@ -1,34 +1,34 @@
-"""EventWriter — append events to each object's own events.jsonl (async).
+"""EventWriter — append a lifecycle event to a session or card events.jsonl.
 
-Every card and every session carries its own append-only event stream at:
-  cards/<bucket>/<card_id>/events.jsonl
-  sessions/<source>/<bucket>/<sess_*>/events.jsonl
-
-File ops are routed through the per-domain Stores (which own Storage).
+These events back the audit / lifeline view of an object; services call
+this whenever they perform a state-affecting operation on the parent
+object (card created, card read, card reviewed, session imported, ...).
 """
 from __future__ import annotations
+import datetime as _dt
+from typing import Any
 
-from memorytalk.util.ids import CARD_PREFIX, SESSION_PREFIX, new_event_id
-from memorytalk.util.ttl import dt_to_iso, now_utc
 from memorytalk.repository import SQLiteStore
+
+
+def _utc_iso() -> str:
+    return _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 class EventWriter:
     def __init__(self, db: SQLiteStore):
         self.db = db
 
-    async def emit(self, object_id: str, kind: str, detail: dict, at: str | None = None) -> str:
-        event_id = new_event_id()
-        at_iso = at or dt_to_iso(now_utc())
-        record = {"event_id": event_id, "at": at_iso, "kind": kind, "detail": detail}
+    async def session_event(
+        self, source: str, session_id: str, event: str, **detail: Any
+    ) -> None:
+        await self.db.sessions.append_event(
+            source, session_id,
+            {"event": event, "ts": _utc_iso(), **detail},
+        )
 
-        if object_id.startswith(CARD_PREFIX):
-            await self.db.cards.append_event(object_id, record)
-        elif object_id.startswith(SESSION_PREFIX):
-            session = await self.db.sessions.get(object_id)
-            if session is None:
-                raise ValueError(f"cannot emit event for unknown session: {object_id}")
-            await self.db.sessions.append_event(session["source"], object_id, record)
-        else:
-            raise ValueError(f"unknown object prefix: {object_id}")
-        return event_id
+    async def card_event(self, card_id: str, event: str, **detail: Any) -> None:
+        await self.db.cards.append_event(
+            card_id,
+            {"event": event, "ts": _utc_iso(), **detail},
+        )

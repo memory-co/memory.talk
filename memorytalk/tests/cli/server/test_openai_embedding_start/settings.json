@@ -1,9 +1,0 @@
-{
-  "embedding": {
-    "provider": "openai",
-    "endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
-    "auth_key": "${QWEN_KEY}",
-    "model": "text-embedding-v4",
-    "dim": 1024
-  }
-}
