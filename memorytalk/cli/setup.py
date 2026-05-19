@@ -31,7 +31,7 @@ import click
 from memorytalk.cli._format import fmt_error
 from memorytalk.cli._render import emit_md, emit_md_err
 from memorytalk.cli.server import (
-    pid_alive, start_server_proc, stop_server_proc,
+    _server_responsive, pid_alive, start_server_proc, stop_server_proc,
 )
 from memorytalk.config import Config, ConfigValidationError, Settings
 from memorytalk.util import console
@@ -215,7 +215,15 @@ def _maybe_start_or_restart(
     cfg: Config, is_first_install: bool, has_diff: bool,
 ) -> str | None:
     """Returns a short string describing the action taken, or None."""
-    pid_alive_now = cfg.pid_path.exists() and pid_alive(int(cfg.pid_path.read_text()))
+    # Same guard as start_server_proc: pid_alive alone is fooled by a
+    # recycled PID, so verify the daemon actually answers HTTP before we
+    # consider "restart" — otherwise stop_server_proc would SIGTERM an
+    # unrelated process that happens to hold the stale PID.
+    pid_alive_now = (
+        cfg.pid_path.exists()
+        and pid_alive(int(cfg.pid_path.read_text()))
+        and _server_responsive(cfg)
+    )
 
     if is_first_install:
         if console.confirm("Start the server now?", default=True):

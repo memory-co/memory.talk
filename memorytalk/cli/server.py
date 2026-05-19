@@ -32,6 +32,18 @@ def pid_alive(pid: int) -> bool:
         return False
 
 
+def _server_responsive(cfg: Config) -> bool:
+    """HTTP-probe the server. ``pid_alive`` alone can't tell us whether
+    the PID in ``server.pid`` is actually our daemon — the kernel may
+    have recycled it to an unrelated process after a crash/reboot. A
+    successful ``/v3/status`` call proves it really is memory-talk."""
+    try:
+        api("GET", "/v3/status", cfg, timeout=1.0)
+        return True
+    except Exception:
+        return False
+
+
 def start_server_proc(cfg: Config) -> dict:
     """Start the API server as a daemon. Returns one of:
 
@@ -47,9 +59,10 @@ def start_server_proc(cfg: Config) -> dict:
             pid = int(cfg.pid_path.read_text().strip())
         except ValueError:
             pid = 0
-        if pid and pid_alive(pid):
+        if pid and pid_alive(pid) and _server_responsive(cfg):
             return {"status": "already_running", "pid": pid, "port": port}
         cfg.pid_path.unlink(missing_ok=True)
+        cfg.port_path.unlink(missing_ok=True)
 
     env = os.environ.copy()
     env["MEMORY_TALK_DATA_ROOT"] = str(cfg.data_root)
