@@ -1,4 +1,4 @@
-"""CLI: server start / stop / status [--json].
+"""CLI: server start / stop / status / logs [--json].
 
 Lifecycle primitives (``start_server_proc`` / ``stop_server_proc`` /
 ``pid_alive``) are exported separately so other commands (notably
@@ -10,6 +10,7 @@ import signal
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import click
 
@@ -67,13 +68,19 @@ def start_server_proc(cfg: Config) -> dict:
     env = os.environ.copy()
     env["MEMORY_TALK_DATA_ROOT"] = str(cfg.data_root)
 
+    # Launch via the in-repo shim (``memorytalk/server.py``) instead of
+    # uvicorn directly. The shim redirects OS-level stdout/stderr to
+    # ``logs/server.log`` and configures Python ``logging`` with a
+    # rotating file handler before uvicorn starts — so the daemon's
+    # logs survive the parent CLI exiting.
+    #
+    # ``stderr=subprocess.PIPE`` is kept narrowly for the 1.2s failure
+    # probe below: errors from interpreter startup or module-import
+    # time happen before the shim's ``_redirect_os_fds_to`` runs, so
+    # we still want to capture those into the failure payload. After
+    # the shim reassigns fd 2, nothing else writes to the pipe.
     proc = subprocess.Popen(
-        [
-            sys.executable, "-m", "uvicorn",
-            "memorytalk.api:app",
-            "--host", "127.0.0.1",
-            "--port", str(port),
-        ],
+        [sys.executable, "-m", "memorytalk.server"],
         env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
@@ -147,3 +154,53 @@ def server_status(json_out: bool) -> None:
             "settings_path": str(cfg.settings_path),
         }
     _emit(payload, json_out, fmt_status)
+
+
+def _tail_bytes(path: Path, n_lines: int) -> list[bytes]:
+    """Return the last ``n_lines`` lines of ``path`` cheaply by reading
+    backward in chunks. Bounded to the last 1 MB so we never load a
+    huge log into memory."""
+    cap = 1024 * 1024
+    with path.open("rb") as f:
+        f.seek(0, 2)
+        size = f.tell()
+        read_size = min(size, cap)
+        f.seek(size - read_size)
+        chunk = f.read(read_size)
+    lines = chunk.splitlines()
+    return lines[-n_lines:]
+
+
+@server.command("logs")
+@click.option("-f", "--follow", is_flag=True, default=False,
+              help="Stream new log lines as they're written (like tail -f)")
+@click.option("-n", "--lines", type=int, default=100,
+              help="Number of trailing lines to show first (default 100)")
+def server_logs(follow: bool, lines: int) -> None:
+    """Tail the daemon's log file (``~/.memory-talk/logs/server.log``)."""
+    cfg = Config()
+    log_path = cfg.logs_dir / "server.log"
+    if not log_path.exists():
+        click.echo("(no log file yet — has the server been started?)", err=True)
+        sys.exit(1)
+
+    for raw in _tail_bytes(log_path, lines):
+        click.echo(raw.decode(errors="replace"))
+
+    if not follow:
+        return
+
+    # ``tail -f`` loop. We don't track inode changes — if the file gets
+    # rotated mid-follow we silently keep reading the rotated copy. The
+    # user can rerun the command to pick up the live file again.
+    with log_path.open("rb") as f:
+        f.seek(0, 2)
+        try:
+            while True:
+                line = f.readline()
+                if not line:
+                    time.sleep(0.2)
+                    continue
+                click.echo(line.decode(errors="replace").rstrip("\n"))
+        except KeyboardInterrupt:
+            pass

@@ -9,14 +9,17 @@ and the dependent endpoint returns 503 ``unavailable`` (rather than the
 whole server failing to come up).
 """
 from __future__ import annotations
+import logging
 import os
-import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 
 from memorytalk.config import Config, ConfigValidationError
+
+
+_log = logging.getLogger("memorytalk.api")
 from memorytalk.provider.embedding import (
     EmbedderValidationError, get_embedder, validate_embedder,
 )
@@ -47,15 +50,15 @@ def create_app(config: Config | None = None) -> FastAPI:
             vectors = await LanceStore.create(
                 config.vectors_dir, dim=config.settings.embedding.dim,
             )
-        except Exception as e:
-            print(f"[memory-talk] lancedb init failed: {e}", file=sys.stderr)
+        except Exception:
+            _log.exception("lancedb init failed; vector-backed endpoints will 503")
 
         embedder = get_embedder(config)
 
         try:
             await validate_embedder(config)
         except EmbedderValidationError as e:
-            print(f"[memory-talk] embedding startup check failed: {e}", file=sys.stderr)
+            _log.exception("embedding startup check failed; aborting boot")
             raise SystemExit(2) from e
 
         events = EventWriter(db)
@@ -87,8 +90,8 @@ def create_app(config: Config | None = None) -> FastAPI:
         if config.settings.sync.enabled:
             try:
                 await app.state.sync.start()
-            except Exception as e:
-                print(f"[memory-talk] sync auto-start failed: {e}", file=sys.stderr)
+            except Exception:
+                _log.exception("sync auto-start failed")
 
         yield
 
