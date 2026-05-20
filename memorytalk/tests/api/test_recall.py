@@ -2,20 +2,16 @@
 from __future__ import annotations
 import pytest
 
+from memorytalk.tests._ingest import ingest_session
+
 pytestmark = pytest.mark.asyncio
 
 
 async def _ingest(client) -> str:
-    r = await client.post("/v3/sessions", json={
-        "session_id": "rc-src", "source": "claude-code",
-        "created_at": "2026-05-18T09:00:00Z",
-        "metadata": {"cwd": "/work"},
-        "sha256": "rc-sha",
-        "rounds": [
-            {"round_id": "r1", "role": "human",
-             "content": [{"type": "text", "text": "intro about LanceDB"}]},
-        ],
-    })
+    r = await ingest_session(client, "rc-src", metadata={"cwd": "/work"}, rounds=[
+        {"round_id": "r1", "role": "human",
+         "content": [{"type": "text", "text": "intro about LanceDB"}]},
+    ])
     r.raise_for_status()
     return r.json()["session_id"]
 

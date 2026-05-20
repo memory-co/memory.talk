@@ -5,17 +5,17 @@ import json
 
 import pytest
 
+from memorytalk.tests._ingest import ingest_session
+
 pytestmark = pytest.mark.asyncio
 
 
 async def _ingest(client, sid: str, sha: str, rounds: list[dict]) -> dict:
-    payload = {
-        "session_id": sid, "source": "claude-code",
-        "created_at": "2026-05-18T09:00:00Z",
-        "metadata": {"cwd": "/work/proj"},
-        "sha256": sha, "rounds": rounds,
-    }
-    r = await client.post("/v3/sessions", json=payload)
+    # ``sha`` parameter is no longer used by the cursor-based API; kept
+    # in the signature so the call sites in this file don't all need to
+    # change. It's effectively a label.
+    del sha
+    r = await ingest_session(client, sid, rounds=rounds)
     r.raise_for_status()
     return r.json()
 

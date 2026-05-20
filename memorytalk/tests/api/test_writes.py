@@ -8,25 +8,21 @@ service-layer wiring that individual focused tests would miss.
 from __future__ import annotations
 import pytest
 
+from memorytalk.tests._ingest import ingest_session
+
 pytestmark = pytest.mark.asyncio
 
 
 async def test_full_pipeline_ingest_card_review_search_read(client):
     # ── 1. sync ingest a session that mentions LanceDB ───────────────
-    r = await client.post("/v3/sessions", json={
-        "session_id": "e2e-sess", "source": "claude-code",
-        "created_at": "2026-05-18T09:00:00Z",
-        "metadata": {"cwd": "/work/proj"},
-        "sha256": "e2e-sha",
-        "rounds": [
-            {"round_id": "r1", "role": "human",
-             "content": [{"type": "text", "text": "we need a vector db"}]},
-            {"round_id": "r2", "role": "assistant",
-             "content": [{"type": "text", "text": "LanceDB is embedded, zero deps"}]},
-            {"round_id": "r3", "role": "human",
-             "content": [{"type": "text", "text": "ok, LanceDB it is"}]},
-        ],
-    })
+    r = await ingest_session(client, "e2e-sess", rounds=[
+        {"round_id": "r1", "role": "human",
+         "content": [{"type": "text", "text": "we need a vector db"}]},
+        {"round_id": "r2", "role": "assistant",
+         "content": [{"type": "text", "text": "LanceDB is embedded, zero deps"}]},
+        {"round_id": "r3", "role": "human",
+         "content": [{"type": "text", "text": "ok, LanceDB it is"}]},
+    ])
     sid = r.json()["session_id"]
 
     # ── 2. extract a card from rounds 2-3 ────────────────────────────

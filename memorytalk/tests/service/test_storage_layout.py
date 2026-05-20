@@ -11,24 +11,21 @@ import json
 
 import pytest
 
+from memorytalk.tests._ingest import ingest_session
+
 pytestmark = pytest.mark.asyncio
 
 
+_SAMPLE_ROUNDS = [
+    {"round_id": "r1", "role": "human",
+     "content": [{"type": "text", "text": "first message"}]},
+    {"round_id": "r2", "role": "assistant",
+     "content": [{"type": "text", "text": "second message with LanceDB keyword"}]},
+]
+
+
 async def _ingest_sample(client) -> str:
-    body = {
-        "session_id": "layout-1",
-        "source": "claude-code",
-        "created_at": "2026-05-18T09:00:00Z",
-        "metadata": {"cwd": "/work/proj"},
-        "sha256": "sha-layout",
-        "rounds": [
-            {"round_id": "r1", "role": "human",
-             "content": [{"type": "text", "text": "first message"}]},
-            {"round_id": "r2", "role": "assistant",
-             "content": [{"type": "text", "text": "second message with LanceDB keyword"}]},
-        ],
-    }
-    r = await client.post("/v3/sessions", json=body)
+    r = await ingest_session(client, "layout-1", rounds=_SAMPLE_ROUNDS)
     assert r.status_code == 200
     return r.json()["session_id"]
 
@@ -90,22 +87,14 @@ async def test_lancedb_rounds_table_has_one_row_per_round(app, client):
 
 async def test_appended_round_lands_in_all_three_stores(app, client):
     sid = await _ingest_sample(client)
-    extra = {
-        "session_id": "layout-1", "source": "claude-code",
-        "created_at": "2026-05-18T09:00:00Z",
-        "metadata": {"cwd": "/work/proj"},
-        "sha256": "sha-layout-2",
-        "rounds": [
-            {"round_id": "r1", "role": "human",
-             "content": [{"type": "text", "text": "first message"}]},
-            {"round_id": "r2", "role": "assistant",
-             "content": [{"type": "text", "text": "second message with LanceDB keyword"}]},
-            {"round_id": "r3", "role": "human",
-             "content": [{"type": "text", "text": "third message"}]},
-        ],
-    }
-    r = await client.post("/v3/sessions", json=extra)
-    assert r.json()["action"] == "appended"
+    extra_rounds = _SAMPLE_ROUNDS + [
+        {"round_id": "r3", "role": "human",
+         "content": [{"type": "text", "text": "third message"}]},
+    ]
+    r = await ingest_session(client, "layout-1", rounds=extra_rounds)
+    body = r.json()
+    assert body["status"] == "ok"
+    assert body["appended_count"] == 1
 
     db = app.state.db
     s = await db.sessions.get(sid)

@@ -86,16 +86,17 @@ Session 的 Round 是原始对话的忠实记录,保留完整结构。
 
 `index` 是会话内的稳定短编号,**是 card / review 引用 round 的键**,因此写入端必须保证它的稳定性。
 
-1. **首次 ingest**(`session_id` 不存在):按请求体 `rounds` 数组顺序赋 `1, 2, 3, ...`
-2. **追加 ingest**(同 `session_id` 再来,且 `sha256` 变了):
-   - 服务端按 `round_id` 对齐旧 / 新 rounds
-   - **已存且内容未变**:保留原 `index`,**不重新编号**
-   - **新增**(请求体里有、已存里没):按相对顺序从 `max(existing_index) + 1` 续号
-   - **已存但内容被改**(平台覆写):**整条跳过**,原 `index` 仍指向原内容;不参与续号;产生 `rounds_overwrite_skipped` 事件
-3. **sidechain round 也占号段** —— 不为 sidechain 单独编号,按数组出现顺序续号
-4. **index 一旦分配就不再变** —— 这是 card / review 引用安全性的前提
+1. **首次 ingest**(session 不存在):按 `append_rounds` 请求里 `rounds[]` 数组顺序赋 `1, 2, 3, ...`
+2. **追加 ingest**(`append_rounds(expected_prev_round_id=X)`,X 匹配 server 的 `last_round_id`):
+   - 新增的 rounds **整体追加到末尾**,`index` 从 `max(existing_index) + 1` 续号
+   - **不做 round_id 级别的 diff** —— sync 已经基于游标算好"哪些是新的",ingest 直接 append
+3. **冲突**(`expected_prev_round_id` ≠ server 实际 `last_round_id`):返回 `status=conflict`,**不写任何 round**;sync 负责重读 + 重试
+4. **sidechain round 也占号段** —— 不为 sidechain 单独编号
+5. **index 一旦分配就不再变** —— card / review 引用安全性的前提
 
-详见 [`../../api/v3/sessions.md`](../../api/v3/sessions.md) 的"Index 续号规则"和 v2 [sessions.md](../../api/v2/sessions.md) 同名章节(规则一致)。
+> v3 是 strictly append-only:同一个 `round_id` 内容被改了,这个事件根本不会到达 server —— sync 的 `read_after` 只产生 strictly-new round。即使到达,server 端的 UNIQUE 约束 + INSERT OR IGNORE 会把它当重复行忽略,不会覆写已有内容。
+
+详见 [`../../api/v3/sessions.md`](../../api/v3/sessions.md)。
 
 ## 存储
 
@@ -105,54 +106,47 @@ Session 的 Round 是原始对话的忠实记录,保留完整结构。
 sessions/{source}/{id[0:2]}/{session_id}/
 ├── meta.json           # session_id / source / created_at / metadata / round_count / synced_at
 ├── rounds.jsonl        # 每行一个 Round JSON,append-only
-└── events.jsonl        # imported / rounds_appended / rounds_overwrite_skipped
+└── events.jsonl        # imported / rounds_appended  (v3 不再有 overwrite-skipped)
 ```
 
 `{id[0:2]}` 是平台 id(去掉 `sess_` 前缀后)的前 2 字符,做存储 bucket。
 
-### SQLite(查询主路径)
+### SQLite(`memory.db`)
 
 ```sql
 CREATE TABLE sessions (
-  session_id   TEXT PRIMARY KEY,        -- 含 sess_ 前缀
-  source       TEXT NOT NULL,
-  cwd          TEXT,                    -- = metadata.cwd,explore namespace 判断字段
-  created_at   TIMESTAMP NOT NULL,
-  round_count  INTEGER NOT NULL,
-  synced_at    TIMESTAMP NOT NULL,
-  sha256       TEXT NOT NULL            -- 用于 sync 增量判断
+  session_id     TEXT PRIMARY KEY,        -- 含 sess_ 前缀
+  source         TEXT NOT NULL,
+  cwd            TEXT,                    -- = metadata.cwd,explore namespace 判断字段
+  created_at     TEXT NOT NULL,
+  synced_at      TEXT NOT NULL,
+  metadata       TEXT NOT NULL DEFAULT '{}',
+  round_count    INTEGER NOT NULL DEFAULT 0,
+  last_round_id  TEXT                     -- ingest 的乐观锁游标
 );
 
 CREATE INDEX idx_sessions_cwd ON sessions(cwd);
 CREATE INDEX idx_sessions_source ON sessions(source);
-CREATE INDEX idx_sessions_created_at ON sessions(created_at);
+CREATE INDEX idx_sessions_created ON sessions(created_at);
+```
 
-CREATE TABLE rounds (
-  session_id   TEXT NOT NULL,
-  index_       INTEGER NOT NULL,        -- "index" 是 SQL 保留字
-  round_id     TEXT NOT NULL,
-  parent_id    TEXT,
-  role         TEXT NOT NULL,
-  text         TEXT,                    -- 拼接后的文本(FTS 用)
-  timestamp    TIMESTAMP,
-  is_sidechain BOOLEAN NOT NULL DEFAULT 0,
-  PRIMARY KEY (session_id, index_)
-);
+> **没有 `rounds` SQL 表,也没有 `rounds_index`**。round 数据走两条路:rounds.jsonl 是 source of truth(给 read 用),LanceDB rounds 表是 FTS + vector 索引(给 search / recall 用)。SQLite 这一层只关心"我有这个 session 没"和"它的游标"。
 
--- FTS 索引(SQLite FTS5)
-CREATE VIRTUAL TABLE rounds_fts USING fts5(
-  text,
-  content='rounds',
-  tokenize='unicode61'
-);
+### SQLite(`sync.db`)— 跟 memory.db 分库
 
--- Ingest 元数据
-CREATE TABLE ingest_log (
-  session_id   TEXT PRIMARY KEY,
-  sha256       TEXT NOT NULL,
-  last_ingest  TIMESTAMP NOT NULL
+```sql
+CREATE TABLE sync_session_checkpoint (
+  source         TEXT    NOT NULL,
+  session_id     TEXT    NOT NULL,        -- 平台原始 id,**不含 sess_ 前缀**
+  sha256         TEXT    NOT NULL,
+  last_round_id  TEXT,
+  line_offset    INTEGER NOT NULL DEFAULT 0,
+  updated_at     TEXT    NOT NULL,
+  PRIMARY KEY (source, session_id)
 );
 ```
+
+`sync.db` 是 sync watcher 自己的状态库 —— 记着"我上次看每个上游 session 的 sha256 + 最后一个 round_id + 文件 line offset",**只为 sync 增量决策服务**。删掉它不影响业务数据,只会触发下一次启动重新冷扫一遍。
 
 ## 跟其它对象的关系
 

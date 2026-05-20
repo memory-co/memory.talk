@@ -131,37 +131,3 @@ class AppendRoundsResponse(BaseModel):
     round_count: int = 0
     # Populated on status="conflict" — the server's actual cursor.
     actual_last_round_id: str | None = None
-
-
-# ─── Legacy compatibility shim ─────────────────────────────────────────
-# ``POST /v3/sessions`` historically accepted a whole-session payload
-# (with ``sha256`` and the full ``rounds`` list, regardless of which
-# rounds were already stored) and replied with one of four ``action``
-# codes. The new ingest protocol is cursor-based and doesn't carry these
-# fields, but the HTTP route is still useful as a manual / external
-# ingest entry point and several existing tests use it as a fixture, so
-# we keep the schemas and translate to ``ensure_session`` +
-# ``append_rounds`` inside the route handler.
-#
-# ``partial_append`` and ``overwrite_skipped`` have no meaning in the
-# new model (we don't detect cross-content rewrites of an existing
-# round_id any more — the file is treated as append-only). The fields
-# remain in the response for shape compatibility but are always
-# ``[]`` / never produced.
-
-class IngestSessionRequest(BaseModel):
-    session_id: str
-    source: str
-    created_at: str
-    metadata: dict[str, Any] = Field(default_factory=dict)
-    sha256: str | None = None  # ignored — kept for shape compat
-    rounds: list[RoundInput] = Field(default_factory=list)
-
-
-class IngestSessionResponse(BaseModel):
-    status: Literal["ok"] = "ok"
-    session_id: str  # prefixed
-    action: Literal["imported", "appended", "skipped"]
-    round_count: int
-    added_count: int = 0
-    overwrite_skipped: list[int] = Field(default_factory=list)

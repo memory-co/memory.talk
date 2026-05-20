@@ -27,6 +27,8 @@ from pathlib import Path
 
 import pytest
 
+from memorytalk.tests._ingest import ingest_session
+
 pytestmark = pytest.mark.asyncio
 
 
@@ -53,17 +55,15 @@ def _card_events(data_root: Path, card_id: str) -> list[dict]:
 async def _ingest(client, sid: str = "evt-src",
                   rounds: list[dict] | None = None,
                   sha: str = "sha1") -> str:
+    # ``sha`` is unused under the new cursor-based API but kept in the
+    # signature so existing call sites don't all need updates.
+    del sha
     rounds = rounds if rounds is not None else [
         {"round_id": f"r{i}", "role": "human" if i % 2 else "assistant",
          "content": [{"type": "text", "text": f"round {i}"}]}
         for i in range(1, 4)
     ]
-    r = await client.post("/v3/sessions", json={
-        "session_id": sid, "source": "claude-code",
-        "created_at": "2026-05-18T09:00:00Z",
-        "metadata": {"cwd": "/work"},
-        "sha256": sha, "rounds": rounds,
-    })
+    r = await ingest_session(client, sid, metadata={"cwd": "/work"}, rounds=rounds)
     r.raise_for_status()
     return r.json()["session_id"]
 

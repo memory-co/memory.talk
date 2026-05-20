@@ -8,6 +8,8 @@ from __future__ import annotations
 import datetime as _dt
 import pytest
 
+from memorytalk.tests._ingest import ingest_session
+
 pytestmark = pytest.mark.asyncio
 
 
@@ -20,12 +22,7 @@ async def _ingest(client, sid: str = "abc-123", sha: str = "sha1", rounds=None) 
         {"round_id": "r2", "role": "assistant",
          "content": [{"type": "text", "text": "hi back"}]},
     ]
-    r = await client.post("/v3/sessions", json={
-        "session_id": sid, "source": "claude-code",
-        "created_at": "2026-05-18T09:00:00Z",
-        "metadata": {"cwd": "/work/proj"},
-        "sha256": sha, "rounds": rounds,
-    })
+    r = await ingest_session(client, sid, rounds=rounds)
     r.raise_for_status()
     return r.json()["session_id"]
 

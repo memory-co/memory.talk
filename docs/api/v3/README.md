@@ -10,11 +10,11 @@ Read        POST   /v3/read                     按 id 读取 card 或 session
 Cards       POST   /v3/cards                    创建 card(自动 embedding)
 Reviews     POST   /v3/reviews                  创建 review(累加 card.stats)
 
-Sessions    POST   /v3/sessions                 ingest 一条 session(sync watcher 内部用)
+Sessions    POST   /v3/sessions/ensure          读 session 当前游标(read-only)
+            POST   /v3/sessions/append          按 expected_prev_round_id 乐观锁追加 rounds
 
-Sync        POST   /v3/sync/start               启动后端 watcher
-            POST   /v3/sync/stop                停止 watcher
-            GET    /v3/sync/status              watcher 状态 + 累积 stats + 最近事件
+Sync        GET    /v3/sync/status              watcher 状态 + 累积 stats + 最近事件
+                                                (开关在 settings.sync.enabled)
 
 Explore     GET    /v3/explore/pending          列出未被任何 card 引用过的 work session
             GET    /v3/explore/list             列出 explore namespace 下的 session
@@ -32,7 +32,8 @@ Status      GET    /v3/status                   统计信息 + provider info
 - **路径设计**:资源动作明确时用 POST 名词(`/v3/cards`, `/v3/reviews`),状态查询用 GET 名词(`/v3/status`),特殊动作显式 verb 路径(`/v3/sync/start`, `/v3/embedding/reembed`)。不强行 REST 化。
 - **追踪存哪**:服务端对 search 落 append-only 审计 jsonl(`logs/search/<UTC 日期>.jsonl`)+ SQLite `search_log` 表;对 card / session / review 的 lifecycle 事件落 `events.jsonl`(每个对象一份)。**v3 不开 `GET /v3/log` 之类的查询入口** —— 审计文件是后端 infra,要看靠 sqlite 直查或离线工具。
 - **无 `server start/stop` API**:进程启停只能在 CLI / OS 层做。
-- **`POST /v3/sync/*` 是 server 内部 watcher 的开关**,不是 CLI 端拉文件 —— v3 sync 跟 v2 的 sync 完全是两个东西,详见 [sync.md](sync.md)。
+- **Sync 不再是 API 控制面**:开关搬到 `settings.sync.enabled`,lifespan 启动时按它决定要不要起 watcher。CLI 上只剩 `memory-talk sync` 看状态。详见 [sync.md](sync.md)。
+- **Sessions API 是 cursor-based + append-only**:不再有"整 session 发过来,服务端帮你 diff"的语义。调用方先 `ensure` 拿游标、再 `append` 增量。详见 [sessions.md](sessions.md)。
 
 ## ID 前缀约定
 
@@ -65,7 +66,7 @@ Status      GET    /v3/status                   统计信息 + provider info
 | 读端点 | `POST /v2/view` | `POST /v3/read`(改名,合约不变) |
 | 写 card | `POST /v2/cards` 接受 `summary` + `rounds` + `from_search_id` | `POST /v3/cards` 接受 `insight` + `rounds` + `source_cards`(可选) |
 | 写 review | 无 | `POST /v3/reviews`(新增) |
-| sync | 无 API(CLI 胶水读文件) | `POST /v3/sync/start/stop` + `GET /v3/sync/status`(后端 watcher) |
+| sync | 无 API(CLI 胶水读文件) | `GET /v3/sync/status`(后端 watcher,开关在 `settings.sync.enabled`) |
 | explore | 无 API(CLI 读 jsonl) | `GET /v3/explore/{pending,list,detail/...}` |
 | `POST /v2/links` | 用户 link 写入 | **删** —— v3 无 link |
 | `POST /v2/tags/{add,remove}` | tag 增删 | **删** —— v3 无 tag |
