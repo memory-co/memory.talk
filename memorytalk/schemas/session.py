@@ -55,24 +55,113 @@ class Session(BaseModel):
     rounds: list[Round] = Field(default_factory=list)
 
 
-class IngestSessionRequest(BaseModel):
-    """Sync watcher writes platform sessions through this endpoint.
+class SourceProbe(BaseModel):
+    """Light-weight inspection of one upstream artifact.
 
-    ``session_id`` here is the **platform raw id** (no ``sess_`` prefix);
-    the server prefixes on first write and returns the prefixed form.
+    Adapters return this to describe "what's the current state of this
+    file/URL right now", without yielding the actual round payload. Sync
+    uses it to compare against its checkpoint and decide whether to
+    bother reading.
     """
+    # adapter-side resource id (absolute file path, full URL, ...)
+    source_id: str
+    # platform raw id (no ``sess_`` prefix)
+    session_id: str
+    # whole-artifact content hash — semantics decided by the adapter
+    # (sha256 of the file bytes, an HTTP ETag, ...). Used solely for
+    # "did this change since last sync" short-circuit.
+    sha256: str
+    created_at: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReadAfterResult(BaseModel):
+    """Rounds strictly after a cursor, with hint info for the next call.
+
+    ``next_line_offset`` is the adapter's hint for where to seek on the
+    next read (line-based for jsonl, byte-based or pagination-cursor for
+    other adapters — it's opaque to sync).
+    """
+    rounds: list[RoundInput] = Field(default_factory=list)
+    next_line_offset: int = 0
+
+
+class EnsureSessionRequest(BaseModel):
+    """Look up a session's current ingest state without writing anything.
+
+    Sync calls this before reading the upstream file so it knows where
+    its cursor stands relative to what's already in the DB. ``session_id``
+    is the **raw platform id**; the response carries the prefixed form.
+    """
+    session_id: str
+    source: str
+
+
+class EnsureSessionResponse(BaseModel):
+    session_id: str  # prefixed
+    last_round_id: str | None = None
+    round_count: int = 0
+
+
+class AppendRoundsRequest(BaseModel):
+    """Append new rounds to a session under optimistic-concurrency.
+
+    ``expected_prev_round_id`` is the cursor the caller believes the
+    server is on. None means the caller thinks no rounds exist yet.
+    If the server disagrees, the response carries ``actual_last_round_id``
+    and the caller is expected to recompute its cursor and retry.
+
+    ``created_at`` / ``metadata`` are honored on first append (when the
+    session row is being created); subsequent appends refresh metadata
+    only.
+    """
+    session_id: str            # raw or prefixed; server normalizes
+    source: str
+    expected_prev_round_id: str | None = None
+    rounds: list[RoundInput] = Field(default_factory=list)
+    created_at: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class AppendRoundsResponse(BaseModel):
+    status: Literal["ok", "conflict"]
+    session_id: str            # prefixed
+    new_last_round_id: str | None = None
+    appended_count: int = 0
+    round_count: int = 0
+    # Populated on status="conflict" — the server's actual cursor.
+    actual_last_round_id: str | None = None
+
+
+# ─── Legacy compatibility shim ─────────────────────────────────────────
+# ``POST /v3/sessions`` historically accepted a whole-session payload
+# (with ``sha256`` and the full ``rounds`` list, regardless of which
+# rounds were already stored) and replied with one of four ``action``
+# codes. The new ingest protocol is cursor-based and doesn't carry these
+# fields, but the HTTP route is still useful as a manual / external
+# ingest entry point and several existing tests use it as a fixture, so
+# we keep the schemas and translate to ``ensure_session`` +
+# ``append_rounds`` inside the route handler.
+#
+# ``partial_append`` and ``overwrite_skipped`` have no meaning in the
+# new model (we don't detect cross-content rewrites of an existing
+# round_id any more — the file is treated as append-only). The fields
+# remain in the response for shape compatibility but are always
+# ``[]`` / never produced.
+
+class IngestSessionRequest(BaseModel):
     session_id: str
     source: str
     created_at: str
     metadata: dict[str, Any] = Field(default_factory=dict)
-    sha256: str
+    sha256: str | None = None  # ignored — kept for shape compat
     rounds: list[RoundInput] = Field(default_factory=list)
 
 
 class IngestSessionResponse(BaseModel):
     status: Literal["ok"] = "ok"
     session_id: str  # prefixed
-    action: Literal["imported", "appended", "skipped", "partial_append"]
+    action: Literal["imported", "appended", "skipped"]
     round_count: int
     added_count: int = 0
     overwrite_skipped: list[int] = Field(default_factory=list)

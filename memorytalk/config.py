@@ -115,6 +115,13 @@ class Config:
         return self.data_root / "memory.db"
 
     @property
+    def sync_db_path(self) -> Path:
+        """Sync connector state — separate from the main memory DB so it
+        can be wiped/restored independently and future remote ingest
+        doesn't have to reach into business data."""
+        return self.data_root / "sync.db"
+
+    @property
     def vectors_dir(self) -> Path:
         return self.data_root / "vectors"
 

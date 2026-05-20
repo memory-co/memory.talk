@@ -1,15 +1,17 @@
 """SQLite schema for v3. All DDL in one place; idempotent init_schema().
 
-Optimization notes vs v2:
+v3 simplifications vs the historical layout:
+
 - ``cards`` table drops ``expires_at`` (v3 has no TTL).
-- ``card_stats`` is a new table (six counters per card; updated on review /
-  read / recall).
-- ``card_source_cards`` is a new table (replaces v2's ``links``).
-- ``reviews`` is a new table.
-- ``links`` / ``tags`` / ``recall_hit`` tables are gone.
-- ``ingest_log`` is a new table (one row per session, holds sha256 +
-  last_ingest — moved out of the v2 ``sessions.synced_at`` field so the
-  sync watcher can update it without rewriting the session row).
+- ``card_stats`` is a per-card counters table.
+- ``card_source_cards`` replaces the v2 ``links`` table.
+- ``rounds_index`` / ``ingest_log`` are **gone**: sync state lives in a
+  separate ``sync.db`` (see ``repository/sync_checkpoint.py``), and the
+  per-session "what's the latest round we've stored" cursor moves to a
+  new ``last_round_id`` column on ``sessions``. The ``IngestService``
+  now exposes ``append_rounds`` with optimistic-concurrency on that
+  cursor, so the per-round content-hash dedup ``rounds_index`` provided
+  is no longer needed.
 """
 from __future__ import annotations
 
@@ -20,42 +22,19 @@ DDL = [
     # ── sessions ─────────────────────────────────────────────────────────
     """
     CREATE TABLE IF NOT EXISTS sessions (
-        session_id   TEXT PRIMARY KEY,        -- always 'sess_<...>'
-        source       TEXT NOT NULL,           -- 'claude-code' / 'codex' / ...
-        cwd          TEXT,                    -- = metadata.cwd; explore namespace key
-        created_at   TEXT NOT NULL,
-        synced_at    TEXT NOT NULL,
-        metadata     TEXT NOT NULL DEFAULT '{}',
-        round_count  INTEGER NOT NULL DEFAULT 0
+        session_id     TEXT PRIMARY KEY,        -- always 'sess_<...>'
+        source         TEXT NOT NULL,           -- 'claude-code' / 'codex' / ...
+        cwd            TEXT,                    -- = metadata.cwd; explore namespace key
+        created_at     TEXT NOT NULL,
+        synced_at      TEXT NOT NULL,
+        metadata       TEXT NOT NULL DEFAULT '{}',
+        round_count    INTEGER NOT NULL DEFAULT 0,
+        last_round_id  TEXT                     -- platform round_id of round_count'th round
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_sessions_cwd ON sessions(cwd)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_source ON sessions(source)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_created ON sessions(created_at)",
-    # Round content lives in two places:
-    # - jsonl on disk (full structure; source of truth for `read`)
-    # - LanceDB rounds table (text + vector; serves FTS + semantic search)
-    #
-    # The SQL layer keeps only the small bits needed for the ingest-merge
-    # protocol — looking up (session_id, round_id) to spot overwrites and
-    # to skip already-stored content. No `content`, no `text` here.
-    """
-    CREATE TABLE IF NOT EXISTS rounds_index (
-        session_id    TEXT NOT NULL,
-        round_id      TEXT NOT NULL,
-        idx           INTEGER NOT NULL,        -- 1-based, gap-free per session
-        content_hash  TEXT NOT NULL,           -- detects platform overwrites
-        PRIMARY KEY (session_id, round_id)
-    )
-    """,
-    "CREATE INDEX IF NOT EXISTS idx_rounds_index_idx ON rounds_index(session_id, idx)",
-    """
-    CREATE TABLE IF NOT EXISTS ingest_log (
-        session_id   TEXT PRIMARY KEY,
-        sha256       TEXT NOT NULL,
-        last_ingest  TEXT NOT NULL
-    )
-    """,
 
     # ── cards ────────────────────────────────────────────────────────────
     """
@@ -134,7 +113,39 @@ DDL = [
 
 
 async def init_schema(conn: aiosqlite.Connection) -> None:
-    """Create all v3 tables if missing. Idempotent."""
+    """Create all v3 tables if missing, then apply additive migrations
+    against pre-existing installs. Idempotent."""
     for stmt in DDL:
         await conn.execute(stmt)
+    await _additive_migrations(conn)
     await conn.commit()
+
+
+async def _additive_migrations(conn: aiosqlite.Connection) -> None:
+    """One-shot upgrades for existing DBs. Safe to run on every boot —
+    each step checks whether the destination state already exists."""
+    # 1. Add ``last_round_id`` column to ``sessions`` if missing.
+    async with conn.execute("PRAGMA table_info(sessions)") as cursor:
+        cols = {row[1] for row in await cursor.fetchall()}
+    if "last_round_id" not in cols:
+        await conn.execute("ALTER TABLE sessions ADD COLUMN last_round_id TEXT")
+
+    # 2. If the legacy ``rounds_index`` table is around, derive
+    #    last_round_id from it (max-idx round per session), then drop it.
+    async with conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='rounds_index'"
+    ) as cursor:
+        has_rounds_index = await cursor.fetchone() is not None
+    if has_rounds_index:
+        await conn.execute(
+            "UPDATE sessions SET last_round_id = ("
+            "  SELECT round_id FROM rounds_index ri "
+            "  WHERE ri.session_id = sessions.session_id "
+            "  ORDER BY idx DESC LIMIT 1"
+            ") WHERE last_round_id IS NULL"
+        )
+        await conn.execute("DROP TABLE rounds_index")
+
+    # 3. Drop the legacy sync-checkpoint table — sync state moved to a
+    #    separate ``sync.db`` (see ``repository/sync_checkpoint.py``).
+    await conn.execute("DROP TABLE IF EXISTS ingest_log")

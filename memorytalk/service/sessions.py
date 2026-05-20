@@ -1,40 +1,46 @@
-"""IngestService — POST /v3/sessions implementation.
+"""IngestService — append-only round persistence with cursor-based concurrency.
 
-Writes go through three places in lockstep:
+Two methods:
 
-  jsonl file           — full round content (source of truth for read)
-  rounds_index (SQL)   — {round_id → (idx, content_hash)} for ingest merge
-  LanceDB rounds table — {session_id, idx, role, text, vector} for search
+  - ``ensure_session(req)`` — read-only. Returns the prefixed session id
+    and the server's current ``(last_round_id, round_count)``. Lets sync
+    decide where to resume from before reading the upstream file.
 
-Merge rules (docs/api/v3/sessions.md):
+  - ``append_rounds(req)`` — write. Checks ``expected_prev_round_id``
+    against the server's stored ``sessions.last_round_id``; appends the
+    payload's rounds in order if they match, returns conflict with
+    ``actual_last_round_id`` otherwise.
 
-  1. First ingest → assign 1, 2, 3, ... in request order.
-  2. Re-ingest with same sha256 → skipped (no-op).
-  3. Re-ingest with new sha256:
-     - rounds matched by ``round_id`` with **identical content** keep
-       their original ``idx``;
-     - matched rounds whose content **changed** are *not* rewritten —
-       they're recorded in ``overwrite_skipped`` and the original idx
-       still points at the original content;
-     - rounds not previously seen are appended with new indices, starting
-       at ``max(existing idx) + 1`` (= session.round_count + 1).
+The old "diff against rounds_index by round_id + content hash" merge
+logic is gone (alongside the ``rounds_index`` and ``ingest_log`` tables).
+Sync now owns "what did I last hand over" via its own checkpoint DB and
+``expected_prev_round_id``; we just trust the caller's delta and append.
 
-This keeps card/review references stable forever once they're written.
+Storage targets per append:
+
+  jsonl on disk     — full round content (source of truth for read)
+  SQLite sessions   — round_count + last_round_id cursor + metadata
+  LanceDB rounds    — text + vector for FTS / semantic search
+                      (best-effort; failure is logged but doesn't fail
+                      the append — a follow-up rebuild can replay vectors)
 """
 from __future__ import annotations
 import datetime as _dt
-import hashlib
-import json
+import logging
 
 from memorytalk.provider.embedding import Embedder
 from memorytalk.provider.lancedb import LanceStore, _segment
 from memorytalk.repository import SQLiteStore
 from memorytalk.schemas import (
-    IngestSessionRequest, IngestSessionResponse, RoundInput,
+    AppendRoundsRequest, AppendRoundsResponse,
+    EnsureSessionRequest, EnsureSessionResponse,
+    RoundInput,
 )
 from memorytalk.service.events import EventWriter
 from memorytalk.util.ids import prefix_session_id
 
+
+_log = logging.getLogger("memorytalk.ingest")
 
 # Cap fed into the embedder. Most local sentence-transformer models top
 # out around 512 tokens (~2k chars of English / ~1k chars CJK); the OpenAI
@@ -50,12 +56,6 @@ class IngestServiceError(Exception):
 
 def _utc_iso() -> str:
     return _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-
-
-def _content_hash(content: list[dict]) -> str:
-    """Stable hash of a round's content used to detect platform overwrites."""
-    blob = json.dumps(content, sort_keys=True, ensure_ascii=False)
-    return hashlib.sha1(blob.encode()).hexdigest()[:16]
 
 
 def _flatten_text(blocks) -> str:
@@ -80,11 +80,6 @@ def _flatten_text(blocks) -> str:
 
 
 def _embed_input(text: str) -> str:
-    """Truncated prefix used as the embedder's input.
-
-    FTS keeps the full text; only the vector is built from this prefix
-    so long tool_result blocks don't blow up the embedder.
-    """
     return text[:_EMBED_CHAR_LIMIT]
 
 
@@ -101,215 +96,171 @@ class IngestService:
         self.embedder = embedder
         self.events = events
 
-    async def ingest(self, payload: IngestSessionRequest) -> IngestSessionResponse:
-        sid = prefix_session_id(payload.session_id)
-        now = _utc_iso()
-        cwd = payload.metadata.get("cwd") if isinstance(payload.metadata, dict) else None
+    # ────────── ensure_session ──────────
 
+    async def ensure_session(self, req: EnsureSessionRequest) -> EnsureSessionResponse:
+        """Read-only probe — never creates rows. Returns where the
+        server's cursor stands for this (source, session_id)."""
+        sid = prefix_session_id(req.session_id)
         existing = await self.db.sessions.get(sid)
-        ingest = await self.db.sessions.get_ingest(sid)
-
-        if existing and ingest and ingest["sha256"] == payload.sha256:
-            return IngestSessionResponse(
-                status="ok", session_id=sid, action="skipped",
-                round_count=existing["round_count"],
-            )
-
         if existing is None:
-            return await self._first_ingest(sid, payload, cwd, now)
-        return await self._merge_ingest(sid, payload, cwd, now, existing)
-
-    # ────────── first ingest ──────────
-
-    async def _first_ingest(
-        self, sid: str, payload: IngestSessionRequest, cwd: str | None, now: str,
-    ) -> IngestSessionResponse:
-        rounds = list(self._build_rounds(payload.rounds, start_idx=1))
-        await self._persist_rounds(
-            session_id=sid, source=payload.source, rounds=rounds,
-            create_meta=True, payload=payload, cwd=cwd, now=now,
-            existing_round_count=0,
+            return EnsureSessionResponse(session_id=sid, last_round_id=None, round_count=0)
+        return EnsureSessionResponse(
+            session_id=sid,
+            last_round_id=existing.get("last_round_id"),
+            round_count=existing.get("round_count", 0),
         )
 
-        await self.db.sessions.upsert_ingest(sid, payload.sha256, now)
-        await self.events.session_event(
-            payload.source, sid, "imported",
-            round_count=len(rounds), sha256=payload.sha256,
-        )
-        return IngestSessionResponse(
-            status="ok", session_id=sid, action="imported",
-            round_count=len(rounds), added_count=len(rounds),
-        )
+    # ────────── append_rounds ──────────
 
-    # ────────── merge ingest ──────────
+    async def append_rounds(self, req: AppendRoundsRequest) -> AppendRoundsResponse:
+        sid = prefix_session_id(req.session_id)
+        now = _utc_iso()
+        existing = await self.db.sessions.get(sid)
+        server_last = existing.get("last_round_id") if existing else None
 
-    async def _merge_ingest(
-        self,
-        sid: str,
-        payload: IngestSessionRequest,
-        cwd: str | None,
-        now: str,
-        existing: dict,
-    ) -> IngestSessionResponse:
-        # Existing rounds keyed by round_id → (idx, content_hash).
-        stored = await self.db.sessions.get_round_index_map(sid)
-
-        max_idx = existing["round_count"]
-        new_inputs: list[RoundInput] = []
-        new_indices: list[int] = []
-        overwrite_skipped: list[int] = []
-
-        for r in payload.rounds:
-            content_dicts = [b.model_dump(exclude_none=True) for b in r.content]
-            if r.round_id in stored:
-                old_idx, old_hash = stored[r.round_id]
-                new_hash = _content_hash(content_dicts)
-                if new_hash != old_hash:
-                    overwrite_skipped.append(old_idx)
-                # Either way: append-only, never overwrite.
-                continue
-            max_idx += 1
-            new_inputs.append(r)
-            new_indices.append(max_idx)
-
-        appended_rounds: list[dict] = []
-        if new_inputs:
-            appended_rounds = list(self._build_rounds_from_inputs(new_inputs, new_indices))
-
-        added_count = len(appended_rounds)
-        new_total = existing["round_count"] + added_count
-
-        if appended_rounds:
-            await self._persist_rounds(
-                session_id=sid, source=payload.source, rounds=appended_rounds,
-                create_meta=False, payload=payload, cwd=cwd, now=now,
-                existing_round_count=existing["round_count"],
+        # Optimistic-concurrency check. None on both sides means "no
+        # session yet", which matches a fresh first append.
+        if server_last != req.expected_prev_round_id:
+            _log.info(
+                "append_rounds conflict sid=%s expected=%s actual=%s",
+                sid, req.expected_prev_round_id, server_last,
+            )
+            return AppendRoundsResponse(
+                status="conflict",
+                session_id=sid,
+                actual_last_round_id=server_last,
             )
 
-        # Update session bookkeeping even for "nothing new" — ingest_log
-        # records the new sha so a subsequent same-sha re-ingest skips.
-        await self.db.sessions.update_round_count(sid, new_total, now)
-        await self.db.sessions.upsert_ingest(sid, payload.sha256, now)
+        if not req.rounds:
+            # Cursor agrees with the caller, but the caller has nothing
+            # to add. Refresh metadata + synced_at if the session exists;
+            # nothing to do otherwise.
+            if existing is not None:
+                await self._refresh_meta(sid, req, existing, now)
+            return AppendRoundsResponse(
+                status="ok",
+                session_id=sid,
+                new_last_round_id=server_last,
+                appended_count=0,
+                round_count=existing.get("round_count", 0) if existing else 0,
+            )
 
-        # Refresh meta with the new count / latest metadata.
-        meta = await self.db.sessions.read_meta(payload.source, sid) or {}
-        meta.update({"round_count": new_total, "synced_at": now,
-                     "metadata": payload.metadata})
-        await self.db.sessions.write_meta(payload.source, sid, meta)
+        existing_count = existing.get("round_count", 0) if existing else 0
+        new_rounds = list(self._build_rounds(req.rounds, start_idx=existing_count + 1))
+        cwd = req.metadata.get("cwd") if isinstance(req.metadata, dict) else None
 
-        if appended_rounds and overwrite_skipped:
-            action = "partial_append"
-        elif appended_rounds:
-            action = "appended"
+        # 1. jsonl (source of truth) ------------------------------------
+        await self.db.sessions.append_rounds_file(req.source, sid, new_rounds)
+
+        # 2. sessions table + meta.json ---------------------------------
+        new_total = existing_count + len(new_rounds)
+        new_last = new_rounds[-1]["round_id"]
+        if existing is None:
+            await self.db.sessions.upsert(
+                session_id=sid, source=req.source, cwd=cwd,
+                created_at=req.created_at, synced_at=now,
+                metadata=req.metadata, round_count=new_total,
+                last_round_id=new_last,
+            )
+            await self.db.sessions.write_meta(req.source, sid, {
+                "session_id": sid, "source": req.source,
+                "created_at": req.created_at, "metadata": req.metadata,
+                "round_count": new_total, "synced_at": now,
+            })
         else:
-            # Either pure-skip (sha changed but nothing usable) or
-            # overwrite-only (sha changed, every change is an overwrite).
-            action = "skipped"
+            await self.db.sessions.update_after_append(sid, new_total, new_last, now)
+            await self._refresh_meta(sid, req, existing, now,
+                                     round_count_override=new_total)
 
-        if appended_rounds:
-            await self.events.session_event(
-                payload.source, sid, "rounds_appended",
-                added=added_count, overwrite_skipped=overwrite_skipped,
-            )
-        if overwrite_skipped:
-            await self.events.session_event(
-                payload.source, sid, "rounds_overwrite_skipped",
-                indexes=overwrite_skipped,
-            )
+        # 3. LanceDB rounds — best effort -------------------------------
+        await self._index_vectors(sid, req.source, new_rounds)
 
-        return IngestSessionResponse(
-            status="ok", session_id=sid, action=action,
-            round_count=new_total, added_count=added_count,
-            overwrite_skipped=overwrite_skipped,
+        await self.events.session_event(
+            req.source, sid,
+            "imported" if existing is None else "rounds_appended",
+            added=len(new_rounds), round_count=new_total,
+        )
+        return AppendRoundsResponse(
+            status="ok",
+            session_id=sid,
+            new_last_round_id=new_last,
+            appended_count=len(new_rounds),
+            round_count=new_total,
         )
 
     # ────────── helpers ──────────
 
-    def _build_rounds(self, inputs, start_idx: int):
-        """Yield stored-round dicts for a contiguous range of new inputs."""
+    async def _refresh_meta(
+        self,
+        sid: str,
+        req: AppendRoundsRequest,
+        existing: dict,
+        now: str,
+        round_count_override: int | None = None,
+    ) -> None:
+        """Rewrite meta.json with the latest metadata + count. Cheap; we
+        always do this on each append so downstream readers see fresh
+        cwd / metadata values."""
+        meta = await self.db.sessions.read_meta(req.source, sid) or {}
+        meta.update({
+            "session_id": sid, "source": req.source,
+            "metadata": req.metadata or existing.get("metadata") or {},
+            "round_count": (
+                round_count_override
+                if round_count_override is not None
+                else existing.get("round_count", 0)
+            ),
+            "synced_at": now,
+        })
+        # created_at sticks once written.
+        meta.setdefault("created_at", req.created_at or existing.get("created_at", ""))
+        await self.db.sessions.write_meta(req.source, sid, meta)
+
+    def _build_rounds(self, inputs: list[RoundInput], start_idx: int) -> list[dict]:
+        rows: list[dict] = []
         idx = start_idx
         for r in inputs:
-            yield self._build_one(r, idx)
-            idx += 1
-
-    def _build_rounds_from_inputs(self, inputs, indices: list[int]):
-        for r, idx in zip(inputs, indices):
-            yield self._build_one(r, idx)
-
-    def _build_one(self, r: RoundInput, idx: int) -> dict:
-        content_dicts = [b.model_dump(exclude_none=True) for b in r.content]
-        return {
-            "idx": idx, "round_id": r.round_id, "parent_id": r.parent_id,
-            "timestamp": r.timestamp, "speaker": r.speaker, "role": r.role,
-            "text": _flatten_text(content_dicts),
-            "content": content_dicts,
-            "is_sidechain": r.is_sidechain, "cwd": r.cwd, "usage": r.usage,
-            "content_hash": _content_hash(content_dicts),
-        }
-
-    async def _persist_rounds(
-        self,
-        session_id: str,
-        source: str,
-        rounds: list[dict],
-        create_meta: bool,
-        payload: IngestSessionRequest,
-        cwd: str | None,
-        now: str,
-        existing_round_count: int,
-    ) -> None:
-        """Atomic-ish three-target write: jsonl, SQL index, LanceDB.
-
-        Order matters: jsonl first (source of truth), then SQL index
-        (so a future ingest with a same-sha shortcut works), then
-        LanceDB (search index — last so a failure here doesn't corrupt
-        ingest state; a follow-up rebuild can replay vectors).
-        """
-        new_total = existing_round_count + len(rounds)
-
-        # 1. jsonl (file mirror, source of truth) ------------------------------
-        await self.db.sessions.append_rounds_file(source, session_id, rounds)
-
-        # 2. session table + meta + rounds_index ------------------------------
-        if create_meta:
-            await self.db.sessions.write_meta(source, session_id, {
-                "session_id": session_id, "source": source,
-                "created_at": payload.created_at, "metadata": payload.metadata,
-                "round_count": new_total, "synced_at": now,
+            content_dicts = [b.model_dump(exclude_none=True) for b in r.content]
+            rows.append({
+                "idx": idx,
+                "round_id": r.round_id,
+                "parent_id": r.parent_id,
+                "timestamp": r.timestamp,
+                "speaker": r.speaker,
+                "role": r.role,
+                "text": _flatten_text(content_dicts),
+                "content": content_dicts,
+                "is_sidechain": r.is_sidechain,
+                "cwd": r.cwd,
+                "usage": r.usage,
             })
-            await self.db.sessions.upsert(
-                session_id=session_id, source=source, cwd=cwd,
-                created_at=payload.created_at, synced_at=now,
-                metadata=payload.metadata, round_count=new_total,
+            idx += 1
+        return rows
+
+    async def _index_vectors(self, sid: str, source: str, rows: list[dict]) -> None:
+        if self.vectors is None or self.embedder is None or not rows:
+            return
+        try:
+            texts = [_embed_input(r["text"] or "") for r in rows]
+            vectors = await self.embedder.embed(texts) if texts else []
+            lance_rows = [
+                {
+                    "session_id": sid,
+                    "idx": r["idx"],
+                    "role": r["role"] or "",
+                    "text": _segment(r["text"] or ""),
+                    "vector": v,
+                }
+                for r, v in zip(rows, vectors)
+            ]
+            await self.vectors.add_rounds(lance_rows)
+        except Exception as e:
+            # LanceDB write is best-effort; sessions table + jsonl
+            # already carry the truth. A future rebuild can replay
+            # vectors. Surface to the watcher via event log.
+            _log.exception("vector index append failed sid=%s", sid)
+            await self.events.session_event(
+                source, sid, "vector_index_failed",
+                error=str(e), affected_indexes=[r["idx"] for r in rows],
             )
-
-        await self.db.sessions.upsert_rounds_index(
-            (session_id, r["round_id"], r["idx"], r["content_hash"])
-            for r in rounds
-        )
-
-        # 3. LanceDB rounds (FTS + vector) ------------------------------------
-        if self.vectors is not None and self.embedder is not None:
-            try:
-                texts = [_embed_input(r["text"] or "") for r in rounds]
-                vectors = await self.embedder.embed(texts) if texts else []
-                lance_rows = [
-                    {
-                        "session_id": session_id,
-                        "idx": r["idx"],
-                        "role": r["role"] or "",
-                        "text": _segment(r["text"] or ""),
-                        "vector": v,
-                    }
-                    for r, v in zip(rounds, vectors)
-                ]
-                await self.vectors.add_rounds(lance_rows)
-            except Exception as e:
-                # LanceDB write is best-effort — don't fail ingest. The
-                # round is searchable as soon as a follow-up rebuild
-                # writes the missing rows. We still emit an event so
-                # `sync status.recent` can show the warning.
-                await self.events.session_event(
-                    source, session_id, "vector_index_failed",
-                    error=str(e), affected_indexes=[r["idx"] for r in rounds],
-                )

@@ -236,11 +236,14 @@ async def test_per_session_backfill_error_does_not_abort(sync_data_root, fake_cl
         def watch_roots(self):
             return []
 
-        def iter_sessions(self):
+        def list_sources(self):
             raise RuntimeError("boom")
 
-        def convert_file(self, path):
+        def probe(self, source_id):
             return None
+
+        def read_after(self, source_id, after_round_id, hint_line_offset=0):
+            raise RuntimeError("unreachable")
 
     # Inject for one test only.
     monkeypatch.setitem(ADAPTERS, "poison", _PoisonAdapter)

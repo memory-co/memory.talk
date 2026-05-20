@@ -1,18 +1,28 @@
 """Claude Code adapter.
 
 Reads ``~/.claude/projects/*/*.jsonl`` conversation files and produces
-``POST /v3/sessions`` payloads. Each ``.jsonl`` file is one session;
-each line is one platform message. ``round_id = uuid`` from the message.
+ingest payloads. Each ``.jsonl`` file is one session; each line is one
+platform message; ``round_id = uuid`` from the message.
 
-v3 differences vs the v2 port:
+Round-level layout:
 
-- ``metadata.cwd`` is extracted from the first message that has a ``cwd``
-  field, so the explore namespace check (cwd prefix match) works without
-  the server having to dig into each round.
 - ``content`` block preservation matches the v3 ContentBlock schema —
-  tool_use / tool_result remain typed (instead of being flattened into
-  ``[name] payload`` text), so future search / display can render them
-  with their original semantics.
+  tool_use / tool_result remain typed so future search / display can
+  render them with their original semantics (text projection is built
+  separately for FTS).
+- ``metadata.cwd`` is extracted from the first message that carries
+  a ``cwd`` field so the explore namespace check works without the
+  server having to dig into each round.
+
+Cursor semantics:
+
+- ``source_id`` = absolute file path string.
+- ``sha256``    = sha256 of the file's raw bytes (used by sync to
+  short-circuit "did anything change").
+- ``after_round_id`` is the platform uuid of the last round the server
+  already stored. ``hint_line_offset`` is the line number sync cached
+  the last time it read this file — we use it as a fast-seek hint
+  but always validate before trusting it.
 """
 from __future__ import annotations
 import hashlib
@@ -22,6 +32,9 @@ from typing import Iterator
 from urllib.parse import unquote
 
 from memorytalk.adapters.base import BaseAdapter, register
+from memorytalk.schemas import (
+    ContentBlock, ReadAfterResult, RoundInput, SourceProbe,
+)
 
 
 @register
@@ -30,19 +43,21 @@ class ClaudeCodeAdapter(BaseAdapter):
 
     DEFAULT_ROOT = Path.home() / ".claude" / "projects"
 
+    # ────────── sync-facing surface ──────────
+
     def watch_roots(self) -> list[Path]:
         return [self.DEFAULT_ROOT]
 
-    def iter_sessions(self) -> Iterator[dict]:
-        d = self.DEFAULT_ROOT
-        if not d.exists():
+    def list_sources(self) -> Iterator[SourceProbe]:
+        if not self.DEFAULT_ROOT.exists():
             return
-        for path in sorted(d.rglob("*.jsonl")):
-            payload = self.convert_file(path)
-            if payload:
-                yield payload
+        for path in sorted(self.DEFAULT_ROOT.rglob("*.jsonl")):
+            probe = self.probe(str(path))
+            if probe is not None:
+                yield probe
 
-    def convert_file(self, path: Path) -> dict | None:
+    def probe(self, source_id: str) -> SourceProbe | None:
+        path = Path(source_id)
         if path.suffix != ".jsonl":
             return None
         try:
@@ -53,10 +68,9 @@ class ClaudeCodeAdapter(BaseAdapter):
             return None
         sha256 = hashlib.sha256(raw_bytes).hexdigest()
         session_id = path.stem  # platform uuid, no prefix
-        project_dir = path.parent.name
-        project_name = unquote(project_dir)
+        project_name = unquote(path.parent.name)
 
-        rounds: list[dict] = []
+        # Pull created_at + cwd from the first parseable message.
         created_at: str | None = None
         cwd: str | None = None
         for line in raw_bytes.decode("utf-8", errors="replace").splitlines():
@@ -67,34 +81,106 @@ class ClaudeCodeAdapter(BaseAdapter):
                 msg = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            r = self._parse_message(msg)
-            if r is None:
-                continue
-            rounds.append(r)
-            if created_at is None and r.get("timestamp"):
-                created_at = r["timestamp"]
-            if cwd is None and r.get("cwd"):
-                cwd = r["cwd"]
-
-        if not rounds:
-            return None
+            if created_at is None and msg.get("timestamp"):
+                created_at = msg["timestamp"]
+            if cwd is None and msg.get("cwd"):
+                cwd = msg["cwd"]
+            if created_at is not None and cwd is not None:
+                break
 
         metadata: dict = {"project": project_name, "path": str(path)}
         if cwd:
             metadata["cwd"] = cwd
 
-        return {
-            "session_id": session_id,
-            "source": self.source_name,
-            "created_at": created_at or "",
-            "metadata": metadata,
-            "sha256": sha256,
-            "rounds": rounds,
-        }
+        return SourceProbe(
+            source_id=str(path),
+            session_id=session_id,
+            sha256=sha256,
+            created_at=created_at or "",
+            metadata=metadata,
+        )
+
+    def read_after(
+        self,
+        source_id: str,
+        after_round_id: str | None,
+        hint_line_offset: int = 0,
+    ) -> ReadAfterResult:
+        path = Path(source_id)
+        if path.suffix != ".jsonl":
+            return ReadAfterResult(rounds=[], next_line_offset=0)
+        try:
+            raw = path.read_text(encoding="utf-8", errors="replace")
+        except FileNotFoundError:
+            return ReadAfterResult(rounds=[], next_line_offset=0)
+        lines = raw.splitlines()
+
+        start_line = self._locate_start(lines, after_round_id, hint_line_offset)
+
+        rounds: list[RoundInput] = []
+        cursor = start_line
+        for cursor in range(start_line, len(lines)):
+            line = lines[cursor].strip()
+            if not line:
+                continue
+            try:
+                msg = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            parsed = self._parse_message(msg)
+            if parsed is None:
+                continue
+            rounds.append(parsed)
+
+        return ReadAfterResult(rounds=rounds, next_line_offset=len(lines))
+
+    # ────────── seek / parse helpers ──────────
+
+    def _locate_start(
+        self,
+        lines: list[str],
+        after_round_id: str | None,
+        hint_line_offset: int,
+    ) -> int:
+        """Return the index of the first line whose round should be
+        yielded (i.e., the line strictly after the one carrying
+        ``after_round_id``).
+
+        Strategy:
+          - If ``after_round_id`` is None → start at 0 (full read).
+          - Otherwise: trust ``hint_line_offset`` only if line[hint-1]
+            actually carries ``after_round_id``. If it doesn't (file got
+            rewritten, hint stale, ...), scan from the top to find the
+            marker. If marker not found anywhere → start at 0.
+        """
+        if after_round_id is None:
+            return 0
+
+        if 0 < hint_line_offset <= len(lines):
+            if self._line_round_id(lines[hint_line_offset - 1]) == after_round_id:
+                return hint_line_offset
+
+        for i, line in enumerate(lines):
+            if self._line_round_id(line) == after_round_id:
+                return i + 1
+        # Marker not in the file at all — caller has a stale cursor.
+        # Treat as fresh ingest so the conflict-retry path kicks in.
+        return 0
+
+    @staticmethod
+    def _line_round_id(line: str) -> str | None:
+        line = line.strip()
+        if not line:
+            return None
+        try:
+            msg = json.loads(line)
+        except json.JSONDecodeError:
+            return None
+        return msg.get("uuid") or None
 
     # ────────── per-message parsing ──────────
 
-    def _parse_message(self, msg: dict) -> dict | None:
+    def _parse_message(self, msg: dict) -> RoundInput | None:
         msg_type = msg.get("type")
         if msg_type not in ("user", "assistant"):
             return None
@@ -107,16 +193,16 @@ class ClaudeCodeAdapter(BaseAdapter):
                 blocks = [{"type": "text", "text": raw_content}]
             else:
                 return None
-        return {
-            "round_id": msg.get("uuid", ""),
-            "parent_id": msg.get("parentUuid"),
-            "timestamp": msg.get("timestamp"),
-            "speaker": speaker,
-            "role": role,
-            "content": blocks,
-            "is_sidechain": bool(msg.get("isSidechain")),
-            "cwd": msg.get("cwd"),
-        }
+        return RoundInput(
+            round_id=msg.get("uuid", ""),
+            parent_id=msg.get("parentUuid"),
+            timestamp=msg.get("timestamp"),
+            speaker=speaker,
+            role=role,
+            content=[ContentBlock(**b) for b in blocks],
+            is_sidechain=bool(msg.get("isSidechain")),
+            cwd=msg.get("cwd"),
+        )
 
     def _parse_content(self, content_list) -> list[dict]:
         if not isinstance(content_list, list):
@@ -139,8 +225,7 @@ class ClaudeCodeAdapter(BaseAdapter):
                 inp = block.get("input", "")
                 if isinstance(inp, dict):
                     inp = json.dumps(inp, ensure_ascii=False)
-                # Keep as typed tool_use so v3 search can render it; carry
-                # the text projection for FTS extraction.
+                # Keep typed; carry text for FTS.
                 out.append({"type": "tool_use", "name": name, "input": inp,
                             "text": f"[{name}] {inp}"})
             elif t == "tool_result":

@@ -26,6 +26,7 @@ from memorytalk.provider.embedding import (
 from memorytalk.provider.lancedb import LanceStore
 from memorytalk.provider.storage import LocalStorage
 from memorytalk.repository import SQLiteStore
+from memorytalk.repository.sync_checkpoint import SyncCheckpointStore
 from memorytalk.service import (
     CardService, EventWriter, IngestService, ReadService,
     RecallService, ReviewService,
@@ -42,6 +43,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     async def lifespan(app: FastAPI):
         storage = LocalStorage(config.data_root)
         db = await SQLiteStore.create(config.db_path, storage)
+        sync_checkpoints = await SyncCheckpointStore.create(config.sync_db_path)
 
         # LanceDB is optional at boot. If it can't open (missing pyarrow,
         # bad dir perms, ...) we still want read/status to work.
@@ -72,7 +74,11 @@ def create_app(config: Config | None = None) -> FastAPI:
         app.state.ingest = IngestService(
             db=db, vectors=vectors, embedder=embedder, events=events,
         )
-        app.state.sync = SyncWatcher(config=config, ingest=app.state.ingest)
+        app.state.sync_checkpoints = sync_checkpoints
+        app.state.sync = SyncWatcher(
+            config=config, ingest=app.state.ingest,
+            checkpoints=sync_checkpoints,
+        )
         app.state.search = SearchService(
             config=config, db=db, vectors=vectors, embedder=embedder,
         )
@@ -102,6 +108,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         except Exception:
             pass
         await db.close()
+        await sync_checkpoints.close()
 
     app = FastAPI(title="memory.talk v3", lifespan=lifespan)
     app.state.config = config

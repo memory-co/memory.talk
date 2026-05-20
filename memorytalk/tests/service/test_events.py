@@ -11,13 +11,15 @@ Event types covered:
 |--------------------|--------------------------------------------------------------------|
 | imported           | sessions/<source>/<bucket>/<sid>/events.jsonl                       |
 | rounds_appended    | same — on re-ingest with new rounds                                 |
-| rounds_overwrite_  | same — on re-ingest where platform changed an existing round       |
-|   skipped          |                                                                    |
 | card_extracted     | per-session events.jsonl (one per referenced session)              |
 | created            | cards/<bucket>/<cid>/events.jsonl                                   |
 | card_linked        | cards/<bucket>/<source_card_id>/events.jsonl (the *target*)        |
 | reviewed           | cards/<bucket>/<cid>/events.jsonl                                   |
 | read               | cards/<bucket>/<cid>/events.jsonl                                   |
+
+``rounds_overwrite_skipped`` is gone — v3 is append-only at the round
+level and no longer detects (let alone reports) attempts to overwrite
+existing round content.
 """
 from __future__ import annotations
 import json
@@ -76,7 +78,7 @@ class TestSessionEvents:
         assert "imported" in kinds
         imported = next(e for e in events if e["event"] == "imported")
         assert imported["round_count"] == 3
-        assert imported["sha256"] == "sha1"
+        assert imported["added"] == 3
 
     async def test_rounds_appended_on_extra_round(self, client, data_root):
         sid = await _ingest(client)
@@ -87,21 +89,6 @@ class TestSessionEvents:
         ])
         kinds = [e["event"] for e in _session_events(data_root, sid)]
         assert "rounds_appended" in kinds
-
-    async def test_overwrite_skipped_event_fires(self, client, data_root):
-        sid = await _ingest(client)
-        # Same round_id 'r2' but text changed → triggers overwrite_skipped.
-        await _ingest(client, sha="sha2", rounds=[
-            {"round_id": "r1", "role": "human",
-             "content": [{"type": "text", "text": "round 1"}]},
-            {"round_id": "r2", "role": "assistant",
-             "content": [{"type": "text", "text": "DIFFERENT NOW"}]},
-            {"round_id": "r3", "role": "human",
-             "content": [{"type": "text", "text": "round 3"}]},
-        ])
-        events = _session_events(data_root, sid)
-        kinds = [e["event"] for e in events]
-        assert "rounds_overwrite_skipped" in kinds
 
 
 # ────────── card lifecycle ──────────

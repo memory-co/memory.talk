@@ -1,6 +1,8 @@
 """Lock in v3's three-target storage layout:
 
-- SQLite has ``rounds_index`` (4-col) but no ``rounds`` table.
+- SQLite has ``sessions`` only (round-level metadata sits in
+  ``sessions.last_round_id`` + the jsonl mirror). No ``rounds`` /
+  ``rounds_index`` SQL tables.
 - LanceDB has a per-round ``rounds`` table with FTS-friendly text + vector.
 - The jsonl file is the source of truth for full round content.
 """
@@ -41,18 +43,26 @@ async def test_sqlite_has_no_rounds_table(app, client):
     assert row is None, "v3 should not have a `rounds` SQL table"
 
 
-async def test_sqlite_has_rounds_index(app, client):
+async def test_sqlite_sessions_tracks_last_round_id(app, client):
+    """``sessions.last_round_id`` is the cursor IngestService checks for
+    optimistic concurrency on append. After this ingest it must point at
+    the last round we sent (``r2``)."""
     sid = await _ingest_sample(client)
     db = app.state.db
+    row = await db.sessions.get(sid)
+    assert row["round_count"] == 2
+    assert row["last_round_id"] == "r2"
+
+
+async def test_sqlite_has_no_rounds_index_table(app, client):
+    """``rounds_index`` was dropped — content-hash overwrite detection
+    no longer exists. Append-only semantics + last_round_id replace it."""
+    await _ingest_sample(client)
+    db = app.state.db
     async with db.conn.execute(
-        "SELECT round_id, idx, content_hash FROM rounds_index "
-        "WHERE session_id = ? ORDER BY idx",
-        (sid,),
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='rounds_index'"
     ) as cur:
-        rows = await cur.fetchall()
-    assert [r["round_id"] for r in rows] == ["r1", "r2"]
-    assert [r["idx"] for r in rows] == [1, 2]
-    assert all(r["content_hash"] for r in rows)
+        assert await cur.fetchone() is None
 
 
 async def test_rounds_jsonl_is_source_of_truth(client, data_root):
@@ -98,12 +108,9 @@ async def test_appended_round_lands_in_all_three_stores(app, client):
     assert r.json()["action"] == "appended"
 
     db = app.state.db
-    idx_map = await db.sessions.get_round_index_map(sid)
-    assert "r3" in idx_map
-    assert idx_map["r3"][0] == 3
-
     s = await db.sessions.get(sid)
     assert s["round_count"] == 3
+    assert s["last_round_id"] == "r3"
 
     rounds = await db.sessions.read_rounds_file("claude-code", sid)
     assert len(rounds) == 3

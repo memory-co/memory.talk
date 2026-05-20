@@ -11,8 +11,10 @@ from memorytalk.schemas.search import (
     CardResult, SearchRequest, SearchResponse, SessionHit, SessionResult,
 )
 from memorytalk.schemas.session import (
-    ContentBlock, IngestSessionRequest, IngestSessionResponse,
-    Round, RoundInput, Session,
+    AppendRoundsRequest, AppendRoundsResponse,
+    ContentBlock, EnsureSessionRequest, EnsureSessionResponse,
+    IngestSessionRequest, IngestSessionResponse,
+    ReadAfterResult, Round, RoundInput, Session, SourceProbe,
 )
 from memorytalk.schemas.status import StatusResponse
 from memorytalk.schemas.sync import (
@@ -27,8 +29,11 @@ __all__ = [
     "RecalledCard", "RecallRequest", "RecallResponse",
     "Review", "CreateReviewRequest", "CreateReviewResponse",
     "CardResult", "SearchRequest", "SearchResponse", "SessionHit", "SessionResult",
-    "ContentBlock", "IngestSessionRequest", "IngestSessionResponse",
-    "Round", "RoundInput", "Session",
+    "ContentBlock",
+    "AppendRoundsRequest", "AppendRoundsResponse",
+    "EnsureSessionRequest", "EnsureSessionResponse",
+    "IngestSessionRequest", "IngestSessionResponse",
+    "ReadAfterResult", "Round", "RoundInput", "Session", "SourceProbe",
     "StatusResponse",
     "SyncStartResponse", "SyncStatusResponse", "SyncStopResponse",
 ]
