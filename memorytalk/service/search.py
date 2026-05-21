@@ -35,7 +35,7 @@ from memorytalk.schemas import (
 )
 from memorytalk.util import dsl as dsl_mod
 from memorytalk.util.formula import FormulaError, compile_formula
-from memorytalk.util.highlight import highlight_keywords, truncate
+from memorytalk.util.highlight import highlight_keywords, make_snippet, truncate
 from memorytalk.util.ids import new_search_id
 
 
@@ -299,7 +299,10 @@ class SearchService:
             session_hits.append(SessionHit(
                 index=h["index"],
                 role=cur.get("role") or h["role"],
-                text=highlight_keywords(cur.get("text") or "", query),
+                text=make_snippet(
+                    cur.get("text") or "", query,
+                    head_chars=self.config.settings.search.snippet_head_chars,
+                ),
                 score=float(h["score"]),
                 context_before=self._context(by_idx.get(h["index"] - 1), query),
                 context_after=self._context(by_idx.get(h["index"] + 1), query),

@@ -39,6 +39,18 @@ def _tokenize_query(query: str) -> list[str]:
     return list(seen)
 
 
+def _compile_token_pattern(query: str) -> "re.Pattern[str] | None":
+    tokens = _tokenize_query(query)
+    if not tokens:
+        return None
+    # Longest-first to avoid shorter tokens consuming a prefix of a longer
+    # match. With a single regex pass this matters: the regex engine tries
+    # alternatives left-to-right and stops at first match, so longer ones
+    # must come first.
+    tokens.sort(key=len, reverse=True)
+    return re.compile("|".join(re.escape(t) for t in tokens), flags=re.IGNORECASE)
+
+
 def highlight_keywords(text: str, query: str) -> str:
     """Return ``text`` with every query token wrapped in ``**…**``.
 
@@ -48,20 +60,10 @@ def highlight_keywords(text: str, query: str) -> str:
     """
     if not text or not query:
         return text or ""
-    tokens = _tokenize_query(query)
-    if not tokens:
+    pattern = _compile_token_pattern(query)
+    if pattern is None:
         return text
-    # Longest-first to avoid shorter tokens consuming a prefix of a longer
-    # match. With a single regex pass this matters: the regex engine tries
-    # alternatives left-to-right and stops at first match, so longer ones
-    # must come first.
-    tokens.sort(key=len, reverse=True)
-    pattern = re.compile("|".join(re.escape(t) for t in tokens), flags=re.IGNORECASE)
-
-    def _wrap(m: re.Match) -> str:
-        return f"**{m.group(0)}**"
-
-    return pattern.sub(_wrap, text)
+    return pattern.sub(lambda m: f"**{m.group(0)}**", text)
 
 
 def truncate(text: str, limit: int = 200) -> str:
@@ -69,3 +71,47 @@ def truncate(text: str, limit: int = 200) -> str:
     if not text or len(text) <= limit:
         return text or ""
     return text[:limit] + "…"
+
+
+def make_snippet(text: str, query: str, head_chars: int = 100) -> str:
+    """Display-budget excerpt of ``text`` for search hits.
+
+    Two modes (decided by token presence — NOT by which recall pipeline
+    produced the hit; see docs/structure/v3/search-result.md):
+
+    - **Keyword window**: when any query token occurs in ``text``, return a
+      ~``head_chars``-wide window centered on the earliest match, with
+      query tokens wrapped in ``**…**`` and ``…`` prefix/suffix when the
+      window was trimmed at either edge.
+    - **Head preview**: when no token matches (typical for pure vector
+      recall), return the first ``head_chars`` characters with a ``…``
+      suffix when truncated. No highlighting (by definition there's
+      nothing to highlight).
+    """
+    if not text:
+        return ""
+    if head_chars <= 0 or len(text) <= head_chars:
+        # Whole text fits the budget — still highlight if applicable.
+        return highlight_keywords(text, query)
+
+    pattern = _compile_token_pattern(query) if query else None
+    match = pattern.search(text) if pattern is not None else None
+    if match is None:
+        # Vector-only hit (or query with no usable tokens). Head preview.
+        return text[:head_chars] + "…"
+
+    # Center a window of head_chars around the earliest match. When the
+    # match is near either edge, shift the window so we still fill the
+    # budget instead of returning a half-empty window.
+    radius = head_chars // 2
+    start = max(0, match.start() - radius)
+    end = min(len(text), start + head_chars)
+    if end - start < head_chars:
+        start = max(0, end - head_chars)
+
+    snippet = text[start:end]
+    if start > 0:
+        snippet = "…" + snippet
+    if end < len(text):
+        snippet = snippet + "…"
+    return highlight_keywords(snippet, query)

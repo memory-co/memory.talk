@@ -28,7 +28,8 @@
   "search": {
     "default_top_k": 10,
     "search_log_retention_days": 0,
-    "ranking_formula": "relevance + 0.1 * (review_up - review_down) + 0.02 * log(read_count + 1) - 0.005 * age_days"
+    "ranking_formula": "relevance + 0.1 * (review_up - review_down) + 0.02 * log(read_count + 1) - 0.005 * age_days",
+    "snippet_head_chars": 100
   },
   "sync": {
     "debounce_ms": 200
@@ -80,6 +81,7 @@
 | `default_top_k` | integer | `10` | search 默认 top_k |
 | `search_log_retention_days` | integer | `0` | `search_log` 老化阈值(天)。`0` = 永不老化 |
 | `ranking_formula` | string | 见下面 | 沉浮公式,详见 [#ranking_formula](#ranking_formula) |
+| `snippet_head_chars` | integer | `100` | `hits[].text` 显示预算字符数。有 query token 命中走 keyword window;无命中走头 N 字符预览。详见 [`search-result.md#hit-text-snippet-规则`](../../structure/v3/search-result.md#hit-text-snippet-规则) |
 
 #### ranking_formula
 

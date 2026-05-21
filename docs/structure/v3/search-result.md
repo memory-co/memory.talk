@@ -151,10 +151,22 @@ UI 层(CLI Markdown 渲染)对两种 result 用**同一种 H3 标题结构**:`##
 |---|---|---|
 | `index` | integer | 命中 round 在 session 内的稳定编号 |
 | `role` | string | `human` / `assistant` / `tool` / `system` |
-| `text` | string | round 原文,含 `**keyword**` 高亮(只对命中关键词加;长 round 不截断) |
+| `text` | string | round 的**显示预算摘要**(默认 ~100 字符,配 `settings.search.snippet_head_chars`)。详见 [#hit-text-snippet-规则](#hit-text-snippet-规则) |
 | `score` | float | 本 round 的 RRF 检索分(原始相关度,**跟外层 session-level `score` 不同尺度**) |
-| `context_before` | object\|null | 前一条 round `{index, role, text}`;长内容截 200 字 + `...`;`null` 表示是 session 第一条 |
+| `context_before` | object\|null | 前一条 round `{index, role, text}`;长内容截 200 字 + `…`;`null` 表示是 session 第一条 |
 | `context_after` | object\|null | 后一条 round;`null` 表示是最后一条 |
+
+#### Hit text snippet 规则
+
+为了防止大 round(几千字符的代码 / 工具输出)把客户端撑爆,`hits[].text` **不再返 round 原文**,而是一段预算 ~`settings.search.snippet_head_chars` 字符的摘要。两种模式由 round text 里**是否出现任一 query token**(jieba 分词后)决定 —— 与召回管线(FTS / 向量)无关:
+
+| 场景 | text 形态 | 高亮 |
+|---|---|---|
+| round 含至少一个 query token(典型 FTS 命中,以及那些"语义召回但碰巧也有词命中"的) | **以最早命中位置为中心**,前后各取约 `head_chars/2` 字符;两端被截则加 `…` 前 / 后缀 | 命中的 token 仍按规则 `**…**` 包裹 |
+| round 不含任何 query token(典型纯向量命中,语义近但没词面重叠) | round **头 `head_chars` 字符 + `…`**(若被截断) | 无(text 里本就没匹配项) |
+| round 总长 ≤ `head_chars` | 整段原文 | 命中的 token 照常 `**…**` 包裹 |
+
+`context_before` / `context_after` 不受这条规则影响,仍是相邻 round 的前 200 字 + `…`(纯向量命中也保留 context,只是 context 文本通常也没词面高亮)。
 
 #### 上下文窗规则
 
@@ -166,6 +178,8 @@ UI 层(CLI Markdown 渲染)对两种 result 用**同一种 H3 标题结构**:`##
 #### Hits 排序
 
 `hits[]` 默认按 `hits[].score` **降序**(round 级 RRF 分)。**不**按 `index` 顺序 —— 人类读者要先看最相关的命中,顺序追溯走 `POST /v3/read`。
+
+`hits[].text` 是预算摘要(默认 ~100 字符),要看 round 原文也走 `POST /v3/read`。
 
 ### Score 尺度对照
 
@@ -188,12 +202,11 @@ UI 层(CLI Markdown 渲染)对两种 result 用**同一种 H3 标题结构**:`##
 
 ## 高亮渲染
 
-`**word**` 标记 keyword 命中。两种场景:
+`**word**` 标记 keyword 命中。三种场景:
 
 - **card `insight`**:整段返回,FTS5 在 `insight` 文本上标 keyword;查无匹配 → 整段无高亮(命中可能在 `rounds[].text` 里)
-- **session `hits[].text`** / **`context_before/after.text`**:每条 round 原文返回,匹配 keyword 内联 `**...**`
-
-session 的 hit `text` **不截断**;`context_before/after.text` 超 200 字按字符截到 200 + `...`。
+- **session `hits[].text`**:按 [#hit-text-snippet-规则](#hit-text-snippet-规则)裁成预算摘要;有词面命中走 keyword window,纯向量命中走 head 预览
+- **`context_before/after.text`**:相邻 round 截前 200 字 + `…`,匹配 keyword 内联 `**…**`(向量命中的 context 通常无词面命中,因此无高亮)
 
 ## SearchLog(服务端审计)
 

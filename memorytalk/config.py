@@ -50,6 +50,11 @@ class SearchConfig(BaseModel):
     default_top_k: int = 10
     search_log_retention_days: int = 0
     ranking_formula: str = _DEFAULT_RANKING_FORMULA
+    # Per-hit display budget for ``hits[].text``. When the round text
+    # contains any query token, we return a keyword-windowed snippet
+    # roughly this long; otherwise we return the round's first
+    # ``snippet_head_chars`` characters as a preview.
+    snippet_head_chars: int = 100
 
 
 class RecallConfig(BaseModel):
