@@ -6,7 +6,14 @@ contract in docs/cli/v3/<cmd>.md exactly — adjust the contract first,
 then the formatter.
 """
 from __future__ import annotations
+import re
 from typing import Any
+
+
+# ``**word**`` inline-bold markers (from server-side make_snippet). Used
+# only to strip them out when we render inside a code fence — see the
+# trade-off note above ``_fmt_search_session``.
+_INLINE_BOLD = re.compile(r"\*\*(.+?)\*\*", flags=re.DOTALL)
 
 
 # ────────── generic ──────────
@@ -300,6 +307,27 @@ def _fmt_search_card(entry: dict) -> str:
     )
 
 
+# Hit-body layout: fenced code block (```...```).
+#
+# Why this layout (chosen over blockquote `> ` 2026-05-21):
+#   - hit/context text from the server can contain real newlines
+#     (multi-line code, tool output, etc.). A blockquote only quotes
+#     the first line; subsequent lines fall outside and the indentation
+#     visually breaks. Code blocks preserve newlines as-is.
+#   - arbitrary user content (``*``, ``_``, ``[``, ...) inside a code
+#     block can't accidentally trigger markdown parsing, so rendering
+#     stays predictable across renderers / terminals.
+#
+# Cost (accepted): markdown is NOT parsed inside fences, so the
+# ``**keyword**`` highlight from server-side ``make_snippet`` would
+# render literally as ``**LanceDB**``. We strip the bold markers below
+# so the body reads cleanly; the matched word itself stays in place,
+# just without emphasis. Readers who want to see the full round (with
+# match context) go to ``POST /v3/read``.
+#
+# Fence collision: if the hit text itself contains a run of backticks
+# (e.g. it embeds a ``` fence), we open with one-longer fence so the
+# wrapper isn't closed prematurely.
 def _fmt_search_session(entry: dict) -> str:
     head = (
         f"### [SESSION] `{entry['session_id']}` · "
@@ -309,15 +337,48 @@ def _fmt_search_session(entry: dict) -> str:
     for hit in entry.get("hits") or []:
         role = hit.get("role") or ""
         lines.append(f"**#{hit['index']}** _({role})_")
+
+        body_parts: list[str] = []
         ctx_before = hit.get("context_before")
-        ctx_after = hit.get("context_after")
         if ctx_before:
-            lines.append(f"> _[{ctx_before['index']}] {ctx_before['text']}_")
-        lines.append(f"> [{hit['index']}] {hit.get('text') or ''}")
+            body_parts.append(
+                f"[{ctx_before['index']}] {_strip_bold(ctx_before.get('text') or '')}"
+            )
+        body_parts.append(
+            f"[{hit['index']}] {_strip_bold(hit.get('text') or '')}"
+        )
+        ctx_after = hit.get("context_after")
         if ctx_after:
-            lines.append(f"> _[{ctx_after['index']}] {ctx_after['text']}_")
+            body_parts.append(
+                f"[{ctx_after['index']}] {_strip_bold(ctx_after.get('text') or '')}"
+            )
+        body = "\n".join(body_parts)
+
+        fence = _pick_fence(body)
+        lines.append(fence)
+        lines.append(body)
+        lines.append(fence)
         lines.append("")
     return "\n".join(lines).rstrip()
+
+
+def _strip_bold(text: str) -> str:
+    """Unwrap ``**…**`` markers — they'd render literally inside a code fence."""
+    return _INLINE_BOLD.sub(r"\1", text)
+
+
+def _pick_fence(body: str) -> str:
+    """Pick a backtick run long enough to not collide with body content."""
+    longest_run = 0
+    current = 0
+    for ch in body:
+        if ch == "`":
+            current += 1
+            if current > longest_run:
+                longest_run = current
+        else:
+            current = 0
+    return "`" * max(3, longest_run + 1)
 
 
 # ────────── helpers ──────────
