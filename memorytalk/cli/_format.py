@@ -336,7 +336,16 @@ def _fmt_search_session(entry: dict) -> str:
     lines: list[str] = [head, ""]
     for hit in entry.get("hits") or []:
         role = hit.get("role") or ""
-        lines.append(f"**#{hit['index']}** _({role})_")
+        # Surface the RRF score so readers can eyeball relative strength.
+        # Caveat: this is LanceDB's hybrid RRF combined score (FTS rank +
+        # vector rank fused), NOT a similarity in [0,1]. Typical top hits
+        # land around 0.01–0.03; a low score doesn't necessarily mean a
+        # weak match, just a lower combined rank. Provenance (FTS vs
+        # vector) is not preserved by RRF — see docs/structure/v3/
+        # search-result.md.
+        score = hit.get("score")
+        score_suffix = f" · score `{score:.4f}`" if score is not None else ""
+        lines.append(f"**#{hit['index']}** _({role})_{score_suffix}")
 
         body_parts: list[str] = []
         ctx_before = hit.get("context_before")
