@@ -30,6 +30,10 @@ class SessionHit(BaseModel):
     role: str
     text: str
     score: float
+    # ISO 8601 UTC timestamp of when this round happened on the source
+    # platform (e.g. claude-code). Optional: some adapters or older
+    # rounds may not have one — render falls back to "no time".
+    timestamp: str | None = None
     context_before: _SessionHitContext | None = None
     context_after: _SessionHitContext | None = None
 
@@ -40,6 +44,8 @@ class CardResult(BaseModel):
     score: float
     card_id: str
     insight: str
+    # ISO 8601 UTC timestamp of card creation. Mirror of cards.created_at.
+    created_at: str
     stats: CardStats = Field(default_factory=CardStats)
 
 

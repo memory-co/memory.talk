@@ -312,8 +312,10 @@ def _fmt_search_card(entry: dict) -> str:
         f"reads {stats.get('read_count', 0)} · "
         f"recalls {stats.get('recall_count', 0)}`"
     )
+    time_str = _fmt_time(entry.get("created_at"))
+    time_suffix = f" · {time_str}" if time_str else ""
     return (
-        f"### [CARD] `{entry['card_id']}` · {inline}\n\n"
+        f"### [CARD] `{entry['card_id']}` · {inline}{time_suffix}\n\n"
         f"{entry.get('insight', '')}"
     )
 
@@ -361,7 +363,9 @@ def _fmt_search_session(entry: dict) -> str:
         # docs/structure/v3/search-result.md.
         score = hit.get("score")
         score_suffix = f" · score `{score:.4f}`" if score is not None else ""
-        lines.append(f"**#{hit['index']}**{score_suffix}")
+        time_str = _fmt_time(hit.get("timestamp"))
+        time_suffix = f" · {time_str}" if time_str else ""
+        lines.append(f"**#{hit['index']}**{score_suffix}{time_suffix}")
 
         body_parts: list[str] = []
         ctx_before = hit.get("context_before")
@@ -457,3 +461,46 @@ def _humanize_secs(s: int) -> str:
     h = s // 3600
     m = (s % 3600) // 60
     return f"{h}h {m}m"
+
+
+def _fmt_time(iso_str: str | None) -> str:
+    """Render a UTC ISO 8601 timestamp as ``YYYY-MM-DD HH:MM (N <unit>前)``.
+
+    Absolute portion is converted to local time so the reader sees their
+    wall clock. Relative portion uses Chinese suffix and rolls up by
+    largest fitting unit (minute → hour → day → month → year). Returns
+    empty string for None/unparseable input so callers can just append
+    without guarding.
+    """
+    if not iso_str:
+        return ""
+    import datetime as _dt
+    try:
+        s = iso_str.replace("Z", "+00:00")
+        dt = _dt.datetime.fromisoformat(s)
+    except ValueError:
+        return ""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_dt.UTC)
+    now = _dt.datetime.now(_dt.UTC)
+    delta_sec = max(0, int((now - dt).total_seconds()))
+
+    def _plural(n: int, unit: str) -> str:
+        return f"{n} {unit}{'s' if n != 1 else ''} ago"
+
+    if delta_sec < 60:
+        rel = "just now"
+    elif delta_sec < 3600:
+        rel = _plural(delta_sec // 60, "minute")
+    elif delta_sec < 86400:
+        rel = _plural(delta_sec // 3600, "hour")
+    elif delta_sec < 86400 * 30:
+        rel = _plural(delta_sec // 86400, "day")
+    elif delta_sec < 86400 * 365:
+        rel = _plural(delta_sec // (86400 * 30), "month")
+    else:
+        rel = _plural(delta_sec // (86400 * 365), "year")
+
+    local = dt.astimezone()
+    abs_str = local.strftime("%Y-%m-%d %H:%M")
+    return f"{abs_str} ({rel})"

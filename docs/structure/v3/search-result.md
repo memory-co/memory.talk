@@ -33,6 +33,7 @@
       "score": 0.52,
       "card_id": "card_01jz8k2m",
       "insight": "选定 **LanceDB** 做向量存储,主要因为零依赖嵌入式架构",
+      "created_at": "2026-04-10T14:30:00Z",
       "stats": {
         "review_up": 7,
         "review_down": 3,
@@ -56,6 +57,7 @@
           "role": "human",
           "text": "我看 **LanceDB** 是个不错的选择,零依赖",
           "score": 0.38,
+          "timestamp": "2026-04-10T14:32:15Z",
           "context_before": {"index": 10, "role": "human", "text": "我们要选个向量库,纠结"},
           "context_after": {"index": 12, "role": "assistant", "text": "好的,那就 LanceDB 了"}
         },
@@ -64,6 +66,7 @@
           "role": "assistant",
           "text": "嵌入式部署最方便,**LanceDB** 跟应用一起走,不用起额外服务",
           "score": 0.31,
+          "timestamp": "2026-04-10T14:35:42Z",
           "context_before": {"index": 14, "role": "human", "text": "用什么部署?"},
           "context_after": {"index": 16, "role": "human", "text": "OK 就这么定"}
         }
@@ -75,6 +78,7 @@
       "score": 0.38,
       "card_id": "card_01jzp3nq",
       "insight": "**LanceDB** 落地后的踩坑清单",
+      "created_at": "2026-05-01T09:14:22Z",
       "stats": {
         "review_up": 2,
         "review_down": 0,
@@ -127,6 +131,7 @@ UI 层(CLI Markdown 渲染)对两种 result 用**同一种 H3 标题结构**:`##
 |---|---|---|
 | `card_id` | string | `card_<ULID>` 带前缀 |
 | `insight` | string | card 的洞见**整段** —— 已对匹配关键词内联 `**keyword**` 高亮。FTS 命中在 `card.rounds[].text` 而**不在** `insight` 时 → 整段无高亮,但 card 仍返回(读者要看 round 原文走 `read`) |
+| `created_at` | string | ISO 8601 UTC card 创建时间;镜像 `card.created_at` |
 | `stats` | Stats | 当前快照,见 [talk-card.md#Stats](talk-card.md#stats) |
 
 **没有 `snippets`** —— `insight` 已经是蒸馏后的一句话,直出比再抽片段更清楚。
@@ -155,6 +160,7 @@ UI 层(CLI Markdown 渲染)对两种 result 用**同一种 H3 标题结构**:`##
 | `role` | string | `human` / `assistant` / `tool` / `system` |
 | `text` | string | round 的**显示预算摘要**(默认 ~100 字符,配 `settings.search.snippet_head_chars`)。详见 [#hit-text-snippet-规则](#hit-text-snippet-规则) |
 | `score` | float | 本 round 的 RRF 检索分(原始相关度,**跟外层 session-level `score` 不同尺度**) |
+| `timestamp` | string\|null | ISO 8601 UTC,本 round 在源平台发生的时间;部分 adapter / 老 round 可能为 null |
 | `context_before` | object\|null | 前一条 round `{index, role, text}`;长内容截 200 字 + `…`;`null` 表示是 session 第一条 |
 | `context_after` | object\|null | 后一条 round;`null` 表示是最后一条 |
 

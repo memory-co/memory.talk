@@ -1,7 +1,13 @@
-"""Unit tests for util/highlight.py — keyword-wrap + truncate + snippet."""
+"""Unit tests for util/highlight.py — keyword-wrap + truncate + snippet.
+
+Also covers ``memorytalk.cli._format._fmt_time`` (lives outside this module
+but pairs nicely with the other small renderer helpers tested here)."""
 from __future__ import annotations
+import datetime as _dt
+
 import pytest
 
+from memorytalk.cli._format import _fmt_time
 from memorytalk.util.highlight import highlight_keywords, make_snippet, truncate
 
 
@@ -144,3 +150,54 @@ class TestMakeSnippet:
         # land inside and gets highlighted too.
         assert "**LanceDB**" in out
         assert out.startswith("…") and out.endswith("…")
+
+
+def _ago(seconds: int) -> str:
+    t = _dt.datetime.now(_dt.UTC) - _dt.timedelta(seconds=seconds)
+    return t.isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+class TestFmtTime:
+    def test_empty_input(self):
+        assert _fmt_time(None) == ""
+        assert _fmt_time("") == ""
+
+    def test_unparseable_input(self):
+        assert _fmt_time("not-a-timestamp") == ""
+
+    def test_just_now(self):
+        assert _fmt_time(_ago(30)).endswith("(just now)")
+
+    def test_minutes_plural(self):
+        assert _fmt_time(_ago(60)).endswith("(1 minute ago)")
+        assert _fmt_time(_ago(180)).endswith("(3 minutes ago)")
+
+    def test_hours_plural(self):
+        assert _fmt_time(_ago(3700)).endswith("(1 hour ago)")
+        assert _fmt_time(_ago(7300)).endswith("(2 hours ago)")
+
+    def test_days_plural(self):
+        assert _fmt_time(_ago(86400)).endswith("(1 day ago)")
+        assert _fmt_time(_ago(86400 * 5)).endswith("(5 days ago)")
+
+    def test_months(self):
+        # 45 days → 1 month (rolls over at 30-day boundary)
+        assert _fmt_time(_ago(86400 * 45)).endswith("(1 month ago)")
+        assert _fmt_time(_ago(86400 * 90)).endswith("(3 months ago)")
+
+    def test_years(self):
+        assert _fmt_time(_ago(86400 * 400)).endswith("(1 year ago)")
+        assert _fmt_time(_ago(86400 * 800)).endswith("(2 years ago)")
+
+    def test_absolute_portion_format(self):
+        out = _fmt_time(_ago(120))
+        # Absolute portion should look like YYYY-MM-DD HH:MM at the start.
+        import re
+        assert re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2} \(", out)
+
+    def test_handles_naive_iso_as_utc(self):
+        # No tzinfo in input → assume UTC, don't crash.
+        t = _dt.datetime.now(_dt.UTC) - _dt.timedelta(seconds=120)
+        naive = t.replace(tzinfo=None).isoformat(timespec="seconds")
+        out = _fmt_time(naive)
+        assert "ago" in out

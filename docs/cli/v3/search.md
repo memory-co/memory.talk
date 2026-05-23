@@ -39,14 +39,14 @@ memory-talk search <query> [--where DSL] [--top-k N] [--all] [--json]
 
 ## Markdown(默认)
 
-````markdown
+`````markdown
 # search: LanceDB 选型
 
-`search_id=sch_01K7XABC` · 4 results
+`search_id=sch_01K7XABC` · 4 results · 2 hidden
 
 ---
 
-### [CARD] `card_01jz8k2m` · `↑7 ↓3 · 12 reviews · 42 reads · 18 recalls`
+### [CARD] `card_01jz8k2m` · `↑7 ↓3 · reviews 12 · reads 42 · recalls 18` · 2026-04-10 22:30 (43 days ago)
 
 选定 **LanceDB** 做向量存储,主要因为零依赖嵌入式架构
 
@@ -54,36 +54,30 @@ memory-talk search <query> [--where DSL] [--top-k N] [--all] [--json]
 
 ### [SESSION] `sess_187c6576` · claude-code · 3 hits
 
-**#11** _(human)_
-> _[10] 我们要选个向量库,纠结_
-> [11] 我看 **LanceDB** 是个不错的选择,零依赖
-> _[12] 好的,那就 LanceDB 了_
-
-**#15** _(assistant)_
-> _[14] 用什么部署?_
-> [15] 嵌入式部署最方便,**LanceDB** 跟应用一起走,不用起额外服务
-> _[16] OK 就这么定_
-
-**#22** _(assistant)_
-> _[21] 容量上限呢?_
-> [22] **LanceDB** 单文件能支持到 TB 级,够大多数本地场景了
-> _[23] 那很合适_
-
----
-
-### [CARD] `card_01jzp3nq` · `↑2 ↓0 · 2 reviews · 5 reads · 1 recall`
-
-**LanceDB** 落地后的踩坑清单
-
----
-
-### [SESSION] `sess_8eba9e` · claude-code · 1 hit
-
-**#8** _(assistant)_
-> _[7] 性能怎么样?_
-> [8] **LanceDB** 在 10M 数据集上 query latency ~5ms,够快
-> _[9] 不错_
+**#11** · score `0.0163` · 2026-04-10 22:32 (43 days ago)
 ````
+[10 AI] 我们要选个向量库, 纠结
+[11 HUMAN*] 我看 LanceDB 是个不错的选择, 零依赖
+[12 AI] 好的, 那就 LanceDB 了
+````
+
+**#15** · score `0.0124` · 2026-04-10 22:35 (43 days ago)
+````
+[14 HUMAN] 用什么部署?
+[15 AI*] 嵌入式部署最方便, LanceDB 跟应用一起走, 不用起额外服务
+[16 HUMAN] OK 就这么定
+````
+
+---
+
+### [CARD] `card_01jzp3nq` · `↑2 ↓0 · reviews 2 · reads 5 · recalls 1` · 2026-05-01 17:14 (22 days ago)
+
+LanceDB 落地后的踩坑清单
+
+---
+
+_(2 weak results hidden by strong-floor filter — pass `--all` to see)_
+`````
 
 ### 约定
 
@@ -230,6 +224,7 @@ memory-talk search <query> [--where DSL] [--top-k N] [--all] [--json]
 |---|---|---|
 | `card_id` | string | 带前缀 |
 | `insight` | string | card 的洞见**整段** —— 已对匹配的关键词内联 `**keyword**` 高亮(FTS 命中在 `card.rounds[].text` 但不在 `insight` 时 → 整段无高亮,但 card 仍返回) |
+| `created_at` | string | ISO 8601 UTC card 创建时间 |
 | `stats` | Stats | 当前 stats 快照,详见 [`../../structure/v3/talk-card.md#Stats`](../../structure/v3/talk-card.md#stats) |
 
 > 没有独立 `snippets` 字段 —— `insight` 已经是蒸馏后的一句话,够短,直出比再抽片段更清楚。要看完整 `rounds` 走 `read`。
@@ -252,6 +247,7 @@ memory-talk search <query> [--where DSL] [--top-k N] [--all] [--json]
 | `role` | string | `human` / `assistant` / `tool` / `system` |
 | `text` | string | round 原文,含 `**keyword**` 高亮 |
 | `score` | float | round 级 RRF 检索分(**不**是 session-level final score;不要混着比) |
+| `timestamp` | string\|null | ISO 8601 UTC,本 round 在源平台发生的时间;部分老 round / adapter 可能 null |
 | `context_before` | object\|null | 前一条 round `{index, role, text}`;长内容截 200;`null` 表示是第一条 |
 | `context_after` | object\|null | 后一条 round;`null` 表示是最后一条 |
 

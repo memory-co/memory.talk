@@ -345,6 +345,7 @@ class SearchService:
             score=float(cand["final_score"]),
             card_id=cand["card_id"],
             insight=highlight_keywords(cand["insight"], query),
+            created_at=cand["created_at"],
             stats=CardStats(**cand["stats"]),
         )
 
@@ -369,6 +370,7 @@ class SearchService:
                     head_chars=self.config.settings.search.snippet_head_chars,
                 ),
                 score=float(h["score"]),
+                timestamp=cur.get("timestamp"),
                 context_before=self._context(by_idx.get(h["index"] - 1), query),
                 context_after=self._context(by_idx.get(h["index"] + 1), query),
             ))
