@@ -37,7 +37,11 @@ cd memory.talk
 ./install.sh
 ```
 
-装完后按提示把 `~/.memory.talk/venv/bin` 加到 PATH(或 symlink 到 `~/.local/bin/`)。要装到别处,设 `MEMORY_TALK_INSTALL_DIR=/some/where ./install.sh`。
+装完后按提示把 `~/.memory.talk/venv/bin` 加到 PATH(或 symlink 到 `~/.local/bin/`)。
+
+环境变量:
+- `MEMORY_TALK_INSTALL_DIR=/some/where` — 装到别处(默认 `~/.memory.talk/`)
+- `MEMORY_TALK_INDEX_URL=https://...` — 强制指定 PyPI 镜像。**默认自动探测** pypi.org 和阿里云速度,选快的;失败 fallback 到 pip 默认
 
 **已有 Python 环境,自己管 venv** —— 直接 pip:
 

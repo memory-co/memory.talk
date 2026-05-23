@@ -103,18 +103,84 @@ fi
 VENV_PY="$VENV_DIR/bin/python"
 VENV_PIP="$VENV_DIR/bin/pip"
 
-# ────────── 3. pip install ──────────
+# ────────── 3. pick fastest PyPI mirror ──────────
+#
+# Many users (esp. mainland China) get vastly faster downloads from a
+# domestic mirror than from pypi.org. We race the two and use whichever
+# answers fastest. ``MEMORY_TALK_INDEX_URL=...`` overrides the test —
+# use it to force a specific mirror (or set it to '' / pypi.org URL to
+# pin to official).
+
+PYPI_OFFICIAL="https://pypi.org/simple/"
+PYPI_ALIYUN="https://mirrors.aliyun.com/pypi/simple/"
+# Probe each mirror with a real metadata request — the memorytalk page
+# is small and exists on both. ``time_total`` includes DNS + connect +
+# TLS + body, so it's a good proxy for "how fast will pip resolve from
+# here". 5s timeout caps the worst case.
+_probe_mirror() {
+    local url="$1"
+    local probe="${url%/}/memorytalk/"
+    local result code time
+    if ! command -v curl >/dev/null 2>&1; then
+        echo "FAIL"; return
+    fi
+    if result=$(curl -o /dev/null -s -w '%{http_code} %{time_total}' \
+                     --max-time 5 "$probe" 2>/dev/null); then
+        code="${result%% *}"
+        time="${result##* }"
+        if [ "$code" = "200" ]; then
+            echo "$time"
+            return
+        fi
+    fi
+    echo "FAIL"
+}
+
+PIP_INDEX_ARGS=()
+if [ -n "${MEMORY_TALK_INDEX_URL:-}" ]; then
+    step "Using PyPI mirror from \$MEMORY_TALK_INDEX_URL..."
+    PIP_INDEX_ARGS=(--index-url "$MEMORY_TALK_INDEX_URL")
+    ok "pinned to $MEMORY_TALK_INDEX_URL"
+else
+    step "Picking the fastest PyPI mirror..."
+    hint "probing pypi.org + mirrors.aliyun.com (5s timeout each)..."
+    T_OFFICIAL="$(_probe_mirror "$PYPI_OFFICIAL")"
+    T_ALIYUN="$(_probe_mirror "$PYPI_ALIYUN")"
+
+    if [ "$T_OFFICIAL" = "FAIL" ] && [ "$T_ALIYUN" = "FAIL" ]; then
+        warn "Both mirrors unreachable, falling back to pip's default index."
+    elif [ "$T_OFFICIAL" = "FAIL" ]; then
+        ok "pypi.org unreachable, using aliyun (${T_ALIYUN}s)"
+        PIP_INDEX_ARGS=(--index-url "$PYPI_ALIYUN")
+    elif [ "$T_ALIYUN" = "FAIL" ]; then
+        ok "aliyun unreachable, using pypi.org (${T_OFFICIAL}s)"
+        PIP_INDEX_ARGS=(--index-url "$PYPI_OFFICIAL")
+    else
+        # Both reachable — pick faster. bash doesn't compare floats; use awk.
+        if awk "BEGIN{exit !(${T_OFFICIAL} < ${T_ALIYUN})}"; then
+            ok "pypi.org wins (${T_OFFICIAL}s vs aliyun ${T_ALIYUN}s)"
+            PIP_INDEX_ARGS=(--index-url "$PYPI_OFFICIAL")
+        else
+            ok "aliyun wins (${T_ALIYUN}s vs pypi.org ${T_OFFICIAL}s)"
+            PIP_INDEX_ARGS=(--index-url "$PYPI_ALIYUN")
+        fi
+    fi
+fi
+
+# ────────── 4. pip install ──────────
 
 step "Upgrading pip inside the venv..."
-"$VENV_PY" -m pip install --quiet --disable-pip-version-check --upgrade pip
+"$VENV_PY" -m pip install --quiet --disable-pip-version-check \
+    "${PIP_INDEX_ARGS[@]}" --upgrade pip
 ok "pip is current"
 
 step "Installing $PACKAGE from PyPI..."
 hint "this pulls lancedb / pyarrow / fastapi etc. — first run can take 1–3 min"
-"$VENV_PIP" install --disable-pip-version-check --upgrade "$PACKAGE"
+"$VENV_PIP" install --disable-pip-version-check \
+    "${PIP_INDEX_ARGS[@]}" --upgrade "$PACKAGE"
 ok "install finished"
 
-# ────────── 4. verify ──────────
+# ────────── 5. verify ──────────
 
 step "Verifying..."
 if ! VERSION="$("$VENV_DIR/bin/memory.talk" --version 2>/dev/null)"; then
@@ -122,7 +188,7 @@ if ! VERSION="$("$VENV_DIR/bin/memory.talk" --version 2>/dev/null)"; then
 fi
 ok "$PACKAGE $VERSION is ready"
 
-# ────────── 5. post-install instructions ──────────
+# ────────── 6. post-install instructions ──────────
 
 cat <<EOF
 
