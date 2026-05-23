@@ -31,6 +31,7 @@ from memorytalk.service import (
     CardService, EventWriter, IngestService, ReadService,
     RecallService, ReviewService,
 )
+from memorytalk.service.backfill import IndexBackfill
 from memorytalk.service.search import SearchService
 from memorytalk.service.sync import SyncWatcher
 
@@ -99,12 +100,27 @@ def create_app(config: Config | None = None) -> FastAPI:
             except Exception:
                 _log.exception("sync auto-start failed")
 
+        # Vector-index backfill loop — picks up sessions whose
+        # ``indexed_round_count < round_count`` (i.e. previous ingest
+        # batches failed silently because of e.g. DashScope's 10-cap)
+        # and re-embeds them in the background. Disabled gracefully
+        # when no embedder / lance is available; loop is cancelled on
+        # lifespan shutdown.
+        app.state.backfill = IndexBackfill(
+            db=db, vectors=vectors, embedder=embedder,
+        )
+        app.state.backfill.start()
+
         yield
 
         # Pause (not stop) on shutdown — preserves the user's persisted
         # enable choice so the next server start auto-resumes the watcher.
         try:
             await app.state.sync.pause()
+        except Exception:
+            pass
+        try:
+            await app.state.backfill.stop()
         except Exception:
             pass
         await db.close()

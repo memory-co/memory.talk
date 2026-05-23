@@ -101,7 +101,13 @@ async def test_status_disabled_when_settings_off(client):
     """Default fixture has sync.enabled=False — status reports `disabled`."""
     r = await client.get("/v3/sync/status")
     assert r.status_code == 200
-    assert r.json() == {"status": "disabled"}
+    body = r.json()
+    assert body["status"] == "disabled"
+    # Index health is reported even when sync is off — it's a property
+    # of the data root, not the watcher.
+    assert "index" in body
+    assert body["index"]["total_sessions"] == 0
+    assert body["index"]["degraded_sessions"] == 0
 
 
 async def test_start_and_stop_routes_are_gone(client):

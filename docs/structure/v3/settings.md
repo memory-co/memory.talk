@@ -71,6 +71,7 @@
 | `auth_key` | string? | null | 字面值或 `${VAR}` | 仅 `openai` 用。`${VAR}` 由 `string.Template.substitute` 渲染 |
 | `dim` | integer | `384` | 正整数 | 向量维度,**必须**与 provider 实际输出一致 |
 | `timeout` | float | `30.0` | 秒 | 仅 `openai` 用 |
+| `batch_size` | integer | `10` | 正整数 | embedder 一次 POST 多少条 `input`。DashScope OpenAI-compatible **硬上限 10**(超了静默 400),OpenAI 真品官方限 2048,vLLM 看部署。`local` / `dummy` 忽略此字段(sentence-transformers 自己处理)。改了立即生效(server 重启) |
 
 > **dim 改了会触发 setup 重算所有 card 的 embedding** —— 详见 [`../../cli/v3/setup.md`](../../cli/v3/setup.md)。
 

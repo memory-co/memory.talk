@@ -50,19 +50,46 @@ class LocalEmbedder(Embedder):
 
 
 class OpenAIEmbedder(Embedder):
-    """OpenAI-compatible embeddings over HTTP (OpenAI / DashScope / vLLM)."""
+    """OpenAI-compatible embeddings over HTTP (OpenAI / DashScope / vLLM).
 
-    def __init__(self, endpoint: str, auth_key: str, model: str, timeout: float = 30.0):
+    Chunked under the hood — DashScope's compatible endpoint silently
+    400s on ``input`` length > 10 (was the root cause of v0.6.0's
+    LanceDB-rounds index gaps; see ``docs/report/2026-05-23-...``). We
+    always chunk by ``batch_size`` regardless of caller, so any caller
+    that passes a long list still gets a complete result.
+
+    All-or-nothing semantics: any chunk failure aborts the whole call.
+    Partial-success isolation belongs in the caller (e.g.
+    ``IngestService._index_vectors``) which knows which rows go with
+    which idx — see that method for the per-chunk failure handling.
+    """
+
+    def __init__(
+        self, endpoint: str, auth_key: str, model: str,
+        timeout: float = 30.0, batch_size: int = 10,
+    ):
         if not endpoint:
             raise ValueError("OpenAIEmbedder requires an endpoint")
         if not auth_key:
             raise ValueError("OpenAIEmbedder requires an auth_key")
+        if batch_size < 1:
+            raise ValueError("OpenAIEmbedder batch_size must be >= 1")
         self.endpoint = endpoint
         self.auth_key = auth_key
         self.model = model
         self.timeout = timeout
+        self.batch_size = batch_size
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        out: list[list[float]] = []
+        for i in range(0, len(texts), self.batch_size):
+            chunk = texts[i:i + self.batch_size]
+            out.extend(await self._embed_chunk(chunk))
+        return out
+
+    async def _embed_chunk(self, chunk: list[str]) -> list[list[float]]:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 self.endpoint,
@@ -70,7 +97,7 @@ class OpenAIEmbedder(Embedder):
                     "Authorization": f"Bearer {self.auth_key}",
                     "Content-Type": "application/json",
                 },
-                json={"model": self.model, "input": list(texts), "encoding_format": "float"},
+                json={"model": self.model, "input": list(chunk), "encoding_format": "float"},
                 timeout=self.timeout,
             )
         resp.raise_for_status()
@@ -90,6 +117,7 @@ def get_embedder(config) -> Embedder:
         return OpenAIEmbedder(
             endpoint=emb.endpoint, auth_key=emb.auth_key,
             model=emb.model, timeout=emb.timeout,
+            batch_size=emb.batch_size,
         )
     raise ValueError(f"unknown embedding provider: {p}")
 

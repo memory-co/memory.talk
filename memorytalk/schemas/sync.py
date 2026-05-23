@@ -12,6 +12,12 @@ class _IngestStats(BaseModel):
     skipped: int = 0
     overwrite_warnings: int = 0
     errors: int = 0
+    # Sessions where the LanceDB index didn't catch up on this run
+    # (status=partial / failed). Distinct from ``errors`` (which counts
+    # sync-layer failures like probe/read_after); ``index_errors``
+    # specifically signals "data is in jsonl/SQLite but search can't
+    # see it yet" — the backfill loop will retry.
+    index_errors: int = 0
 
 
 class SyncStartResponse(BaseModel):
@@ -36,10 +42,28 @@ class _SyncWatchedRoot(BaseModel):
 class _SyncRecentEvent(BaseModel):
     at: str
     session_id: str
-    event: str  # imported / rounds_appended / rounds_overwrite_skipped / error
+    # imported / rounds_appended / rounds_overwrite_skipped / error /
+    # index_partial / index_failed
+    event: str
     rounds: int | None = None
     rounds_skipped: int | None = None
     error: str | None = None
+    # Populated for index_partial / index_failed events.
+    indexed: int | None = None
+    index_failed: int | None = None
+
+
+class _IndexHealth(BaseModel):
+    """Snapshot of how complete the LanceDB rounds index is. Aggregated
+    on each ``GET /v3/sync/status`` from the ``sessions`` table — fields
+    backed by ``indexed_round_count`` / ``round_count``."""
+    total_sessions: int = 0
+    total_rounds: int = 0
+    indexed_rounds: int = 0
+    missing_rounds: int = 0
+    degraded_sessions: int = 0
+    backfill_status: Literal["running", "idle", "disabled"] = "idle"
+    last_index_error: str | None = None
 
 
 class _SyncLastRun(BaseModel):
@@ -58,3 +82,6 @@ class SyncStatusResponse(BaseModel):
     last_event_at: str | None = None
     recent: list[_SyncRecentEvent] = Field(default_factory=list)
     last_run: _SyncLastRun | None = None
+    # Always returned (even when sync is stopped) — index health is a
+    # property of the data root, not the sync watcher's runtime state.
+    index: _IndexHealth = Field(default_factory=_IndexHealth)

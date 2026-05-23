@@ -16,13 +16,28 @@ router = APIRouter()
 async def get_sync_status(request: Request, limit: int = Query(5, ge=0, le=20)):
     config = request.app.state.config
     watcher = request.app.state.sync
+    db = request.app.state.db
+
+    # Index health is independent of sync watcher state — even when
+    # sync is disabled the index can be degraded (e.g. partial backfill
+    # from a previous run). Compute it unconditionally so callers always
+    # see the data-completeness picture.
+    index = await db.sessions.get_index_health()
+    backfill = getattr(request.app.state, "backfill", None)
+    index["backfill_status"] = (
+        backfill.status if backfill is not None else "disabled"
+    )
+    index["last_index_error"] = (
+        backfill.last_error if backfill is not None else None
+    )
+
     if not config.settings.sync.enabled:
-        return {"status": "disabled"}
+        return {"status": "disabled", "index": index}
     if not watcher.running:
         # enabled=True but the watcher isn't live → lifespan auto-start
         # failed. The exact exception isn't captured here; users can find
         # it in stderr of the server process.
-        return {"status": "error", "error": "watcher not running"}
+        return {"status": "error", "error": "watcher not running", "index": index}
     return {
         "status": "running",
         "phase": watcher.phase,
@@ -32,4 +47,5 @@ async def get_sync_status(request: Request, limit: int = Query(5, ge=0, le=20)):
         "totals": watcher.totals(),
         "last_event_at": (watcher.recent(1) or [{}])[0].get("at"),
         "recent": watcher.recent(limit=limit),
+        "index": index,
     }

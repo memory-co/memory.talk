@@ -173,8 +173,18 @@ class IngestService:
             await self._refresh_meta(sid, req, existing, now,
                                      round_count_override=new_total)
 
-        # 3. LanceDB rounds — best effort -------------------------------
-        await self._index_vectors(sid, req.source, new_rounds)
+        # 3. LanceDB rounds — best effort (per-batch isolated) -----------
+        indexed_count, failed_idxs, index_err = await self._index_vectors(
+            sid, req.source, new_rounds,
+        )
+        if not new_rounds:
+            index_status = "ok"
+        elif indexed_count == len(new_rounds):
+            index_status = "ok"
+        elif indexed_count == 0:
+            index_status = "failed"
+        else:
+            index_status = "partial"
 
         await self.events.session_event(
             req.source, sid,
@@ -187,6 +197,10 @@ class IngestService:
             new_last_round_id=new_last,
             appended_count=len(new_rounds),
             round_count=new_total,
+            indexed_count=indexed_count,
+            index_failed_count=len(failed_idxs),
+            index_status=index_status,
+            index_error=index_err,
         )
 
     # ────────── helpers ──────────
@@ -238,29 +252,75 @@ class IngestService:
             idx += 1
         return rows
 
-    async def _index_vectors(self, sid: str, source: str, rows: list[dict]) -> None:
+    async def _index_vectors(
+        self, sid: str, source: str, rows: list[dict],
+    ) -> tuple[int, list[int], str | None]:
+        """Embed + write LanceDB for ``rows``. Returns ``(succeeded,
+        failed_idxs, last_err)``.
+
+        Chunks at ``settings.embedding.batch_size`` so a single bad
+        batch (e.g. DashScope's 10-cap 400) only loses that batch's
+        rounds — earlier batches already flushed stay in LanceDB and
+        their idxs go into ``sessions.indexed_round_count``. The
+        background backfill loop will pick up the failed idxs on a
+        future server start, so even with intermittent endpoint
+        failures we'll converge.
+
+        Caller passes the result onward via ``AppendRoundsResponse``
+        so the sync watcher can surface it.
+        """
         if self.vectors is None or self.embedder is None or not rows:
-            return
-        try:
-            texts = [_embed_input(r["text"] or "") for r in rows]
-            vectors = await self.embedder.embed(texts) if texts else []
-            lance_rows = [
-                {
-                    "session_id": sid,
-                    "idx": r["idx"],
-                    "role": r["role"] or "",
-                    "text": _segment(r["text"] or ""),
-                    "vector": v,
-                }
-                for r, v in zip(rows, vectors)
-            ]
-            await self.vectors.add_rounds(lance_rows)
-        except Exception as e:
-            # LanceDB write is best-effort; sessions table + jsonl
-            # already carry the truth. A future rebuild can replay
-            # vectors. Surface to the watcher via event log.
-            _log.exception("vector index append failed sid=%s", sid)
+            return (0, [], None)
+
+        # Mirror the embedder's batch_size so a chunk that lands in
+        # ``embedder.embed()`` doesn't get re-chunked there (matches
+        # endpoint cap exactly). Local / dummy embedders have no cap;
+        # default to 100 — large enough to keep round-trip overhead low
+        # and small enough to bound the blast radius of a bad batch.
+        batch_size = getattr(self.embedder, "batch_size", 100)
+        if not isinstance(batch_size, int) or batch_size < 1:
+            batch_size = 100
+
+        succeeded = 0
+        failed_idxs: list[int] = []
+        last_err: str | None = None
+        now = _utc_iso()
+
+        for i in range(0, len(rows), batch_size):
+            chunk = rows[i:i + batch_size]
+            chunk_idxs = [r["idx"] for r in chunk]
+            try:
+                texts = [_embed_input(r["text"] or "") for r in chunk]
+                vectors = await self.embedder.embed(texts)
+                lance_rows = [
+                    {
+                        "session_id": sid,
+                        "idx": r["idx"],
+                        "role": r["role"] or "",
+                        "text": _segment(r["text"] or ""),
+                        "vector": v,
+                    }
+                    for r, v in zip(chunk, vectors)
+                ]
+                await self.vectors.add_rounds(lance_rows)
+                succeeded += len(chunk)
+                # Persist immediately so a crash mid-loop leaves the
+                # SQLite counter accurate — backfill resumes from the
+                # right offset.
+                await self.db.sessions.bump_indexed_count(sid, len(chunk), now)
+            except Exception as e:
+                _log.exception(
+                    "vector index batch failed sid=%s offset=%d size=%d",
+                    sid, i, len(chunk),
+                )
+                failed_idxs.extend(chunk_idxs)
+                last_err = str(e)
+
+        if failed_idxs:
+            await self.db.sessions.set_last_index_error(sid, last_err or "", now)
             await self.events.session_event(
                 source, sid, "vector_index_failed",
-                error=str(e), affected_indexes=[r["idx"] for r in rows],
+                error=last_err, affected_indexes=failed_idxs,
             )
+
+        return (succeeded, failed_idxs, last_err)

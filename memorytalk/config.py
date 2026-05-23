@@ -40,6 +40,13 @@ class EmbeddingConfig(BaseModel):
     auth_key: str | None = None
     dim: int = 384
     timeout: float = 30.0
+    # Max ``input`` length per embed request. DashScope OpenAI-compatible
+    # caps at 10 (the rest silently 400). OpenAI proper allows 2048, local
+    # ignores this (sentence-transformers handles batching internally).
+    # We default low and let users raise it for endpoints they know are
+    # generous — wrong-direction default loses data; high default with
+    # auto-detect loses requests.
+    batch_size: int = 10
 
 
 class ServerConfig(BaseModel):

@@ -22,14 +22,21 @@ DDL = [
     # ── sessions ─────────────────────────────────────────────────────────
     """
     CREATE TABLE IF NOT EXISTS sessions (
-        session_id     TEXT PRIMARY KEY,        -- always 'sess_<...>'
-        source         TEXT NOT NULL,           -- 'claude-code' / 'codex' / ...
-        cwd            TEXT,                    -- = metadata.cwd; explore namespace key
-        created_at     TEXT NOT NULL,
-        synced_at      TEXT NOT NULL,
-        metadata       TEXT NOT NULL DEFAULT '{}',
-        round_count    INTEGER NOT NULL DEFAULT 0,
-        last_round_id  TEXT                     -- platform round_id of round_count'th round
+        session_id              TEXT PRIMARY KEY,    -- always 'sess_<...>'
+        source                  TEXT NOT NULL,       -- 'claude-code' / 'codex' / ...
+        cwd                     TEXT,                -- = metadata.cwd; explore namespace key
+        created_at              TEXT NOT NULL,
+        synced_at               TEXT NOT NULL,
+        metadata                TEXT NOT NULL DEFAULT '{}',
+        round_count             INTEGER NOT NULL DEFAULT 0,
+        last_round_id           TEXT,                -- platform round_id of round_count'th round
+        -- Vector index tracking (lance rounds table)
+        -- indexed_round_count < round_count  → degraded, eligible for backfill.
+        -- last_index_error / last_index_attempted_at are observability fields:
+        -- show the user why a session is stuck and when we last tried.
+        indexed_round_count     INTEGER NOT NULL DEFAULT 0,
+        last_index_error        TEXT,
+        last_index_attempted_at TEXT
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_sessions_cwd ON sessions(cwd)",
@@ -129,6 +136,21 @@ async def _additive_migrations(conn: aiosqlite.Connection) -> None:
         cols = {row[1] for row in await cursor.fetchall()}
     if "last_round_id" not in cols:
         await conn.execute("ALTER TABLE sessions ADD COLUMN last_round_id TEXT")
+
+    # 1b. Add vector-index tracking columns (added 0.6.1 after the
+    #     DashScope 10-batch silent-corruption bug — without these we
+    #     have no way to query "which sessions are degraded"). Existing
+    #     rows get ``indexed_round_count=0``, which intentionally puts
+    #     them on the backfill backlog at next boot.
+    if "indexed_round_count" not in cols:
+        await conn.execute(
+            "ALTER TABLE sessions ADD COLUMN indexed_round_count "
+            "INTEGER NOT NULL DEFAULT 0"
+        )
+    if "last_index_error" not in cols:
+        await conn.execute("ALTER TABLE sessions ADD COLUMN last_index_error TEXT")
+    if "last_index_attempted_at" not in cols:
+        await conn.execute("ALTER TABLE sessions ADD COLUMN last_index_attempted_at TEXT")
 
     # 2. If the legacy ``rounds_index`` table is around, derive
     #    last_round_id from it (max-idx round per session), then drop it.

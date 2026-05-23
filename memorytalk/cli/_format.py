@@ -186,14 +186,19 @@ def _flatten_blocks(blocks: list[Any]) -> str:
 def fmt_sync_status(payload: dict) -> str:
     status = payload.get("status", "")
     if status == "disabled":
-        return (
+        out = (
             "# sync · **disabled**\n\n"
             "hint: enable via `memory.talk setup` or set `sync.enabled` "
             "in `settings.json` and restart the server.\n"
         )
+        # Index health is meaningful even when sync is off — if the
+        # last run left a backlog, the user should know now (not later
+        # when search starts missing things).
+        idx_block = _fmt_index_health(payload.get("index"))
+        return out + (idx_block or "")
     if status == "error":
         err = payload.get("error") or "unknown error"
-        return f"# sync · **error**\n\n{err}\n"
+        return f"# sync · **error**\n\n{err}\n" + (_fmt_index_health(payload.get("index")) or "")
 
     # running
     phase = payload.get("phase") or "watching"
@@ -217,7 +222,15 @@ def fmt_sync_status(payload: dict) -> str:
     lines.append(f"| appended | {totals.get('appended', 0)} |")
     lines.append(f"| overwrite_warnings | {totals.get('overwrite_warnings', 0)} |")
     lines.append(f"| errors | {totals.get('errors', 0)} |")
+    # index_errors lives in totals too — surface alongside its sibling
+    # so it's clear "all green errors" doesn't mean "search index OK".
+    lines.append(f"| index_errors | {totals.get('index_errors', 0)} |")
     lines.append(f"| last_event_at | {payload.get('last_event_at') or '—'} |")
+
+    idx_block = _fmt_index_health(payload.get("index"))
+    if idx_block:
+        lines.append("")
+        lines.append(idx_block.rstrip())
 
     recent = payload.get("recent") or []
     if recent:
@@ -226,8 +239,46 @@ def fmt_sync_status(payload: dict) -> str:
             rounds = ev.get("rounds")
             if rounds is None and ev.get("rounds_skipped") is not None:
                 rounds = f"(-{ev['rounds_skipped']} skipped)"
+            elif rounds is None and ev.get("event") in ("index_partial", "index_failed"):
+                # Embed the index-failure counts in the rounds column so
+                # the existing 4-col layout still fits.
+                indexed = ev.get("indexed") or 0
+                failed = ev.get("index_failed") or 0
+                rounds = f"+{indexed} indexed / {failed} failed"
             lines.append(f"| {ev['at']} | `{ev['session_id']}` | {ev['event']} | {rounds if rounds is not None else '—'} |")
 
+    return "\n".join(lines) + "\n"
+
+
+def _fmt_index_health(index: dict | None) -> str | None:
+    """Render the index-health snapshot block. Returns None when there's
+    no data (no sessions ingested yet) so callers can omit the section
+    entirely on a fresh install."""
+    if not index:
+        return None
+    total_sessions = int(index.get("total_sessions") or 0)
+    if total_sessions == 0:
+        return None
+    total_rounds   = int(index.get("total_rounds")   or 0)
+    indexed_rounds = int(index.get("indexed_rounds") or 0)
+    missing        = int(index.get("missing_rounds") or 0)
+    degraded       = int(index.get("degraded_sessions") or 0)
+    backfill       = index.get("backfill_status") or "idle"
+    last_err       = index.get("last_index_error")
+
+    lines = [
+        "## index health", "",
+        "| field | value |", "|---|---|",
+        f"| sessions | {total_sessions} (degraded: **{degraded}**) |"
+        if degraded
+        else f"| sessions | {total_sessions} |",
+        f"| rounds | {total_rounds} (indexed: {indexed_rounds}, missing: **{missing}**) |"
+        if missing
+        else f"| rounds | {total_rounds} (all indexed) |",
+        f"| backfill | `{backfill}` |",
+    ]
+    if last_err:
+        lines.append(f"| last_index_error | `{last_err[:80]}{'…' if len(last_err) > 80 else ''}` |")
     return "\n".join(lines) + "\n"
 
 

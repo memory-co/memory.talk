@@ -131,3 +131,15 @@ class AppendRoundsResponse(BaseModel):
     round_count: int = 0
     # Populated on status="conflict" — the server's actual cursor.
     actual_last_round_id: str | None = None
+    # ── vector-index outcome (independent axis from append status) ──
+    # ``status`` reports whether jsonl + SQLite write succeeded; these
+    # fields report whether the LanceDB vector index for the appended
+    # rounds was populated. ``index_status="partial"`` happens when
+    # the embedder fails on some batches but not others (e.g. DashScope
+    # 10-cap rejecting an 11+ chunk while the earlier 10-row batch
+    # already landed). The background backfill task picks up degraded
+    # sessions on the next server start.
+    indexed_count: int = 0
+    index_failed_count: int = 0
+    index_status: Literal["ok", "partial", "failed"] = "ok"
+    index_error: str | None = None

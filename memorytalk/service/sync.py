@@ -374,6 +374,22 @@ class SyncWatcher:
             )
         else:
             stats["skipped"] = 1
+
+        # Vector-index outcome is independent from the append path.
+        # ``status`` was already "ok" (jsonl + SQLite committed); but
+        # the LanceDB index for these rounds might be partial / failed.
+        # Surface it so the user's ``sync status`` doesn't show all
+        # green when search is actually missing data.
+        if result is not None and getattr(result, "index_status", "ok") != "ok":
+            stats["index_errors"] = 1
+            self._record(
+                probe.session_id,
+                "index_partial" if result.index_status == "partial" else "index_failed",
+                indexed=result.indexed_count,
+                index_failed=result.index_failed_count,
+                error=result.index_error,
+            )
+
         return stats
 
     async def _send_with_conflict_retry(
@@ -468,6 +484,7 @@ def _new_totals() -> dict:
     return {
         "discovered": 0, "imported": 0, "appended": 0,
         "skipped": 0, "errors": 0,
+        "index_errors": 0,
     }
 
 

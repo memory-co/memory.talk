@@ -123,6 +123,82 @@ class SessionStore:
             row = await cursor.fetchone()
         return row[0]
 
+    # ─── vector-index tracking ────────────────────────────────────────
+    # Backstory: ingest writes rounds to jsonl + SQLite synchronously,
+    # then fires-and-forgets the LanceDB vector index. If the embedder
+    # fails (e.g. DashScope's 10-batch cap), jsonl/SQLite still hold
+    # the data but search silently misses it. These fields let us:
+    #   - know which sessions are degraded (a single SQL query, not a
+    #     wholesale jsonl walk)
+    #   - resume backfill after a crash without re-embedding already-
+    #     indexed rounds
+    #   - surface the latest failure to the user in `sync status`
+
+    async def bump_indexed_count(
+        self, session_id: str, n: int, attempted_at: str,
+    ) -> None:
+        """Add ``n`` to ``indexed_round_count`` and mark last attempt OK.
+
+        Called once per successfully-flushed embedder batch. Sets
+        ``last_index_error = NULL`` so a previously-degraded session
+        clears its error state as soon as a batch lands.
+        """
+        await self.conn.execute(
+            "UPDATE sessions SET indexed_round_count = indexed_round_count + ?, "
+            "last_index_error = NULL, last_index_attempted_at = ? "
+            "WHERE session_id = ?",
+            (n, attempted_at, session_id),
+        )
+        await self.conn.commit()
+
+    async def set_last_index_error(
+        self, session_id: str, error: str, attempted_at: str,
+    ) -> None:
+        """Record a failed embedder batch. Doesn't touch ``indexed_round_count`` —
+        previously-indexed rounds are still indexed; this session is just
+        stuck partway."""
+        await self.conn.execute(
+            "UPDATE sessions SET last_index_error = ?, last_index_attempted_at = ? "
+            "WHERE session_id = ?",
+            (error, attempted_at, session_id),
+        )
+        await self.conn.commit()
+
+    async def list_degraded(self, limit: int = 50) -> list[dict]:
+        """Return sessions whose vector index isn't caught up — i.e.
+        ``indexed_round_count < round_count``. Sorted by the gap size
+        descending so the biggest backlogs get worked on first."""
+        async with self.conn.execute(
+            "SELECT * FROM sessions "
+            "WHERE indexed_round_count < round_count "
+            "ORDER BY (round_count - indexed_round_count) DESC "
+            "LIMIT ?",
+            (limit,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [self._row(r) for r in rows]
+
+    async def get_index_health(self) -> dict:
+        """Aggregate snapshot for ``GET /v3/sync/status``."""
+        async with self.conn.execute(
+            "SELECT "
+            "  COUNT(*) AS total_sessions, "
+            "  COALESCE(SUM(round_count), 0) AS total_rounds, "
+            "  COALESCE(SUM(indexed_round_count), 0) AS indexed_rounds, "
+            "  COALESCE(SUM(round_count - indexed_round_count), 0) AS missing_rounds, "
+            "  SUM(CASE WHEN indexed_round_count < round_count THEN 1 ELSE 0 END) "
+            "    AS degraded_sessions "
+            "FROM sessions"
+        ) as cursor:
+            row = await cursor.fetchone()
+        return {
+            "total_sessions":    row[0] or 0,
+            "total_rounds":      row[1] or 0,
+            "indexed_rounds":    row[2] or 0,
+            "missing_rounds":    row[3] or 0,
+            "degraded_sessions": row[4] or 0,
+        }
+
     @staticmethod
     def _row(row) -> dict:
         return {
@@ -134,4 +210,7 @@ class SessionStore:
             "metadata": json.loads(row["metadata"] or "{}"),
             "round_count": row["round_count"],
             "last_round_id": row["last_round_id"],
+            "indexed_round_count": row["indexed_round_count"] if "indexed_round_count" in row.keys() else 0,
+            "last_index_error": row["last_index_error"] if "last_index_error" in row.keys() else None,
+            "last_index_attempted_at": row["last_index_attempted_at"] if "last_index_attempted_at" in row.keys() else None,
         }

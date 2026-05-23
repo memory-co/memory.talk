@@ -115,20 +115,27 @@ sessions/{source}/{id[0:2]}/{session_id}/
 
 ```sql
 CREATE TABLE sessions (
-  session_id     TEXT PRIMARY KEY,        -- 含 sess_ 前缀
-  source         TEXT NOT NULL,
-  cwd            TEXT,                    -- = metadata.cwd,explore namespace 判断字段
-  created_at     TEXT NOT NULL,
-  synced_at      TEXT NOT NULL,
-  metadata       TEXT NOT NULL DEFAULT '{}',
-  round_count    INTEGER NOT NULL DEFAULT 0,
-  last_round_id  TEXT                     -- ingest 的乐观锁游标
+  session_id              TEXT PRIMARY KEY,    -- 含 sess_ 前缀
+  source                  TEXT NOT NULL,
+  cwd                     TEXT,                -- = metadata.cwd,explore namespace 判断字段
+  created_at              TEXT NOT NULL,
+  synced_at               TEXT NOT NULL,
+  metadata                TEXT NOT NULL DEFAULT '{}',
+  round_count             INTEGER NOT NULL DEFAULT 0,
+  last_round_id           TEXT,                -- ingest 的乐观锁游标
+  -- 向量索引追踪(LanceDB rounds 表)。indexed_round_count < round_count
+  -- 即 degraded,后台 backfill task 会拣起来重 embed。
+  indexed_round_count     INTEGER NOT NULL DEFAULT 0,
+  last_index_error        TEXT,                -- 最近一次 embedding 失败原因
+  last_index_attempted_at TEXT
 );
 
 CREATE INDEX idx_sessions_cwd ON sessions(cwd);
 CREATE INDEX idx_sessions_source ON sessions(source);
 CREATE INDEX idx_sessions_created ON sessions(created_at);
 ```
+
+`indexed_round_count` 是 0.6.1 加的字段,跟 `round_count` 之差就是"该 session 还有多少 round 没被向量索引"。详见 [`../api/v3/sync.md#index-health`](../../api/v3/sync.md#index-health) 和 [`docs/report/2026-05-23-search-vector-index-batch-gap.md`](../report/) 的根因分析。
 
 > **没有 `rounds` SQL 表,也没有 `rounds_index`**。round 数据走两条路:rounds.jsonl 是 source of truth(给 read 用),LanceDB rounds 表是 FTS + vector 索引(给 search / recall 用)。SQLite 这一层只关心"我有这个 session 没"和"它的游标"。
 
