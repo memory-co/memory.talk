@@ -347,42 +347,103 @@ def _fmt_search_session(entry: dict) -> str:
         f"{entry.get('source', '')} · {entry.get('hit_count', 0)} hits"
     )
     lines: list[str] = [head, ""]
-    for hit in entry.get("hits") or []:
-        # Header carries only hit-level metadata (index + score). Role
-        # used to be here as ``_(human)_``, but that was misleading: the
-        # fence below contains ctx_before / hit / ctx_after rounds which
-        # often have DIFFERENT roles (tool stdout, sidechain, multi-turn
-        # human). Roles now live inside the fence per row — see
-        # ``_round_row``.
-        #
-        # Score caveat: this is LanceDB's hybrid RRF combined score (FTS
-        # rank + vector rank fused), NOT a similarity in [0,1]. Typical
-        # top hits land around 0.01–0.03; a low score doesn't necessarily
-        # mean a weak match, just a lower combined rank. Provenance
-        # (FTS vs vector) is not preserved by RRF — see
-        # docs/structure/v3/search-result.md.
-        score = hit.get("score")
-        score_suffix = f" · score `{score:.4f}`" if score is not None else ""
-        time_str = _fmt_time(hit.get("timestamp"))
-        time_suffix = f" · {time_str}" if time_str else ""
-        lines.append(f"**#{hit['index']}**{score_suffix}{time_suffix}")
-
-        body_parts: list[str] = []
-        ctx_before = hit.get("context_before")
-        if ctx_before:
-            body_parts.append(_round_row(ctx_before, is_hit=False))
-        body_parts.append(_round_row(hit, is_hit=True))
-        ctx_after = hit.get("context_after")
-        if ctx_after:
-            body_parts.append(_round_row(ctx_after, is_hit=False))
-        body = "\n".join(body_parts)
-
-        fence = _pick_fence(body)
-        lines.append(fence)
-        lines.append(body)
-        lines.append(fence)
-        lines.append("")
+    # Header carries only hit-level metadata (index + score + time).
+    # Role used to live here as ``_(human)_``, but that was misleading:
+    # the fence below contains ctx_before / hit / ctx_after rounds which
+    # often have DIFFERENT roles (tool stdout, sidechain, multi-turn
+    # human). Roles now live inside the fence per row — see ``_round_row``.
+    #
+    # Score caveat: this is LanceDB's hybrid RRF combined score (FTS
+    # rank + vector rank fused), NOT a similarity in [0,1]. Typical
+    # top hits land around 0.01–0.03; a low score doesn't necessarily
+    # mean a weak match, just a lower combined rank. Provenance
+    # (FTS vs vector) is not preserved by RRF — see
+    # docs/structure/v3/search-result.md.
+    #
+    # Adjacency merging: hits whose context windows overlap (|idx_diff|
+    # ≤ 2 with the current ±1 context radius) get merged into one fence
+    # so the same round isn't rendered twice. The merged header lists
+    # every constituent hit (``#4, #5``) and uses the top-scoring hit's
+    # score / time as the anchor. Each original hit's main row keeps
+    # its ``*`` marker; pure-context rows don't get one.
+    for group in _merge_hits(entry.get("hits") or []):
+        lines.extend(_fmt_hit_group(group))
     return "\n".join(lines).rstrip()
+
+
+# Two hits are "adjacent" when their context windows touch or overlap.
+# Context radius is ±1 (one round before + one round after the hit), so
+# windows touch when ``idx_diff <= 2 * radius = 2``. Hardcoded because
+# the context radius itself is hardcoded in ``service/search.py``
+# (``_CONTEXT_TRUNCATE`` controls truncation length, not window radius;
+# the ±1 sits inline in ``_build_session_result``). If radius ever
+# becomes configurable, expose this too.
+_MERGE_GAP = 2
+
+
+def _merge_hits(hits: list[dict]) -> list[list[dict]]:
+    """Group hits whose context windows overlap so they share one fence.
+
+    Input is the API's ``hits[]`` (sorted by score, not index). Output
+    is a list of groups, each a list of hits in **index order**. The
+    group list itself is sorted by the top-scoring hit per group
+    (descending) so the strongest group renders first — matches the
+    user's mental model of "best hit first".
+    """
+    if not hits:
+        return []
+    by_idx = sorted(hits, key=lambda h: h["index"])
+    groups: list[list[dict]] = [[by_idx[0]]]
+    for h in by_idx[1:]:
+        if h["index"] - groups[-1][-1]["index"] <= _MERGE_GAP:
+            groups[-1].append(h)
+        else:
+            groups.append([h])
+    # Re-sort groups by their strongest hit so the page leads with the
+    # most relevant one.
+    groups.sort(
+        key=lambda g: max((h.get("score") or 0.0) for h in g),
+        reverse=True,
+    )
+    return groups
+
+
+def _fmt_hit_group(group: list[dict]) -> list[str]:
+    """Render one group — single hit reuses the original layout; multi
+    hits merge ctx_before / hit / ctx_after rounds into one fence with
+    every constituent hit's main row marked ``*``."""
+    # ── header ──────────────────────────────────────────────────────
+    top = max(group, key=lambda h: h.get("score") or 0.0)
+    idx_label = ", ".join(f"#{h['index']}" for h in group)
+    score_suffix = (
+        f" · top score `{top['score']:.4f}`" if len(group) > 1
+        else (f" · score `{top['score']:.4f}`" if top.get("score") is not None else "")
+    )
+    time_str = _fmt_time(top.get("timestamp"))
+    time_suffix = f" · {time_str}" if time_str else ""
+    header = f"**{idx_label}**{score_suffix}{time_suffix}"
+
+    # ── body: union of (ctx_before, hit, ctx_after) across group ────
+    # Hit version wins over context version on idx collision (richer
+    # snippet text from server-side ``make_snippet`` vs simple truncate).
+    hit_indices = {h["index"] for h in group}
+    rounds_by_idx: dict[int, dict] = {}
+    # Pass 1: hits (these win).
+    for h in group:
+        rounds_by_idx[h["index"]] = h
+    # Pass 2: contexts (don't overwrite hits).
+    for h in group:
+        for key in ("context_before", "context_after"):
+            ctx = h.get(key)
+            if ctx and ctx["index"] not in rounds_by_idx:
+                rounds_by_idx[ctx["index"]] = ctx
+
+    body = "\n".join(
+        _round_row(rounds_by_idx[i], is_hit=(i in hit_indices))
+        for i in sorted(rounds_by_idx)
+    )
+    fence = _pick_fence(body)
+    return [header, fence, body, fence, ""]
 
 
 # CLI-only role display mapping. Server-side role strings stay as

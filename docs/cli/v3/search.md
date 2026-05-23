@@ -54,19 +54,16 @@ memory-talk search <query> [--where DSL] [--top-k N] [--all] [--json]
 
 ### [SESSION] `sess_187c6576` · claude-code · 3 hits
 
-**#11** · score `0.0163` · 2026-04-10 22:32 (43 days ago)
+**#11, #13** · top score `0.0163` · 2026-04-10 22:32 (43 days ago)
 ````
 [10 AI] 我们要选个向量库, 纠结
 [11 HUMAN*] 我看 LanceDB 是个不错的选择, 零依赖
 [12 AI] 好的, 那就 LanceDB 了
+[13 AI*] 嵌入式部署最方便, LanceDB 跟应用一起走
+[14 HUMAN] OK 就这么定
 ````
 
-**#15** · score `0.0124` · 2026-04-10 22:35 (43 days ago)
-````
-[14 HUMAN] 用什么部署?
-[15 AI*] 嵌入式部署最方便, LanceDB 跟应用一起走, 不用起额外服务
-[16 HUMAN] OK 就这么定
-````
+> 这里 hit #11 和 hit #13 idx 差 2,窗触碰 —— 合并到一个 fence,中间共享的 round [12] 只画一次。`top score` 取 cluster 里最高的(`#11` 的)。
 
 ---
 
@@ -96,29 +93,29 @@ _(2 weak results hidden by strong-floor filter — pass `--all` to see)_
 #### Session 块
 
 - 标题:`### [SESSION] \`<sess_id>\` · <source> · K hits`。`K` 是本 session 命中 round **总数**(可能多于实际展示数)。
-- 每个命中 round 是一个"窗",形如:
-  - `**#<idx>** _(<role>)_` —— index 大写醒目,role 用斜体小标(`_(human)_` / `_(assistant)_` / `_(tool)_`)
-  - 三行 blockquote 上下文窗:
-    - `> _[idx-1] 前一行内容_` —— 斜体提示"上文,非命中"
-    - `> [idx] 当前行 + **keyword**` —— 不斜体,带高亮
-    - `> _[idx+1] 后一行内容_` —— 斜体下文
-  - 边界缺失(index 是 1 或最后一条)→ 对应行整行省略
-- 窗之间空一行隔开,**不**用 `---`(那是 result 之间的分隔符,不混用)
-- 每个 session **最多展示 3 个窗**(按 round 命中分降序);超出在标题里 `K hits` 反映真实总数,其余需走 `read` 看完整 session
+- 每个命中(或一组合并后的相邻命中)是一个**渲染块**,形如:
+  - 头一行:`**#<idx>** · score \`<X.XXXX>\` · <YYYY-MM-DD HH:MM> (<N units ago>)`
+    - 多 hit 合并时变成 `**#<idxA>, #<idxB>** · top score \`<top X.XXXX>\` · <top hit 的时间>`
+  - 接一段 fenced code block(```` ``` ````),按 idx 升序逐行 `[<idx> <ROLE>[*]] <text>`
+    - `<ROLE>` 大写,`HUMAN` / `AI` / `TOOL` / `SYSTEM`(`AI` 是 server 端 `assistant` 的 CLI 显示别名)
+    - `*` 标记原始 hit 行;纯上下文行不加 `*`
+    - 文本里的 `\n` 在渲染时压成空格,fence 内每条 round 单行展示(原文结构走 `read`)
+- 块之间空一行隔开,**不**用 `---`(那是 result 之间的分隔符,不混用)
+- 每个 session **最多展示 3 个 hit**(`hits_shown` 上限),合并后块数 ≤ hit 数
 
 #### 上下文窗规则
 
 - **窗大小固定**:前 1 行 + 后 1 行,不可调
-- 上下文行**纯 round 文本前缀**(超 200 字按字符截断到 200 + `...`)
+- 上下文行**纯 round 文本前缀**(超 200 字按字符截断到 200 + `…`)
 - 上下文行**不过滤 role** —— tool / sidechain 也照常显示(它们是真实上下文的一部分)
-- 上下文行**可能也含 query keyword**:照常 `**...**` 高亮(读者一眼看出"这条上下文恰好也命中了,但不是这个窗的中心")
-- 同一 session 里两个相邻 round(`#N` / `#N+1`)都命中 → **生成两个独立窗**,不去重 —— 它们会有重叠内容,但调用方能从两个角度看到"这两条都是命中焦点"。重叠是 feature。
+- **相邻 hit 自动合并**:同一 session 里两个 hit 的 idx 差 `≤ 2`(窗触碰或重叠)→ 合并到一个 fence,union 所有涉及的 round,**每个 round 只画一次**。原本会重复出现的中间行(hit A 的 ctx_after 同时是 hit B 的 ctx_before)只保留一份。每个原始 hit 的主 idx 仍带 `*`
+- 合并的 cluster 头按 idx 顺序列举所有命中(`#4, #5` 或 `#10, #11, #12`),score 和时间用 cluster 里**最强 hit** 的(语义上"这块最相关的位置")
 
 #### 其它
 
 - result 之间用 `---` 分隔(无论 card 还是 session)
 - card / session 在标题里的 id 全部反引号包住
-- `score` 不在 Markdown 输出里 —— RRF + 沉浮公式跑出来的 final score 对人类读者价值低,只在 `--json` 里给脚本 / 调试用
+- `score` 在 Markdown 输出里露出(让读者眼测相对强弱)。注意这是 LanceDB RRF 融合分,典型 `0.01–0.03`,**只看排名不看绝对相似度**,详见 [`../../structure/v3/search-result.md#关于-rrf-分的一句忠告`](../../structure/v3/search-result.md#关于-rrf-分的一句忠告)
 - 0 命中 → header 仍然出(`search_id=... · 0 results`),不打"no results"占位文字
 
 ## JSON(`--json`)
