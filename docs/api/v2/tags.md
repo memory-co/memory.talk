@@ -28,7 +28,7 @@ v2 tag 同时作用于 **session** 和 **card**，每个 tag 由 **key + value**
 
 | 输入字符串 | 解析结果 |
 |---|---|
-| `project:memory-talk` | `key=project`, `value=memory-talk` |
+| `project:memory.talk` | `key=project`, `value=memory.talk` |
 | `decision` | `key=decision`, `value=""` |
 | `version:` | `key=version`, `value=""` |
 | `path:/etc/hosts:rw` | `key=path`, `value=/etc/hosts:rw`（按**首个**`:` 分割）|
@@ -46,7 +46,7 @@ v2 tag 同时作用于 **session** 和 **card**，每个 tag 由 **key + value**
 
 ```json
 {
-  "project": "memory-talk",
+  "project": "memory.talk",
   "decision": "",
   "owner": "alice"
 }
@@ -65,7 +65,7 @@ POST /v2/sessions/sess_187c6576/tags
 Content-Type: application/json
 
 {
-  "tags": ["project:memory-talk", "decision"]
+  "tags": ["project:memory.talk", "decision"]
 }
 ```
 
@@ -98,7 +98,7 @@ Content-Type: application/json
 {
   "status": "ok",
   "tags": [
-    {"key": "project", "value": "memory-talk"},
+    {"key": "project", "value": "memory.talk"},
     {"key": "decision", "value": ""}
   ]
 }
@@ -147,7 +147,7 @@ DELETE /v2/cards/card_01KQ11Y1PCJ08AC0P0GA345G2Q/tags?key=topic
 POST /v2/sessions/sess_187c6576/tags
 Content-Type: application/json
 
-{"tags": ["project:memory-talk-v2"]}
+{"tags": ["project:memory.talk-v2"]}
 ```
 
 如果 `project` 已经存在且 value 不同，触发 `tag_updated` 事件并覆盖；若不存在，则等同于新增（触发 `tag_added`）。

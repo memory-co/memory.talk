@@ -12,7 +12,7 @@ memory.talk 把你跟 Claude Code、Codex 等 AI 平台的对话历史压缩成*
 
 你每次开新会话都要给 AI 复述项目背景、再次走过同样的弯路 —— 因为每次会话都是空白。memory.talk 让这个过程变成:
 
-1. **导入**过去的会话(`memory-talk sync`)
+1. **导入**过去的会话(`memory.talk sync`)
 2. **提炼**对话成 cards(LLM 通过 `card` 命令落地)
 3. AI 启动时 hook **自动召回**相关记忆(`recall`)
 4. AI 思考过程中**主动检索**(`search`)
@@ -23,7 +23,7 @@ memory.talk 把你跟 Claude Code、Codex 等 AI 平台的对话历史压缩成*
 
 ### 安装
 
-**一键脚本(推荐,在 `~/.memory-talk/venv/` 里建独立 venv,跟系统 Python 隔离)**:
+**一键脚本(推荐,在 `~/.memory.talk/venv/` 里建独立 venv,跟系统 Python 隔离)**:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/memory-co/memory.talk/main/install.sh | bash
@@ -37,7 +37,7 @@ cd memory.talk
 ./install.sh
 ```
 
-装完后按提示把 `~/.memory-talk/venv/bin` 加到 PATH(或 symlink 到 `~/.local/bin/`)。要装到别处,设 `MEMORY_TALK_INSTALL_DIR=/some/where ./install.sh`。
+装完后按提示把 `~/.memory.talk/venv/bin` 加到 PATH(或 symlink 到 `~/.local/bin/`)。要装到别处,设 `MEMORY_TALK_INSTALL_DIR=/some/where ./install.sh`。
 
 **已有 Python 环境,自己管 venv** —— 直接 pip:
 
@@ -53,15 +53,15 @@ cd memory.talk
 pip install -e .
 ```
 
-后续升级走 `memory-talk upgrade`(自动找对的 pip,详见 [`docs/cli/v3/upgrade.md`](docs/cli/v3/upgrade.md))。
+后续升级走 `memory.talk upgrade`(自动找对的 pip,详见 [`docs/cli/v3/upgrade.md`](docs/cli/v3/upgrade.md))。
 
 ### 初始化
 
 ```bash
-memory-talk setup
+memory.talk setup
 ```
 
-交互式 wizard 会问你 embedding provider(`local` / `openai`)、port、向量库、关系库等,自动写 `~/.memory-talk/settings.json`,可选立刻启动后台服务,顺便建一个 `memory.talk` 软链(等价于 `memory-talk`)。
+交互式 wizard 会问你 embedding provider(`local` / `openai`)、port、向量库、关系库等,自动写 `~/.memory.talk/settings.json`,可选立刻启动后台服务,顺便建一个 `memory.talk` 软链(等价于 `memory.talk`)。
 
 > setup 可重复跑 —— 第二次会进"修改模式",每个字段默认就是当前值,Enter 跳过,改了就询问是否重启服务。
 
@@ -69,16 +69,16 @@ memory-talk setup
 
 ```bash
 # 从 Claude Code / Codex 平台导入历史会话
-memory-talk sync
+memory.talk sync
 
 # 搜索一下
-memory-talk search "LanceDB 选型"
+memory.talk search "LanceDB 选型"
 
 # 读一条 card 详情
-memory-talk view card_01jz8k2m
+memory.talk view card_01jz8k2m
 
 # 看一条 session 的生命周期事件
-memory-talk log sess_xxx
+memory.talk log sess_xxx
 ```
 
 完整命令列表 → [docs/cli/v2/](docs/cli/v2/README.md)
@@ -104,7 +104,7 @@ memory-talk log sess_xxx
 |---|---|---|
 | 触发 | AI 思考时主动调用 | harness hook 自动调用 |
 | 意识形态 | 有意识 / 决定要查 | 无意识 / 看到 prompt 即浮现 |
-| 输出 | 完整结构(snippets / links / tags) | 极简(`memory-talk view <id>  # summary`) |
+| 输出 | 完整结构(snippets / links / tags) | 极简(`memory.talk view <id>  # summary`) |
 | 去重 | 无 | 同 session 已召回过的不再返回 |
 
 底层都建在 **hybrid FTS + 向量** 之上(LanceDB)。
@@ -112,7 +112,7 @@ memory-talk log sess_xxx
 ### 存储布局
 
 ```
-~/.memory-talk/
+~/.memory.talk/
 ├── settings.json
 ├── sessions/<source>/<bucket>/<sess_id>/
 │   ├── meta.json
@@ -127,7 +127,7 @@ memory-talk log sess_xxx
 └── logs/search/<UTC-day>.jsonl
 ```
 
-**文件层是 source of truth**,SQLite + LanceDB 都是从文件可重建的派生索引。`memory-talk rebuild` 随时可以从文件重建出全部索引。
+**文件层是 source of truth**,SQLite + LanceDB 都是从文件可重建的派生索引。`memory.talk rebuild` 随时可以从文件重建出全部索引。
 
 ---
 
@@ -147,7 +147,7 @@ CLI 默认输出 **Markdown**,运行时按 stdout 是否 TTY 自动决定渲染:
 
 - **Python 不调 LLM**:数据层只做 CRUD / embedding / 向量检索,不做认知。LLM 通过 CLI 调用,认知发生在外部。
 - **可插拔的 storage 抽象**:`provider/storage.py` 定义统一原语(write/read/append/list/delete),local-fs 是当前实现,后续可加 S3。Domain ops(write_session_meta 等)在 `repository/<domain>.py` 里调原语,不直接 open 文件。
-- **rebuild 永远可行**:任何时候删掉 `memory.db` + `vectors/` 跑 `memory-talk rebuild`,从文件层完整还原。
+- **rebuild 永远可行**:任何时候删掉 `memory.db` + `vectors/` 跑 `memory.talk rebuild`,从文件层完整还原。
 - **rebuild 期间 server 进入维护模式**:除了 `/v2/status`,所有 API 503 拦掉,避免读到撕裂的中间态。
 
 ---

@@ -136,7 +136,7 @@ Round / ContentBlock 结构见 [`../../structure/v3/session.md`](../../structure
 }
 ```
 
-**调用方义务**:用 `actual_last_round_id` 当新游标,重新从上游读 strictly-after 的 rounds,再发一次。memory-talk 内置的 SyncWatcher 会自动重试一次,第二次仍冲突就打 error 日志并放弃这一轮(下个事件再来)。
+**调用方义务**:用 `actual_last_round_id` 当新游标,重新从上游读 strictly-after 的 rounds,再发一次。memory.talk 内置的 SyncWatcher 会自动重试一次,第二次仍冲突就打 error 日志并放弃这一轮(下个事件再来)。
 
 | 字段 | 说明 |
 |---|---|
@@ -164,7 +164,7 @@ Round / ContentBlock 结构见 [`../../structure/v3/session.md`](../../structure
 ## 调用方
 
 - **内部**: `memorytalk.service.sync.SyncWatcher` 通过 in-process 直接调 `IngestService.ensure_session` / `append_rounds`,不走 HTTP。
-- **外部**: 任何想从 v3 之外的来源往 memory-talk 灌 session 的程序(CI runner / 自定义脚本 / 将来 sync 服务变 remote 后的 client)走这两个 HTTP 路由。
+- **外部**: 任何想从 v3 之外的来源往 memory.talk 灌 session 的程序(CI runner / 自定义脚本 / 将来 sync 服务变 remote 后的 client)走这两个 HTTP 路由。
 
 ## 跟 PR-1 之前的差异
 

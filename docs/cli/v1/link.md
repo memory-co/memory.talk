@@ -7,7 +7,7 @@
 创建一条关联。
 
 ```bash
-memory-talk link create '<JSON>'
+memory.talk link create '<JSON>'
 ```
 
 JSON 字段：
@@ -24,7 +24,7 @@ JSON 字段：
 
 示例：
 ```bash
-memory-talk link create '{
+memory.talk link create '{
   "source_id": "card-a",
   "source_type": "card",
   "target_id": "card-b",
@@ -38,7 +38,7 @@ memory-talk link create '{
 查询某个对象的所有关联。
 
 ```bash
-memory-talk link list <ID> [--type card|session]
+memory.talk link list <ID> [--type card|session]
 ```
 
 `--type` 可筛选关联目标的类型。每条结果带 `link_id`。

@@ -150,7 +150,7 @@ user 消息（返回工具结果）：
       {
         "type": "tool_result",
         "tool_use_id": "toolu_01YCSMUFs1pAhc786qzPUiS2",
-        "content": "[project]\nname = \"memory-talk\"\nversion = \"0.2.0\"\n..."
+        "content": "[project]\nname = \"memory.talk\"\nversion = \"0.2.0\"\n..."
       }
     ]
   }
@@ -179,7 +179,7 @@ user 消息（返回工具结果）：
     "timestamp": "2026-04-13T12:42:54.255Z",
     "speaker": "system",
     "role": "tool",
-    "content": [{"type": "text", "text": "[project]\nname = \"memory-talk\"\nversion = \"0.2.0\"\n..."}],
+    "content": [{"type": "text", "text": "[project]\nname = \"memory.talk\"\nversion = \"0.2.0\"\n..."}],
     "is_sidechain": false,
     "cwd": "/home/user/myapp"
   }

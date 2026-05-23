@@ -1,6 +1,6 @@
 """SyncCheckpointStore — per-adapter "what's been pulled from upstream" state.
 
-Lives in its own SQLite file (``~/.memory-talk/sync.db``), distinct from
+Lives in its own SQLite file (``~/.memory.talk/sync.db``), distinct from
 the main memory DB. Rationale:
 
 - Domain split: the main DB holds the user's memory (sessions, rounds,

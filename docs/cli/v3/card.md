@@ -3,7 +3,7 @@
 创建一张 Talk-Card。v2 里 card 是一级命令,**只负责写入**——读取一律通过 `read <card_id>`。
 
 ```bash
-memory-talk card '<json>' [--json]
+memory.talk card '<json>' [--json]
 ```
 
 输入 JSON 结构:

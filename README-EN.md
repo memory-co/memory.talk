@@ -12,7 +12,7 @@ memory.talk turns your past conversations with Claude Code, Codex, and other AI 
 
 Every fresh AI session starts blank — you re-explain the project, walk down the same dead ends, re-make the same decisions. memory.talk turns that loop into:
 
-1. **Sync** past sessions (`memory-talk sync`)
+1. **Sync** past sessions (`memory.talk sync`)
 2. **Distill** them into cards (LLM does the cognition; `card` lands the data)
 3. AI startup hook **auto-recalls** relevant memories (`recall`)
 4. AI **actively retrieves** during reasoning (`search`)
@@ -38,10 +38,10 @@ pip install -e .
 ### Initialize
 
 ```bash
-memory-talk setup
+memory.talk setup
 ```
 
-The interactive wizard asks for embedding provider (`local` / `openai`), port, vector backend, relation backend, etc., writes `~/.memory-talk/settings.json`, optionally starts the background server, and creates a `memory.talk` symlink (equivalent to `memory-talk`).
+The interactive wizard asks for embedding provider (`local` / `openai`), port, vector backend, relation backend, etc., writes `~/.memory.talk/settings.json`, optionally starts the background server, and creates a `memory.talk` symlink (equivalent to `memory.talk`).
 
 > setup is idempotent — run it again to reconfigure. Each prompt's default is the current value; press Enter to keep, edit to change. If anything changes and the server is running, you'll be asked whether to restart.
 
@@ -49,16 +49,16 @@ The interactive wizard asks for embedding provider (`local` / `openai`), port, v
 
 ```bash
 # Import past sessions from Claude Code / Codex
-memory-talk sync
+memory.talk sync
 
 # Search
-memory-talk search "LanceDB selection"
+memory.talk search "LanceDB selection"
 
 # View one card
-memory-talk view card_01jz8k2m
+memory.talk view card_01jz8k2m
 
 # See the lifecycle events of a session
-memory-talk log sess_xxx
+memory.talk log sess_xxx
 ```
 
 Full command list → [docs/cli/v2/](docs/cli/v2/README.md)
@@ -84,7 +84,7 @@ A compressed cognition unit (≤1024 tokens), distilled by an LLM from specific 
 |---|---|---|
 | Trigger | AI calls during reasoning | harness hook auto-calls |
 | Mode | Conscious / decided to look | Unconscious / surfaces on prompt |
-| Output | Full structure (snippets / links / tags) | Minimal (`memory-talk view <id>  # summary`) |
+| Output | Full structure (snippets / links / tags) | Minimal (`memory.talk view <id>  # summary`) |
 | Dedup | None | Same session won't re-recall a card |
 
 Both ride the same **hybrid FTS + vector** layer (LanceDB underneath).
@@ -92,7 +92,7 @@ Both ride the same **hybrid FTS + vector** layer (LanceDB underneath).
 ### Storage layout
 
 ```
-~/.memory-talk/
+~/.memory.talk/
 ├── settings.json
 ├── sessions/<source>/<bucket>/<sess_id>/
 │   ├── meta.json
@@ -107,7 +107,7 @@ Both ride the same **hybrid FTS + vector** layer (LanceDB underneath).
 └── logs/search/<UTC-day>.jsonl
 ```
 
-**Files are the source of truth.** SQLite + LanceDB are derived indices, fully reconstructible from the on-disk JSONL/JSON tree. Run `memory-talk rebuild` anytime to regenerate everything from files.
+**Files are the source of truth.** SQLite + LanceDB are derived indices, fully reconstructible from the on-disk JSONL/JSON tree. Run `memory.talk rebuild` anytime to regenerate everything from files.
 
 ---
 
@@ -127,7 +127,7 @@ Errors follow the same contract: Markdown mode writes `**error:** <msg>` to stde
 
 - **Python never calls an LLM.** The data layer is pure CRUD / embedding / vector search. Cognition (summarization, link inference, card composition) happens in an LLM that calls into this CLI from outside.
 - **Pluggable storage abstraction.** `provider/storage.py` exposes primitives (`write_text` / `read_text` / `append_text` / `list_subkeys` / etc.); local-fs is the current implementation. Domain ops (`write_session_meta`, `append_rounds`, ...) live in `repository/<domain>.py` and only ever speak to the primitive layer — swapping to S3 is one new class.
-- **Rebuild always works.** Delete `memory.db` and `vectors/`, run `memory-talk rebuild`, and everything reconstitutes from the file tree.
+- **Rebuild always works.** Delete `memory.db` and `vectors/`, run `memory.talk rebuild`, and everything reconstitutes from the file tree.
 - **Rebuild flips the server into maintenance mode.** While rebuilding, every API except `GET /v2/status` returns 503 to keep callers from reading torn intermediate state.
 
 ---

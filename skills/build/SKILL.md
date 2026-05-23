@@ -12,13 +12,13 @@ description: Use when organizing imported sessions into Talk-Cards — this is t
 ### 1. 找未整理的 session
 
 ```
-memory-talk session list --tag unbuilt
+memory.talk session list --tag unbuilt
 ```
 
 ### 2. 读 session 的 rounds
 
 ```
-memory-talk session read <session_id>
+memory.talk session read <session_id>
 ```
 
 也支持范围：`--start N --end M`。返回完整的 Round 数组（`round_id / parent_id / speaker / role / content[] / timestamp / cwd` 等）。
@@ -40,7 +40,7 @@ memory-talk session read <session_id>
 **创建 card：**
 
 ```
-memory-talk card create '{
+memory.talk card create '{
   "summary": "决定用 LanceDB 做向量存储，因为零依赖、本地文件、适合嵌入式部署",
   "rounds": [
     {"role": "human", "text": "向量库选型，ChromaDB 和 LanceDB 哪个好？"},
@@ -61,7 +61,7 @@ Embedding 自动计算。返回 `{"status": "ok", "card_id": "01jz..."}`。
 整理另一个 session 时发现和之前某张 card 有关联，可以独立补一条 link（需要显式指定 source 和 target）：
 
 ```
-memory-talk link create '{
+memory.talk link create '{
   "source_id": "<new-card-id>",
   "source_type": "card",
   "target_id": "<old-card-id>",
@@ -75,8 +75,8 @@ memory-talk link create '{
 整理完一个 session 的所有 card 之后，显式更新 tag：
 
 ```
-memory-talk session tag <session_id> remove unbuilt
-memory-talk session tag <session_id> add built
+memory.talk session tag <session_id> remove unbuilt
+memory.talk session tag <session_id> add built
 ```
 
 **没有自动机制** —— `built` / `unbuilt` 只是 Agent 用来追踪"这个 session 处理过没"的普通 tag，由你自己打、自己维护。下次 `/build` 靠 `--tag unbuilt` 过滤能不能工作，完全取决于你这一步有没有做。

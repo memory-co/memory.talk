@@ -1,8 +1,8 @@
 # Sync API
 
-后端 watcher 是 settings-driven 的。**开关** = `settings.sync.enabled`(由 `memory-talk setup` 写,server 启动时 lifespan 读)。API 上只剩**一个端点**:`GET /v3/sync/status`,纯查询。
+后端 watcher 是 settings-driven 的。**开关** = `settings.sync.enabled`(由 `memory.talk setup` 写,server 启动时 lifespan 读)。API 上只剩**一个端点**:`GET /v3/sync/status`,纯查询。
 
-CLI 对应单命令 [`memory-talk sync`](../../cli/v3/sync.md)。
+CLI 对应单命令 [`memory.talk sync`](../../cli/v3/sync.md)。
 
 > Pre-PR-1 还有 `POST /v3/sync/start` / `POST /v3/sync/stop`,行为是同步阻塞 backfill + 写一个独立的 `sync_state.json`。现在两个端点都删了,settings.json 是 single source of truth。
 
@@ -20,7 +20,7 @@ CLI 对应单命令 [`memory-talk sync`](../../cli/v3/sync.md)。
 {"status": "disabled"}
 ```
 
-调用方应提示用户跑 `memory-talk setup` 开启,或手动改 `settings.json` 后重启 server。
+调用方应提示用户跑 `memory.talk setup` 开启,或手动改 `settings.json` 后重启 server。
 
 ### 响应:`status=error`(`enabled=true` 但 watcher 没起来)
 
@@ -28,7 +28,7 @@ CLI 对应单命令 [`memory-talk sync`](../../cli/v3/sync.md)。
 {"status": "error", "error": "watcher not running"}
 ```
 
-只在 lifespan 启动 watcher 抛异常时出现。具体异常堆栈进 `~/.memory-talk/logs/sync/watch.log`。
+只在 lifespan 启动 watcher 抛异常时出现。具体异常堆栈进 `~/.memory.talk/logs/sync/watch.log`。
 
 ### 响应:`status=running`
 

@@ -104,7 +104,7 @@ def _run_hook_mode(top_k: int | None) -> None:
             if not isinstance(session_id, str) or not isinstance(prompt, str):
                 raise TypeError("session_id and prompt must be strings")
         except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
-            sys.stderr.write(f"memory-talk hook: malformed stdin ({e})\n")
+            sys.stderr.write(f"memory.talk hook: malformed stdin ({e})\n")
             _emit("")
             return
 
@@ -134,7 +134,7 @@ def _run_hook_mode(top_k: int | None) -> None:
             # future exception type (OSError, ssl errors, malformed
             # response KeyError) escaping and breaking the hook
             # silently — every user prompt would get blocked.
-            sys.stderr.write(f"memory-talk hook: recall failed ({e})\n")
+            sys.stderr.write(f"memory.talk hook: recall failed ({e})\n")
             _emit("")
             return
 
@@ -144,7 +144,7 @@ def _run_hook_mode(top_k: int | None) -> None:
         # Outer net — covers Config() failures, OS errors, anything the
         # inner blocks didn't anticipate. The hook MUST emit valid JSON
         # and return 0 even when something completely unexpected blows up.
-        sys.stderr.write(f"memory-talk hook: unexpected error "
+        sys.stderr.write(f"memory.talk hook: unexpected error "
                          f"({type(e).__name__}: {e})\n")
         try:
             _emit("")

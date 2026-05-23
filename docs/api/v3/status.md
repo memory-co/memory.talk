@@ -8,8 +8,8 @@
 
 ```json
 {
-  "data_root": "/home/user/.memory-talk",
-  "settings_path": "/home/user/.memory-talk/settings.json",
+  "data_root": "/home/user/.memory.talk",
+  "settings_path": "/home/user/.memory.talk/settings.json",
   "status": "running",
   "sessions_total": 47,
   "cards_total": 184,

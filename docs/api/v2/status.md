@@ -2,7 +2,7 @@
 
 ## GET /v2/status
 
-返回服务和存储统计。CLI 的 `memory-talk server status` 直接调这个端点——能连上就是 running，连不上视为 not_running。
+返回服务和存储统计。CLI 的 `memory.talk server status` 直接调这个端点——能连上就是 running，连不上视为 not_running。
 
 无请求参数。
 
@@ -10,8 +10,8 @@
 
 ```json
 {
-  "data_root": "/home/user/.memory-talk",
-  "settings_path": "/home/user/.memory-talk/settings.json",
+  "data_root": "/home/user/.memory.talk",
+  "settings_path": "/home/user/.memory.talk/settings.json",
   "status": "running",
   "sessions_total": 12,
   "cards_total": 47,

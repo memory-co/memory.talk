@@ -2,13 +2,13 @@
 
 v3 simplifications vs v2:
 
-- **No ``--data-root`` flag**; data root is fixed at ``~/.memory-talk``.
+- **No ``--data-root`` flag**; data root is fixed at ``~/.memory.talk``.
   Tests still honor ``MEMORY_TALK_DATA_ROOT`` env so they can run on a
   tmpdir without trampling the user's real install — that env var is an
   internal hook, not a user-facing knob.
 - **No venv bootstrap / PATH takeover** — those are install-management
   concerns that should be handled by a package installer / dedicated
-  ``memory-talk install`` command, not bundled with config.
+  ``memory.talk install`` command, not bundled with config.
 - **No TTL / filter / explore prompts** — TTL is gone in v3; filter /
   explore are surfaced through their own commands (or not configured
   via setup at all).
@@ -49,7 +49,7 @@ _EMB_OPTIONS = [
 
 @click.command("setup")
 def setup() -> None:
-    """Interactive wizard: install / reconfigure / restart memory-talk."""
+    """Interactive wizard: install / reconfigure / restart memory.talk."""
     cfg = Config()
     try:
         old_raw = read_settings_raw(cfg.settings_path)
@@ -82,7 +82,7 @@ def setup() -> None:
 def _wizard(cfg: Config, old_raw: dict | None, is_first_install: bool) -> dict:
     """Returns a dict describing what the run did, for the summary."""
     mode = "首次安装" if is_first_install else "已有配置 — 修改模式"
-    err_console.print(f"[bold]memory-talk setup[/bold] · {mode}")
+    err_console.print(f"[bold]memory.talk setup[/bold] · {mode}")
     err_console.print(f"data_root: [cyan]{cfg.data_root}[/cyan]\n")
 
     base = dict(old_raw) if old_raw else Settings().model_dump()
@@ -290,7 +290,7 @@ def _summary_md(cfg: Config, result: dict) -> str:
     else:
         lines.append("| server | (unchanged) |")
     if result["embedding_dim_changed"]:
-        lines.append("| notice | **embedding dim changed** — re-embed all cards via `memory-talk setup` once card writes are implemented |")
+        lines.append("| notice | **embedding dim changed** — re-embed all cards via `memory.talk setup` once card writes are implemented |")
     return "\n".join(lines) + "\n"
 
 

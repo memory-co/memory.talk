@@ -12,7 +12,7 @@ description: Use when importing conversation history from Claude Code, Codex, or
 ### 1. 同步所有平台
 
 ```
-memory-talk sync
+memory.talk sync
 ```
 
 扫描所有已配置平台的默认目录（如 `~/.claude/projects/`），自动导入新会话、更新已变更会话。返回 JSON 汇总：
@@ -31,8 +31,8 @@ memory-talk sync
 ### 2. 浏览并标记新 session
 
 ```
-memory-talk session list                                    # 全部
-memory-talk session list --tag claude --tag project:myapp   # 多 tag AND 筛选
+memory.talk session list                                    # 全部
+memory.talk session list --tag claude --tag project:myapp   # 多 tag AND 筛选
 ```
 
 ### 3. 给新 session 打上 `unbuilt` tag
@@ -40,7 +40,7 @@ memory-talk session list --tag claude --tag project:myapp   # 多 tag AND 筛选
 **tag 没有自动机制**，`built` / `unbuilt` 是 Agent 自己维护的工作流标签。sync 本身不打 tag，后续 `/build` 能不能用 `--tag unbuilt` 找到待整理 session，取决于这一步：
 
 ```
-memory-talk session tag <session_id> add unbuilt
+memory.talk session tag <session_id> add unbuilt
 ```
 
 识别"哪些是新的 session"：`session tag <id> list` 返回空，或既没 `built` 也没 `unbuilt` 的，就是还没纳入工作流的。

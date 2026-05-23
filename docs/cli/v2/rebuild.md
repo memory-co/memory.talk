@@ -3,7 +3,7 @@
 从存储根目录下的源文件(`sessions/`、`cards/`、以及 `logs/*.jsonl`)重建 SQLite 行、FTS 索引、向量索引、`search_log`、`event_log`。阻塞执行,跑完一次性返回。
 
 ```bash
-memory-talk rebuild [--json]
+memory.talk rebuild [--json]
 ```
 
 适用场景:
@@ -16,7 +16,7 @@ memory-talk rebuild [--json]
 v2 把**所有"写行为"都落一份 append-only jsonl**,SQLite 表是派生索引:
 
 ```
-~/.memory-talk/
+~/.memory.talk/
 ├── sessions/{source}/{id[0:2]}/{session_id}/
 │   ├── meta.json
 │   └── rounds.jsonl                  # session round 追加流

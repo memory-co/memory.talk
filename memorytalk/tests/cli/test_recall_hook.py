@@ -1,4 +1,4 @@
-"""`memory-talk recall --hook` — Claude Code UserPromptSubmit integration.
+"""`memory.talk recall --hook` — Claude Code UserPromptSubmit integration.
 
 Contract: the hook MUST emit a valid ``hookSpecificOutput`` JSON to
 stdout and exit 0 in every branch — a non-zero exit blocks the user's
@@ -63,7 +63,7 @@ def test_hook_recalls_and_emits_json(tmp_path, monkeypatch):
     body = _parse_hook_output(result.stdout)
     assert body["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
     ctx = body["hookSpecificOutput"]["additionalContext"]
-    assert "memory-talk read card_001" in ctx
+    assert "memory.talk read card_001" in ctx
     assert "tcp keepalive issue" in ctx
 
 

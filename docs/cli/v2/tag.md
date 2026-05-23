@@ -13,7 +13,7 @@
 
 | 写法 | 解析 |
 |---|---|
-| `project:memory-talk` | `key=project`, `value=memory-talk` |
+| `project:memory.talk` | `key=project`, `value=memory.talk` |
 | `decision` | `key=decision`, `value=""` |
 | `version:` | `key=version`, `value=""`（同 `decision`）|
 | `path:/etc/hosts:rw` | `key=path`, `value=/etc/hosts:rw`（按**首个** `:` 分割，value 内允许 `:`）|
@@ -25,7 +25,7 @@ key 不能为空（`":foo"` / `":"` 会报错）；key/value 各自 strip 首尾
 **Upsert 语义** —— key 不存在则新增，已存在则覆盖 value，已存在且 value 一致则静默 noop。
 
 ```bash
-memory-talk tag add <subject_id> <tag> [<tag> ...] [--json]
+memory.talk tag add <subject_id> <tag> [<tag> ...] [--json]
 ```
 
 `<subject_id>` 必须以 `sess_` 或 `card_` 开头，CLI 按前缀自动选择 endpoint（内部路由到 `/v2/sessions/{sid}/tags` 或 `/v2/cards/{cid}/tags`）。
@@ -34,22 +34,22 @@ memory-talk tag add <subject_id> <tag> [<tag> ...] [--json]
 
 ```bash
 # 给 session 加 tag
-memory-talk tag add sess_187c6576 decision project:memory-talk
+memory.talk tag add sess_187c6576 decision project:memory.talk
 
 # 给 card 加 tag
-memory-talk tag add card_01KQ11Y1PCJ08AC0P0GA345G2Q topic:lancedb status:reviewed
+memory.talk tag add card_01KQ11Y1PCJ08AC0P0GA345G2Q topic:lancedb status:reviewed
 
 # 直接更新一个 tag 的 value（key 已存在 → 覆盖）
-memory-talk tag add sess_187c6576 project:memory-talk-v2
+memory.talk tag add sess_187c6576 project:memory.talk-v2
 
 # 把已有 key 的 value 清空（保留 key）
-memory-talk tag add sess_187c6576 project:
+memory.talk tag add sess_187c6576 project:
 ```
 
 ### Markdown（默认）
 
 ```markdown
-ok: tags = `project:memory-talk`, `decision`
+ok: tags = `project:memory.talk`, `decision`
 ```
 
 value 为空的 tag 直接显示 key（不显示 `:`）：
@@ -66,7 +66,7 @@ ok: tags = `decision`, `owner:alice`
 {
   "status": "ok",
   "tags": [
-    {"key": "project", "value": "memory-talk"},
+    {"key": "project", "value": "memory.talk"},
     {"key": "decision", "value": ""}
   ]
 }
@@ -75,7 +75,7 @@ ok: tags = `decision`, `owner:alice`
 ## tag remove（按 key 删除）
 
 ```bash
-memory-talk tag remove <subject_id> <key> [<key> ...] [--json]
+memory.talk tag remove <subject_id> <key> [<key> ...] [--json]
 ```
 
 参数是 **key 列表**，**不**写 `key:value`——CLI 会拒绝带 `:` 的输入。如果你想"只在 value 等于 X 时才删"，本命令不支持，先 `view` 校验再 `remove`。
@@ -83,8 +83,8 @@ memory-talk tag remove <subject_id> <key> [<key> ...] [--json]
 例：
 
 ```bash
-memory-talk tag remove sess_187c6576 decision project
-memory-talk tag remove card_01KQ11Y1PCJ08AC0P0GA345G2Q status
+memory.talk tag remove sess_187c6576 decision project
+memory.talk tag remove card_01KQ11Y1PCJ08AC0P0GA345G2Q status
 ```
 
 不存在的 key 静默跳过（幂等，log 也不记）。
@@ -92,7 +92,7 @@ memory-talk tag remove card_01KQ11Y1PCJ08AC0P0GA345G2Q status
 ### Markdown
 
 ```markdown
-ok: tags = `project:memory-talk`
+ok: tags = `project:memory.talk`
 ```
 
 全部 tag 被清空：
@@ -106,7 +106,7 @@ ok: tags = *(empty)*
 ```json
 {
   "status": "ok",
-  "tags": [{"key": "project", "value": "memory-talk"}]
+  "tags": [{"key": "project", "value": "memory.talk"}]
 }
 ```
 
@@ -115,7 +115,7 @@ ok: tags = *(empty)*
 CLI 输出**只展示当前全量 tag**，不区分本次操作是 added / updated / unchanged / removed。如果你需要审计哪个 tag 被改/被删，去看 log：
 
 ```bash
-memory-talk log <subject_id>
+memory.talk log <subject_id>
 ```
 
 事件类型：

@@ -1,27 +1,27 @@
 #!/usr/bin/env bash
 # install.sh — bootstrap memorytalk on a fresh machine.
 #
-# Creates a self-contained venv at ~/.memory-talk/venv and installs the
+# Creates a self-contained venv at ~/.memory.talk/venv and installs the
 # latest memorytalk release from PyPI into it. Idempotent: re-running
 # upgrades in place.
 #
 # Layout after install (shared with runtime data root):
-#   ~/.memory-talk/                        ← install root + data root
-#   ~/.memory-talk/venv/                   ← Python venv (this script)
-#   ~/.memory-talk/venv/bin/memory-talk    ← entry point
-#   ~/.memory-talk/settings.json           ← created by `memory-talk setup`
-#   ~/.memory-talk/memory.db, sessions/, cards/, ...  ← runtime data
+#   ~/.memory.talk/                        ← install root + data root
+#   ~/.memory.talk/venv/                   ← Python venv (this script)
+#   ~/.memory.talk/venv/bin/memory.talk    ← entry point
+#   ~/.memory.talk/settings.json           ← created by `memory.talk setup`
+#   ~/.memory.talk/memory.db, sessions/, cards/, ...  ← runtime data
 #
 # Usage:
 #   ./install.sh
 #   curl -fsSL https://raw.githubusercontent.com/.../install.sh | bash
-#   MEMORY_TALK_INSTALL_DIR=/opt/memory-talk ./install.sh   # custom path
+#   MEMORY_TALK_INSTALL_DIR=/opt/memory.talk ./install.sh   # custom path
 #
 # Requires: bash 3.2+, Python 3.10+, network access to PyPI.
 
 set -euo pipefail
 
-INSTALL_DIR="${MEMORY_TALK_INSTALL_DIR:-$HOME/.memory-talk}"
+INSTALL_DIR="${MEMORY_TALK_INSTALL_DIR:-$HOME/.memory.talk}"
 VENV_DIR="$INSTALL_DIR/venv"
 PACKAGE="memorytalk"
 MIN_PY_MAJOR=3
@@ -49,7 +49,7 @@ hint()  { printf '  %s%s%s\n'    "$C_DIM"    "$*"     "$C_RESET"; }
 # ────────── 0. sanity warnings ──────────
 
 if [ "${EUID:-$(id -u)}" -eq 0 ]; then
-    warn "Running as root — memory-talk will install to /root/memory-talk."
+    warn "Running as root — memory.talk will install to /root/memory.talk."
     warn "Usually you want to run this as your normal user instead."
 fi
 
@@ -117,8 +117,8 @@ ok "install finished"
 # ────────── 4. verify ──────────
 
 step "Verifying..."
-if ! VERSION="$("$VENV_DIR/bin/memory-talk" --version 2>/dev/null)"; then
-    fail "memory-talk installed but --version failed. Run '$VENV_DIR/bin/memory-talk --help' to investigate."
+if ! VERSION="$("$VENV_DIR/bin/memory.talk" --version 2>/dev/null)"; then
+    fail "memory.talk installed but --version failed. Run '$VENV_DIR/bin/memory.talk --help' to investigate."
 fi
 ok "$PACKAGE $VERSION is ready"
 
@@ -128,8 +128,8 @@ cat <<EOF
 
 ${C_BOLD}Installation complete.${C_RESET}
 
-memory-talk entry point:
-  ${C_BOLD}$VENV_DIR/bin/memory-talk${C_RESET}
+memory.talk entry point:
+  ${C_BOLD}$VENV_DIR/bin/memory.talk${C_RESET}
 
 To use it from anywhere, add the venv's bin to your PATH. Pick one:
 
@@ -137,16 +137,16 @@ To use it from anywhere, add the venv's bin to your PATH. Pick one:
   echo 'export PATH="$VENV_DIR/bin:\$PATH"' >> ~/.zshrc   # or ~/.bashrc
 
   ${C_DIM}# Option B: symlink into ~/.local/bin (if it's already in PATH)${C_RESET}
-  ln -sf "$VENV_DIR/bin/memory-talk" "\$HOME/.local/bin/memory-talk"
+  ln -sf "$VENV_DIR/bin/memory.talk" "\$HOME/.local/bin/memory.talk"
 
 Then in a new shell:
 
-  memory-talk setup            ${C_DIM}# interactive first-time configure${C_RESET}
-  memory-talk server start
-  memory-talk --help
+  memory.talk setup            ${C_DIM}# interactive first-time configure${C_RESET}
+  memory.talk server start
+  memory.talk --help
 
 Future upgrades:
 
-  memory-talk upgrade          ${C_DIM}# pulls latest from PyPI into this venv${C_RESET}
+  memory.talk upgrade          ${C_DIM}# pulls latest from PyPI into this venv${C_RESET}
 
 EOF

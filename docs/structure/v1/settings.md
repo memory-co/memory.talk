@@ -1,6 +1,6 @@
 # settings.json
 
-配置文件路径：`~/.memory-talk/settings.json`
+配置文件路径：`~/.memory.talk/settings.json`
 
 不存在时使用默认值。由 AI 直接读写，无需专门的 setup 命令。
 

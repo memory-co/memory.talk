@@ -7,7 +7,7 @@
 列出 session，支持按 tag 筛选。
 
 ```bash
-memory-talk session list [--tag <TAG>]
+memory.talk session list [--tag <TAG>]
 ```
 
 | 选项 | 说明 |
@@ -16,7 +16,7 @@ memory-talk session list [--tag <TAG>]
 
 示例：
 ```bash
-memory-talk session list --tag claude --tag project:myapp
+memory.talk session list --tag claude --tag project:myapp
 ```
 
 ## session read
@@ -24,7 +24,7 @@ memory-talk session list --tag claude --tag project:myapp
 读出 session 的所有 rounds，可指定范围。
 
 ```bash
-memory-talk session read <SESSION_ID> [--start N] [--end M]
+memory.talk session read <SESSION_ID> [--start N] [--end M]
 ```
 
 输出：Round 对象的 JSON 数组，每个 Round 包含 `round_id`、`speaker`、`role`、`content`（ContentBlock 列表）。
@@ -34,16 +34,16 @@ memory-talk session read <SESSION_ID> [--start N] [--end M]
 管理 session 的 tag。
 
 ```bash
-memory-talk session tag <SESSION_ID> add <TAG> [<TAG>...]
-memory-talk session tag <SESSION_ID> remove <TAG> [<TAG>...]
-memory-talk session tag <SESSION_ID> list
+memory.talk session tag <SESSION_ID> add <TAG> [<TAG>...]
+memory.talk session tag <SESSION_ID> remove <TAG> [<TAG>...]
+memory.talk session tag <SESSION_ID> list
 ```
 
 示例：
 ```bash
-memory-talk session tag abc123 add claude project:myapp important
-memory-talk session tag abc123 remove important
-memory-talk session tag abc123 list
+memory.talk session tag abc123 add claude project:myapp important
+memory.talk session tag abc123 remove important
+memory.talk session tag abc123 list
 ```
 
 Tag 是自由文本，建议用 `key:value` 格式表达维度，例如：

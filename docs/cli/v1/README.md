@@ -6,12 +6,12 @@
 - **Text**：供人类阅读，`--format text` 或 `-f text`
 
 ```bash
-memory-talk server status              # JSON 输出（默认）
-memory-talk server status -f text      # 人类可读输出
+memory.talk server status              # JSON 输出（默认）
+memory.talk server status -f text      # 人类可读输出
 ```
 
 ```
-memory-talk
+memory.talk
 ├── server start / stop / status   # 管理本地 API 服务（status 含数据统计）
 ├── sync                           # 自动同步所有平台会话
 ├── session list / read / tag
@@ -22,6 +22,6 @@ memory-talk
 └── rebuild                        # 从文件重建索引
 ```
 
-配置文件 `~/.memory-talk/settings.json`，不存在时使用默认值，由 AI 直接读写。详见 [settings.md](../../structure/v1/settings.md)。
+配置文件 `~/.memory.talk/settings.json`，不存在时使用默认值，由 AI 直接读写。详见 [settings.md](../../structure/v1/settings.md)。
 
 详细文档见各子命令文件。

@@ -1,6 +1,6 @@
 # settings.json
 
-配置文件路径：`~/.memory-talk/settings.json`
+配置文件路径：`~/.memory.talk/settings.json`
 
 不存在时使用默认值。由 AI 直接读写，无需专门的 setup 命令。
 
@@ -98,7 +98,7 @@
 }
 ```
 
-> **迁移说明**:旧版本的 `auth_env_key` 字段(只存环境变量名)已被 `auth_key` 取代。带 `auth_env_key` 的 settings.json 会启动失败,请重跑 `memory-talk setup` 重建配置。
+> **迁移说明**:旧版本的 `auth_env_key` 字段(只存环境变量名)已被 `auth_key` 取代。带 `auth_env_key` 的 settings.json 会启动失败,请重跑 `memory.talk setup` 重建配置。
 
 **ttl.card**
 

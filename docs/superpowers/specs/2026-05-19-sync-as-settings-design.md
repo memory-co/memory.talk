@@ -8,14 +8,14 @@
 Reshape `sync` from a CLI control plane into a settings-driven background
 service.
 
-- One CLI verb only: `memory-talk sync` → shows status.
+- One CLI verb only: `memory.talk sync` → shows status.
 - On/off lives in `settings.json` (`sync.enabled`); `setup` asks for it.
 - Server start is never blocked by initial backfill — backfill runs as a
   background task with progress visible in `sync` status.
 
 ## Motivation
 
-The current `memory-talk sync start` runs the full initial backfill
+The current `memory.talk sync start` runs the full initial backfill
 inside the HTTP request handler. With many adapter-discovered sessions
 this exceeds the CLI's 30s timeout, so the user sees:
 
@@ -36,10 +36,10 @@ durable thing is a settings choice, not a daemon command.
 In scope:
 
 1. Add `sync.enabled: bool` to `SyncConfig` in `settings.json`.
-2. Migrate the existing `~/.memory-talk/sync_state.json` into
+2. Migrate the existing `~/.memory.talk/sync_state.json` into
    `settings.json` transparently, then delete the old file.
-3. Drop `memory-talk sync start` / `memory-talk sync stop` CLI commands.
-   `memory-talk sync` becomes a single-shot status display.
+3. Drop `memory.talk sync start` / `memory.talk sync stop` CLI commands.
+   `memory.talk sync` becomes a single-shot status display.
 4. Drop `POST /v3/sync/start` and `POST /v3/sync/stop` API routes.
    `GET /v3/sync/status` stays.
 5. `setup` wizard adds a Sync section that prompts for `sync.enabled`.
@@ -75,7 +75,7 @@ Default `False` for the model — but `setup` defaults the prompt to
 `True` on first install (see below). Both defaults exist for a reason:
 the model default makes test fixtures and ad-hoc config files
 conservative, while the wizard default reflects the common-user intent
-("I installed memory-talk to sync my sessions").
+("I installed memory.talk to sync my sessions").
 
 ### Migration of `sync_state.json`
 
@@ -208,14 +208,14 @@ if app.state.sync.state.load().get("enabled"):
     try:
         await app.state.sync.start()
     except Exception as e:
-        print(f"[memory-talk] auto-resume sync failed: {e}", file=sys.stderr)
+        print(f"[memory.talk] auto-resume sync failed: {e}", file=sys.stderr)
 
 # NEW
 if config.settings.sync.enabled:
     try:
         await app.state.sync.start()   # now fast — schedules backfill
     except Exception as e:
-        print(f"[memory-talk] sync auto-start failed: {e}", file=sys.stderr)
+        print(f"[memory.talk] sync auto-start failed: {e}", file=sys.stderr)
 ```
 
 The shutdown path still calls `app.state.sync.pause()`.
@@ -253,7 +253,7 @@ When `status == "disabled"`:
 
 ```
 sync · disabled
-hint: rerun `memory-talk setup` to enable
+hint: rerun `memory.talk setup` to enable
 ```
 
 ### Removed code
@@ -294,8 +294,8 @@ New / updated tests:
 
 ## Docs
 
-- `README.md`: update sync section. CLI surface is `memory-talk sync`
-  (status). Configuration via `memory-talk setup` or by editing
+- `README.md`: update sync section. CLI surface is `memory.talk sync`
+  (status). Configuration via `memory.talk setup` or by editing
   `settings.json["sync"]["enabled"]` and restarting the server.
 - `docs/cli/v3/sync.md` (if present): rewrite. Otherwise add one.
 - `docs/cli/v3/setup.md`: list the new Sync section.
@@ -303,7 +303,7 @@ New / updated tests:
 ## Open Questions
 
 1. **Keep `SyncWatcher.stop()` public?** Today it's called only by
-   `memory-talk sync stop`, which we're deleting. The internal
+   `memory.talk sync stop`, which we're deleting. The internal
    `_teardown` / `pause` covers shutdown. Recommendation: delete
    `stop()` entirely. (Decide at implementation time; not load-bearing
    for the design.)

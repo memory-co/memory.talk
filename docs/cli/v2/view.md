@@ -3,14 +3,14 @@
 按带前缀的 id 读取 card 或 session——**服务端按 id 前缀自动判型**:`card_*` 走 card 读取,`sess_*` 走 session 读取,其它前缀 400。
 
 ```bash
-memory-talk view <id> [--json]
+memory.talk view <id> [--json]
 ```
 
 例:
 
 ```bash
-memory-talk view card_01jz8k2m            # Markdown 默认
-memory-talk view sess_187c6576 --json
+memory.talk view card_01jz8k2m            # Markdown 默认
+memory.talk view sess_187c6576 --json
 ```
 
 参数：
@@ -60,7 +60,7 @@ db = lancedb.connect("./data")
 
 **Created:** `2026-04-10`
 
-**Tags:** `decision`, `project:memory-talk`
+**Tags:** `decision`, `project:memory.talk`
 
 **Metadata:**
 
@@ -140,7 +140,7 @@ ChromaDB vs LanceDB?
     "session_id": "sess_187c6576",
     "source": "claude-code",
     "created_at": "2026-04-10T14:30:00Z",
-    "tags": ["decision", "project:memory-talk"],
+    "tags": ["decision", "project:memory.talk"],
     "metadata": {"project": "/home/user/myapp"},
     "rounds": [
       {

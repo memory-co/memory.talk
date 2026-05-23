@@ -1,5 +1,5 @@
 ---
-name: using-memory-talk
+name: using-memory.talk
 description: Use when starting any conversation - provides persistent cross-session memory via Talk-Cards
 ---
 
@@ -12,28 +12,28 @@ description: Use when starting any conversation - provides persistent cross-sess
 所有命令走 `Bash` 工具，默认输出 JSON（加 `-f text` 输出人类可读格式）。
 
 ```
-memory-talk server start                           # 首次启动（自动建 ~/.memory-talk/）
-memory-talk server status                          # 运行状态 + 数据统计
-memory-talk server stop
+memory.talk server start                           # 首次启动（自动建 ~/.memory.talk/）
+memory.talk server status                          # 运行状态 + 数据统计
+memory.talk server stop
 
-memory-talk sync                                   # 扫所有平台，导入新 session（自动去重）
+memory.talk sync                                   # 扫所有平台，导入新 session（自动去重）
 
-memory-talk session list [--tag TAG]...            # 列 session，可按 tag 筛选（unbuilt / built / claude / project:X）
-memory-talk session read <SESSION_ID> [--start N] [--end M]
-memory-talk session tag <SESSION_ID> add|remove|list <TAG>...
+memory.talk session list [--tag TAG]...            # 列 session，可按 tag 筛选（unbuilt / built / claude / project:X）
+memory.talk session read <SESSION_ID> [--start N] [--end M]
+memory.talk session tag <SESSION_ID> add|remove|list <TAG>...
 
-memory-talk card create '<JSON>'                   # 创建 Talk-Card（自动 embedding）
-memory-talk card get <CARD_ID> [--link-id <LINK_ID>]   # 带 --link-id 会刷新 link 的 TTL
-memory-talk card list [--session-id <ID>]
+memory.talk card create '<JSON>'                   # 创建 Talk-Card（自动 embedding）
+memory.talk card get <CARD_ID> [--link-id <LINK_ID>]   # 带 --link-id 会刷新 link 的 TTL
+memory.talk card list [--session-id <ID>]
 
-memory-talk link create '<JSON>'                   # 跨 card 补 link
-memory-talk link list <ID> [--type card|session]   # 查某个 card/session 的所有 link
+memory.talk link create '<JSON>'                   # 跨 card 补 link
+memory.talk link list <ID> [--type card|session]   # 查某个 card/session 的所有 link
 
-memory-talk recall "<QUERY>" [--top-k N]           # 向量检索（top-k 默认 5）
-memory-talk rebuild                                # 从文件重建索引（换 embedding 后跑一次）
+memory.talk recall "<QUERY>" [--top-k N]           # 向量检索（top-k 默认 5）
+memory.talk rebuild                                # 从文件重建索引（换 embedding 后跑一次）
 ```
 
-配置在 `~/.memory-talk/settings.json`，由 AI 直接读写，schema 见 `docs/structure/settings.md`。
+配置在 `~/.memory.talk/settings.json`，由 AI 直接读写，schema 见 `docs/structure/settings.md`。
 
 ## 数据结构
 

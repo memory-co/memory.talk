@@ -7,7 +7,7 @@
 创建一张 Talk-Card。自动计算 embedding 写入向量库。
 
 ```bash
-memory-talk card create '<JSON>'
+memory.talk card create '<JSON>'
 ```
 
 JSON 字段：
@@ -31,7 +31,7 @@ JSON 字段：
 
 示例：
 ```bash
-memory-talk card create '{
+memory.talk card create '{
   "summary": "决定用 LanceDB 做向量存储，因为零依赖、本地文件、适合嵌入式部署",
   "rounds": [
     {"role": "human", "text": "向量库选型，ChromaDB 和 LanceDB 哪个好？"},
@@ -57,7 +57,7 @@ memory-talk card create '{
 读取一张 card 的完整内容。
 
 ```bash
-memory-talk card get <CARD_ID> [--link-id <LINK_ID>]
+memory.talk card get <CARD_ID> [--link-id <LINK_ID>]
 ```
 
 `--link-id` 声明通过哪条 link 访问到的，传入时自动刷新该 link 的 TTL。
@@ -67,6 +67,6 @@ memory-talk card get <CARD_ID> [--link-id <LINK_ID>]
 列出所有 card，可按 session 筛选。
 
 ```bash
-memory-talk card list [--session-id <ID>]
+memory.talk card list [--session-id <ID>]
 ```
 

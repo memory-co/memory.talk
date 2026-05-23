@@ -69,7 +69,7 @@ pending = {
 
 ```json
 {
-  "explore_cwd": "/home/user/.memory-talk/explore",
+  "explore_cwd": "/home/user/.memory.talk/explore",
   "count": 3,
   "sessions": [
     {
@@ -107,7 +107,7 @@ pending = {
     "started_at": "2026-05-03T10:24:00Z",
     "last_at": "2026-05-03T10:38:00Z",
     "rounds": 14,
-    "cwd": "/home/user/.memory-talk/explore",
+    "cwd": "/home/user/.memory.talk/explore",
     "status": "done"
   },
   "cards": [

@@ -1,7 +1,7 @@
-"""CLI: ``memory-talk sync`` — show backend sync status.
+"""CLI: ``memory.talk sync`` — show backend sync status.
 
 Sync is enabled/disabled via ``settings.json`` (``sync.enabled``) and
-asked during ``memory-talk setup``. There is no longer a CLI ``start`` /
+asked during ``memory.talk setup``. There is no longer a CLI ``start`` /
 ``stop`` — the watcher follows the config flag on every server
 (re)start.
 """

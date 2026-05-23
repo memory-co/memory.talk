@@ -11,7 +11,7 @@
 - `review` 看 recall 维度的活动 —— 哪些 session 被召回过,以及每一轮抽了什么
 
 ```
-memory-talk review
+memory.talk review
 ├── list                              # 横扫所有有 recall 历史的 session
 └── detail <session_id>               # 钻进单个 session 看每一轮的 hit 详情
 ```
@@ -21,13 +21,13 @@ memory-talk review
 ## review list
 
 ```bash
-memory-talk review list [--limit N] [--data-root PATH] [--json]
+memory.talk review list [--limit N] [--data-root PATH] [--json]
 ```
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
 | `--limit` | 100 | 返回最近活跃的前 N 个 session(按 `last_at` 倒序)|
-| `--data-root` | `~/.memory-talk` | 数据根目录 |
+| `--data-root` | `~/.memory.talk` | 数据根目录 |
 | `--json` | 关 | 输出 JSON 而非 Markdown |
 
 ### 数据来源
@@ -85,7 +85,7 @@ LIMIT ?;
   ````markdown
   # Sessions with recall history (0)
 
-  *(no recall history yet — call `memory-talk recall <session_id> <prompt>` first)*
+  *(no recall history yet — call `memory.talk recall <session_id> <prompt>` first)*
   ````
 
 ### JSON(`--json`)
@@ -130,7 +130,7 @@ LIMIT ?;
 钻进单个 session,按时间倒序列出每一轮 recall 的 query 和命中的 cards。
 
 ```bash
-memory-talk review detail <session_id> [--limit N] [--data-root PATH] [--json]
+memory.talk review detail <session_id> [--limit N] [--data-root PATH] [--json]
 ```
 
 | 参数 | 默认 | 说明 |
@@ -264,20 +264,20 @@ LIMIT ?;     -- LIMIT 是行数(可能跨 round),实际渲染时按 round 分组
 
 ```bash
 # AI 进会话开头自检一下"我最近在想哪些事情"
-memory-talk review list --limit 5
+memory.talk review list --limit 5
 
 # 看到某个 session 有兴趣 → 钻进去看每一轮抽了什么
-memory-talk review detail sess_lancedb-discuss
+memory.talk review detail sess_lancedb-discuss
 
 # 该 session session_exist=true → log/view 都可用
-memory-talk log sess_lancedb-discuss
+memory.talk log sess_lancedb-discuss
 
 # session_exist=false → log/view 会 404
 # 但 review detail 仍然能看 recall 维度的历史
 # 也可以接着做一次 recall 拉新内容
-memory-talk recall sess_async-pool-debug "现在又踩到了什么坑"
+memory.talk recall sess_async-pool-debug "现在又踩到了什么坑"
 
 # 等 /v2/sessions 被写入之后(`sync` 是常见触发途径),session_exist 自动翻 true
-memory-talk sync
-memory-talk review list        # async-pool-debug 现在应该是 session_exist=true
+memory.talk sync
+memory.talk review list        # async-pool-debug 现在应该是 session_exist=true
 ```

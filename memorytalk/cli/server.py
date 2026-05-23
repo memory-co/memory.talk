@@ -2,7 +2,7 @@
 
 Lifecycle primitives (``start_server_proc`` / ``stop_server_proc`` /
 ``pid_alive``) are exported separately so other commands (notably
-``memory-talk setup``) can reuse them without subprocess-ing themselves.
+``memory.talk setup``) can reuse them without subprocess-ing themselves.
 """
 from __future__ import annotations
 import os
@@ -37,7 +37,7 @@ def _server_responsive(cfg: Config) -> bool:
     """HTTP-probe the server. ``pid_alive`` alone can't tell us whether
     the PID in ``server.pid`` is actually our daemon — the kernel may
     have recycled it to an unrelated process after a crash/reboot. A
-    successful ``/v3/status`` call proves it really is memory-talk."""
+    successful ``/v3/status`` call proves it really is memory.talk."""
     try:
         api("GET", "/v3/status", cfg, timeout=1.0)
         return True
@@ -177,7 +177,7 @@ def _tail_bytes(path: Path, n_lines: int) -> list[bytes]:
 @click.option("-n", "--lines", type=int, default=100,
               help="Number of trailing lines to show first (default 100)")
 def server_logs(follow: bool, lines: int) -> None:
-    """Tail the daemon's log file (``~/.memory-talk/logs/server.log``)."""
+    """Tail the daemon's log file (``~/.memory.talk/logs/server.log``)."""
     cfg = Config()
     log_path = cfg.logs_dir / "server.log"
     if not log_path.exists():

@@ -32,7 +32,7 @@ Status      GET    /v3/status                   统计信息 + provider info
 - **路径设计**:资源动作明确时用 POST 名词(`/v3/cards`, `/v3/reviews`),状态查询用 GET 名词(`/v3/status`),特殊动作显式 verb 路径(`/v3/sync/start`, `/v3/embedding/reembed`)。不强行 REST 化。
 - **追踪存哪**:服务端对 search 落 append-only 审计 jsonl(`logs/search/<UTC 日期>.jsonl`)+ SQLite `search_log` 表;对 card / session / review 的 lifecycle 事件落 `events.jsonl`(每个对象一份)。**v3 不开 `GET /v3/log` 之类的查询入口** —— 审计文件是后端 infra,要看靠 sqlite 直查或离线工具。
 - **无 `server start/stop` API**:进程启停只能在 CLI / OS 层做。
-- **Sync 不再是 API 控制面**:开关搬到 `settings.sync.enabled`,lifespan 启动时按它决定要不要起 watcher。CLI 上只剩 `memory-talk sync` 看状态。详见 [sync.md](sync.md)。
+- **Sync 不再是 API 控制面**:开关搬到 `settings.sync.enabled`,lifespan 启动时按它决定要不要起 watcher。CLI 上只剩 `memory.talk sync` 看状态。详见 [sync.md](sync.md)。
 - **Sessions API 是 cursor-based + append-only**:不再有"整 session 发过来,服务端帮你 diff"的语义。调用方先 `ensure` 拿游标、再 `append` 增量。详见 [sessions.md](sessions.md)。
 
 ## ID 前缀约定

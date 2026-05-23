@@ -1,6 +1,6 @@
 # explore
 
-**LLM 主导的 card 维护工作台**:在一个隔离环境里启动 Claude Code,让它读会话、抽新 card 或给老 card 写 review。memory-talk 自己不抽不评 —— 抽 / 评是 LLM 的活,explore 负责**拉起 claude + 隔离 + 跟踪产出**。
+**LLM 主导的 card 维护工作台**:在一个隔离环境里启动 Claude Code,让它读会话、抽新 card 或给老 card 写 review。memory.talk 自己不抽不评 —— 抽 / 评是 LLM 的活,explore 负责**拉起 claude + 隔离 + 跟踪产出**。
 
 跟 [sync](sync.md) 的关系:sync 是后端 watchdog,实时把所有 Claude Code session 落到 backend(包括 explore 自己跑出来的)。explore 不调用 sync,sync 不知道 explore 在跑 —— 两条独立通路在 backend 数据层自然汇合。
 
@@ -15,14 +15,14 @@
 ```json
 {
   "explore": {
-    "cwd": "~/.memory-talk/explore"
+    "cwd": "~/.memory.talk/explore"
   }
 }
 ```
 
 | 字段 | 默认 | 说明 |
 |---|---|---|
-| `explore.cwd` | `~/.memory-talk/explore` | claude 启动目录。绝对路径或 `~/` 起头。backend 做 namespace 判断时按**完全展开后的绝对路径前缀**匹配 `session.metadata.cwd`。 |
+| `explore.cwd` | `~/.memory.talk/explore` | claude 启动目录。绝对路径或 `~/` 起头。backend 做 namespace 判断时按**完全展开后的绝对路径前缀**匹配 `session.metadata.cwd`。 |
 
 setup wizard 首次跑会:
 
@@ -35,7 +35,7 @@ setup wizard 首次跑会:
 ## 子命令
 
 ```
-memory-talk explore
+memory.talk explore
 ├── pending [--limit N]                 # 候选队列:未被任何 card 引用过的 work session
 ├── list [--limit N]                    # 产出历史:explore namespace 下已跑过的 session
 ├── detail <session_id>                 # 单条 explore session 详情(产出的 cards / reviews)
@@ -46,12 +46,12 @@ memory-talk explore
 
 适用的命令支持 `--json`。**所有读路径都走 backend HTTP**,所有 namespace 判断都走 `metadata.cwd` 前缀匹配,不直接读 `~/.claude/projects/*.jsonl`。
 
-> data root **固定在 `~/.memory-talk`**(v3 不暴露 `--data-root` 参数)。后续如需配置,会在 [setup](setup.md) 里加入,其它命令不动。
+> data root **固定在 `~/.memory.talk`**(v3 不暴露 `--data-root` 参数)。后续如需配置,会在 [setup](setup.md) 里加入,其它命令不动。
 
 ### explore pending
 
 ```bash
-memory-talk explore pending [--limit N] [--json]
+memory.talk explore pending [--limit N] [--json]
 ```
 
 后端定义:
@@ -86,12 +86,12 @@ memory-talk explore pending [--limit N] [--json]
 }
 ```
 
-> **pending 的"未被引用"是严格的**:有 1 张 card 引用过这条 session,这条 session 就出队 —— 即便里面还有更多 insight 没抽完。要重访 / 二次抽取,直接 `memory-talk read <sid>` + `card '{...}'` 即可,不靠 pending 推回来。
+> **pending 的"未被引用"是严格的**:有 1 张 card 引用过这条 session,这条 session 就出队 —— 即便里面还有更多 insight 没抽完。要重访 / 二次抽取,直接 `memory.talk read <sid>` + `card '{...}'` 即可,不靠 pending 推回来。
 
 ### explore list
 
 ```bash
-memory-talk explore list [--limit N] [--json]
+memory.talk explore list [--limit N] [--json]
 ```
 
 列出 **`metadata.cwd` startswith `<explore.cwd>`** 的所有 session —— 即 explore 自己跑出来的 session 历史。
@@ -122,7 +122,7 @@ memory-talk explore list [--limit N] [--json]
 ### explore detail
 
 ```bash
-memory-talk explore detail <session_id> [--json]
+memory.talk explore detail <session_id> [--json]
 ```
 
 走 backend,聚焦**本 session 的产出**:
@@ -131,22 +131,22 @@ memory-talk explore detail <session_id> [--json]
 - 产出的 card 列表(每条 `card_id` + `insight` + `created_at`)
 - 产出的 review 列表(每条 `review_id` + 关联的 `card_id` + `score` + `comment` + `indexes`)
 
-跟 `memory-talk read sess_xxx` 的差别:detail **不展开 round 内容**;要看对话原文用 `read`。
+跟 `memory.talk read sess_xxx` 的差别:detail **不展开 round 内容**;要看对话原文用 `read`。
 
 ### explore auto
 
 ```bash
-memory-talk explore auto [--limit N] [--json]
+memory.talk explore auto [--limit N] [--json]
 ```
 
 非交互式跑一次:`claude --print` 在 `<explore.cwd>` 起,内置 prompt 让它:
 
-1. 调 `memory-talk explore pending --limit N --json` 拿候选 session
+1. 调 `memory.talk explore pending --limit N --json` 拿候选 session
 2. 对每条候选:
-   - `memory-talk read <sid>` 看内容
+   - `memory.talk read <sid>` 看内容
    - 决定**三选一**:
-     - **抽 card**(找到值得固化的新判断)→ `memory-talk card '{...}'`
-     - **写 review**(内容反驳 / 支持某张已有 card)→ `memory-talk review '{...}'`
+     - **抽 card**(找到值得固化的新判断)→ `memory.talk card '{...}'`
+     - **写 review**(内容反驳 / 支持某张已有 card)→ `memory.talk review '{...}'`
      - **跳过**(纯闲聊 / 已在别处沉淀)
 3. 处理完进下一条,直到队列空或达上限
 4. stdout 输出 summary
@@ -203,7 +203,7 @@ failure 模式:
 ### explore manual
 
 ```bash
-memory-talk explore manual
+memory.talk explore manual
 ```
 
 进程替换:
@@ -212,12 +212,12 @@ memory-talk explore manual
 cd <explore.cwd> && exec claude
 ```
 
-用户落进 claude 交互界面,自己决定看什么、抽什么、评什么。**memory-talk 进程被 claude 替换** —— 退出 claude = 退出整个命令。不接 `--json`。
+用户落进 claude 交互界面,自己决定看什么、抽什么、评什么。**memory.talk 进程被 claude 替换** —— 退出 claude = 退出整个命令。不接 `--json`。
 
 ### explore resume
 
 ```bash
-memory-talk explore resume <session_id>
+memory.talk explore resume <session_id>
 ```
 
 续接某条 explore 记录,等价于:
@@ -226,7 +226,7 @@ memory-talk explore resume <session_id>
 cd <explore.cwd> && exec claude --resume <claude_uuid>
 ```
 
-`<session_id>` 接 `sess_<uuid>`(memory-talk id)或裸 UUID 都行,内部去前缀。
+`<session_id>` 接 `sess_<uuid>`(memory.talk id)或裸 UUID 都行,内部去前缀。
 
 **namespace 校验**:CLI 先调 backend 拉这条 session 的 `metadata.cwd`,确认 startswith `<explore.cwd>`;不通过则报错 —— 避免误把工作 session 拉进 explore namespace(否则 list / detail 会把它算成 explore 产出,污染统计)。
 
@@ -234,7 +234,7 @@ cd <explore.cwd> && exec claude --resume <claude_uuid>
 
 ## hook 隔离机制
 
-memory-talk 不管 Claude Code 的 hook 配置,**靠 Claude Code 自己的 project-local settings 优先级**:
+memory.talk 不管 Claude Code 的 hook 配置,**靠 Claude Code 自己的 project-local settings 优先级**:
 
 ```
 <explore.cwd>/.claude/settings.json    ← 最高优先级,完全覆盖
@@ -253,45 +253,45 @@ setup 写的覆盖文件内容:
 
 显式空数组 → 覆盖 user-level 配置,不合并。
 
-用户自己改了 / 删了这份文件 —— memory-talk 不再校正,只在 setup 重跑时**询问**是否复原(默认 yes)。
+用户自己改了 / 删了这份文件 —— memory.talk 不再校正,只在 setup 重跑时**询问**是否复原(默认 yes)。
 
 ## 错误
 
 | 情况 | 行为 |
 |---|---|
-| `<explore.cwd>` 不存在 | exit 1,提示跑 `memory-talk setup` |
+| `<explore.cwd>` 不存在 | exit 1,提示跑 `memory.talk setup` |
 | `<explore.cwd>` 不是目录(文件 / 软链坏) | exit 1 |
 | `claude` 不在 PATH | exit 1,提示安装 Claude Code |
 | `resume <id>` 但 backend 查到 cwd 不在 explore namespace | exit 1,"这条 session 不属于 explore 命名空间" |
 | `resume <id>` 但 backend 查不到这条 session | exit 1,"sync 还没追上 / id 打错" |
 | `auto` 中 claude 进程被信号杀掉 | 透传 exit code(130=SIGINT, 143=SIGTERM)|
 | `auto` 跑时 pending 为空 | 不起 claude,ok 退,`processed=0` |
-| backend(server)未运行 | exit 1,提示先 `memory-talk server start` |
+| backend(server)未运行 | exit 1,提示先 `memory.talk server start` |
 
 ## 推荐姿势
 
 ```bash
 # 看看积压
-memory-talk explore pending
+memory.talk explore pending
 
 # 让 LLM 自动消费前 5 条
-memory-talk explore auto --limit 5
+memory.talk explore auto --limit 5
 
 # 看刚才抽 / 评了啥
-memory-talk explore list
-memory-talk explore detail sess_01k...
+memory.talk explore list
+memory.talk explore detail sess_01k...
 
 # 自己抽 / 复盘
-memory-talk explore manual
+memory.talk explore manual
 # (在 claude 里) /exit
-memory-talk explore resume sess_01k...  # 接着上次接着抽
+memory.talk explore resume sess_01k...  # 接着上次接着抽
 ```
 
 ## 设计取舍
 
 ### 为什么 explore 不直接调 LLM API,而是包一层 Claude Code
 
-[架构原则](../../../CLAUDE.md):Python 不调 LLM API,认知工作走 Skill / agent。explore 也不破这条 —— 不直连 OpenAI / Anthropic API,只起 `claude` 进程,让它用工具(`memory-talk read` / `card` / `review`)完成抽取 + 评价。
+[架构原则](../../../CLAUDE.md):Python 不调 LLM API,认知工作走 Skill / agent。explore 也不破这条 —— 不直连 OpenAI / Anthropic API,只起 `claude` 进程,让它用工具(`memory.talk read` / `card` / `review`)完成抽取 + 评价。
 
 直接调 API 也能跑,但 explore 自己要管 prompt / context window / tool_use loop,等于把 Claude Code 的 agent 核心机制再做一遍。借 claude 已有的 agent loop 是更轻的实现,而且全流程都落 backend(`explore detail` 能拉出完整对话),debug 友好。
 
@@ -326,9 +326,9 @@ sync 是后端实时 watcher,落 backend 跟 jsonl 落盘几乎同时,旁路读 
 ### 为什么 manual / resume 走 exec 而不是 subprocess
 
 1. **TTY ownership**:claude 是 TUI,subprocess 包一层会让信号转发(SIGWINCH / SIGINT)和 escape sequence 处理变怪。
-2. **进程模型清晰**:`Ctrl-C` 退 claude 直接退到 shell,而不是先回到 memory-talk 再退一次。
+2. **进程模型清晰**:`Ctrl-C` 退 claude 直接退到 shell,而不是先回到 memory.talk 再退一次。
 
-代价:exec 之后没法做 post-processing。**故意留着** —— sync 是实时的,resume 期间想看进度直接开第二个终端 `memory-talk explore list` 即可。
+代价:exec 之后没法做 post-processing。**故意留着** —— sync 是实时的,resume 期间想看进度直接开第二个终端 `memory.talk explore list` 即可。
 
 ### 为什么 auto 阻塞而不是后台
 

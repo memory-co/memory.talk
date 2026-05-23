@@ -5,7 +5,7 @@ in isolation:
 
 - ``build_log_config`` + ``dictConfig`` actually wires the
   ``memorytalk``/``uvicorn`` loggers to a rotating file handler.
-- ``memory-talk server logs`` reads from the configured path and
+- ``memory.talk server logs`` reads from the configured path and
   handles the "no log yet" case.
 """
 from __future__ import annotations
@@ -105,7 +105,7 @@ def test_server_logs_command_tails_last_n(tmp_path, monkeypatch):
 
 
 def test_logs_subcommand_registered():
-    """`memory-talk server logs --help` is reachable from the top-level
+    """`memory.talk server logs --help` is reachable from the top-level
     CLI (catches click decoration regressions)."""
     from memorytalk.cli import main
     runner = CliRunner()

@@ -3,16 +3,16 @@
 按带前缀的 id 读取 card 或 session——**服务端按 id 前缀自动判型**:`card_*` 走 card 读取,`sess_*` 走 session 读取,其它前缀 400。
 
 ```bash
-memory-talk read <id> [--json]
-memory-talk --no-pager read <id>          # 强制直出
+memory.talk read <id> [--json]
+memory.talk --no-pager read <id>          # 强制直出
 ```
 
 例:
 
 ```bash
-memory-talk read card_01jz8k2m            # Markdown 默认,长输出走 pager
-memory-talk read sess_187c6576 --json     # JSON,永远不 pager
-memory-talk read sess_187c6576 | less     # 显式 pipe,不 pager
+memory.talk read card_01jz8k2m            # Markdown 默认,长输出走 pager
+memory.talk read sess_187c6576 --json     # JSON,永远不 pager
+memory.talk read sess_187c6576 | less     # 显式 pipe,不 pager
 ```
 
 参数：
@@ -31,7 +31,7 @@ memory-talk read sess_187c6576 | less     # 显式 pipe,不 pager
 | `--json` | 永远直出 |
 | `--no-pager`(顶层 flag)或 `NO_PAGER=1` 环境变量 | 强制直出 |
 
-AI 工具 / 脚本 / shell pipe 调用 `memory-talk read xxx` 行为跟以前**完全一致**,只有人在终端里敲才会进入交互滚动。
+AI 工具 / 脚本 / shell pipe 调用 `memory.talk read xxx` 行为跟以前**完全一致**,只有人在终端里敲才会进入交互滚动。
 
 ## Markdown(默认)
 

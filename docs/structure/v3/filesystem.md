@@ -1,15 +1,15 @@
 # Filesystem
 
-v3 在 data root(**固定** `~/.memory-talk/`)下产生的所有文件 / 目录清单 —— 这一页只回答"v3 到底在磁盘上放了什么"。每类内容的字段语义和不变性见对应的对象 md。
+v3 在 data root(**固定** `~/.memory.talk/`)下产生的所有文件 / 目录清单 —— 这一页只回答"v3 到底在磁盘上放了什么"。每类内容的字段语义和不变性见对应的对象 md。
 
 ## Data root
 
-固定在 `~/.memory-talk/`,**不开 `--data-root` 参数**(详见 [`../../cli/v3/setup.md`](../../cli/v3/setup.md))。`MEMORY_TALK_DATA_ROOT` 环境变量存在,但**仅作测试 hook**(允许 tmpdir 隔离多实例),不在用户文档中暴露。
+固定在 `~/.memory.talk/`,**不开 `--data-root` 参数**(详见 [`../../cli/v3/setup.md`](../../cli/v3/setup.md))。`MEMORY_TALK_DATA_ROOT` 环境变量存在,但**仅作测试 hook**(允许 tmpdir 隔离多实例),不在用户文档中暴露。
 
 ## 全景
 
 ```
-~/.memory-talk/
+~/.memory.talk/
 ├── settings.json                         # 用户配置(见 settings.md)
 ├── memory.db                             # SQLite 主库 —— 查询主路径
 ├── server.pid                            # daemon 进程 pid
@@ -144,7 +144,7 @@ Schema 定义在 [`provider/lancedb.py`](../../../memorytalk/provider/lancedb.py
 
 server 启动 / `setup` 完成时,`Config.ensure_dirs` 会 `mkdir -p`:
 
-- `~/.memory-talk/`
+- `~/.memory.talk/`
 - `vectors/`
 - `sessions/`
 - `cards/`

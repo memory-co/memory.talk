@@ -17,7 +17,7 @@
 v2 把所有"写行为"都落一份 append-only jsonl，SQLite 表是派生索引：
 
 ```
-~/.memory-talk/
+~/.memory.talk/
 ├── sessions/{source}/{id[0:2]}/{session_id}/
 │   ├── meta.json
 │   └── rounds.jsonl              # session round 追加流

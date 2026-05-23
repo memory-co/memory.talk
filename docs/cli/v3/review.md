@@ -3,7 +3,7 @@
 对一张 card 的"回帖"——card 像一个帖子,review 是后续会话里对它的态度表态。可以**支持(+1)、中立(0)、反对(-1)**,附带某次 session 里的证据 rounds 和一段说明 comment。
 
 ```bash
-memory-talk review '<json>' [--json]
+memory.talk review '<json>' [--json]
 ```
 
 输入 JSON 结构:
@@ -99,7 +99,7 @@ review **不单独 read** —— 它依附于 card,在 `read card_xxx` 的输出
 
 ```bash
 # 三个月后再翻到这张 card,觉得当时的选型仍然成立
-memory-talk review '{
+memory.talk review '{
   "card_id": "card_01jz8k2m",
   "session_id": "'"$SESSION_ID"'",
   "indexes": "20-25",
@@ -108,7 +108,7 @@ memory-talk review '{
 }'
 
 # 翻到一张 card,发现当时的判断错了
-memory-talk review '{
+memory.talk review '{
   "card_id": "card_01jz0xnq",
   "session_id": "'"$SESSION_ID"'",
   "indexes": "3-8",
@@ -117,7 +117,7 @@ memory-talk review '{
 }'
 
 # 仅备注,无明确正负
-memory-talk review '{
+memory.talk review '{
   "card_id": "card_01jz8k2m",
   "session_id": "'"$SESSION_ID"'",
   "indexes": "11",

@@ -1,8 +1,8 @@
-"""memory-talk server daemon entry point.
+"""memory.talk server daemon entry point.
 
-Launched by ``memory-talk server start`` via ``python -m memorytalk.server``.
+Launched by ``memory.talk server start`` via ``python -m memorytalk.server``.
 Configures logging to a rotated file under
-``~/.memory-talk/logs/server.log`` BEFORE starting uvicorn, so the
+``~/.memory.talk/logs/server.log`` BEFORE starting uvicorn, so the
 daemon's diagnostics survive the parent CLI process exiting. The
 previous design piped the daemon's stderr to the parent CLI's
 ``subprocess.PIPE``, which was only drained inside a 1.2s failure

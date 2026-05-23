@@ -22,7 +22,7 @@
     {"at": "2026-04-10T14:30:00Z", "kind": "imported", "detail": {"source": "claude-code", "round_count": 20}},
     {"at": "2026-04-11T09:00:00Z", "kind": "rounds_appended", "detail": {"from_index": 21, "to_index": 28, "added_count": 8}},
     {"at": "2026-04-15T11:20:00Z", "kind": "tag_added", "detail": {"tag": "decision"}},
-    {"at": "2026-04-15T11:20:00Z", "kind": "tag_added", "detail": {"tag": "project:memory-talk"}},
+    {"at": "2026-04-15T11:20:00Z", "kind": "tag_added", "detail": {"tag": "project:memory.talk"}},
     {"at": "2026-04-16T10:30:00Z", "kind": "card_extracted", "detail": {"card_id": "card_01jz8k2m", "indexes": "11-15", "default_link_id": "link_01jzq7rm"}},
     {"at": "2026-04-17T14:02:33Z", "kind": "linked", "detail": {"direction": "incoming", "link_id": "link_01jzq8sn", "peer_id": "card_01jzp3nq", "peer_type": "card", "comment": "后续踩了 NFS 的坑", "ttl_initial": 1209600}}
   ]

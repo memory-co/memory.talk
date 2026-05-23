@@ -425,7 +425,7 @@ v2 没有这个过滤层,所有 top_k 结果都展示。v3 加入是为了解决
 ### 落库
 
 - **SQLite `search_log` 表**:`results` 用 JSON 列存整个 blob
-- **`~/.memory-talk/logs/search/<YYYY-MM-DD>.jsonl`**:按 UTC 日期切分,每行一个完整 SearchLog 对象
+- **`~/.memory.talk/logs/search/<YYYY-MM-DD>.jsonl`**:按 UTC 日期切分,每行一个完整 SearchLog 对象
 
 ```sql
 CREATE TABLE search_log (

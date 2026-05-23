@@ -1,6 +1,6 @@
 [project]
 name = "memorytalk"
-version = "0.5.2"
+version = "0.6.0"
 description = "Persistent cross-session memory for AI agents — Talk-Card architecture with forum-dynamics sinking/floating (v3)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -25,7 +25,10 @@ dependencies = [
 ]
 
 [project.scripts]
-memory-talk = "memorytalk.cli:main"
+# Quoted key — TOML treats bare ``memory.talk`` as nested table
+# (``project.scripts.memory.talk``), so we must quote to keep the dot
+# literal in the entry-point name.
+"memory.talk" = "memorytalk.cli:main"
 
 [project.optional-dependencies]
 dev = [

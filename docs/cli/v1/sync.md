@@ -3,7 +3,7 @@
 自动发现并同步所有平台的会话。
 
 ```bash
-memory-talk sync
+memory.talk sync
 ```
 
 扫描所有已配置平台的默认目录，自动导入新会话和更新过的会话。

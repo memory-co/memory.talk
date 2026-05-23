@@ -5,7 +5,7 @@
 > 需要关键词精确匹配、按元数据筛选，或想同时搜 session？请用 [`search`](search.md)。
 
 ```bash
-memory-talk recall "<QUERY>" [--top-k N]
+memory.talk recall "<QUERY>" [--top-k N]
 ```
 
 | 选项 | 默认值 | 说明 |

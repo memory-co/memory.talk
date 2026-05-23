@@ -74,7 +74,7 @@ v3 没有独立的 `rebuild` CLI 命令 —— 重算 embedding 嵌在 setup 流
 | | v2 | v3 |
 |---|---|---|
 | 入口 | `POST /v2/rebuild` —— 重建 FTS / 向量 / 日志全部 | `POST /v3/embedding/reembed` —— **只**重算 embedding |
-| 触发方式 | `memory-talk rebuild` CLI | setup 内部调用 |
+| 触发方式 | `memory.talk rebuild` CLI | setup 内部调用 |
 | 重建范围 | embedding + FTS + 日志重放 | 只 embedding |
 | 用户可见命令 | 是 | **否** —— 没有 CLI 命令直接调这个端点 |
 

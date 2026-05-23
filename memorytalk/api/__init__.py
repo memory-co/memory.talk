@@ -135,6 +135,6 @@ def create_app(config: Config | None = None) -> FastAPI:
 
 
 # uvicorn entry point. The data_root env var is the same test hook
-# `Config.__init__` honors; user-facing CLI hardcodes ~/.memory-talk.
+# `Config.__init__` honors; user-facing CLI hardcodes ~/.memory.talk.
 _data_root = os.environ.get("MEMORY_TALK_DATA_ROOT")
 app = create_app(Config(_data_root) if _data_root else Config())

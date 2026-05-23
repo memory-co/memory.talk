@@ -170,7 +170,7 @@ CLI 对应 [`search`](../../cli/v3/search.md) 命令。
 
 ### 副作用
 
-- 在服务端 `search_log` 表 + `~/.memory-talk/logs/search/<UTC 日期>.jsonl` 追加一条 SearchLog,**存的是完整响应体**(含 `results[]` 全字段,session hits 含上下文窗)
+- 在服务端 `search_log` 表 + `~/.memory.talk/logs/search/<UTC 日期>.jsonl` 追加一条 SearchLog,**存的是完整响应体**(含 `results[]` 全字段,session hits 含上下文窗)
 - **不刷新任何 stats**
 
 ### 排序

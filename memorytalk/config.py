@@ -4,7 +4,7 @@ v3 simplifications vs v2:
 - **No TTL config** — sinking/floating dynamics are computed at search time
   from review/read/recall counters, not from per-object expires_at.
 - **No links / tags** — those entities are gone.
-- **`data_root` hardcoded** to ``~/.memory-talk`` (docs/cli/v3/setup.md).
+- **`data_root` hardcoded** to ``~/.memory.talk`` (docs/cli/v3/setup.md).
   Override via ``MEMORY_TALK_DATA_ROOT`` env var stays as a test hook.
 - **`ranking_formula`** is new — drives the sinking/floating sort.
 """
@@ -67,7 +67,7 @@ class SyncConfig(BaseModel):
 
 
 class ExploreConfig(BaseModel):
-    cwd: str = "~/.memory-talk/explore"
+    cwd: str = "~/.memory.talk/explore"
     auto_default_limit: int = 5
 
 
@@ -83,7 +83,7 @@ class Settings(BaseModel):
 
 
 def _default_data_root() -> Path:
-    """Default data root — ~/.memory-talk, with a test-friendly env override.
+    """Default data root — ~/.memory.talk, with a test-friendly env override.
 
     The override is **intentionally not advertised** in user-facing docs
     (docs/cli/v3/setup.md says data root is hardcoded). It exists so tests
@@ -92,7 +92,7 @@ def _default_data_root() -> Path:
     env = os.environ.get("MEMORY_TALK_DATA_ROOT")
     if env:
         return Path(env).expanduser()
-    return Path.home() / ".memory-talk"
+    return Path.home() / ".memory.talk"
 
 
 class Config:

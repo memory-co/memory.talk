@@ -3,7 +3,7 @@
 查一个 card 或 session 的**全生命周期**——什么时候被创建 / 导入、什么时候被打 tag、什么时候被 link、什么时候有 card 从它身上提取、什么时候 sync 追加了新 round……按时间顺序排列。
 
 ```bash
-memory-talk log <id> [--json]
+memory.talk log <id> [--json]
 ```
 
 `<id>` 必须是 `card_<...>` 或 `sess_<...>`——服务端按前缀自动判型。
@@ -24,7 +24,7 @@ memory-talk log <id> [--json]
 | `2026-04-10T14:30:00Z` | imported | source=claude-code · round_count=20 |
 | `2026-04-11T09:00:00Z` | rounds_appended | indexes 21-28 (+8) |
 | `2026-04-15T11:20:00Z` | tag_added | `decision` |
-| `2026-04-15T11:20:00Z` | tag_added | `project:memory-talk` |
+| `2026-04-15T11:20:00Z` | tag_added | `project:memory.talk` |
 | `2026-04-16T10:30:00Z` | card_extracted | `card_01jz8k2m` · indexes=11-15 |
 | `2026-04-17T14:02:33Z` | linked | ←incoming `card_01jzp3nq` (后续踩了 NFS 的坑) · ttl 14d |
 | `2026-04-19T08:00:00Z` | tag_removed | `decision` |
@@ -76,7 +76,7 @@ memory-talk log <id> [--json]
     {
       "at": "2026-04-15T11:20:00Z",
       "kind": "tag_added",
-      "detail": {"tag": "project:memory-talk"}
+      "detail": {"tag": "project:memory.talk"}
     },
     {
       "at": "2026-04-16T10:30:00Z",

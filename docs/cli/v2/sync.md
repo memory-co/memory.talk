@@ -3,11 +3,11 @@
 从 Claude Code / Codex 等平台的本地会话文件中发现并导入 session。阻塞执行,结束后一次性返回统计。
 
 ```bash
-memory-talk sync [--data-root PATH] [--json]
+memory.talk sync [--data-root PATH] [--json]
 ```
 
 参数:
-- `--data-root` 可选,指定数据根目录(默认 `~/.memory-talk`)。
+- `--data-root` 可选,指定数据根目录(默认 `~/.memory.talk`)。
 - `--json` 输出 JSON 而非默认 Markdown。
 
 行为:

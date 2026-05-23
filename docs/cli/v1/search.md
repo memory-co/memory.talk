@@ -3,7 +3,7 @@
 更完善的搜索：同时搜 **Card** 和 **Session**，正文走 FTS + 向量混合检索，元数据通过独立 DSL 过滤。
 
 ```bash
-memory-talk search "<FTS_QUERY>" [--where "<DSL>"] [--top-k N] [--format json|text]
+memory.talk search "<FTS_QUERY>" [--where "<DSL>"] [--top-k N] [--format json|text]
 ```
 
 | 参数 | 默认 | 说明 |
@@ -96,7 +96,7 @@ created_at >= -7d                    # 相对：-7d / -30m / -24h / -4w
       {
         "session_id": "abc123",
         "source": "claude-code",
-        "tags": ["decision", "project:memory-talk"],
+        "tags": ["decision", "project:memory.talk"],
         "round_count": 42,
         "created_at": "2026-04-10T12:00:00",
         "score": 5.21,
@@ -114,27 +114,27 @@ created_at >= -7d                    # 相对：-7d / -30m / -24h / -4w
 - `cards.results[].score`：RRF 分数（越大越相关）
 - `sessions.results[].score`：BM25 分数
 - 两路分数不可直接比较
-- Session 结果**返回匹配片段**（`snippets`），每段用 markdown `**token**` 高亮匹配词，最多 5 段；不返回完整 rounds 原文，需要详细阅读请用 `memory-talk session read <SESSION_ID>`。空 query 退化路径下 `snippets` 为 `[]`。
+- Session 结果**返回匹配片段**（`snippets`），每段用 markdown `**token**` 高亮匹配词，最多 5 段；不返回完整 rounds 原文，需要详细阅读请用 `memory.talk session read <SESSION_ID>`。空 query 退化路径下 `snippets` 为 `[]`。
 
 ## 示例
 
 ```bash
 # 纯正文搜索
-memory-talk search "LanceDB 选型"
+memory.talk search "LanceDB 选型"
 
 # 正文 + 会话 + 时间范围
-memory-talk search "数据库迁移 -mysql" \
+memory.talk search "数据库迁移 -mysql" \
   --where 'session_id = "abc" AND created_at >= -7d'
 
 # 只按元数据筛，不要正文
-memory-talk search "" \
+memory.talk search "" \
   --where 'tag LIKE "project:%" AND created_at >= "2026-04-01"'
 
 # 精确短语（等价于"正文精确子串"）
-memory-talk search '"NFS 踩坑"' --top-k 20
+memory.talk search '"NFS 踩坑"' --top-k 20
 
 # Card 专属字段：Session 路返回 count: 0
-memory-talk search "迁移" --where 'card_id = "01jzq..."'
+memory.talk search "迁移" --where 'card_id = "01jzq..."'
 ```
 
 ## 与 recall 的取舍

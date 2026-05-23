@@ -48,7 +48,7 @@
     "session_id": "sess_187c6576",
     "source": "claude-code",
     "created_at": "2026-04-10T14:30:00Z",
-    "tags": ["decision", "project:memory-talk"],
+    "tags": ["decision", "project:memory.talk"],
     "metadata": {"project": "/home/user/myapp"},
     "rounds": [
       {

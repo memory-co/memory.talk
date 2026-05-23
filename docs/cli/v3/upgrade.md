@@ -3,9 +3,9 @@
 把 memorytalk 升级到 PyPI 上的最新发布。背后跑的就是 pip,但**保证用对的 pip**(下面讲)。
 
 ```bash
-memory-talk upgrade                 # 交互式:展示版本对比 → 确认 → 安装
-memory-talk upgrade --yes           # 直接 upgrade(scripted)
-memory-talk upgrade --check         # 只查版本不安装(dry-run)
+memory.talk upgrade                 # 交互式:展示版本对比 → 确认 → 安装
+memory.talk upgrade --yes           # 直接 upgrade(scripted)
+memory.talk upgrade --check         # 只查版本不安装(dry-run)
 ```
 
 参数:
@@ -36,10 +36,10 @@ memory-talk upgrade --check         # 只查版本不安装(dry-run)
 
 直接调 `pip` 在某些环境下会**装错地方**:
 
-- 用户有多个 Python(系统 Python + venv + pyenv 等),shell 的 `pip` 可能不是当前运行 `memory-talk` 的那个 Python 的 pip
-- 后果:pip 装完报"success",但 memory-talk 重启后还是老版本(因为 site-packages 不是同一个)
+- 用户有多个 Python(系统 Python + venv + pyenv 等),shell 的 `pip` 可能不是当前运行 `memory.talk` 的那个 Python 的 pip
+- 后果:pip 装完报"success",但 memory.talk 重启后还是老版本(因为 site-packages 不是同一个)
 
-`sys.executable -m pip` 保证 pip 跑在**当前运行 memory-talk 的 Python** 上,装的就是同一个 site-packages。这也是 pip 官方推荐写法(`pip --help` 第一行)。
+`sys.executable -m pip` 保证 pip 跑在**当前运行 memory.talk 的 Python** 上,装的就是同一个 site-packages。这也是 pip 官方推荐写法(`pip --help` 第一行)。
 
 ## 为什么验证用一个新 subprocess
 
@@ -86,7 +86,7 @@ Successfully installed memorytalk-0.5.2
 ✓ upgraded to 0.5.2
 
 ⚠ If the server is running, restart it to load the new code:
-    memory-talk server stop && memory-talk server start
+    memory.talk server stop && memory.talk server start
 ```
 
 ### `--check`
@@ -122,6 +122,6 @@ Successfully installed memorytalk-0.5.2
 
 ## 跟其它命令的差别
 
-- 不查 `~/.memory-talk/`(纯 pip 操作,跟数据无关)
+- 不查 `~/.memory.talk/`(纯 pip 操作,跟数据无关)
 - 不连 server(`server` 进程在不在跑都无所谓)
 - 不读 `settings.json`

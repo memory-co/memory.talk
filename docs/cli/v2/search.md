@@ -3,7 +3,7 @@
 v2 主检索入口。hybrid FTS + 向量检索 + 元数据 DSL 过滤,结果分两支返回(cards 和 sessions)。命中的 `card_id` / `session_id` 直接返回给调用方——拿到就能喂给 `view` / `log` / `tag` / `link create`。
 
 ```bash
-memory-talk search <query> [--where DSL] [--top-k N] [--json]
+memory.talk search <query> [--where DSL] [--top-k N] [--json]
 ```
 
 | 参数 | 默认 | 说明 |
@@ -146,9 +146,9 @@ search_log 默认永久保留。老化策略见 `settings.search.search_log_rete
 支持字段:`session_id`、`card_id`、`tag`、`source`、`created_at`。运算符:`=`、`!=`、`LIKE`、`IN`、`NOT IN`、`AND`。示例:
 
 ```bash
-memory-talk search "LanceDB" -w 'tag = "decision" AND source = "claude-code"'
-memory-talk search "" -w 'created_at > "2026-04-01"'
-memory-talk search "bug" -w 'session_id = "sess_abc123"'
+memory.talk search "LanceDB" -w 'tag = "decision" AND source = "claude-code"'
+memory.talk search "" -w 'created_at > "2026-04-01"'
+memory.talk search "bug" -w 'session_id = "sess_abc123"'
 ```
 
 DSL 解析失败:

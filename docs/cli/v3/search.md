@@ -5,7 +5,7 @@ v3 主检索入口。hybrid FTS + 向量检索 + 元数据 / stats DSL 过滤,**
 命中的 `card_id` / `session_id` 直接返回给调用方 —— 拿到就能喂给 `read`。
 
 ```bash
-memory-talk search <query> [--where DSL] [--top-k N] [--all] [--json]
+memory.talk search <query> [--where DSL] [--top-k N] [--all] [--json]
 ```
 
 | 参数 | 默认 | 说明 |
@@ -311,31 +311,31 @@ DSL 里某个字段如果**不属于**当前候选的类型,这个候选会被**
 想要"只看 card"或"只看 session"用 `type`:
 
 ```bash
-memory-talk search "LanceDB" -w 'type = "card"'      # 只 cards
-memory-talk search "LanceDB" -w 'type = "session"'   # 只 sessions
+memory.talk search "LanceDB" -w 'type = "card"'      # 只 cards
+memory.talk search "LanceDB" -w 'type = "session"'   # 只 sessions
 ```
 
 ### 示例
 
 ```bash
-memory-talk search "LanceDB" -w 'source = "claude-code"'
-memory-talk search "" -w 'created_at > "2026-04-01"'
-memory-talk search "bug" -w 'session_id = "sess_abc123"'
+memory.talk search "LanceDB" -w 'source = "claude-code"'
+memory.talk search "" -w 'created_at > "2026-04-01"'
+memory.talk search "bug" -w 'session_id = "sess_abc123"'
 
 # shadow knowledge:被路过得多但没人真讨论过的 card
-memory-talk search "" -w 'read_count > 10 AND review_count = 0'
+memory.talk search "" -w 'read_count > 10 AND review_count = 0'
 
 # 高争议:赞踩都不少
-memory-talk search "" -w 'review_up >= 3 AND review_down >= 3'
+memory.talk search "" -w 'review_up >= 3 AND review_down >= 3'
 
 # 被反驳更多的 card(可能要 fork)
-memory-talk search "" -w 'review_down > review_up'
+memory.talk search "" -w 'review_down > review_up'
 
 # 只看 card
-memory-talk search "LanceDB" -w 'type = "card"'
+memory.talk search "LanceDB" -w 'type = "card"'
 
 # 只看 session
-memory-talk search "LanceDB" -w 'type = "session"'
+memory.talk search "LanceDB" -w 'type = "session"'
 ```
 
 DSL 解析失败:

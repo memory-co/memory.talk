@@ -1,4 +1,4 @@
-"""memory-talk v3 CLI root.
+"""memory.talk v3 CLI root.
 
 Each command is in its own submodule and registered here. Missing
 modules are skipped silently so partial-build environments still expose
@@ -18,7 +18,7 @@ import click
          "opt-in — currently just `read`). Equivalent to NO_PAGER=1.",
 )
 def main(no_pager: bool) -> None:
-    """memory-talk v3."""
+    """memory.talk v3."""
     # Propagate to env so the rendering layer (memorytalk.cli._render)
     # doesn't need to thread a click context everywhere. Subprocess and
     # ``--json`` paths bypass the pager regardless.

@@ -51,12 +51,12 @@ def fmt_server_stop(payload: dict) -> str:
 def fmt_status(payload: dict) -> str:
     if payload.get("status") == "not_running":
         return (
-            "# memory-talk · **not_running**\n\n"
+            "# memory.talk · **not_running**\n\n"
             f"- data_root: `{payload.get('data_root', '')}`\n"
             f"- settings: `{payload.get('settings_path', '')}`\n"
         )
     lines = [
-        "# memory-talk · **running**",
+        "# memory.talk · **running**",
         "",
         "| field | value |",
         "|---|---|",
@@ -188,7 +188,7 @@ def fmt_sync_status(payload: dict) -> str:
     if status == "disabled":
         return (
             "# sync · **disabled**\n\n"
-            "hint: enable via `memory-talk setup` or set `sync.enabled` "
+            "hint: enable via `memory.talk setup` or set `sync.enabled` "
             "in `settings.json` and restart the server.\n"
         )
     if status == "error":
@@ -252,7 +252,7 @@ def fmt_review_created(payload: dict) -> str:
 # ────────── recall ──────────
 
 def fmt_recall(payload: dict) -> str:
-    """Bash-code-block layout: one ``memory-talk read <cid> # <insight>`` per
+    """Bash-code-block layout: one ``memory.talk read <cid> # <insight>`` per
     recalled card. Empty recall → empty string (the harness injects nothing).
 
     Designed so the harness can inline this directly into an LLM's context
@@ -264,7 +264,7 @@ def fmt_recall(payload: dict) -> str:
         return ""
     lines = ["```bash", "# Relevant memories — run any to expand detail:"]
     for r in recalled:
-        lines.append(f"memory-talk read {r['card_id']}  # {r['insight']}")
+        lines.append(f"memory.talk read {r['card_id']}  # {r['insight']}")
     lines.append("```")
     return "\n".join(lines) + "\n"
 

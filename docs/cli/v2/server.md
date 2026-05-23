@@ -9,7 +9,7 @@
 启动 API 服务（后台守护进程）。
 
 ```bash
-memory-talk server start [--data-root PATH] [--json]
+memory.talk server start [--data-root PATH] [--json]
 ```
 
 ### Markdown（默认）
@@ -26,7 +26,7 @@ memory-talk server start [--data-root PATH] [--json]
 **error:** server failed to start (exit_code=2)
 
 ```
-[memory-talk] embedding startup check failed: openai embedder: ...
+[memory.talk] embedding startup check failed: openai embedder: ...
 ```
 ````
 
@@ -53,7 +53,7 @@ memory-talk server start [--data-root PATH] [--json]
 ## server stop
 
 ```bash
-memory-talk server stop [--data-root PATH] [--json]
+memory.talk server stop [--data-root PATH] [--json]
 ```
 
 ### Markdown
@@ -83,18 +83,18 @@ memory-talk server stop [--data-root PATH] [--json]
 直接调 API,能连上就是 running(同时返回数据统计),连不上就是 not_running。
 
 ```bash
-memory-talk server status [--data-root PATH] [--json]
+memory.talk server status [--data-root PATH] [--json]
 ```
 
 ### Markdown(运行中)
 
 ````markdown
-# memory-talk · **running**
+# memory.talk · **running**
 
 | field | value |
 |---|---|
-| data_root | `/home/user/.memory-talk` |
-| settings | `/home/user/.memory-talk/settings.json` |
+| data_root | `/home/user/.memory.talk` |
+| settings | `/home/user/.memory.talk/settings.json` |
 | sessions | 12 |
 | cards | 47 |
 | links | 23 |
@@ -107,18 +107,18 @@ memory-talk server status [--data-root PATH] [--json]
 ### Markdown(未运行)
 
 ````markdown
-# memory-talk · **not_running**
+# memory.talk · **not_running**
 
-- data_root: `/home/user/.memory-talk`
-- settings: `/home/user/.memory-talk/settings.json`
+- data_root: `/home/user/.memory.talk`
+- settings: `/home/user/.memory.talk/settings.json`
 ````
 
 ### JSON
 
 ```json
 {
-  "data_root": "/home/user/.memory-talk",
-  "settings_path": "/home/user/.memory-talk/settings.json",
+  "data_root": "/home/user/.memory.talk",
+  "settings_path": "/home/user/.memory.talk/settings.json",
   "status": "running",
   "sessions_total": 12,
   "cards_total": 47,

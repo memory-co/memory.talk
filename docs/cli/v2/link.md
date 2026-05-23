@@ -10,7 +10,7 @@ Link 分两种:
 ## link create
 
 ```bash
-memory-talk link create '<json>' [--json]
+memory.talk link create '<json>' [--json]
 ```
 
 输入 JSON:

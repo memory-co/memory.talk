@@ -18,7 +18,7 @@ class TestShouldPager:
             assert _render._should_pager() is False
 
     def test_off_when_stdin_not_tty(self):
-        # echo X | memory-talk read foo — less would block on keyboard input
+        # echo X | memory.talk read foo — less would block on keyboard input
         with mock.patch("sys.stdout") as so, mock.patch("sys.stdin") as si:
             so.isatty.return_value = True
             si.isatty.return_value = False

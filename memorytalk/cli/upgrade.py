@@ -126,7 +126,7 @@ def upgrade(auto_yes: bool, check_only: bool) -> None:
     click.echo(f"\n✓ upgraded to {new_version}")
     click.echo(
         "\n⚠ If the server is running, restart it to load the new code:\n"
-        "    memory-talk server stop && memory-talk server start"
+        "    memory.talk server stop && memory.talk server start"
     )
 
 

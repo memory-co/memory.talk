@@ -1,6 +1,6 @@
 # settings.json
 
-配置文件路径:**`~/.memory-talk/settings.json`**(v3 data root **固定** 在 `~/.memory-talk`,不开 `--data-root` 参数;详见 [`../../cli/v3/setup.md`](../../cli/v3/setup.md))。
+配置文件路径:**`~/.memory.talk/settings.json`**(v3 data root **固定** 在 `~/.memory.talk`,不开 `--data-root` 参数;详见 [`../../cli/v3/setup.md`](../../cli/v3/setup.md))。
 
 不存在时退到内置默认值。**setup wizard** 是首要写入路径(交互式 prompt + 原子写),手工编辑也允许 —— 改完重启 server 生效。
 
@@ -35,7 +35,7 @@
     "debounce_ms": 200
   },
   "explore": {
-    "cwd": "~/.memory-talk/explore",
+    "cwd": "~/.memory.talk/explore",
     "auto_default_limit": 5
   }
 }
@@ -127,13 +127,13 @@ relevance + 0.1 * (review_up - review_down) + 0.02 * log(read_count + 1) - 0.005
 |---|---|---|---|
 | `debounce_ms` | integer | `200` | watcher 合并同文件连续写的窗口(毫秒) |
 
-> sync 是否启用的开关**不在 settings.json**,而是在独立的 `~/.memory-talk/sync_state.json` 里持久化(详见 [`../../cli/v3/sync.md`](../../cli/v3/sync.md))—— 它是 runtime 状态而非配置。
+> sync 是否启用的开关**不在 settings.json**,而是在独立的 `~/.memory.talk/sync_state.json` 里持久化(详见 [`../../cli/v3/sync.md`](../../cli/v3/sync.md))—— 它是 runtime 状态而非配置。
 
 ### explore
 
 | 字段 | 类型 | 默认 | 说明 |
 |---|---|---|---|
-| `cwd` | string | `~/.memory-talk/explore` | claude 启动目录;backend 按这个前缀判断 `metadata.cwd` 是否落在 explore namespace |
+| `cwd` | string | `~/.memory.talk/explore` | claude 启动目录;backend 按这个前缀判断 `metadata.cwd` 是否落在 explore namespace |
 | `auto_default_limit` | integer | `5` | `explore auto` 不传 `--limit` 时的默认上限 |
 
 ## 跟 v2 的差异

@@ -9,7 +9,7 @@
 启动 API 服务（后台守护进程）。
 
 ```bash
-memory-talk server start [--data-root PATH]
+memory.talk server start [--data-root PATH]
 ```
 
 输出：
@@ -32,7 +32,7 @@ memory-talk server start [--data-root PATH]
 停止 API 服务。
 
 ```bash
-memory-talk server stop [--data-root PATH]
+memory.talk server stop [--data-root PATH]
 ```
 
 输出：
@@ -45,14 +45,14 @@ memory-talk server stop [--data-root PATH]
 检查 API 服务状态。直接调 API，能连上就是 running（同时返回数据统计），连不上就是 not_running。
 
 ```bash
-memory-talk server status [--data-root PATH]
+memory.talk server status [--data-root PATH]
 ```
 
 运行中（含数据统计）：
 ```json
 {
-  "data_root": "/home/user/.memory-talk",
-  "settings_path": "/home/user/.memory-talk/settings.json",
+  "data_root": "/home/user/.memory.talk",
+  "settings_path": "/home/user/.memory.talk/settings.json",
   "status": "running",
   "sessions_total": 12,
   "cards_total": 47,
@@ -66,8 +66,8 @@ memory-talk server status [--data-root PATH]
 未运行：
 ```json
 {
-  "data_root": "/home/user/.memory-talk",
-  "settings_path": "/home/user/.memory-talk/settings.json",
+  "data_root": "/home/user/.memory.talk",
+  "settings_path": "/home/user/.memory.talk/settings.json",
   "status": "not_running"
 }
 ```
