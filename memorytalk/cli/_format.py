@@ -335,32 +335,31 @@ def _fmt_search_session(entry: dict) -> str:
     )
     lines: list[str] = [head, ""]
     for hit in entry.get("hits") or []:
-        role = hit.get("role") or ""
-        # Surface the RRF score so readers can eyeball relative strength.
-        # Caveat: this is LanceDB's hybrid RRF combined score (FTS rank +
-        # vector rank fused), NOT a similarity in [0,1]. Typical top hits
-        # land around 0.01–0.03; a low score doesn't necessarily mean a
-        # weak match, just a lower combined rank. Provenance (FTS vs
-        # vector) is not preserved by RRF — see docs/structure/v3/
-        # search-result.md.
+        # Header carries only hit-level metadata (index + score). Role
+        # used to be here as ``_(human)_``, but that was misleading: the
+        # fence below contains ctx_before / hit / ctx_after rounds which
+        # often have DIFFERENT roles (tool stdout, sidechain, multi-turn
+        # human). Roles now live inside the fence per row — see
+        # ``_round_row``.
+        #
+        # Score caveat: this is LanceDB's hybrid RRF combined score (FTS
+        # rank + vector rank fused), NOT a similarity in [0,1]. Typical
+        # top hits land around 0.01–0.03; a low score doesn't necessarily
+        # mean a weak match, just a lower combined rank. Provenance
+        # (FTS vs vector) is not preserved by RRF — see
+        # docs/structure/v3/search-result.md.
         score = hit.get("score")
         score_suffix = f" · score `{score:.4f}`" if score is not None else ""
-        lines.append(f"**#{hit['index']}** _({role})_{score_suffix}")
+        lines.append(f"**#{hit['index']}**{score_suffix}")
 
         body_parts: list[str] = []
         ctx_before = hit.get("context_before")
         if ctx_before:
-            body_parts.append(
-                f"[{ctx_before['index']}] {_strip_bold(ctx_before.get('text') or '')}"
-            )
-        body_parts.append(
-            f"[{hit['index']}] {_strip_bold(hit.get('text') or '')}"
-        )
+            body_parts.append(_round_row(ctx_before, is_hit=False))
+        body_parts.append(_round_row(hit, is_hit=True))
         ctx_after = hit.get("context_after")
         if ctx_after:
-            body_parts.append(
-                f"[{ctx_after['index']}] {_strip_bold(ctx_after.get('text') or '')}"
-            )
+            body_parts.append(_round_row(ctx_after, is_hit=False))
         body = "\n".join(body_parts)
 
         fence = _pick_fence(body)
@@ -371,9 +370,44 @@ def _fmt_search_session(entry: dict) -> str:
     return "\n".join(lines).rstrip()
 
 
+def _round_row(round_dict: dict, *, is_hit: bool) -> str:
+    """Render one round line for the search-hit fence.
+
+    Layout: ``[<idx> <ROLE>[*]] <text>``. The hit row gets a trailing
+    ``*`` inside the brackets so the marker sits in the same column band
+    as the role tag — every line still starts at column 0, all ``[…]``
+    prefixes left-align, so the eye scans cleanly even with mixed roles.
+
+    Role is uppercased (``HUMAN`` / ``ASSISTANT`` / ``TOOL`` / ``SYSTEM``)
+    so it reads like a log-level tag and visually separates from content.
+    """
+    role = (round_dict.get("role") or "").upper()
+    marker = "*" if is_hit else ""
+    tag = f"[{round_dict['index']} {role}{marker}]" if role else f"[{round_dict['index']}{marker}]"
+    return f"{tag} {_inline_text(round_dict.get('text') or '')}"
+
+
 def _strip_bold(text: str) -> str:
     """Unwrap ``**…**`` markers — they'd render literally inside a code fence."""
     return _INLINE_BOLD.sub(r"\1", text)
+
+
+def _inline_text(text: str) -> str:
+    """Render a round's text as a single line inside the code fence.
+
+    Search hit / context text often contains real newlines (multi-line
+    code, tool stdout, paragraph breaks). Inside the fence those
+    newlines preserve correctly but visually break the "one round =
+    one ``[N] ...`` line" structure — long multi-line rounds bleed into
+    each other and you lose the ability to scan. Flatten ``\\n`` to a
+    single space so each round renders on its own line and the terminal
+    handles soft-wrapping. The full round (with structure) is still one
+    ``POST /v3/read`` away.
+
+    Also strips the ``**...**`` highlight markers (markdown isn't parsed
+    inside fences, so they'd show literally).
+    """
+    return _strip_bold(text).replace("\r\n", " ").replace("\n", " ")
 
 
 def _pick_fence(body: str) -> str:
