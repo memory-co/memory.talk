@@ -48,6 +48,23 @@ _HITS_PER_SESSION = 3
 # Context window: 1 round before + 1 round after the hit.
 _CONTEXT_TRUNCATE = 200
 
+# "Strong-floor" thresholds for the post-rank filter (request.show_all=false).
+# Rule: if any result of that type has final_score >= floor, keep only those;
+# otherwise return the whole bucket. Hardcoded — tune by editing here, no
+# settings knob (the values depend on reranker + formula and changing them
+# in sync from settings would be footgun-prone).
+#
+# - **session 0.02**: session.final_score ≈ max(hits[].score) - small age decay.
+#   Hits are RRF(K=60); single-pipeline rank-1 ≈ 1/61 ≈ 0.0164, both pipelines
+#   rank-1 ≈ 2/61 ≈ 0.0328. 0.02 means "at least one round ranks well in some
+#   pipeline" — separates real-topic hits from passing-mention echo.
+# - **card 0.1**: card.final_score = RRF + 0.1·(up-down) + 0.02·log(read+1)
+#   - 0.005·age. Without stats reinforcement, RRF alone tops out near 0.03
+#   (same scale as session). 0.1 means "at least ~1 review_up or several reads"
+#   — separates user-validated cards from just-retrieved noise.
+_SESSION_STRONG_FLOOR = 0.02
+_CARD_STRONG_FLOOR = 0.1
+
 
 def _utc_iso() -> str:
     return _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -66,6 +83,34 @@ def _age_days(created_at_iso: str, now: _dt.datetime | None = None) -> float:
         dt = dt.replace(tzinfo=_dt.UTC)
     now = now or _dt.datetime.now(_dt.UTC)
     return max(0.0, (now - dt).total_seconds() / 86400.0)
+
+
+def _apply_strong_floor(
+    merged: list[tuple[str, dict]],
+) -> list[tuple[str, dict]]:
+    """Per-type strong-floor filter — see ``_SESSION_STRONG_FLOOR`` /
+    ``_CARD_STRONG_FLOOR`` for thresholds and rationale.
+
+    Rule (applied independently to each type):
+        if any item.final_score >= floor:
+            keep only items where final_score >= floor
+        else:
+            keep all items (whole bucket — nothing was "strong" enough
+            to warrant hiding the rest)
+
+    Returns ``merged`` in original order minus filtered items.
+    """
+    floors = {"card": _CARD_STRONG_FLOOR, "session": _SESSION_STRONG_FLOOR}
+    keep_ids: set[int] = set()
+    for kind, floor in floors.items():
+        of_type = [c for k, c in merged if k == kind]
+        if not of_type:
+            continue
+        if any(c["final_score"] >= floor for c in of_type):
+            keep_ids.update(id(c) for c in of_type if c["final_score"] >= floor)
+        else:
+            keep_ids.update(id(c) for c in of_type)
+    return [(k, c) for k, c in merged if id(c) in keep_ids]
 
 
 def _aggregate_session_relevance(scores: list[float]) -> float:
@@ -119,6 +164,7 @@ class SearchService:
 
     async def search(
         self, query: str, where: str | None, top_k: int | None,
+        show_all: bool = False,
     ) -> SearchResponse:
         top_k = top_k or self.config.settings.search.default_top_k
         flt = dsl_mod.parse(where or "")
@@ -159,6 +205,15 @@ class SearchService:
         merged.sort(key=lambda x: x[1]["final_score"], reverse=True)
         merged = merged[:top_k]
 
+        # ──────── 4.5. Strong-floor filter (per-type) ────────
+        # Skipped entirely when show_all=true. Each type is evaluated
+        # independently because card vs session final_score scales are
+        # not comparable (cards carry stats bonuses; sessions don't).
+        before_filter = len(merged)
+        if not show_all:
+            merged = _apply_strong_floor(merged)
+        hidden_count = before_filter - len(merged)
+
         # ──────── 5. Build response objects ────────
         results = []
         # Per-session jsonl cache so we read each jsonl once even if multiple
@@ -172,7 +227,8 @@ class SearchService:
 
         search_id = new_search_id()
         response = SearchResponse(
-            search_id=search_id, query=query, count=len(results), results=results,
+            search_id=search_id, query=query, count=len(results),
+            hidden_count=hidden_count, results=results,
         )
 
         # ──────── 6. Audit log ────────

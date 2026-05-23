@@ -207,3 +207,29 @@ class TestAudit:
             if any(rec["query"] == "audit topic" for rec in lines):
                 return
         pytest.fail("audit topic record not found in jsonl mirror")
+
+
+# ────────── strong-floor filter (show_all flag) ──────────
+
+class TestShowAll:
+    """End-to-end coverage of the per-type strong-floor filter wired through
+    the API. Pure filter logic lives in tests/service/test_search_filter.py
+    — this class just checks the request/response plumbing carries the
+    ``show_all`` flag and ``hidden_count`` field correctly."""
+
+    async def test_response_has_hidden_count_field(self, client):
+        # Even with zero results, the response schema includes the field.
+        r = await client.post("/v3/search", json={"query": "no-such-query-zzzz"})
+        body = r.json()
+        assert "hidden_count" in body
+        assert body["hidden_count"] == 0
+
+    async def test_show_all_request_field_accepted(self, client):
+        # Server doesn't 400 on the new field.
+        r = await client.post("/v3/search",
+                              json={"query": "x", "show_all": True})
+        assert r.status_code == 200
+        body = r.json()
+        assert "hidden_count" in body
+        # show_all bypasses the filter → hidden_count must be 0.
+        assert body["hidden_count"] == 0

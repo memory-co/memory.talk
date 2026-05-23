@@ -21,6 +21,7 @@ async def post_search(payload: SearchRequest, request: Request) -> SearchRespons
             query=payload.query or "",
             where=payload.where,
             top_k=payload.top_k,
+            show_all=payload.show_all,
         )
     except DSLError as e:
         raise HTTPException(status_code=400, detail=str(e))

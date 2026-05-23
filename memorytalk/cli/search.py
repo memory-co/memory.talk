@@ -16,8 +16,13 @@ from memorytalk.config import Config
               help="DSL filter (see docs/cli/v3/search.md#DSL)")
 @click.option("--top-k", "top_k", type=int, default=None,
               help="Total result cap (default = settings.search.default_top_k)")
+@click.option("--all", "-a", "show_all", is_flag=True, default=False,
+              help="Disable the strong-floor filter; show everything in top_k")
 @click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON")
-def search(query: str, where: str | None, top_k: int | None, json_out: bool) -> None:
+def search(
+    query: str, where: str | None, top_k: int | None,
+    show_all: bool, json_out: bool,
+) -> None:
     """Hybrid FTS + vector search across cards and sessions."""
     cfg = Config()
     body: dict = {"query": query or ""}
@@ -25,6 +30,8 @@ def search(query: str, where: str | None, top_k: int | None, json_out: bool) -> 
         body["where"] = where
     if top_k is not None:
         body["top_k"] = top_k
+    if show_all:
+        body["show_all"] = True
     try:
         result = api("POST", "/v3/search", cfg, json_body=body)
     except ApiError as e:

@@ -274,12 +274,15 @@ def fmt_recall(payload: dict) -> str:
 def fmt_search(payload: dict) -> str:
     query = payload.get("query") or ""
     count = payload.get("count", 0)
+    hidden = int(payload.get("hidden_count") or 0)
     sid = payload.get("search_id", "")
+    header = f"`search_id={sid}` · {count} results"
+    if hidden:
+        header += f" · {hidden} hidden"
     parts: list[str] = [f"# search: {query}" if query else "# search",
-                        "",
-                        f"`search_id={sid}` · {count} results", ""]
+                        "", header, ""]
 
-    if count == 0:
+    if count == 0 and hidden == 0:
         return "\n".join(parts) + "\n"
 
     for entry in payload.get("results") or []:
@@ -290,6 +293,14 @@ def fmt_search(payload: dict) -> str:
         elif entry.get("type") == "session":
             parts.append(_fmt_search_session(entry))
         parts.append("")
+
+    if hidden:
+        parts.append(
+            f"_({hidden} weak result{'s' if hidden != 1 else ''} hidden "
+            "by strong-floor filter — pass `--all` to see)_"
+        )
+        parts.append("")
+
     return "\n".join(parts).rstrip() + "\n"
 
 
@@ -370,6 +381,16 @@ def _fmt_search_session(entry: dict) -> str:
     return "\n".join(lines).rstrip()
 
 
+# CLI-only role display mapping. Server-side role strings stay as
+# ``assistant`` / ``human`` / ``tool`` / ``system`` (see schemas /
+# search-result.md); we only remap at render time for screen real-estate
+# and idiom — ``AI`` reads faster than ``ASSISTANT`` and matches how
+# users talk about Claude/GPT outputs in casual conversation.
+_ROLE_DISPLAY = {
+    "ASSISTANT": "AI",
+}
+
+
 def _round_row(round_dict: dict, *, is_hit: bool) -> str:
     """Render one round line for the search-hit fence.
 
@@ -378,10 +399,12 @@ def _round_row(round_dict: dict, *, is_hit: bool) -> str:
     as the role tag — every line still starts at column 0, all ``[…]``
     prefixes left-align, so the eye scans cleanly even with mixed roles.
 
-    Role is uppercased (``HUMAN`` / ``ASSISTANT`` / ``TOOL`` / ``SYSTEM``)
-    so it reads like a log-level tag and visually separates from content.
+    Role is uppercased and then passed through ``_ROLE_DISPLAY`` for
+    CLI-only remapping (``ASSISTANT`` → ``AI``); the underlying API /
+    storage value is unchanged.
     """
-    role = (round_dict.get("role") or "").upper()
+    raw = (round_dict.get("role") or "").upper()
+    role = _ROLE_DISPLAY.get(raw, raw)
     marker = "*" if is_hit else ""
     tag = f"[{round_dict['index']} {role}{marker}]" if role else f"[{round_dict['index']}{marker}]"
     return f"{tag} {_inline_text(round_dict.get('text') or '')}"

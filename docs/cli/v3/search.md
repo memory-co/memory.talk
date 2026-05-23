@@ -5,7 +5,7 @@ v3 主检索入口。hybrid FTS + 向量检索 + 元数据 / stats DSL 过滤,**
 命中的 `card_id` / `session_id` 直接返回给调用方 —— 拿到就能喂给 `read`。
 
 ```bash
-memory-talk search <query> [--where DSL] [--top-k N] [--json]
+memory-talk search <query> [--where DSL] [--top-k N] [--all] [--json]
 ```
 
 | 参数 | 默认 | 说明 |
@@ -13,7 +13,16 @@ memory-talk search <query> [--where DSL] [--top-k N] [--json]
 | `<query>` | — | 检索文本。可为空字符串(配合 `--where` 做纯元数据 / stats 过滤) |
 | `--where`, `-w` | 无 | 元数据 / stats / type 过滤 DSL,见 [#DSL](#dsl) |
 | `--top-k` | `settings.search.default_top_k`(默认 10) | **总**结果数上限(card + session 合计) |
+| `--all`, `-a` | 关 | 跳过 strong-floor 过滤(见下文),展示 top_k 全部结果 |
 | `--json` | 关 | 输出 JSON 而非默认 Markdown |
+
+### strong-floor 过滤(默认开)
+
+排序之后再过一遍:**如果某类型(card / session)有强匹配,只保留强匹配;没有就全留**。阈值 hardcode,语义和值见 [`../../structure/v3/search-result.md#strong-floor-过滤`](../../structure/v3/search-result.md#strong-floor-过滤)。
+
+过滤后的渲染会在末尾多一行 `_(N weak results hidden by strong-floor filter — pass --all to see)_`。要看被藏的内容 → `--all`。
+
+`--all` 透传 server,**只影响渲染层是否进过滤**,不改召回 / 排序。
 
 ## 召回与排序
 
@@ -204,6 +213,7 @@ memory-talk search <query> [--where DSL] [--top-k N] [--json]
 | `search_id` | string | `sch_<ULID>`,审计 id |
 | `query` | string | 回显请求 |
 | `count` | int | `results[]` 长度(可能 ≤ `top_k`,等于 `top_k` 时说明被截断了) |
+| `hidden_count` | int | 被 strong-floor 过滤切掉的条数;`--all` / `show_all=true` 时固定 `0` |
 | `results` | object[] | 混合结果,按 `score` 降序排列 |
 
 #### `results[]` 共有字段
