@@ -8,7 +8,6 @@ loudly instead of silently regressing 89% of ingested rounds back to
 ``role="human"``.
 
 Reference: docs/report/2026-05-23-claude-code-adapter-role-misclassification.md
-(if added later) and the discussion thread that produced this fix.
 """
 from __future__ import annotations
 
