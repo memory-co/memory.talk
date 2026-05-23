@@ -91,6 +91,15 @@ def emit_md_paged(text: str) -> None:
     if not _should_pager():
         emit_md(text)
         return
+    # less needs -R to interpret ANSI escapes (otherwise rich's bold /
+    # color sequences print as literal "ESC[1;4m..." text); -F to auto-
+    # quit when output fits one screen so short payloads don't force an
+    # interactive prompt; -X to leave the output on screen after quit.
+    # ``pydoc.pager()`` (which rich's SystemPager uses) just execs
+    # ``$PAGER`` with no flags, so we inject via the LESS env var like
+    # git does (LESS=FRX is git's documented default). setdefault so a
+    # user's existing $LESS preference wins.
+    os.environ.setdefault("LESS", "FRX")
     from rich.console import Console
     console = Console()
     with console.pager(styles=True):
