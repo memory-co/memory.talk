@@ -90,7 +90,23 @@ def _wizard(cfg: Config, old_raw: dict | None, is_first_install: bool) -> dict:
 
     # ── embedding ───────────────────────────────────────────────────────
     section("Embedding")
-    emb_base = dict(base.get("embedding") or {})
+    # First-install pre-fill: recommended starting template (DashScope's
+    # text-embedding-v4 over an OpenAI-compatible endpoint). The wizard
+    # still prompts for every field — user can override anything before
+    # the probe runs. We override emb_base here rather than the schema
+    # default (EmbeddingConfig.provider="local") so that fresh Config()
+    # calls without persisted settings still resolve to a local-only,
+    # no-network, no-API-key state — important for tests and for the
+    # "config went missing" recovery path.
+    if is_first_install:
+        emb_base = {
+            "provider": "openai",
+            "endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
+            "model": "text-embedding-v4",
+            "dim": 1024,
+        }
+    else:
+        emb_base = dict(base.get("embedding") or {})
     emb = _step_embedding(emb_base)
     new["embedding"] = emb
 
