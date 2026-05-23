@@ -6,7 +6,9 @@ import click
 
 from memorytalk.cli._format import fmt_error, fmt_read
 from memorytalk.cli._http import ApiError, api, extract_error_message
-from memorytalk.cli._render import emit_json, emit_json_err, emit_md, emit_md_err
+from memorytalk.cli._render import (
+    emit_json, emit_json_err, emit_md_err, emit_md_paged,
+)
 from memorytalk.config import Config
 
 
@@ -34,4 +36,8 @@ def read(object_id: str, json_out: bool) -> None:
     if json_out:
         emit_json(result)
     else:
-        emit_md(fmt_read(result))
+        # Card / session payloads can be long (rounds + reviews +
+        # source_cards); route through a less-style pager when in an
+        # interactive terminal. Subprocess / pipe / --no-pager fall
+        # back to plain output — see emit_md_paged docstring.
+        emit_md_paged(fmt_read(result))

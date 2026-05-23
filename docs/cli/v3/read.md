@@ -4,18 +4,34 @@
 
 ```bash
 memory-talk read <id> [--json]
+memory-talk --no-pager read <id>          # 强制直出
 ```
 
 例:
 
 ```bash
-memory-talk read card_01jz8k2m            # Markdown 默认
-memory-talk read sess_187c6576 --json
+memory-talk read card_01jz8k2m            # Markdown 默认,长输出走 pager
+memory-talk read sess_187c6576 --json     # JSON,永远不 pager
+memory-talk read sess_187c6576 | less     # 显式 pipe,不 pager
 ```
 
 参数：
 - `<id>` 必须是 `card_<...>` 或 `sess_<...>`。非法前缀或不存在的 id 返回错误。
 - `--json` 输出 JSON。
+
+### Pager 行为
+
+`read` 是目前**唯一**进 pager 的命令(其它命令暂不开启 —— 跟 git 只让 `log` / `diff` / `show` 进 pager 一个套路)。具体规则:
+
+| 条件 | 行为 |
+|---|---|
+| 交互终端(stdout + stdin 都是 TTY) | 自动走 pager(`$PAGER`,默认 `less -RFX`),可滚动 / 搜索 / `q` 退出 |
+| 输出比一屏短 | `less -F` 自动退,不打扰 |
+| 管道 / 重定向 / subprocess 调用 / AI tool 调用 | 直出,无 pager,无 ANSI 颜色(rich 自动剥) |
+| `--json` | 永远直出 |
+| `--no-pager`(顶层 flag)或 `NO_PAGER=1` 环境变量 | 强制直出 |
+
+AI 工具 / 脚本 / shell pipe 调用 `memory-talk read xxx` 行为跟以前**完全一致**,只有人在终端里敲才会进入交互滚动。
 
 ## Markdown(默认)
 
