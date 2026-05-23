@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
 # install.sh — bootstrap memorytalk on a fresh machine.
 #
-# Creates a self-contained venv at ~/memory-talk/venv and installs the
+# Creates a self-contained venv at ~/.memory-talk/venv and installs the
 # latest memorytalk release from PyPI into it. Idempotent: re-running
 # upgrades in place.
 #
-# Layout after install:
-#   ~/memory-talk/           ← install root (this script's INSTALL_DIR)
-#   ~/memory-talk/venv/      ← Python venv, isolated from system Python
-#   ~/memory-talk/venv/bin/memory-talk   ← entry point
-#
-# Note: the *data* root is a different directory (~/.memory-talk/, with
-# the dot) created later by `memory-talk setup`. We don't touch it here.
+# Layout after install (shared with runtime data root):
+#   ~/.memory-talk/                        ← install root + data root
+#   ~/.memory-talk/venv/                   ← Python venv (this script)
+#   ~/.memory-talk/venv/bin/memory-talk    ← entry point
+#   ~/.memory-talk/settings.json           ← created by `memory-talk setup`
+#   ~/.memory-talk/memory.db, sessions/, cards/, ...  ← runtime data
 #
 # Usage:
 #   ./install.sh
@@ -22,7 +21,7 @@
 
 set -euo pipefail
 
-INSTALL_DIR="${MEMORY_TALK_INSTALL_DIR:-$HOME/memory-talk}"
+INSTALL_DIR="${MEMORY_TALK_INSTALL_DIR:-$HOME/.memory-talk}"
 VENV_DIR="$INSTALL_DIR/venv"
 PACKAGE="memorytalk"
 MIN_PY_MAJOR=3
