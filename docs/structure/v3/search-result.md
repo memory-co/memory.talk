@@ -152,7 +152,7 @@ UI 层(CLI Markdown 渲染)对两种 result 用**同一种 H3 标题结构**:`##
 | `index` | integer | 命中 round 在 session 内的稳定编号 |
 | `role` | string | `human` / `assistant` / `tool` / `system` |
 | `text` | string | round 的**显示预算摘要**(默认 ~100 字符,配 `settings.search.snippet_head_chars`)。详见 [#hit-text-snippet-规则](#hit-text-snippet-规则) |
-| `score` | float | 本 round 的 reranker 加权分(原始相关度,**跟外层 session-level `score` 不同尺度**) |
+| `score` | float | 本 round 的 RRF 检索分(原始相关度,**跟外层 session-level `score` 不同尺度**) |
 | `context_before` | object\|null | 前一条 round `{index, role, text}`;长内容截 200 字 + `…`;`null` 表示是 session 第一条 |
 | `context_after` | object\|null | 后一条 round;`null` 表示是最后一条 |
 
@@ -177,7 +177,7 @@ UI 层(CLI Markdown 渲染)对两种 result 用**同一种 H3 标题结构**:`##
 
 #### Hits 排序
 
-`hits[]` 默认按 `hits[].score` **降序**(round 级 reranker 加权分)。**不**按 `index` 顺序 —— 人类读者要先看最相关的命中,顺序追溯走 `POST /v3/read`。
+`hits[]` 默认按 `hits[].score` **降序**(round 级 RRF 分)。**不**按 `index` 顺序 —— 人类读者要先看最相关的命中,顺序追溯走 `POST /v3/read`。
 
 `hits[].text` 是预算摘要(默认 ~100 字符),要看 round 原文也走 `POST /v3/read`。
 
@@ -186,7 +186,7 @@ UI 层(CLI Markdown 渲染)对两种 result 用**同一种 H3 标题结构**:`##
 | 字段 | 含义 | 用途 |
 |---|---|---|
 | `results[].score` | final score(`ranking_formula` 跑完) | 跨 type 排序、可直接比 |
-| `hits[].score` | round 级 reranker 加权分(BM25 + 向量余弦的线性组合) | session 内部 hit 排序,**不要跟 final score 混比** |
+| `hits[].score` | round 级 RRF 相关度 | session 内部 hit 排序,**不要跟 final score 混比** |
 
 ## 排序算法
 
@@ -194,7 +194,7 @@ UI 层(CLI Markdown 渲染)对两种 result 用**同一种 H3 标题结构**:`##
 
 ```
 LanceDB hybrid 召回(per round / per card)
-        │  返回 reranker 加权分(LinearCombinationReranker 默认 0.7 vector + 0.3 fts)
+        │  返回 RRF 原始分(K=60)
         ▼
 1. 按 session_id 分组,sort hits desc by score        (仅 session)
         │
@@ -212,7 +212,7 @@ LanceDB hybrid 召回(per round / per card)
    (hits_shown ≤ hit_count;超出的 hit 既不展示也不参与排序)
 ```
 
-每个 round 的"原始分"由 LanceDB `LinearCombinationReranker()` 算出 —— 默认 `0.7 * vector_score + 0.3 * fts_score`(`weight=0.7` 偏向向量),反映**真实相似度**而非排名(详见 [#关于-reranker-分的尺度](#关于-reranker-分的尺度))。
+每个 round 的"原始分"是 LanceDB `RRFReranker(K=60)` 跑完的 hybrid score,典型范围 **`0.01 – 0.03`**;**它只看排名,不看绝对相似度**(详见 [#关于-rrf-分的一句忠告](#关于-rrf-分的一句忠告))。
 
 ### Step 1:hits 排序
 
@@ -220,7 +220,7 @@ LanceDB hybrid 召回(per round / per card)
 
 ### Step 2:session relevance = max(hits)
 
-仅 session 这一支跑这一步。card 的 relevance 直接来自 LanceDB cards 表的 reranker 加权分,无需聚合。
+仅 session 这一支跑这一步。card 的 relevance 直接来自 LanceDB cards 表的 RRF 分,无需聚合。
 
 公式([`_aggregate_session_relevance`](../../../memorytalk/service/search.py)):
 
@@ -230,18 +230,16 @@ relevance = max(hits[].score)
 
 **为什么是 max,不是 noisy-OR / sum**
 
-历史上用过 noisy-OR(`1 - Π(1 - s_i)`),想用"多 hit 加分,但有 diminishing returns"的语义。这条契约只在 `s_i → 1` 时成立 —— 当时 reranker 还是 `RRFReranker(K=60)`,输出尺度是 `0.01 – 0.03`(上限 ≈ `2/61 ≈ 0.0328`),在这个尺度下泰勒展开后 noisy-OR **退化为求和**:
+历史上用过 noisy-OR(`1 - Π(1 - s_i)`),想用"多 hit 加分,但有 diminishing returns"的语义。这条契约只在 `s_i → 1` 时成立 —— RRF 输出尺度是 `0.01 – 0.03`(`K=60` 决定的上限 ≈ `2/61 ≈ 0.0328`),在这个尺度下泰勒展开后 noisy-OR **退化为求和**:
 
 | 14 个 `0.012` 弱 hit | 1 个 `0.031` 强 hit |
 |---|---|
 | noisy-OR ≈ `0.155` | `0.031` |
 | **多弱 hit 完胜强单 hit 5×** —— 跟 docstring 承诺的"never exceeds the strongest single hit by much"完全相反 | |
 
-实际后果:**询问者自己的会话因为复读 query(用户问 + AI 转写 + 工具 stdout)轻松拿 10+ 弱 hit,把"真正一次精确提问"的别人会话挤到后面**。换成 `max` 后,这类 echo 噪声直接被压制。
+实际后果:**询问者自己的会话因为复读 query(用户问 + AI 转写 + 工具 stdout)轻松拿 10+ 弱 hit,把"真正一次精确提问"的别人会话挤到后面**(详见 `report.md`)。换成 `max` 后,这类 echo 噪声直接被压制。
 
-> 后续 reranker 已经换成 `LinearCombinationReranker`(score 反映真实相似度,尺度更宽),"小输入退化"那条 bug 在 reranker 层面也消失了。但 max 这条设计**仍然保留** —— "多个弱 hit"在新尺度下依然属于路过式提及(echo / stdout / 模板),不应该叠加成主导信号。`max` 是 cleanest 的语义,无论 reranker 怎么换都成立。
-
-> 损失了什么?理论上"多 hit 表明话题深度"的信号。实务里几乎不成立 —— 真深度讨论的 session 一定有至少一个"集中讨论"的强 hit,max 仍能选中;**纯靠多次弱命中的 session 几乎都是 echo / 路过式提及 / 模板回显**,本来就不该排前。
+> 损失了什么?理论上"多 hit 表明话题深度"的信号。实务里几乎不成立 —— 真深度讨论的 session 一定有至少一个"集中讨论"的强 RRF round,max 仍能选中;**纯靠多次弱命中的 session 几乎都是 echo / 路过式提及 / 模板回显**,本来就不该排前。
 >
 > 想把多 hit 当独立排序信号 → 在 `ranking_formula` 里用 `hit_count` 变量(暂未暴露,后续再加)。**不要回头去聚合公式里夹带私货**。
 
@@ -259,7 +257,7 @@ relevance + 0.1 * (review_up - review_down) + 0.02 * log(read_count + 1) - 0.005
 
 | 变量 | card | session |
 |---|---|---|
-| `relevance` | LanceDB cards 表 reranker 加权分 | step 2 的 `max(hits[].score)` |
+| `relevance` | LanceDB cards 表 RRF 分 | step 2 的 `max(hits[].score)` |
 | `review_up` / `review_down` / `review_neutral` / `review_count` / `read_count` / `recall_count` | `card.stats.*` | **统一置 0** |
 | `age_days` | 距 `card.created_at` 天数 | 距 `session.created_at` 天数 |
 
@@ -272,7 +270,7 @@ relevance + 0.1 * (review_up - review_down) + 0.02 * log(read_count + 1) - 0.005
 跨 type 可比性来自"**两类候选过同一公式**":
 
 - **card** 四项全启用,有 stats bonus —— 一张被 review_up 几次 + 偶尔被 read 的 card,final_score 容易 `0.5+`
-- **session** stats vars 全 0,实际只剩 `relevance - 0.005 * age_days`,而 relevance = 最强 hit 的 reranker 加权分
+- **session** stats vars 全 0,实际只剩 `relevance - 0.005 * age_days`,而 relevance = 最强 hit 的 RRF 分,典型 `0.03` 上下
 
 所以**默认配置下 card 天然占便宜**。这是公式涌现的偏序,不是硬编码"卡先于会话"。
 
@@ -284,21 +282,26 @@ relevance + 0.1 * (review_up - review_down) + 0.02 * log(read_count + 1) - 0.005
 
 **hits_shown 上限不影响排序** —— session relevance 只看 step 1 排序后的 `hits[0].score`,而 `hits[0]` 必定在展示的前 3 个里,所以"截掉的 hit"对排序没贡献。`hit_count` 字段告诉读者本 session 实际有多少命中(可能远多于 `hits_shown`),纯展示用。
 
-### 关于 reranker 分的尺度
+### 关于 RRF 分的一句忠告
 
-当前 reranker 是 `LinearCombinationReranker(weight=0.7)`,公式:
+`hits[].score`(LanceDB RRF 原始分)**只看排名,不看绝对相似度**:
 
+- 一个 round 即便余弦相似度只有 `0.3`(语义实际很弱),只要它进了向量 top-K,RRF 照样给分
+- 反过来,FTS 完全没命中 query token 的 round,向量 rank 高时 RRF 也给高分 —— **这就是"语义召回但词面无关"的来源**,也是"有些 hit 看着不那么贴"的根因
+
+RRF 不暴露"FTS / vector / both" 来源(`RRFReranker` 内部合并后扔了)。要拿到这个信号,SearchService 得自己分两路独立查 + 自融合,目前没做。
+
+#### 为什么不用 LinearCombinationReranker
+
+直觉上 `LinearCombination` 用真实 BM25 + 向量分,应该比 RRF 的纯排名更准。**实际上 `lancedb==0.30.x` 的实现是反向的**:
+
+```python
+combined = 1 - (0.7 * vec_sim + 0.3 * bm25_raw)
 ```
-score = 0.7 * vector_similarity + 0.3 * fts_bm25
-```
 
-- **`vector_similarity`** 是余弦相似度,粗略 `[0, 1]`(向量库内部细节)
-- **`fts_bm25`** 是 LanceDB 的 BM25 分,**无固定上界**(取决于 query 词的 IDF 和文档长度),典型 `0 – 几`
-- 因为 BM25 没归一化,**两路尺度并不严格可比**,但 default `weight=0.7` 偏向向量,在大部分 query 上 ranking 仍合理。要纯语义可以把 weight 调到 1.0,要纯关键词调到 0.0
+`bm25_raw` 无界(强匹配 ~30+),`vec_sim` 在 `[0, 1]` —— BM25 占主导且**越高分越被打低**,完美 text 匹配的 round 在 min-max 归一化后接近 0,被"两路都弱但 fill 撑起来"的噪声压到 #2000 外。Lance 上游 docstring 自己标了 `TODO: pretty confusing as we invert scores`。
 
-跟历史上的 `RRFReranker(K=60)` 相比:**LinearCombination 反映真实相似度,RRF 只看排名**。前者下"score 0.8" 实打实意味着强匹配;后者下 "score 0.0328" 只意味着"在两路都排第 1",可能实际相关度极低。
-
-**仍未暴露的信息**:`hits[].score` 是合成后的单值,**没拆出 vector / fts 各自的贡献**。要知道"这个 hit 是词面命中还是语义召回",目前看不到。SearchService 若分两路独立查 + 自融合可以拿到这个信号(report.md 里讨论过,暂未做)。
+2026-05-23 切过去又当天回滚 —— 详见 `report-v2.md`。**不要再切**,除非:(a) Lance 上游修了 inversion + 加了归一化,或 (b) 落地一个 search-quality 回归测试(固定 query + 固定 corpus,断言"完美匹配 round 必在 top-k")。
 
 ### 实务直觉
 
@@ -306,7 +309,7 @@ score = 0.7 * vector_similarity + 0.3 * fts_bm25
 
 1. **session 排得低** → 它 stats 全 0 在跟有 stats bonus 的 card 比,改公式
 2. **session A 顶部 hit 比 B 强但 A 排在 B 后** → A 更旧,被 `-0.005 * age_days` 拉下去了;hit 数量本身不影响排序
-3. **某 hit 看着"不那么贴"** → 多半是纯向量召回(score 主要来自 `0.7 * cosine`),词面零命中。看 hit text 里是否含 query token
+3. **某 hit 看着"不那么贴"** → 多半是纯向量召回拿了 RRF 分,词面零命中。看 hit text 里是否含 query token
 4. **整体分都偏低** → query 在 LanceDB 召回阶段就稀疏,扩 oversample(`_CARD_OVERSAMPLE` / `_ROUNDS_OVERSAMPLE`)或换公式让 stats 权重盖过 relevance
 
 ## 高亮渲染

@@ -183,22 +183,38 @@ async def _run_hybrid(
     table, query: str, vector: list[float] | None,
     top_k: int, where: str | None,
 ) -> list[dict]:
-    """Internal: hybrid FTS + vector with linear-combination reranking.
+    """Internal: hybrid FTS + vector with RRF reranking.
 
-    Switched away from ``RRFReranker(K=60)`` on 2026-05-23. RRF only
-    looks at *ranks*, not absolute scores, so on the K=60 output scale
-    (top score ~0.033, rank-1 vs rank-2 diff ~0.0003) a perfect FTS
-    match was indistinguishable from "barely in the top-K" — and the
-    downstream session aggregator amplified that flatness into a
-    correctness bug (see ``service/search.py:_aggregate_session_relevance``
-    docstring).
+    Reranker history (read before changing — there's a trap here):
 
-    ``LinearCombinationReranker`` uses the actual BM25 + vector scores,
-    so strong matches produce visibly larger numbers and the score
-    ordering tracks real similarity. Defaults: ``weight=0.7`` (vector
-    weight), ``fill=1.0`` (filler for hits present in only one pipeline).
+    - **RRFReranker(K=60)** (current). Rank-based fusion. Output scale
+      is small (~0.033 top) and the rank-1-vs-rank-2 differential is
+      tiny (~0.0003), so the absolute score doesn't reflect match
+      strength. We compensate downstream:
+        * ``service/search.py:_aggregate_session_relevance`` is ``max``
+          (not noisy-OR — see its docstring for why noisy-OR was wrong);
+        * ``ranking_formula`` only consumes RRF as one signal among
+          stats / age.
+
+    - **LinearCombinationReranker (tried 2026-05-23, reverted same day)**.
+      Looked attractive because it nominally uses actual BM25 + vector
+      scores. But in ``lancedb==0.30.x`` the implementation is
+      **inverted and unnormalized**:
+      ``combined = 1 - (0.7 * vec_sim + 0.3 * bm25_raw)`` where BM25
+      is unbounded (~30+ for strong matches) and vec_sim is [0, 1].
+      Higher BM25 → lower combined → after min-max normalization the
+      perfect-match round lands near 0 and noisy "fill" rows land
+      near 1. A perfect-text-match round vanished from top 1000 in
+      production — see ``report-v2.md`` for the evidence chain. Lance's
+      own docstring carries a ``TODO: pretty confusing as we invert
+      scores``.
+
+    **Do not switch to LinearCombinationReranker without** (a) Lance
+    upstream fixing the inversion + adding normalization, or (b)
+    landing a search-quality regression test that asserts perfect
+    text matches stay in top-k on a fixed corpus.
     """
-    from lancedb.rerankers import LinearCombinationReranker
+    from lancedb.rerankers import RRFReranker
 
     q = table.query()
     has_vector = vector is not None and len(vector) > 0
@@ -219,7 +235,7 @@ async def _run_hybrid(
             r["_score"] = 0.0
         return rows
     if has_vector and has_text:
-        q = q.rerank(reranker=LinearCombinationReranker())
+        q = q.rerank(reranker=RRFReranker(K=60))
     if where:
         q = q.where(where)
     q = q.limit(top_k)
