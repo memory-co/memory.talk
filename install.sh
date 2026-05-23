@@ -188,24 +188,63 @@ if ! VERSION="$("$VENV_DIR/bin/memory.talk" --version 2>/dev/null)"; then
 fi
 ok "$PACKAGE $VERSION is ready"
 
-# ────────── 6. post-install instructions ──────────
+# ────────── 6. expose `memory.talk` globally ──────────
+#
+# Drop a symlink into ``~/.local/bin/`` (XDG convention; on Ubuntu / Mac
+# / Fedora this dir is already on the default PATH via ~/.profile). If
+# it's not in PATH yet, warn the user with the exact line to add.
+#
+# Overrides:
+#   MEMORY_TALK_BIN_DIR=/some/where    symlink target dir
+#   MEMORY_TALK_NO_BIN_LINK=1          skip linking entirely
+
+BIN_LINK_DIR="${MEMORY_TALK_BIN_DIR:-$HOME/.local/bin}"
+BIN_LINK="$BIN_LINK_DIR/memory.talk"
+ENTRY="$VENV_DIR/bin/memory.talk"
+
+if [ -n "${MEMORY_TALK_NO_BIN_LINK:-}" ]; then
+    step "Skipping global bin link (MEMORY_TALK_NO_BIN_LINK set)"
+else
+    step "Exposing memory.talk in $BIN_LINK_DIR..."
+    mkdir -p "$BIN_LINK_DIR"
+    if [ -L "$BIN_LINK" ]; then
+        # Existing symlink — replace transparently (likely our own from
+        # a prior install run).
+        ln -sf "$ENTRY" "$BIN_LINK"
+        ok "updated symlink $BIN_LINK"
+    elif [ -e "$BIN_LINK" ]; then
+        # Regular file at this path — don't clobber user data.
+        warn "$BIN_LINK already exists as a regular file. Skipping link."
+        hint "Remove it and re-run install.sh, or set MEMORY_TALK_BIN_DIR to another dir."
+    else
+        ln -s "$ENTRY" "$BIN_LINK"
+        ok "created symlink $BIN_LINK"
+    fi
+
+    # Path check — many shells don't include ~/.local/bin unless the
+    # user's rc explicitly adds it. Tell them what to do.
+    case ":$PATH:" in
+        *":$BIN_LINK_DIR:"*)
+            ok "$BIN_LINK_DIR is already on \$PATH — run: memory.talk --version"
+            ;;
+        *)
+            warn "$BIN_LINK_DIR is not on \$PATH yet. Add this line to your shell rc:"
+            hint "  export PATH=\"$BIN_LINK_DIR:\$PATH\""
+            ;;
+    esac
+fi
+
+# ────────── 7. post-install instructions ──────────
 
 cat <<EOF
 
 ${C_BOLD}Installation complete.${C_RESET}
 
-memory.talk entry point:
-  ${C_BOLD}$VENV_DIR/bin/memory.talk${C_RESET}
+Entry point:    ${C_BOLD}$ENTRY${C_RESET}
+Global link:    $BIN_LINK
+Data root:      $INSTALL_DIR
 
-To use it from anywhere, add the venv's bin to your PATH. Pick one:
-
-  ${C_DIM}# Option A: shell rc one-liner (zsh / bash)${C_RESET}
-  echo 'export PATH="$VENV_DIR/bin:\$PATH"' >> ~/.zshrc   # or ~/.bashrc
-
-  ${C_DIM}# Option B: symlink into ~/.local/bin (if it's already in PATH)${C_RESET}
-  ln -sf "$VENV_DIR/bin/memory.talk" "\$HOME/.local/bin/memory.talk"
-
-Then in a new shell:
+Next steps (after opening a new shell so PATH updates take effect):
 
   memory.talk setup            ${C_DIM}# interactive first-time configure${C_RESET}
   memory.talk server start

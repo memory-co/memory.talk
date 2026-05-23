@@ -37,10 +37,12 @@ cd memory.talk
 ./install.sh
 ```
 
-装完后按提示把 `~/.memory.talk/venv/bin` 加到 PATH(或 symlink 到 `~/.local/bin/`)。
+装完后**自动**在 `~/.local/bin/memory.talk` 建符号链接指向 venv 入口。`~/.local/bin` 不在 PATH 时,脚本会打印精确的 `export PATH=...` 行让你贴进 shell rc(zsh / bash)。
 
 环境变量:
 - `MEMORY_TALK_INSTALL_DIR=/some/where` — 装到别处(默认 `~/.memory.talk/`)
+- `MEMORY_TALK_BIN_DIR=/some/where` — 改 symlink 目录(默认 `~/.local/bin/`)
+- `MEMORY_TALK_NO_BIN_LINK=1` — 不创建全局 symlink(自己管 PATH)
 - `MEMORY_TALK_INDEX_URL=https://...` — 强制指定 PyPI 镜像。**默认自动探测** pypi.org 和阿里云速度,选快的;失败 fallback 到 pip 默认
 
 **已有 Python 环境,自己管 venv** —— 直接 pip:
