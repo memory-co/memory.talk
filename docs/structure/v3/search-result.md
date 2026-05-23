@@ -237,7 +237,7 @@ relevance = max(hits[].score)
 | noisy-OR ≈ `0.155` | `0.031` |
 | **多弱 hit 完胜强单 hit 5×** —— 跟 docstring 承诺的"never exceeds the strongest single hit by much"完全相反 | |
 
-实际后果:**询问者自己的会话因为复读 query(用户问 + AI 转写 + 工具 stdout)轻松拿 10+ 弱 hit,把"真正一次精确提问"的别人会话挤到后面**(详见 `report.md`)。换成 `max` 后,这类 echo 噪声直接被压制。
+实际后果:**询问者自己的会话因为复读 query(用户问 + AI 转写 + 工具 stdout)轻松拿 10+ 弱 hit,把"真正一次精确提问"的别人会话挤到后面**(详见 [`../../report/2026-05-21-search-noisy-or-aggregation-bug.md`](../../report/2026-05-21-search-noisy-or-aggregation-bug.md))。换成 `max` 后,这类 echo 噪声直接被压制。
 
 > 损失了什么?理论上"多 hit 表明话题深度"的信号。实务里几乎不成立 —— 真深度讨论的 session 一定有至少一个"集中讨论"的强 RRF round,max 仍能选中;**纯靠多次弱命中的 session 几乎都是 echo / 路过式提及 / 模板回显**,本来就不该排前。
 >
@@ -301,7 +301,7 @@ combined = 1 - (0.7 * vec_sim + 0.3 * bm25_raw)
 
 `bm25_raw` 无界(强匹配 ~30+),`vec_sim` 在 `[0, 1]` —— BM25 占主导且**越高分越被打低**,完美 text 匹配的 round 在 min-max 归一化后接近 0,被"两路都弱但 fill 撑起来"的噪声压到 #2000 外。Lance 上游 docstring 自己标了 `TODO: pretty confusing as we invert scores`。
 
-2026-05-23 切过去又当天回滚 —— 详见 `report-v2.md`。**不要再切**,除非:(a) Lance 上游修了 inversion + 加了归一化,或 (b) 落地一个 search-quality 回归测试(固定 query + 固定 corpus,断言"完美匹配 round 必在 top-k")。
+2026-05-23 切过去又当天回滚 —— 详见 [`../../report/2026-05-23-search-linear-combination-regression.md`](../../report/2026-05-23-search-linear-combination-regression.md)。**不要再切**,除非:(a) Lance 上游修了 inversion + 加了归一化,或 (b) 落地一个 search-quality 回归测试(固定 query + 固定 corpus,断言"完美匹配 round 必在 top-k")。
 
 ### 实务直觉
 

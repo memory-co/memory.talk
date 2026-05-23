@@ -205,7 +205,8 @@ async def _run_hybrid(
       Higher BM25 → lower combined → after min-max normalization the
       perfect-match round lands near 0 and noisy "fill" rows land
       near 1. A perfect-text-match round vanished from top 1000 in
-      production — see ``report-v2.md`` for the evidence chain. Lance's
+      production — see ``docs/report/2026-05-23-search-linear-combination-regression.md``
+      for the evidence chain. Lance's
       own docstring carries a ``TODO: pretty confusing as we invert
       scores``.
 
