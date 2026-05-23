@@ -183,8 +183,22 @@ async def _run_hybrid(
     table, query: str, vector: list[float] | None,
     top_k: int, where: str | None,
 ) -> list[dict]:
-    """Internal: hybrid FTS + vector with RRF reranking."""
-    from lancedb.rerankers import RRFReranker
+    """Internal: hybrid FTS + vector with linear-combination reranking.
+
+    Switched away from ``RRFReranker(K=60)`` on 2026-05-23. RRF only
+    looks at *ranks*, not absolute scores, so on the K=60 output scale
+    (top score ~0.033, rank-1 vs rank-2 diff ~0.0003) a perfect FTS
+    match was indistinguishable from "barely in the top-K" — and the
+    downstream session aggregator amplified that flatness into a
+    correctness bug (see ``service/search.py:_aggregate_session_relevance``
+    docstring).
+
+    ``LinearCombinationReranker`` uses the actual BM25 + vector scores,
+    so strong matches produce visibly larger numbers and the score
+    ordering tracks real similarity. Defaults: ``weight=0.7`` (vector
+    weight), ``fill=1.0`` (filler for hits present in only one pipeline).
+    """
+    from lancedb.rerankers import LinearCombinationReranker
 
     q = table.query()
     has_vector = vector is not None and len(vector) > 0
@@ -196,7 +210,7 @@ async def _run_hybrid(
         q = q.nearest_to_text(_segment(query))
     if not has_vector and not has_text:
         # Pure scan — no relevance to compute, only useful when a `where`
-        # filter narrows things. RRF reranker would crash without anchors.
+        # filter narrows things. The reranker would crash without anchors.
         if where:
             q = q.where(where)
         q = q.limit(top_k)
@@ -205,7 +219,7 @@ async def _run_hybrid(
             r["_score"] = 0.0
         return rows
     if has_vector and has_text:
-        q = q.rerank(reranker=RRFReranker(K=60))
+        q = q.rerank(reranker=LinearCombinationReranker())
     if where:
         q = q.where(where)
     q = q.limit(top_k)

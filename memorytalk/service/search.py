@@ -69,21 +69,30 @@ def _age_days(created_at_iso: str, now: _dt.datetime | None = None) -> float:
 
 
 def _aggregate_session_relevance(scores: list[float]) -> float:
-    """1 - prod(1 - s_i): bounded 'any of them' aggregator.
+    """Session relevance = its strongest single hit.
 
-    Multiple round hits in the same session multiply the chance that
-    *some* round of this session matches, with diminishing returns. Maps
-    to [0, 1] and never exceeds the strongest single hit by much.
+    Previously used noisy-OR (``1 - Π(1 - s_i)``) with the intent of
+    rewarding multi-hit sessions while saturating to keep the strongest
+    hit dominant. That promise only holds when ``s_i → 1``; on the RRF
+    output scale (typical hits 0.01–0.03) noisy-OR degenerates to a sum
+    — 14 weak hits at 0.012 aggregate to ~0.155, beating a single hit
+    at 0.031 by 5×. Sessions full of query-token echoes (the asking
+    session itself, tool stdout, transcribed plans) then crowd out
+    sessions with one clean strong match.
+
+    Switched to ``max`` (2026-05-23) — in practice, genuinely "deep"
+    sessions about a topic always have at least one densely-discussing
+    round (strong RRF), which max captures; whereas "many weak hits"
+    is almost always echo / passing mention / template repetition, not
+    depth. Net effect: bug fix without losing real signal.
+
+    If you ever want the multi-hit count back as a ranking signal,
+    expose ``hit_count`` as a variable in ``ranking_formula`` rather
+    than smuggling it through the aggregator.
     """
     if not scores:
         return 0.0
-    p = 1.0
-    for s in scores:
-        # Clamp into [0, 1] — RRF scores are normally in this range; defensive
-        # in case a provider returns negatives or very large numbers.
-        s = max(0.0, min(1.0, s))
-        p *= (1.0 - s)
-    return 1.0 - p
+    return max(0.0, min(1.0, max(scores)))
 
 
 class SearchService:
