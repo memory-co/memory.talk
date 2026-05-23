@@ -13,6 +13,11 @@ Round-level layout:
 - ``metadata.cwd`` is extracted from the first message that carries
   a ``cwd`` field so the explore namespace check works without the
   server having to dig into each round.
+- ``role`` / ``speaker`` for ``type:"user"`` rows is **not** simply
+  "human" — Claude Code transcripts pack four distinct things into the
+  user-role bucket (real human input, tool_result echo-back, harness-
+  injected slash command artifacts, status messages). See
+  ``_classify_user_message`` for the disambiguation logic.
 
 Cursor semantics:
 
@@ -35,6 +40,67 @@ from memorytalk.adapters.base import BaseAdapter, register
 from memorytalk.schemas import (
     ContentBlock, ReadAfterResult, RoundInput, SourceProbe,
 )
+
+
+def _classify_user_message(msg: dict) -> tuple[str, str]:
+    """Classify a ``type:"user"`` Claude Code message into (role, speaker).
+
+    The Anthropic Messages API only has user / assistant roles. Claude
+    Code persists raw API payloads verbatim, so on disk ``type:"user"``
+    is a 4-way bucket:
+
+      1. tool_result echo-back (model's tool call output reflected back
+         into the user-side payload by the API protocol)
+      2. CLI-injected caveat (``isMeta`` flag set on harness messages)
+      3. Slash command artifacts the harness wraps in ``<command-name>``
+         / ``<local-command-stdout>`` / ``<local-command-caveat>`` /
+         ``[Request interrupted by user]`` text
+      4. Actual human keyboard input
+
+    Priority order below favors the most stable signal: ``toolUseResult``
+    is a CLI-level field that survives Anthropic API content-shape
+    changes; the content-block ``type`` is the API-level fallback; text
+    prefixes are last because they're brittle to harness rebranding
+    (tests in ``tests/adapters/test_claude_code.py`` catch regressions).
+    """
+    # 1. tool_result (CLI-level signal, most stable)
+    if "toolUseResult" in msg:
+        return ("tool", "tool")
+    content = msg.get("message", {}).get("content", [])
+    if (
+        isinstance(content, list) and content
+        and isinstance(content[0], dict)
+        and content[0].get("type") == "tool_result"
+    ):
+        return ("tool", "tool")
+
+    # 2. CLI-flagged meta (caveat etc.)
+    if msg.get("isMeta"):
+        return ("system", "harness")
+
+    # 3. Harness-injected slash-command artifacts — text prefix only.
+    text: str | None = None
+    if isinstance(content, str):
+        text = content
+    elif (
+        isinstance(content, list) and content
+        and isinstance(content[0], dict)
+        and content[0].get("type") == "text"
+    ):
+        text = content[0].get("text", "")
+    if text:
+        stripped = text.lstrip()
+        for prefix in (
+            "<command-name>",
+            "<local-command-stdout>",
+            "<local-command-caveat>",
+            "[Request interrupted by user]",
+        ):
+            if stripped.startswith(prefix):
+                return ("system", "harness")
+
+    # 4. Default — actual human input.
+    return ("human", "user")
 
 
 @register
@@ -184,8 +250,10 @@ class ClaudeCodeAdapter(BaseAdapter):
         msg_type = msg.get("type")
         if msg_type not in ("user", "assistant"):
             return None
-        role = "human" if msg_type == "user" else "assistant"
-        speaker = "user" if msg_type == "user" else "assistant"
+        if msg_type == "assistant":
+            role, speaker = "assistant", "assistant"
+        else:
+            role, speaker = _classify_user_message(msg)
         raw_content = msg.get("message", {}).get("content", [])
         blocks = self._parse_content(raw_content)
         if not blocks:
