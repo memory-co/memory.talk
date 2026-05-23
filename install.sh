@@ -190,48 +190,136 @@ ok "$PACKAGE $VERSION is ready"
 
 # ────────── 6. expose `memory.talk` globally ──────────
 #
-# Drop a symlink into ``~/.local/bin/`` (XDG convention; on Ubuntu / Mac
-# / Fedora this dir is already on the default PATH via ~/.profile). If
-# it's not in PATH yet, warn the user with the exact line to add.
+# Write a small launcher shim (NOT a symlink) into ``~/.local/bin/`` and
+# ensure that dir is on the user's PATH. Two reasons we use a shim:
+#
+#   1. Lets us ``unset PYTHONPATH`` / ``PYTHONHOME`` before exec so an
+#      inherited env (e.g. when memory.talk is launched from inside
+#      another Python tool's session) can't shadow our venv's stdlib.
+#   2. Atomic to replace; survives venv rebuilds without dangling.
+#
+# We auto-append a PATH entry to the user's shell rc files (zsh / bash /
+# fish / profile). Without this step, macOS users in particular wouldn't
+# see ``memory.talk`` on PATH — ``~/.local/bin`` isn't on the default
+# zsh PATH there. We mark our additions with a comment so future re-
+# runs skip them (idempotent).
 #
 # Overrides:
-#   MEMORY_TALK_BIN_DIR=/some/where    symlink target dir
-#   MEMORY_TALK_NO_BIN_LINK=1          skip linking entirely
+#   MEMORY_TALK_BIN_DIR=/some/where    shim target dir (default ~/.local/bin)
+#   MEMORY_TALK_NO_BIN_LINK=1          skip linking + skip PATH edit
 
 BIN_LINK_DIR="${MEMORY_TALK_BIN_DIR:-$HOME/.local/bin}"
 BIN_LINK="$BIN_LINK_DIR/memory.talk"
 ENTRY="$VENV_DIR/bin/memory.talk"
 
-if [ -n "${MEMORY_TALK_NO_BIN_LINK:-}" ]; then
-    step "Skipping global bin link (MEMORY_TALK_NO_BIN_LINK set)"
-else
-    step "Exposing memory.talk in $BIN_LINK_DIR..."
-    mkdir -p "$BIN_LINK_DIR"
-    if [ -L "$BIN_LINK" ]; then
-        # Existing symlink — replace transparently (likely our own from
-        # a prior install run).
-        ln -sf "$ENTRY" "$BIN_LINK"
-        ok "updated symlink $BIN_LINK"
-    elif [ -e "$BIN_LINK" ]; then
-        # Regular file at this path — don't clobber user data.
-        warn "$BIN_LINK already exists as a regular file. Skipping link."
-        hint "Remove it and re-run install.sh, or set MEMORY_TALK_BIN_DIR to another dir."
-    else
-        ln -s "$ENTRY" "$BIN_LINK"
-        ok "created symlink $BIN_LINK"
-    fi
+_add_path_to_shell_configs() {
+    local dir="$1"
+    local marker="# memory.talk — ensure $dir is on PATH"
+    local login_shell rc_files=() is_fish=false
+    login_shell="$(basename "${SHELL:-/bin/bash}")"
 
-    # Path check — many shells don't include ~/.local/bin unless the
-    # user's rc explicitly adds it. Tell them what to do.
-    case ":$PATH:" in
-        *":$BIN_LINK_DIR:"*)
-            ok "$BIN_LINK_DIR is already on \$PATH — run: memory.talk --version"
+    case "$login_shell" in
+        zsh)
+            [ -f "$HOME/.zshrc" ]    && rc_files+=("$HOME/.zshrc")
+            [ -f "$HOME/.zprofile" ] && rc_files+=("$HOME/.zprofile")
+            # macOS fresh accounts: neither file exists by default. Create
+            # ~/.zshrc so we have somewhere to write — without it, the user
+            # would have to open a new terminal AND create the file
+            # themselves to ever pick up our PATH change.
+            if [ ${#rc_files[@]} -eq 0 ]; then
+                touch "$HOME/.zshrc"
+                rc_files+=("$HOME/.zshrc")
+            fi
+            ;;
+        bash)
+            [ -f "$HOME/.bashrc" ]       && rc_files+=("$HOME/.bashrc")
+            [ -f "$HOME/.bash_profile" ] && rc_files+=("$HOME/.bash_profile")
+            ;;
+        fish)
+            is_fish=true
+            local fish_cfg="$HOME/.config/fish/config.fish"
+            mkdir -p "$(dirname "$fish_cfg")"
+            touch "$fish_cfg"
+            rc_files+=("$fish_cfg")
             ;;
         *)
-            warn "$BIN_LINK_DIR is not on \$PATH yet. Add this line to your shell rc:"
-            hint "  export PATH=\"$BIN_LINK_DIR:\$PATH\""
+            [ -f "$HOME/.bashrc" ] && rc_files+=("$HOME/.bashrc")
+            [ -f "$HOME/.zshrc" ]  && rc_files+=("$HOME/.zshrc")
             ;;
     esac
+    # Ubuntu / Debian / WSL login shells source ~/.profile even when the
+    # interactive rc files are skipped — covers ssh + non-interactive
+    # subshells too.
+    [ "$is_fish" = false ] && [ -f "$HOME/.profile" ] && rc_files+=("$HOME/.profile")
+
+    local export_line
+    if [ "$is_fish" = true ]; then
+        export_line="fish_add_path \"$dir\""
+    elif [ "$dir" = "$HOME/.local/bin" ]; then
+        # Keep the rc line portable across machines.
+        export_line='export PATH="$HOME/.local/bin:$PATH"'
+    else
+        export_line="export PATH=\"$dir:\$PATH\""
+    fi
+
+    local added_any=false
+    for rc in "${rc_files[@]}"; do
+        # Idempotent: skip if our marker is already in the file (we ran
+        # before) or if a non-comment line already exports this dir.
+        if grep -Fq "$marker" "$rc" 2>/dev/null; then
+            continue
+        fi
+        if grep -v '^[[:space:]]*#' "$rc" 2>/dev/null \
+                | grep -qF "$dir"; then
+            continue
+        fi
+        {
+            echo ""
+            echo "$marker"
+            echo "$export_line"
+        } >> "$rc"
+        ok "added $dir to PATH in $rc"
+        added_any=true
+    done
+
+    if [ "$added_any" = true ]; then
+        hint "open a new shell (or 'source ${rc_files[0]}') to pick up PATH"
+    fi
+}
+
+if [ -n "${MEMORY_TALK_NO_BIN_LINK:-}" ]; then
+    step "Skipping global command install (MEMORY_TALK_NO_BIN_LINK set)"
+else
+    step "Installing memory.talk launcher into $BIN_LINK_DIR..."
+    mkdir -p "$BIN_LINK_DIR"
+    # Older runs may have left a symlink (or, in the worst case, a real
+    # file with this name). ``rm -f`` handles both safely — we're about
+    # to overwrite anyway. We don't clobber regular files with no shebang
+    # check, but if you ran install.sh once you already opted into us
+    # managing this path.
+    rm -f "$BIN_LINK"
+    cat > "$BIN_LINK" <<EOF
+#!/usr/bin/env bash
+# memory.talk launcher — generated by install.sh. Safe to overwrite or
+# delete; rerun install.sh to recreate.
+unset PYTHONPATH
+unset PYTHONHOME
+exec "$ENTRY" "\$@"
+EOF
+    chmod +x "$BIN_LINK"
+    ok "wrote launcher $BIN_LINK"
+
+    # PATH integration. Check current PATH; if not present, auto-edit rc.
+    if echo "$PATH" | tr ':' '\n' | grep -qFx "$BIN_LINK_DIR"; then
+        ok "$BIN_LINK_DIR is already on \$PATH"
+    else
+        _add_path_to_shell_configs "$BIN_LINK_DIR"
+    fi
+
+    # Export for current install.sh shell so the verify echo below works
+    # and so 'memory.talk --version' runs immediately after install.sh
+    # exits, if the caller stays in this shell.
+    export PATH="$BIN_LINK_DIR:$PATH"
 fi
 
 # ────────── 7. post-install instructions ──────────
