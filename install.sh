@@ -332,11 +332,47 @@ Entry point:    ${C_BOLD}$ENTRY${C_RESET}
 Global link:    $BIN_LINK
 Data root:      $INSTALL_DIR
 
-Next steps (after opening a new shell so PATH updates take effect):
+EOF
 
-  memory.talk setup            ${C_DIM}# interactive first-time configure${C_RESET}
-  memory.talk server start
-  memory.talk --help
+# ────────── 8. drop straight into setup ──────────
+#
+# Hand off to the interactive wizard so a fresh install lands the user
+# in "ready to use" state with one curl-pipe-to-bash invocation. The
+# wizard writes settings.json, picks an embedder, optionally starts the
+# server. ``MEMORY_TALK_NO_SETUP=1`` opt-out for CI / scripted installs.
+#
+# stdio routing matters: when this script was launched via ``curl ... |
+# bash`` the process inherits stdin from the pipe (not a TTY), so the
+# wizard's prompts would fail. We probe /dev/tty separately and
+# redirect stdin from it when available — same trick hermes-agent uses
+# for its sudo prompt.
+
+if [ -n "${MEMORY_TALK_NO_SETUP:-}" ]; then
+    hint "Skipping interactive setup (MEMORY_TALK_NO_SETUP set)."
+    hint "Run 'memory.talk setup' when you're ready to configure."
+else
+    step "Launching 'memory.talk setup'..."
+    if [ -t 0 ]; then
+        # Plain interactive invocation (./install.sh from a real shell).
+        "$BIN_LINK" setup \
+            || warn "setup exited non-zero; rerun anytime with 'memory.talk setup'"
+    elif [ -r /dev/tty ] && [ -w /dev/tty ]; then
+        # curl|bash: stdin is the pipe, but the user's terminal is
+        # still reachable through /dev/tty. Wire the wizard's stdio to
+        # it so prompts actually work.
+        "$BIN_LINK" setup </dev/tty >/dev/tty 2>/dev/tty \
+            || warn "setup exited non-zero; rerun anytime with 'memory.talk setup'"
+    else
+        hint "No TTY available — skipping setup. Run 'memory.talk setup' next."
+    fi
+fi
+
+cat <<EOF
+
+Next steps (open a new shell first so PATH updates take effect):
+
+  memory.talk server start     ${C_DIM}# start local API daemon${C_RESET}
+  memory.talk --help           ${C_DIM}# see all commands${C_RESET}
 
 Future upgrades:
 
