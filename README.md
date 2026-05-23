@@ -23,6 +23,24 @@ memory.talk 把你跟 Claude Code、Codex 等 AI 平台的对话历史压缩成*
 
 ### 安装
 
+**一键脚本(推荐,在 `~/memory-talk/venv/` 里建独立 venv,跟系统 Python 隔离)**:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/memory-co/memory.talk/main/install.sh | bash
+```
+
+或者克隆后跑:
+
+```bash
+git clone https://github.com/memory-co/memory.talk.git
+cd memory.talk
+./install.sh
+```
+
+装完后按提示把 `~/memory-talk/venv/bin` 加到 PATH(或 symlink 到 `~/.local/bin/`)。要装到别处,设 `MEMORY_TALK_INSTALL_DIR=/some/where ./install.sh`。
+
+**已有 Python 环境,自己管 venv** —— 直接 pip:
+
 ```bash
 pip install memorytalk
 ```
@@ -34,6 +52,8 @@ git clone https://github.com/memory-co/memory.talk.git
 cd memory.talk
 pip install -e .
 ```
+
+后续升级走 `memory-talk upgrade`(自动找对的 pip,详见 [`docs/cli/v3/upgrade.md`](docs/cli/v3/upgrade.md))。
 
 ### 初始化
 
