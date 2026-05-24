@@ -45,12 +45,41 @@ class _SyncRecentEvent(BaseModel):
     # imported / rounds_appended / rounds_overwrite_skipped / error /
     # index_partial / index_failed
     event: str
+    # ``<source>@<label>`` for the endpoint that produced this event.
+    # Empty string allowed for legacy paths that don't have an
+    # adapter handle (e.g. lifespan-level failures).
+    endpoint: str = ""
     rounds: int | None = None
     rounds_skipped: int | None = None
     error: str | None = None
     # Populated for index_partial / index_failed events.
     indexed: int | None = None
     index_failed: int | None = None
+
+
+class _Endpoint(BaseModel):
+    """One configured sync endpoint. Surfaced in ``sync/status`` so the
+    user can see at a glance which sources are wired up + whether
+    they're reachable."""
+    source: str
+    location: str
+    label: str
+    ok: bool
+    reason: str | None = None  # populated when ok=False (e.g. ``missing``)
+
+
+class _IndexHealthByEndpoint(BaseModel):
+    """Per-endpoint slice of the index health snapshot. Endpoint key is
+    ``<source>@<label>``."""
+    endpoint: str
+    source: str
+    location: str
+    label: str
+    sessions: int
+    rounds: int
+    indexed: int
+    missing: int
+    degraded: int
 
 
 class _IndexHealth(BaseModel):
@@ -64,6 +93,8 @@ class _IndexHealth(BaseModel):
     degraded_sessions: int = 0
     backfill_status: Literal["running", "idle", "disabled"] = "idle"
     last_index_error: str | None = None
+    # Per-endpoint breakdown so the CLI can render one row per source.
+    by_endpoint: list[_IndexHealthByEndpoint] = Field(default_factory=list)
 
 
 class _SyncLastRun(BaseModel):
@@ -77,8 +108,14 @@ class SyncStatusResponse(BaseModel):
     status: Literal["running", "stopped"]
     uptime_seconds: float | None = None
     adapters: list[str] = Field(default_factory=list)
+    # New 0.7.x: structured per-endpoint info. Replaces ``adapters`` /
+    # ``watching`` for callers that want a unified view. Kept the old
+    # fields for back-compat with older API consumers.
+    endpoints: list[_Endpoint] = Field(default_factory=list)
     watching: list[_SyncWatchedRoot] = Field(default_factory=list)
     totals: _IngestStats | None = None
+    # Per-endpoint totals (same keys as ``totals``, keyed by ``<source>@<label>``).
+    totals_by_endpoint: dict[str, _IngestStats] = Field(default_factory=dict)
     last_event_at: str | None = None
     recent: list[_SyncRecentEvent] = Field(default_factory=list)
     last_run: _SyncLastRun | None = None

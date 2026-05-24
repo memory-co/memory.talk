@@ -133,7 +133,9 @@ class TestParseMessageIntegration:
     actually lands on RoundInput, and assistant path is untouched."""
 
     def setup_method(self):
-        self.adapter = ClaudeCodeAdapter()
+        self.adapter = ClaudeCodeAdapter(
+            location=ClaudeCodeAdapter.DEFAULT_LOCATION,
+        )
 
     def test_assistant_text_unaffected(self):
         msg = {

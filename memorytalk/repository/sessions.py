@@ -89,13 +89,17 @@ class SessionStore:
         metadata: dict,
         round_count: int,
         last_round_id: str | None,
+        location: str = "",
+        location_label: str | None = None,
     ) -> None:
         await self.conn.execute(
             "INSERT OR REPLACE INTO sessions "
-            "(session_id, source, cwd, created_at, synced_at, metadata, "
-            "round_count, last_round_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (session_id, source, cwd, created_at, synced_at,
+            "(session_id, source, location, location_label, cwd, "
+            " created_at, synced_at, metadata, "
+            " round_count, last_round_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (session_id, source, location, location_label, cwd,
+             created_at, synced_at,
              json.dumps(metadata, ensure_ascii=False),
              round_count, last_round_id),
         )
@@ -198,6 +202,43 @@ class SessionStore:
             "missing_rounds":    row[3] or 0,
             "degraded_sessions": row[4] or 0,
         }
+
+    async def get_index_health_by_endpoint(self) -> list[dict]:
+        """Per-(source, location) aggregate. Used by ``GET /v3/sync/status``
+        to render the per-endpoint table without the CLI having to
+        re-shape totals client-side."""
+        async with self.conn.execute(
+            "SELECT "
+            "  source, location, "
+            "  COALESCE(MAX(location_label), '') AS location_label, "
+            "  COUNT(*) AS sessions, "
+            "  COALESCE(SUM(round_count), 0) AS rounds, "
+            "  COALESCE(SUM(indexed_round_count), 0) AS indexed, "
+            "  COALESCE(SUM(round_count - indexed_round_count), 0) AS missing, "
+            "  SUM(CASE WHEN indexed_round_count < round_count THEN 1 ELSE 0 END) "
+            "    AS degraded "
+            "FROM sessions "
+            "GROUP BY source, location "
+            "ORDER BY source, location"
+        ) as cursor:
+            rows = await cursor.fetchall()
+        out = []
+        for r in rows:
+            source = r[0]
+            location = r[1] or ""
+            label = r[2] or location
+            out.append({
+                "source": source,
+                "location": location,
+                "label": label,
+                "endpoint": f"{source}@{label or location}",
+                "sessions": int(r[3] or 0),
+                "rounds": int(r[4] or 0),
+                "indexed": int(r[5] or 0),
+                "missing": int(r[6] or 0),
+                "degraded": int(r[7] or 0),
+            })
+        return out
 
     @staticmethod
     def _row(row) -> dict:

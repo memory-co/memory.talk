@@ -34,9 +34,11 @@ pytestmark = pytest.mark.asyncio
 
 # ────────── helpers ──────────
 
+from memorytalk.repository.sessions import SessionStore
+
+
 def _session_events(data_root: Path, session_id: str) -> list[dict]:
-    raw = session_id[len("sess_"):]
-    bucket = raw[:2].lower()
+    bucket = SessionStore._bucket(session_id)
     path = data_root / "sessions" / "claude-code" / bucket / session_id / "events.jsonl"
     if not path.exists():
         return []
@@ -44,8 +46,8 @@ def _session_events(data_root: Path, session_id: str) -> list[dict]:
 
 
 def _card_events(data_root: Path, card_id: str) -> list[dict]:
-    raw = card_id[len("card_"):]
-    bucket = raw[:2].lower()
+    raw = card_id[len("card_"):] if card_id.startswith("card_") else card_id
+    bucket = (raw[:2] if len(raw) >= 2 else raw).lower()
     path = data_root / "cards" / bucket / card_id / "events.jsonl"
     if not path.exists():
         return []

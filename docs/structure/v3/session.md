@@ -6,8 +6,10 @@
 
 ```json
 {
-  "session_id": "sess_187c6576-875f-4e3e-8fd8-f21fe60190b0",
+  "session_id": "sess-15f0a7fb-f21fe60190b0",
   "source": "claude-code",
+  "location": "/home/user/.claude/projects",
+  "location_label": "claude-code@~/.claude/projects",
   "created_at": "2026-04-10T14:30:00Z",
   "metadata": {
     "cwd": "/home/user/myapp",
@@ -36,13 +38,25 @@
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `session_id` | string | 唯一标识,形如 `sess_<平台原始 id>`。前缀由服务端入库时加上(平台文件名不带前缀) |
-| `source` | string | 来源平台(`claude-code` / `codex` / 后续扩展) |
+| `session_id` | string | 唯一标识,形如 `sess-<8-char loc hash>-<last UUID segment>`。loc hash = `sha256("<source>#<location>")[:8]`,保证同源不同 endpoint 的 session **不会撞 id**;last segment 取上游 id 最后一段 `-` 之后的内容(git short-sha 风格) |
+| `source` | string | 来源平台(`claude-code` / `codex` / `openclaw` / 后续扩展) |
+| `location` | string | 该 source 的端点定位符 —— 文件型 adapter 是绝对路径(`~/.claude/projects`),HTTP 型是 base URL(`https://us.openclaw.example`)。**和 `source` 一起构成 endpoint 唯一键** |
+| `location_label` | string\|null | 可读的端点别名,出现在 CLI 状态表 / 日志的 `<source>@<label>` 里。未设时回退到 `location` |
 | `created_at` | string | 对话创建时间(取第一条 round 的时间戳) |
 | `metadata` | object | 平台特有扩展。**`metadata.cwd`** 字段在 explore namespace 判断里有特殊作用(见下方) |
 | `rounds` | Round[] | 对话轮次,通过 `parent_id` 形成链表(支持分叉) |
 | `round_count` | integer | 总轮次数 |
 | `synced_at` | string | 最近一次 sync 落库的时间 |
+
+### session_id 生成规则(0.7.x)
+
+```
+session_id = "sess-" + sha256(source + "#" + location)[:8] + "-" + last_segment(upstream_id)
+```
+
+- **`sha256(source#location)[:8]`** —— 让两个 endpoint 即便上游 id 相同也产生不同的 sid;`(source, location)` 改了 sid 也会变(等同于"换了 endpoint",新建 session 重新同步)。
+- **`last_segment(upstream_id)`** —— 取 `-` 最后一段。UUID 的最后段是 12 hex,人工 id 落到这一段时易撞车,所以 SyncWatcher 跑出来的 sid 主要靠 loc 哈希区分,last segment 只是给人看的尾巴。
+- 整个 mint 过程是 deterministic 的 —— sync 进程崩了重跑,同一个上游文件还是落到同一个 sid。
 
 **v3 跟 v2 的差异**:v3 session schema **没有 `tags` 字段** —— tag 整套机制在 v3 下线。其它字段保持不变。
 
@@ -115,8 +129,10 @@ sessions/{source}/{id[0:2]}/{session_id}/
 
 ```sql
 CREATE TABLE sessions (
-  session_id              TEXT PRIMARY KEY,    -- 含 sess_ 前缀
+  session_id              TEXT PRIMARY KEY,    -- 0.7.x 起为 sess-<loc8>-<lastseg>
   source                  TEXT NOT NULL,
+  location                TEXT NOT NULL DEFAULT '',  -- 端点定位符(0.7.x 新增)
+  location_label          TEXT,                -- 端点可读标签(0.7.x 新增)
   cwd                     TEXT,                -- = metadata.cwd,explore namespace 判断字段
   created_at              TEXT NOT NULL,
   synced_at               TEXT NOT NULL,
@@ -133,7 +149,11 @@ CREATE TABLE sessions (
 CREATE INDEX idx_sessions_cwd ON sessions(cwd);
 CREATE INDEX idx_sessions_source ON sessions(source);
 CREATE INDEX idx_sessions_created ON sessions(created_at);
+-- 按 endpoint 聚合查 sync/status 的 by_endpoint 视图。
+CREATE INDEX idx_sessions_endpoint ON sessions(source, location);
 ```
+
+> **PK 仍是 `session_id`** —— sid 是 mint 出来的全局唯一值,`(source, location)` 跟着同一行作为冗余列方便按 endpoint 聚合。删旧数据重灌(`rm -rf ~/.memory.talk && memory.talk setup`)是 0.6 → 0.7 升级路径,**没有数据迁移代码**。
 
 `indexed_round_count` 是 0.6.1 加的字段,跟 `round_count` 之差就是"该 session 还有多少 round 没被向量索引"。详见 [`../api/v3/sync.md#index-health`](../../api/v3/sync.md#index-health) 和 [`docs/report/2026-05-23-search-vector-index-batch-gap.md`](../report/) 的根因分析。
 
@@ -144,16 +164,19 @@ CREATE INDEX idx_sessions_created ON sessions(created_at);
 ```sql
 CREATE TABLE sync_session_checkpoint (
   source         TEXT    NOT NULL,
-  session_id     TEXT    NOT NULL,        -- 平台原始 id,**不含 sess_ 前缀**
+  location       TEXT    NOT NULL DEFAULT '',  -- 0.7.x 加入 PK
+  session_id     TEXT    NOT NULL,        -- 平台原始 id,**不含 sess- 前缀**
   sha256         TEXT    NOT NULL,
   last_round_id  TEXT,
   line_offset    INTEGER NOT NULL DEFAULT 0,
   updated_at     TEXT    NOT NULL,
-  PRIMARY KEY (source, session_id)
+  PRIMARY KEY (source, location, session_id)
 );
 ```
 
 `sync.db` 是 sync watcher 自己的状态库 —— 记着"我上次看每个上游 session 的 sha256 + 最后一个 round_id + 文件 line offset",**只为 sync 增量决策服务**。删掉它不影响业务数据,只会触发下一次启动重新冷扫一遍。
+
+> PK 0.7.x 起把 `location` 也算进去,让同源不同 endpoint(claude-code 装在两个 home,openclaw 的 US/EU 双 base URL)的同名 session 可以独立打游标。
 
 ## 跟其它对象的关系
 

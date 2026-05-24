@@ -32,7 +32,9 @@
     "snippet_head_chars": 100
   },
   "sync": {
-    "debounce_ms": 200
+    "enabled": true,
+    "debounce_ms": 200,
+    "endpoints": null
   },
   "explore": {
     "cwd": "~/.memory.talk/explore",
@@ -126,9 +128,36 @@ relevance + 0.1 * (review_up - review_down) + 0.02 * log(read_count + 1) - 0.005
 
 | 字段 | 类型 | 默认 | 说明 |
 |---|---|---|---|
+| `enabled` | boolean | `true` | watcher 是否启用。0.5.x 起从 `sync_state.json` 迁来,首次启动 server 时自动 migrate 旧文件 |
 | `debounce_ms` | integer | `200` | watcher 合并同文件连续写的窗口(毫秒) |
+| `endpoints` | `EndpointConfig[]?` | `null` | 0.7.x 新字段。**null = 自动检测**(所有 `DEFAULT_LOCATION` 存在的 adapter 起一份);非 null 时**精确取这个清单**,不再自动扫 |
 
-> sync 是否启用的开关**不在 settings.json**,而是在独立的 `~/.memory.talk/sync_state.json` 里持久化(详见 [`../../cli/v3/sync.md`](../../cli/v3/sync.md))—— 它是 runtime 状态而非配置。
+#### `endpoints[]` 字段
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `source` | string | ✓ | 注册过的 adapter 名(`claude-code` / `codex` / `openclaw`) |
+| `location` | string | ✓ | 端点定位符 —— 文件型是绝对路径,HTTP 型是 base URL |
+| `label` | string? | | 可读别名,用于状态表 / 日志的 `<source>@<label>`;未设回退到 `location` |
+| `auth_key` | string? | | HTTP 型 adapter 用;字面值或 `${VAR}` |
+
+`EndpointConfig` 允许附加 adapter 特有 kwargs(`model_config = ConfigDict(extra="allow")`),透传到 `cls(location=..., label=..., **extras)`。
+
+示例(显式配置两个 openclaw endpoint):
+
+```json
+"sync": {
+  "enabled": true,
+  "endpoints": [
+    {"source": "claude-code", "location": "~/.claude/projects"},
+    {"source": "codex",       "location": "~/.codex/sessions"},
+    {"source": "openclaw", "location": "https://us.openclaw.example",
+     "label": "us", "auth_key": "${OPENCLAW_US_KEY}"},
+    {"source": "openclaw", "location": "https://eu.openclaw.example",
+     "label": "eu", "auth_key": "${OPENCLAW_EU_KEY}"}
+  ]
+}
+```
 
 ### explore
 
@@ -146,6 +175,8 @@ relevance + 0.1 * (review_up - review_down) + 0.02 * log(read_count + 1) - 0.005
 | `search.comment_max_length` | 500 | **删** —— link 的 comment 没了;review 的 comment 不设硬上限 |
 | `search.ranking_formula` | 无 | **新增** —— 沉浮公式 |
 | `sync.debounce_ms` | 无 | **新增** —— watcher 防抖窗口 |
+| `sync.enabled` | 在 `sync_state.json` | 迁到 settings,首次加载自动 migrate |
+| `sync.endpoints` | 无 | **新增 0.7.x** —— 多 endpoint 配置;null 时走自动检测 |
 | `explore.cwd` | 在(但 v3 流程不同) | 在,namespace 判断字段从 tag 改为 `metadata.cwd` 前缀 |
 | `explore.auto_default_limit` | 无 | **新增** |
 

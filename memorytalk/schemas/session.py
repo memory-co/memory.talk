@@ -89,16 +89,19 @@ class ReadAfterResult(BaseModel):
 class EnsureSessionRequest(BaseModel):
     """Look up a session's current ingest state without writing anything.
 
-    Sync calls this before reading the upstream file so it knows where
-    its cursor stands relative to what's already in the DB. ``session_id``
-    is the **raw platform id**; the response carries the prefixed form.
+    ``session_id`` is the canonical minted id (``sess-<loc8>-<lastseg>``,
+    produced by ``BaseAdapter.mint_session_id``). ``location`` /
+    ``location_label`` carry through for fresh inserts that materialize
+    a session row.
     """
     session_id: str
     source: str
+    location: str = ""
+    location_label: str | None = None
 
 
 class EnsureSessionResponse(BaseModel):
-    session_id: str  # prefixed
+    session_id: str  # canonical
     last_round_id: str | None = None
     round_count: int = 0
 
@@ -106,17 +109,14 @@ class EnsureSessionResponse(BaseModel):
 class AppendRoundsRequest(BaseModel):
     """Append new rounds to a session under optimistic-concurrency.
 
-    ``expected_prev_round_id`` is the cursor the caller believes the
-    server is on. None means the caller thinks no rounds exist yet.
-    If the server disagrees, the response carries ``actual_last_round_id``
-    and the caller is expected to recompute its cursor and retry.
-
-    ``created_at`` / ``metadata`` are honored on first append (when the
-    session row is being created); subsequent appends refresh metadata
-    only.
+    ``session_id`` is the canonical minted id (``sess-<loc8>-<lastseg>``).
+    ``location`` / ``location_label`` are stored on the sessions row at
+    first insert (subsequent appends keep the existing values).
     """
-    session_id: str            # raw or prefixed; server normalizes
+    session_id: str
     source: str
+    location: str = ""
+    location_label: str | None = None
     expected_prev_round_id: str | None = None
     rounds: list[RoundInput] = Field(default_factory=list)
     created_at: str = ""

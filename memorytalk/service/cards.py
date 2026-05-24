@@ -33,7 +33,9 @@ from memorytalk.provider.lancedb import LanceStore
 from memorytalk.repository import SQLiteStore
 from memorytalk.schemas import CreateCardRequest
 from memorytalk.service.events import EventWriter
-from memorytalk.util.ids import CARD_PREFIX, SESSION_PREFIX, new_card_id
+from memorytalk.util.ids import (
+    CARD_PREFIX, SESSION_PREFIX, SESSION_PREFIX_LEGACY, new_card_id,
+)
 from memorytalk.util.indexes import IndexesParseError, parse_indexes
 
 
@@ -168,7 +170,7 @@ class CardService:
         sources: dict[str, str] = {}  # session_id → source
         out: list[dict] = []
         for ref in refs:
-            if not ref.session_id.startswith(SESSION_PREFIX):
+            if not ref.session_id.startswith((SESSION_PREFIX, SESSION_PREFIX_LEGACY)):
                 raise CardServiceError("invalid session_id prefix")
             session_row = await self.db.sessions.get(ref.session_id)
             if session_row is None:

@@ -24,7 +24,16 @@ def _msg(uuid, parent, mtype, text, ts="2026-05-18T09:00:00Z", cwd="/work/proj")
 
 @pytest.fixture
 def fake_claude_root(tmp_path, monkeypatch):
-    """Point ClaudeCodeAdapter at a tmp tree with one prepared session jsonl."""
+    """Point ClaudeCodeAdapter at a tmp tree with one prepared session jsonl.
+
+    Returns ``(root, jsonl_path, minted_sid)``. The minted sid depends
+    on (source, location) hash, so it must be computed after the
+    monkeypatch points DEFAULT_LOCATION at the tmp tree.
+
+    Also points the CodexAdapter at a nonexistent tmp path so the
+    auto-detect loop in SyncWatcher doesn't pick up the developer's
+    real ``~/.codex/sessions/`` data during a test run.
+    """
     root = tmp_path / "fake_claude_projects"
     proj = root / "myproject"
     proj.mkdir(parents=True)
@@ -34,8 +43,13 @@ def fake_claude_root(tmp_path, monkeypatch):
         + json.dumps(_msg("a1", "u1", "assistant", "hi back")) + "\n"
     )
     from memorytalk.adapters.claude_code import ClaudeCodeAdapter
-    monkeypatch.setattr(ClaudeCodeAdapter, "DEFAULT_ROOT", root)
-    return root, f
+    from memorytalk.adapters.codex import CodexAdapter
+    monkeypatch.setattr(ClaudeCodeAdapter, "DEFAULT_LOCATION", str(root))
+    monkeypatch.setattr(
+        CodexAdapter, "DEFAULT_LOCATION", str(tmp_path / "no_codex_here"),
+    )
+    sid = ClaudeCodeAdapter(location=str(root)).mint_session_id("abc-123")
+    return root, f, sid
 
 
 @pytest.fixture
@@ -134,7 +148,7 @@ async def test_watcher_logs_lifecycle_and_events(sync_client_with_claude, fake_c
     watcher start, backfill milestones, file events received, ingest
     outcomes. The dictConfig that routes these to ``logs/sync/watch.log``
     is the daemon shim's job — here we just verify the call sites fire."""
-    _, session_file = fake_claude_root
+    _, session_file, sid = fake_claude_root
     caplog.set_level("INFO", logger="memorytalk.sync.watch")
     await _wait_for_phase(sync_client_with_claude, "watching")
 
@@ -143,7 +157,7 @@ async def test_watcher_logs_lifecycle_and_events(sync_client_with_claude, fake_c
         f.write(json.dumps(_msg("u9", "a1", "user", "another round")) + "\n")
     for _ in range(20):
         await asyncio.sleep(0.2)
-        r = await sync_client_with_claude.post("/v3/read", json={"id": "sess_abc-123"})
+        r = await sync_client_with_claude.post("/v3/read", json={"id": sid})
         if len(r.json()["session"]["rounds"]) == 3:
             break
 
@@ -156,14 +170,15 @@ async def test_watcher_logs_lifecycle_and_events(sync_client_with_claude, fake_c
     # because those fire during the test body.
     assert "backfill finished" in joined, joined
     assert any("event adapter=claude-code" in m for m in records), joined
-    assert any("ingested adapter=claude-code" in m for m in records), joined
+    # 0.7.x: ingested log line now keys on endpoint=<source@label>, not adapter=<source>.
+    assert any("ingested endpoint=claude-code" in m for m in records), joined
 
 
 async def test_watcher_picks_up_appended_round(sync_client_with_claude, fake_claude_root):
-    _, session_file = fake_claude_root
+    _, session_file, sid = fake_claude_root
     await _wait_for_phase(sync_client_with_claude, "watching")
 
-    r = await sync_client_with_claude.post("/v3/read", json={"id": "sess_abc-123"})
+    r = await sync_client_with_claude.post("/v3/read", json={"id": sid})
     assert len(r.json()["session"]["rounds"]) == 2
 
     with session_file.open("a") as f:
@@ -171,7 +186,7 @@ async def test_watcher_picks_up_appended_round(sync_client_with_claude, fake_cla
 
     for _ in range(20):
         await asyncio.sleep(0.2)
-        r = await sync_client_with_claude.post("/v3/read", json={"id": "sess_abc-123"})
+        r = await sync_client_with_claude.post("/v3/read", json={"id": sid})
         if len(r.json()["session"]["rounds"]) == 3:
             break
     assert len(r.json()["session"]["rounds"]) == 3
@@ -183,6 +198,35 @@ async def test_watcher_picks_up_appended_round(sync_client_with_claude, fake_cla
 
 async def test_v3_status_sync_enabled_reflects_settings(sync_client_with_claude):
     assert (await sync_client_with_claude.get("/v3/status")).json()["sync_enabled"] is True
+
+
+# ────────── per-endpoint visibility (0.7.x) ──────────
+
+async def test_status_surfaces_endpoint_breakdown(sync_client_with_claude):
+    """``GET /v3/sync/status`` carries per-endpoint counters and an
+    endpoints list, so the CLI / consumers can render a one-row-per-source
+    view without re-aggregating client-side."""
+    body = await _wait_for_phase(sync_client_with_claude, "watching")
+    # endpoints reflects what the watcher built from settings/auto-detect.
+    eps = body.get("endpoints") or []
+    assert any(e["source"] == "claude-code" for e in eps)
+    # The per-endpoint slice mirrors totals[claude-code@<label>] — same
+    # counter shape.
+    by_ep = body.get("totals_by_endpoint") or {}
+    cc_key = next((k for k in by_ep if k.startswith("claude-code@")), None)
+    assert cc_key is not None, by_ep
+    cc_totals = by_ep[cc_key]
+    # Index health by endpoint surfaces the data-completeness picture.
+    by_endpoint_idx = (body.get("index") or {}).get("by_endpoint") or []
+    cc_idx = next(
+        (r for r in by_endpoint_idx if r["source"] == "claude-code"), None,
+    )
+    assert cc_idx is not None
+    assert cc_idx["sessions"] == 1
+    assert cc_idx["rounds"] >= 2
+    # Imported should match the index — every session backfilled should
+    # have bumped imported by 1 in the per-endpoint totals.
+    assert cc_totals["imported"] >= 1
 
 
 # ────────── legacy sync_state.json migration ──────────
@@ -237,7 +281,10 @@ async def test_per_session_backfill_error_does_not_abort(sync_data_root, fake_cl
 
     class _PoisonAdapter(BaseAdapter):
         source_name = "poison"
-        DEFAULT_ROOT = sync_data_root / "nowhere"
+        # Must be an existing path: auto-detect skips adapters whose
+        # DEFAULT_LOCATION doesn't exist on disk. sync_data_root is the
+        # data dir created by the fixture, guaranteed to exist.
+        DEFAULT_LOCATION = str(sync_data_root)
 
         def watch_roots(self):
             return []

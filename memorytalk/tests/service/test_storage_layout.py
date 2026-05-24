@@ -64,8 +64,8 @@ async def test_sqlite_has_no_rounds_index_table(app, client):
 
 async def test_rounds_jsonl_is_source_of_truth(client, data_root):
     sid = await _ingest_sample(client)
-    raw_id = sid[len("sess_"):]
-    bucket = raw_id[:2].lower()
+    from memorytalk.repository.sessions import SessionStore
+    bucket = SessionStore._bucket(sid)
     jsonl = data_root / "sessions" / "claude-code" / bucket / sid / "rounds.jsonl"
     assert jsonl.exists()
     lines = [json.loads(l) for l in jsonl.read_text().splitlines() if l.strip()]

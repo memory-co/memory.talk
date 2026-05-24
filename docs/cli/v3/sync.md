@@ -57,22 +57,45 @@ hint: enable via `memory.talk setup` or set `sync.enabled` in `settings.json` an
 | field | value |
 |---|---|
 | uptime | 2h 13m |
-| adapters | claude-code |
-| watching | `~/.claude/projects` |
+| endpoints | 2 |
 | imported | 7 |
 | appended | 12 |
-| overwrite_warnings | 0 |
 | errors | 0 |
+| index_errors | 0 |
 | last_event_at | 2026-05-20 14:32:18 |
+
+## endpoints
+
+| source | location | ok | imported | appended | errors |
+|---|---|---|---|---|---|
+| claude-code | `/home/user/.claude/projects` | ✓ | 5 | 10 | 0 |
+| codex       | `/home/user/.codex/sessions`  | ✓ | 2 | 2  | 0 |
+
+## index health
+
+| field | value |
+|---|---|
+| sessions | 425 |
+| rounds | 12735 (all indexed) |
+| backfill | `idle` |
+
+### by endpoint
+
+| endpoint | sessions | rounds | indexed | missing | degraded |
+|---|---|---|---|---|---|
+| `claude-code@/home/user/.claude/projects` | 400 | 12000 | 12000 | 0 | 0 |
+| `codex@/home/user/.codex/sessions`        |  25 |   735 |   735 | 0 | 0 |
 
 ## recent
 
 | time | session_id | event | rounds |
 |---|---|---|---|
-| 14:32:18 | `sess_187c6576-…190b0` | rounds_appended | +3 |
-| 14:30:02 | `sess_a91e2f44-…b81c` | rounds_appended | +1 |
-| 14:21:55 | `sess_5dcf9a02-…0e7f` | imported | 18 |
+| 14:32:18 | `sess-15f0a7fb-…190b0` | rounds_appended | +3 |
+| 14:30:02 | `sess-15f0a7fb-…b81c`  | rounds_appended | +1 |
+| 14:21:55 | `sess-d68dd382-…0e7f`  | imported | 18 |
 ````
+
+`endpoints` 表只在多 endpoint 时才真正有比较价值;单 endpoint 安装也会显示,只是和顶层 totals 重复。`by endpoint` 索引健康分布只在 >1 个 endpoint 时渲染。
 
 `phase` 在冷扫期间为 `backfilling`,扫完跳 `watching`。`totals` 是本次 lifespan 的累计,server 重启清零。
 
@@ -109,9 +132,19 @@ watcher not running
 
 把 `~/.memory.talk/sync.db` 删掉,重启 server。下次启动的 backfill 会把所有 session 都视为新游标,重新走一遍 `ensure → read_after(None) → append_rounds`。由于 ingest 是 append-only + UNIQUE on (session_id, round_id),已经存过的 round 都不会重复写入,但游标会全部刷新一遍。
 
-## ID 规范化
+## ID 规范化(0.7.x)
 
-平台原始 session 文件名(例如 Claude Code 给的 UUID `187c6576-…`)在写入存储时被服务端**前缀化为 `sess_`**(即 `sess_187c6576-…`)。所有 v3 命令和 API 里出现的 `session_id` 都是带前缀的形态;sync.db 里的 checkpoint key 是 `(source, raw_session_id)`(不带前缀)—— 这是 sync 视角的"上游 id"。
+session_id 由 SyncWatcher / adapter 在 mint 阶段算好:
+
+```
+session_id = "sess-" + sha256("<source>#<location>")[:8] + "-" + last_segment(upstream_id)
+```
+
+`(source, location)` 一起进 8 字符 loc-hash,保证同源不同 endpoint 的 session **不会撞 id**;`last_segment` 是上游 id 最后一段 `-` 之后的内容(git short-sha 风格,人眼可读)。
+
+sync.db checkpoint 的主键是 `(source, location, raw_session_id)`,跟 sessions 表的 sid 解耦 —— sync 视角看的是"上游文件 + 它在哪个 endpoint",sessions 表看的是 mint 后的全局唯一 sid。
+
+> 0.6 → 0.7 升级路径:**不做数据迁移**。`rm -rf ~/.memory.talk && memory.talk setup` 重灌一遍即可,sync watcher 会从 0 重新 backfill 所有上游 session。
 
 ## 跟其他命令的边界
 

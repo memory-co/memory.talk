@@ -100,8 +100,15 @@ class IngestService:
 
     async def ensure_session(self, req: EnsureSessionRequest) -> EnsureSessionResponse:
         """Read-only probe — never creates rows. Returns where the
-        server's cursor stands for this (source, session_id)."""
-        sid = prefix_session_id(req.session_id)
+        server's cursor stands for this canonical session_id.
+
+        Caller (sync watcher) is responsible for minting the canonical
+        id via ``BaseAdapter.mint_session_id``; we accept it verbatim.
+        Old code paths that handed in raw upstream ids go through
+        ``prefix_session_id`` themselves (only the recall hook does
+        this; see ``util/ids.py``).
+        """
+        sid = req.session_id
         existing = await self.db.sessions.get(sid)
         if existing is None:
             return EnsureSessionResponse(session_id=sid, last_round_id=None, round_count=0)
@@ -114,7 +121,10 @@ class IngestService:
     # ────────── append_rounds ──────────
 
     async def append_rounds(self, req: AppendRoundsRequest) -> AppendRoundsResponse:
-        sid = prefix_session_id(req.session_id)
+        # Canonical session_id arrives already minted by the caller
+        # (sync watcher uses adapter.mint_session_id). No further
+        # transformation here.
+        sid = req.session_id
         now = _utc_iso()
         existing = await self.db.sessions.get(sid)
         server_last = existing.get("last_round_id") if existing else None
@@ -158,7 +168,9 @@ class IngestService:
         new_last = new_rounds[-1]["round_id"]
         if existing is None:
             await self.db.sessions.upsert(
-                session_id=sid, source=req.source, cwd=cwd,
+                session_id=sid, source=req.source,
+                location=req.location, location_label=req.location_label,
+                cwd=cwd,
                 created_at=req.created_at, synced_at=now,
                 metadata=req.metadata, round_count=new_total,
                 last_round_id=new_last,

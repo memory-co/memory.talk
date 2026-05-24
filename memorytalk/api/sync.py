@@ -23,6 +23,7 @@ async def get_sync_status(request: Request, limit: int = Query(5, ge=0, le=20)):
     # from a previous run). Compute it unconditionally so callers always
     # see the data-completeness picture.
     index = await db.sessions.get_index_health()
+    index["by_endpoint"] = await db.sessions.get_index_health_by_endpoint()
     backfill = getattr(request.app.state, "backfill", None)
     index["backfill_status"] = (
         backfill.status if backfill is not None else "disabled"
@@ -34,17 +35,18 @@ async def get_sync_status(request: Request, limit: int = Query(5, ge=0, le=20)):
     if not config.settings.sync.enabled:
         return {"status": "disabled", "index": index}
     if not watcher.running:
-        # enabled=True but the watcher isn't live → lifespan auto-start
-        # failed. The exact exception isn't captured here; users can find
-        # it in stderr of the server process.
         return {"status": "error", "error": "watcher not running", "index": index}
+
+    totals = watcher.totals()
     return {
         "status": "running",
         "phase": watcher.phase,
         "uptime_seconds": watcher.uptime_seconds,
         "adapters": watcher.adapter_names(),
+        "endpoints": watcher.endpoint_info(),
         "watching": watcher.watching(),
-        "totals": watcher.totals(),
+        "totals": totals.get("_total", totals),
+        "totals_by_endpoint": {k: v for k, v in totals.items() if k != "_total"},
         "last_event_at": (watcher.recent(1) or [{}])[0].get("at"),
         "recent": watcher.recent(limit=limit),
         "index": index,

@@ -106,18 +106,23 @@ def _classify_user_message(msg: dict) -> tuple[str, str]:
 @register
 class ClaudeCodeAdapter(BaseAdapter):
     source_name = "claude-code"
+    DEFAULT_LOCATION = str(Path.home() / ".claude" / "projects")
 
-    DEFAULT_ROOT = Path.home() / ".claude" / "projects"
+    @property
+    def root(self) -> Path:
+        # ``location`` is the literal string from settings (e.g.
+        # ``~/.claude/projects``); expand here for filesystem ops.
+        return Path(self.location).expanduser()
 
     # ────────── sync-facing surface ──────────
 
     def watch_roots(self) -> list[Path]:
-        return [self.DEFAULT_ROOT]
+        return [self.root]
 
     def list_sources(self) -> Iterator[SourceProbe]:
-        if not self.DEFAULT_ROOT.exists():
+        if not self.root.exists():
             return
-        for path in sorted(self.DEFAULT_ROOT.rglob("*.jsonl")):
+        for path in sorted(self.root.rglob("*.jsonl")):
             probe = self.probe(str(path))
             if probe is not None:
                 yield probe

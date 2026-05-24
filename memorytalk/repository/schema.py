@@ -22,8 +22,13 @@ DDL = [
     # ── sessions ─────────────────────────────────────────────────────────
     """
     CREATE TABLE IF NOT EXISTS sessions (
-        session_id              TEXT PRIMARY KEY,    -- always 'sess_<...>'
-        source                  TEXT NOT NULL,       -- 'claude-code' / 'codex' / ...
+        session_id              TEXT PRIMARY KEY,    -- 'sess-<loc8>-<lastseg>'
+        source                  TEXT NOT NULL,       -- 'claude-code' / 'codex' / 'openclaw' / ...
+        location                TEXT NOT NULL DEFAULT '',
+                                                     -- adapter location URI (filesystem path / URL);
+                                                     -- baked into session_id's loc_code; column kept
+                                                     -- for GROUP BY queries
+        location_label          TEXT,                -- UI-friendly name; falls back to location
         cwd                     TEXT,                -- = metadata.cwd; explore namespace key
         created_at              TEXT NOT NULL,
         synced_at               TEXT NOT NULL,
@@ -42,6 +47,7 @@ DDL = [
     "CREATE INDEX IF NOT EXISTS idx_sessions_cwd ON sessions(cwd)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_source ON sessions(source)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_created ON sessions(created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_sessions_endpoint ON sessions(source, location)",
 
     # ── cards ────────────────────────────────────────────────────────────
     """
@@ -151,6 +157,20 @@ async def _additive_migrations(conn: aiosqlite.Connection) -> None:
         await conn.execute("ALTER TABLE sessions ADD COLUMN last_index_error TEXT")
     if "last_index_attempted_at" not in cols:
         await conn.execute("ALTER TABLE sessions ADD COLUMN last_index_attempted_at TEXT")
+
+    # 1c. Endpoint tracking columns (added 0.7.x for multi-endpoint
+    #     sync support — same source can be ingested from multiple
+    #     locations, e.g. openclaw US + EU endpoints). The ``location``
+    #     value is the literal string from settings (filesystem path or
+    #     URL), and it's also baked into the session_id's loc_code
+    #     prefix; the column is redundant but lets ``GROUP BY location``
+    #     queries skip the per-row id parsing.
+    if "location" not in cols:
+        await conn.execute(
+            "ALTER TABLE sessions ADD COLUMN location TEXT NOT NULL DEFAULT ''"
+        )
+    if "location_label" not in cols:
+        await conn.execute("ALTER TABLE sessions ADD COLUMN location_label TEXT")
 
     # 2. If the legacy ``rounds_index`` table is around, derive
     #    last_round_id from it (max-idx round per session), then drop it.

@@ -203,29 +203,40 @@ def fmt_sync_status(payload: dict) -> str:
     # running
     phase = payload.get("phase") or "watching"
     secs = int(payload.get("uptime_seconds") or 0)
-    adapters = ", ".join(payload.get("adapters") or [])
     totals = payload.get("totals") or {}
-    watching = payload.get("watching") or []
+    endpoints = payload.get("endpoints") or []
+    totals_by_endpoint = payload.get("totals_by_endpoint") or {}
 
     lines = [
         f"# sync · **running** · phase `{phase}`", "",
         "| field | value |", "|---|---|",
         f"| uptime | {_humanize_secs(secs)} |",
-        f"| adapters | {adapters} |",
+        f"| endpoints | {len(endpoints)} |",
+        f"| imported | {totals.get('imported', 0)} |",
+        f"| appended | {totals.get('appended', 0)} |",
+        f"| errors | {totals.get('errors', 0)} |",
+        f"| index_errors | {totals.get('index_errors', 0)} |",
+        f"| last_event_at | {payload.get('last_event_at') or '—'} |",
     ]
-    paths = []
-    for w in watching:
-        marker = "" if w.get("ok") else f" ({w.get('reason') or 'missing'})"
-        paths.append(f"`{w['path']}`{marker}")
-    lines.append(f"| watching | {', '.join(paths) if paths else '—'} |")
-    lines.append(f"| imported | {totals.get('imported', 0)} |")
-    lines.append(f"| appended | {totals.get('appended', 0)} |")
-    lines.append(f"| overwrite_warnings | {totals.get('overwrite_warnings', 0)} |")
-    lines.append(f"| errors | {totals.get('errors', 0)} |")
-    # index_errors lives in totals too — surface alongside its sibling
-    # so it's clear "all green errors" doesn't mean "search index OK".
-    lines.append(f"| index_errors | {totals.get('index_errors', 0)} |")
-    lines.append(f"| last_event_at | {payload.get('last_event_at') or '—'} |")
+
+    if endpoints:
+        # Per-endpoint table — one row per (source, location). Folds
+        # in totals_by_endpoint so the user sees both reachability +
+        # ingest activity per endpoint at a glance.
+        lines.extend([
+            "", "## endpoints", "",
+            "| source | location | ok | imported | appended | errors |",
+            "|---|---|---|---|---|---|",
+        ])
+        for ep in endpoints:
+            key = f"{ep['source']}@{ep.get('label') or ep.get('location')}"
+            t = totals_by_endpoint.get(key) or {}
+            mark = "✓" if ep.get("ok") else f"✗ ({ep.get('reason') or 'missing'})"
+            lines.append(
+                f"| {ep['source']} | `{ep.get('location') or '—'}` | "
+                f"{mark} | {t.get('imported', 0)} | {t.get('appended', 0)} | "
+                f"{t.get('errors', 0)} |"
+            )
 
     idx_block = _fmt_index_health(payload.get("index"))
     if idx_block:
@@ -279,6 +290,24 @@ def _fmt_index_health(index: dict | None) -> str | None:
     ]
     if last_err:
         lines.append(f"| last_index_error | `{last_err[:80]}{'…' if len(last_err) > 80 else ''}` |")
+
+    by_endpoint = index.get("by_endpoint") or []
+    if len(by_endpoint) > 1:
+        # Only render the breakdown when there's something to compare —
+        # a single-endpoint install (e.g. just claude-code) already saw
+        # those numbers in the cross-endpoint summary above.
+        lines.extend([
+            "", "### by endpoint", "",
+            "| endpoint | sessions | rounds | indexed | missing | degraded |",
+            "|---|---|---|---|---|---|",
+        ])
+        for r in by_endpoint:
+            lines.append(
+                f"| `{r.get('endpoint') or r.get('source')}` | "
+                f"{r.get('sessions', 0)} | {r.get('rounds', 0)} | "
+                f"{r.get('indexed', 0)} | {r.get('missing', 0)} | "
+                f"{r.get('degraded', 0)} |"
+            )
     return "\n".join(lines) + "\n"
 
 

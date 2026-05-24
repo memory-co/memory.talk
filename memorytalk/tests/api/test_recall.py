@@ -33,7 +33,8 @@ async def test_recall_basic_returns_card_with_insight(client):
     })
     assert r.status_code == 200
     body = r.json()
-    assert body["session_id"] == "sess_hook-1"  # normalized
+    from memorytalk.util.ids import prefix_session_id
+    assert body["session_id"] == prefix_session_id("hook-1")  # normalized
     assert body["query"] == "LanceDB"
     ids = [c["card_id"] for c in body["recalled"]]
     assert cid in ids
@@ -109,15 +110,18 @@ async def test_recall_does_not_touch_search_log(app, client):
 
 
 async def test_recall_session_id_normalization(client):
+    from memorytalk.util.ids import prefix_session_id
     sid = await _ingest(client)
     await _make_card(client, sid, "norm-1")
     r1 = await client.post("/v3/recall", json={
         "session_id": "raw-id", "prompt": "norm",
     })
-    assert r1.json()["session_id"] == "sess_raw-id"
+    # Raw id gets minted into the canonical sess-<loc8>-<lastseg>.
+    assert r1.json()["session_id"] == prefix_session_id("raw-id")
     r2 = await client.post("/v3/recall", json={
         "session_id": "sess_already-prefixed", "prompt": "norm",
     })
+    # Already-prefixed (legacy ``sess_`` form) passes through verbatim.
     assert r2.json()["session_id"] == "sess_already-prefixed"
 
 

@@ -13,7 +13,7 @@ import json
 import os
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 _DEFAULT_RANKING_FORMULA = (
@@ -68,9 +68,32 @@ class RecallConfig(BaseModel):
     default_top_k: int = 3
 
 
+class EndpointConfig(BaseModel):
+    """A single sync target. (source, location) is the unique identifier;
+    label is for display, extras are adapter-specific (e.g. ``auth_key``
+    for openclaw).
+
+    ``location`` interpretation per adapter:
+      - ``claude-code`` / ``codex``: filesystem path
+      - ``openclaw``: HTTPS URL
+    """
+    model_config = ConfigDict(extra="allow")  # adapter-specific kwargs survive
+
+    source: str
+    location: str
+    label: str | None = None
+    auth_key: str | None = None  # adapter-specific; openclaw uses it
+
+
 class SyncConfig(BaseModel):
     enabled: bool = False
     debounce_ms: int = 200
+    # When None (default), the watcher auto-detects from registered
+    # adapters whose DEFAULT_LOCATION exists on disk. Users only need
+    # to populate this list to (a) opt-in HTTP-based endpoints like
+    # openclaw, (b) add a non-default local location, or (c) pin a
+    # specific subset for testing.
+    endpoints: list[EndpointConfig] | None = None
 
 
 class ExploreConfig(BaseModel):

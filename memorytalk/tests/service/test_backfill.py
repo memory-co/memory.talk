@@ -30,10 +30,12 @@ def _round(rid: str, role: str, text: str) -> dict:
     }
 
 
-async def _seed_session(client, sid: str, n_rounds: int) -> None:
+async def _seed_session(client, sid: str, n_rounds: int) -> str:
+    """Seed and return the canonical (minted) session_id."""
     rounds = [_round(f"r{i}", "human", f"round {i} text") for i in range(n_rounds)]
     r = await ingest_session(client, sid, rounds=rounds)
     r.raise_for_status()
+    return r.json()["session_id"]
 
 
 @pytest_asyncio.fixture
@@ -54,18 +56,18 @@ class TestReindexHappyPath:
         # Default fixture uses dummy embedder, which never fails — so to
         # create a degraded state we have to set indexed_round_count
         # manually after seed (simulating a past partial failure).
-        await _seed_session(client, "bf-1", n_rounds=15)
+        sid = await _seed_session(client, "bf-1", n_rounds=15)
         await app.state.db.sessions.bump_indexed_count(
-            "sess_bf-1", -15, "2026-01-01T00:00:00Z",
+            sid, -15, "2026-01-01T00:00:00Z",
         )  # roll back to 0 to simulate degraded
-        row = await app.state.db.sessions.get("sess_bf-1")
+        row = await app.state.db.sessions.get(sid)
         assert row["indexed_round_count"] == 0
         assert row["round_count"] == 15
 
         # Reindex.
         await backfill._reindex_session(row)
 
-        row = await app.state.db.sessions.get("sess_bf-1")
+        row = await app.state.db.sessions.get(sid)
         assert row["indexed_round_count"] == row["round_count"] == 15
         # last_index_error should be cleared on full success.
         assert row["last_index_error"] is None
@@ -75,17 +77,19 @@ class TestListDegradedOrdering:
 
     async def test_largest_gap_first(self, app, client):
         # Two degraded sessions, one with a 3-round gap, one with 10.
-        await _seed_session(client, "small-gap", n_rounds=5)
+        # Use ids whose final segment (last `-` chunk, used by
+        # ``mint_session_id``) differs, otherwise they'd collide.
+        small_sid = await _seed_session(client, "gap-small", n_rounds=5)
         await app.state.db.sessions.bump_indexed_count(
-            "sess_small-gap", -3, "2026-01-01T00:00:00Z",
+            small_sid, -3, "2026-01-01T00:00:00Z",
         )  # 5 - 3 = 2 indexed, 3 missing
-        await _seed_session(client, "big-gap", n_rounds=15)
+        big_sid = await _seed_session(client, "gap-big", n_rounds=15)
         await app.state.db.sessions.bump_indexed_count(
-            "sess_big-gap", -10, "2026-01-01T00:00:00Z",
+            big_sid, -10, "2026-01-01T00:00:00Z",
         )  # 15 - 10 = 5 indexed, 10 missing
 
         degraded = await app.state.db.sessions.list_degraded(limit=10)
-        assert [s["session_id"] for s in degraded] == ["sess_big-gap", "sess_small-gap"]
+        assert [s["session_id"] for s in degraded] == [big_sid, small_sid]
 
 
 class TestIndexHealthAggregate:
@@ -98,9 +102,9 @@ class TestIndexHealthAggregate:
 
     async def test_degraded_aggregates_correctly(self, app, client):
         await _seed_session(client, "agg-a", n_rounds=8)   # fully indexed (dummy)
-        await _seed_session(client, "agg-b", n_rounds=20)
+        sid_b = await _seed_session(client, "agg-b", n_rounds=20)
         await app.state.db.sessions.bump_indexed_count(
-            "sess_agg-b", -12, "2026-01-01T00:00:00Z",
+            sid_b, -12, "2026-01-01T00:00:00Z",
         )  # 20 - 12 = 8 indexed, 12 missing
 
         h = await app.state.db.sessions.get_index_health()
@@ -115,20 +119,11 @@ class TestIndexHealthAggregate:
 class TestMissingJsonlGracefulSkip:
 
     async def test_marks_error_and_returns(self, app, client, backfill, tmp_path):
-        await _seed_session(client, "ghost", n_rounds=5)
+        sid = await _seed_session(client, "ghost", n_rounds=5)
         # Manually delete the jsonl to simulate a corrupted install.
-        # rounds.jsonl path mirrors what the repo lays out — easiest
-        # way is to ask the storage layer to read first and confirm,
-        # then nuke the file.
+        # The exact storage layout (bucket prefix etc.) is repo-internal,
+        # so find the file by rglob rather than reconstructing the path.
         from pathlib import Path
-        # `sessions/<source>/<bucket>/<sid>/rounds.jsonl`
-        # Default test source is "claude-code" via the helper.
-        rounds_path = (
-            Path(app.state.config.data_root)
-            / "sessions" / "claude-code" / "gh"  # ghost[0:2]
-            / "sess_ghost" / "rounds.jsonl"
-        )
-        # The exact bucket scheme might differ; find the actual file.
         candidates = list(
             (Path(app.state.config.data_root) / "sessions").rglob("rounds.jsonl")
         )
@@ -138,13 +133,13 @@ class TestMissingJsonlGracefulSkip:
 
         # Roll back indexed_round_count so the session is degraded.
         await app.state.db.sessions.bump_indexed_count(
-            "sess_ghost", -5, "2026-01-01T00:00:00Z",
+            sid, -5, "2026-01-01T00:00:00Z",
         )
-        row = await app.state.db.sessions.get("sess_ghost")
+        row = await app.state.db.sessions.get(sid)
 
         # Should NOT raise — sets last_index_error and returns.
         await backfill._reindex_session(row)
 
-        row = await app.state.db.sessions.get("sess_ghost")
+        row = await app.state.db.sessions.get(sid)
         assert row["last_index_error"] is not None
         assert "missing" in row["last_index_error"].lower()

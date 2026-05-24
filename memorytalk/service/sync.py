@@ -68,7 +68,7 @@ class SyncWatcher:
         self.adapters: list[BaseAdapter] = (
             list(adapters)
             if adapters is not None
-            else [cls() for cls in ADAPTERS.values()]
+            else _build_adapters_from_settings(config)
         )
         self.debounce_seconds = (debounce_ms or config.settings.sync.debounce_ms) / 1000.0
 
@@ -109,7 +109,38 @@ class SyncWatcher:
         return out
 
     def totals(self) -> dict:
+        """Return ``{"_total": {...flat counters...}, "<endpoint>": {...}}``.
+
+        ``_total`` is the cross-endpoint sum; per-endpoint slices key
+        on ``<source>@<label>``. Layout is nested so a future caller
+        can render either the unified or per-endpoint view without
+        re-summing.
+        """
         return dict(self._totals)
+
+    def endpoint_info(self) -> list[dict]:
+        """Per-endpoint metadata for ``/v3/sync/status.endpoints``."""
+        out: list[dict] = []
+        for a in self.adapters:
+            ok = True
+            reason: str | None = None
+            roots = a.watch_roots()
+            if roots:
+                # File-based adapter — endpoint OK iff at least one
+                # watch root exists. HTTP adapters return [] and are
+                # always reported ``ok=True`` (network reachability
+                # would need an actual probe call we don't want to
+                # do on every status request).
+                ok = any(p.exists() for p in roots)
+                reason = None if ok else "missing"
+            out.append({
+                "source": a.source_name,
+                "location": a.location,
+                "label": a.label,
+                "ok": ok,
+                "reason": reason,
+            })
+        return out
 
     def recent(self, limit: int = 5) -> list[dict]:
         return list(reversed(list(self._recent)))[:limit]
@@ -162,26 +193,30 @@ class SyncWatcher:
         _watch_log.info("backfill start adapters=%s", self.adapter_names())
         try:
             for adapter in self.adapters:
+                ep = _endpoint_key(adapter)
                 try:
                     count = 0
                     for probe in adapter.list_sources():
                         stats = await self._sync_one_source(adapter, probe.source_id)
-                        _accumulate(self._totals, stats)
+                        _accumulate(self._totals, stats, endpoint=ep)
                         count += 1
                     _watch_log.info(
-                        "backfill adapter=%s sources=%d totals=%s",
-                        adapter.source_name, count, dict(self._totals),
+                        "backfill endpoint=%s sources=%d totals=%s",
+                        ep, count, dict(self._totals.get("_total", {})),
                     )
                 except Exception as e:
                     _watch_log.exception(
-                        "backfill failed adapter=%s", adapter.source_name,
+                        "backfill failed endpoint=%s", ep,
                     )
-                    self._record_error(adapter.source_name, f"backfill: {e}")
+                    self._record_error(
+                        adapter.source_name, f"backfill: {e}", endpoint=ep,
+                    )
                     continue
         finally:
             self.phase = "watching"
             _watch_log.info(
-                "backfill finished, phase=watching totals=%s", dict(self._totals),
+                "backfill finished, phase=watching totals=%s",
+                self._totals.get("_total", {}),
             )
 
     async def pause(self) -> None:
@@ -224,13 +259,19 @@ class SyncWatcher:
             self._worker_task = None
 
         totals = dict(self._totals)
+        # ``last_run.totals`` only carries the cross-endpoint summary
+        # for backward compat with the old _IngestStats shape; the
+        # per-endpoint breakdown lives in this lifespan's running
+        # ``self._totals`` until the next start() resets it.
         self._last_run = {
             "start": start_iso, "stop": stop_iso,
-            "duration_seconds": uptime, "totals": totals,
+            "duration_seconds": uptime,
+            "totals": totals.get("_total", _zero_counters()),
         }
         self._start_ts = None
         _watch_log.info(
-            "watcher stopped uptime=%.1fs totals=%s", uptime, totals,
+            "watcher stopped uptime=%.1fs totals=%s",
+            uptime, totals.get("_total", {}),
         )
         return totals, uptime
 
@@ -260,15 +301,16 @@ class SyncWatcher:
         while True:
             adapter, path = await self._queue.get()
             await self._await_settled(path)
+            ep = _endpoint_key(adapter)
             try:
                 stats = await self._sync_one_source(adapter, str(path))
-                _accumulate(self._totals, stats)
+                _accumulate(self._totals, stats, endpoint=ep)
             except Exception as e:
                 _watch_log.exception(
-                    "worker iteration failed adapter=%s path=%s",
-                    adapter.source_name, path,
+                    "worker iteration failed endpoint=%s path=%s",
+                    ep, path,
                 )
-                self._record_error(path, str(e))
+                self._record_error(path, str(e), endpoint=ep)
 
     async def _await_settled(self, path: Path) -> None:
         """Wait until the path hasn't been re-touched for one debounce window."""
@@ -284,42 +326,55 @@ class SyncWatcher:
     # ────────── core sync path (shared by backfill + watcher) ──────────
 
     async def _sync_one_source(self, adapter: BaseAdapter, source_id: str) -> dict:
-        stats = _new_totals()
+        # Per-source counters are flat — the caller folds them into
+        # self._totals (nested by endpoint) via _accumulate().
+        stats = _zero_counters()
+        ep = _endpoint_key(adapter)  # "source@label"
 
         # 1. Probe
         try:
             probe = adapter.probe(source_id)
         except Exception as e:
             _watch_log.exception(
-                "probe failed adapter=%s source=%s", adapter.source_name, source_id,
+                "probe failed endpoint=%s source=%s", ep, source_id,
             )
-            self._record_error(source_id, f"probe: {e}")
+            self._record_error(source_id, f"probe: {e}", endpoint=ep)
             stats["errors"] = 1
             return stats
         if probe is None:
             return stats
         stats["discovered"] = 1
 
-        # 2. Checkpoint short-circuit
-        ckpt = await self.checkpoints.get(adapter.source_name, probe.session_id)
+        # Mint canonical session_id once; everywhere below uses this.
+        # probe.session_id is the raw upstream id; the minted id embeds
+        # (source, location) via loc_code so two endpoints can carry
+        # the same upstream id without colliding.
+        sid = adapter.mint_session_id(probe.session_id)
+
+        # 2. Checkpoint short-circuit (scoped by source+location+raw id)
+        ckpt = await self.checkpoints.get(
+            adapter.source_name, adapter.location, probe.session_id,
+        )
         if ckpt and ckpt["sha256"] == probe.sha256:
             stats["skipped"] = 1
             return stats
 
-        # 3. Ask ingest where its cursor is
+        # 3. Ask ingest where its cursor is — pass the already-minted
+        # canonical id (sessions table row keyed by it).
         try:
             ensure = await self.ingest.ensure_session(EnsureSessionRequest(
-                source=adapter.source_name, session_id=probe.session_id,
+                source=adapter.source_name, session_id=sid,
+                location=adapter.location, location_label=adapter.label,
             ))
         except Exception as e:
-            _watch_log.exception("ensure_session failed sid=%s", probe.session_id)
-            self._record_error(probe.session_id, f"ensure: {e}")
+            _watch_log.exception("ensure_session failed sid=%s", sid)
+            self._record_error(sid, f"ensure: {e}", endpoint=ep)
             stats["errors"] = 1
             return stats
         server_last = ensure.last_round_id
         hint_offset = ckpt["line_offset"] if ckpt else 0
 
-        # 4. Read incremental rounds from the file
+        # 4. Read incremental rounds from the source
         try:
             batch = adapter.read_after(
                 source_id,
@@ -327,15 +382,15 @@ class SyncWatcher:
                 hint_line_offset=hint_offset,
             )
         except Exception as e:
-            _watch_log.exception("read_after failed sid=%s", probe.session_id)
-            self._record_error(probe.session_id, f"read_after: {e}")
+            _watch_log.exception("read_after failed sid=%s", sid)
+            self._record_error(sid, f"read_after: {e}", endpoint=ep)
             stats["errors"] = 1
             return stats
 
         # 5 + 6. Append, retry once on conflict
         if batch.rounds:
             result, used_offset = await self._send_with_conflict_retry(
-                adapter, probe, batch, expected_prev=server_last,
+                adapter, probe, sid, batch, expected_prev=server_last,
             )
             if result is None:
                 stats["errors"] = 1
@@ -354,6 +409,7 @@ class SyncWatcher:
         # 7. Update checkpoint
         await self.checkpoints.upsert(
             source=adapter.source_name,
+            location=adapter.location,
             session_id=probe.session_id,
             sha256=probe.sha256,
             last_round_id=new_last,
@@ -364,30 +420,28 @@ class SyncWatcher:
         if appended > 0:
             if server_last is None:
                 stats["imported"] = 1
-                self._record(probe.session_id, "imported", rounds=appended)
+                self._record(sid, "imported", rounds=appended, endpoint=ep)
             else:
                 stats["appended"] = 1
-                self._record(probe.session_id, "rounds_appended", rounds=appended)
+                self._record(sid, "rounds_appended", rounds=appended, endpoint=ep)
             _watch_log.info(
-                "ingested adapter=%s sid=%s appended=%d new_last=%s",
-                adapter.source_name, probe.session_id, appended, new_last,
+                "ingested endpoint=%s sid=%s appended=%d new_last=%s",
+                ep, sid, appended, new_last,
             )
         else:
             stats["skipped"] = 1
 
-        # Vector-index outcome is independent from the append path.
-        # ``status`` was already "ok" (jsonl + SQLite committed); but
-        # the LanceDB index for these rounds might be partial / failed.
-        # Surface it so the user's ``sync status`` doesn't show all
-        # green when search is actually missing data.
+        # Vector-index outcome is independent from the append path —
+        # see docs/report/2026-05-23-search-vector-index-batch-gap.md.
         if result is not None and getattr(result, "index_status", "ok") != "ok":
             stats["index_errors"] = 1
             self._record(
-                probe.session_id,
+                sid,
                 "index_partial" if result.index_status == "partial" else "index_failed",
                 indexed=result.indexed_count,
                 index_failed=result.index_failed_count,
                 error=result.index_error,
+                endpoint=ep,
             )
 
         return stats
@@ -396,16 +450,17 @@ class SyncWatcher:
         self,
         adapter: BaseAdapter,
         probe: SourceProbe,
+        sid: str,
         batch,
         expected_prev: str | None,
     ) -> tuple[AppendRoundsResponse | None, int]:
-        """Returns (response, line_offset_used). response=None when the
-        conflict persists after one retry. line_offset_used is the offset
-        from whichever batch was successfully sent (so the checkpoint
-        records the right resume point)."""
+        """Returns (response, line_offset_used). ``sid`` is the canonical
+        minted session_id (passes straight to ingest)."""
         req = AppendRoundsRequest(
-            session_id=probe.session_id,
+            session_id=sid,
             source=adapter.source_name,
+            location=adapter.location,
+            location_label=adapter.label,
             expected_prev_round_id=expected_prev,
             rounds=batch.rounds,
             created_at=probe.created_at,
@@ -417,7 +472,7 @@ class SyncWatcher:
 
         _watch_log.warning(
             "append conflict sid=%s expected=%s actual=%s; retrying once",
-            probe.session_id, expected_prev, result.actual_last_round_id,
+            sid, expected_prev, result.actual_last_round_id,
         )
 
         # Re-read from the server's actual cursor.
@@ -428,29 +483,26 @@ class SyncWatcher:
                 hint_line_offset=0,
             )
         except Exception:
-            _watch_log.exception(
-                "re-read after conflict failed sid=%s", probe.session_id,
-            )
+            _watch_log.exception("re-read after conflict failed sid=%s", sid)
             return None, batch.next_line_offset
 
         if not retry_batch.rounds:
-            # Server has more rounds than the file currently carries —
-            # cursor advances to match server. Synthesize an OK reply.
             _watch_log.info(
-                "post-conflict file has nothing new sid=%s; cursor caught up",
-                probe.session_id,
+                "post-conflict file has nothing new sid=%s; cursor caught up", sid,
             )
             return AppendRoundsResponse(
                 status="ok",
-                session_id=probe.session_id,
+                session_id=sid,
                 new_last_round_id=result.actual_last_round_id,
                 appended_count=0,
                 round_count=0,
             ), retry_batch.next_line_offset
 
         retry_req = AppendRoundsRequest(
-            session_id=probe.session_id,
+            session_id=sid,
             source=adapter.source_name,
+            location=adapter.location,
+            location_label=adapter.label,
             expected_prev_round_id=result.actual_last_round_id,
             rounds=retry_batch.rounds,
             created_at=probe.created_at,
@@ -462,9 +514,10 @@ class SyncWatcher:
 
         _watch_log.error(
             "conflict persists after retry sid=%s actual=%s",
-            probe.session_id, retry_result.actual_last_round_id,
+            sid, retry_result.actual_last_round_id,
         )
-        self._record_error(probe.session_id, "conflict persists")
+        self._record_error(sid, "conflict persists",
+                           endpoint=_endpoint_key(adapter))
         return None, retry_batch.next_line_offset
 
     # ────────── recent ring buffer ──────────
@@ -474,23 +527,50 @@ class SyncWatcher:
             "at": _ISO(), "session_id": session_id, "event": event, **extra,
         })
 
-    def _record_error(self, key, msg: str) -> None:
+    def _record_error(self, key, msg: str, *, endpoint: str = "") -> None:
         self._recent.append({
-            "at": _ISO(), "session_id": str(key), "event": "error", "error": msg,
+            "at": _ISO(), "session_id": str(key), "event": "error",
+            "error": msg, "endpoint": endpoint,
         })
 
 
+def _endpoint_key(adapter: BaseAdapter) -> str:
+    """Display key for an adapter instance: ``"<source>@<label>"``. Used
+    in event records + ``totals`` per-endpoint aggregation."""
+    return f"{adapter.source_name}@{adapter.label or adapter.location}"
+
+
+_COUNTER_KEYS = (
+    "discovered", "imported", "appended", "skipped",
+    "overwrite_warnings", "errors", "index_errors",
+)
+
+
+def _zero_counters() -> dict:
+    return {k: 0 for k in _COUNTER_KEYS}
+
+
 def _new_totals() -> dict:
-    return {
-        "discovered": 0, "imported": 0, "appended": 0,
-        "skipped": 0, "errors": 0,
-        "index_errors": 0,
-    }
+    """Watcher totals layout. ``_total`` is the cross-endpoint sum
+    consumed by old callers that just want one number per counter;
+    per-endpoint slices live under their ``<source>@<label>`` key.
+    Empty per-endpoint dict initially — slices spring into existence
+    on first event from that endpoint."""
+    return {"_total": _zero_counters()}
 
 
-def _accumulate(totals: dict, delta: dict) -> None:
+def _accumulate(totals: dict, delta: dict, endpoint: str | None = None) -> None:
+    """Add ``delta`` into ``totals['_total']`` and the per-endpoint
+    slice keyed by ``endpoint`` (created lazily). Unknown delta keys
+    are ignored so adding new counters in the future doesn't blow up
+    on older watcher instances mid-upgrade."""
     for k, v in delta.items():
-        totals[k] = totals.get(k, 0) + v
+        if k not in _COUNTER_KEYS:
+            continue
+        totals["_total"][k] = totals["_total"].get(k, 0) + v
+        if endpoint:
+            slice_ = totals.setdefault(endpoint, _zero_counters())
+            slice_[k] = slice_.get(k, 0) + v
 
 
 def _make_observer(watcher: SyncWatcher):
@@ -520,3 +600,56 @@ def _make_observer(watcher: SyncWatcher):
             if root.exists():
                 observer.schedule(_Handler(adapter), str(root), recursive=True)
     return observer
+
+
+def _build_adapters_from_settings(config: Config) -> list[BaseAdapter]:
+    """Materialize adapter instances per ``settings.sync.endpoints``.
+
+    When ``endpoints`` is None (default), auto-detect: instantiate every
+    registered adapter whose ``DEFAULT_LOCATION`` exists on disk. This
+    keeps a fresh install zero-config — claude-code at ``~/.claude``
+    and codex at ``~/.codex/sessions`` get picked up if present, no
+    user action required. Remote endpoints (openclaw etc.) MUST be
+    listed explicitly because they have no default.
+    """
+    eps = config.settings.sync.endpoints
+    if eps is not None:
+        # Explicit list — instantiate exactly what user asked for.
+        out: list[BaseAdapter] = []
+        for ep in eps:
+            cls = ADAPTERS.get(ep.source)
+            if cls is None:
+                _watch_log.warning(
+                    "settings.sync.endpoints references unknown source=%r; skipping",
+                    ep.source,
+                )
+                continue
+            try:
+                # Pass through adapter-specific extras (auth_key etc.).
+                extras = {
+                    k: v for k, v in ep.model_dump().items()
+                    if k not in {"source", "location", "label"} and v is not None
+                }
+                out.append(cls(location=ep.location, label=ep.label, **extras))
+            except Exception:
+                _watch_log.exception(
+                    "failed to instantiate adapter %s@%s",
+                    ep.source, ep.location,
+                )
+        return out
+
+    # Auto-detect: register a default-location instance per adapter whose
+    # location exists. Adapters without a DEFAULT_LOCATION (HTTP-only,
+    # e.g. openclaw) are skipped — they need explicit settings.
+    auto: list[BaseAdapter] = []
+    for cls in ADAPTERS.values():
+        default = getattr(cls, "DEFAULT_LOCATION", None)
+        if not default:
+            continue
+        if not Path(default).expanduser().exists():
+            continue
+        try:
+            auto.append(cls(location=default))
+        except Exception:
+            _watch_log.exception("auto-detect failed for %s", cls.source_name)
+    return auto

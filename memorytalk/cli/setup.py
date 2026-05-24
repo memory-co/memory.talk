@@ -139,10 +139,14 @@ def _wizard(cfg: Config, old_raw: dict | None, is_first_install: bool) -> dict:
 
     # ── sync ────────────────────────────────────────────────────────────
     section("Sync")
+    # Probe what'll auto-detect so the user can see ahead of time which
+    # CLIs will be picked up. Endpoint discovery itself happens in the
+    # SyncWatcher at server start — this is purely informational.
+    _show_detected_endpoints()
     old_sync = base.get("sync") or {}
     enabled_default = old_sync.get("enabled", True if is_first_install else False)
     sync_enabled = console.confirm(
-        "Enable backend sync? (auto-ingest Claude Code sessions etc.)",
+        "Enable backend sync? (auto-ingest Claude Code / Codex sessions etc.)",
         default=enabled_default,
     )
     new["sync"] = {
@@ -222,6 +226,37 @@ def _step_embedding(base: dict) -> dict:
         )
         out["timeout"] = base.get("timeout", 30.0)
     return out
+
+
+def _show_detected_endpoints() -> None:
+    """List adapters whose ``DEFAULT_LOCATION`` exists on the user's
+    machine — those will be auto-attached on server start. Adapters
+    without a default location (e.g. openclaw) need explicit
+    ``settings.sync.endpoints`` to participate; we don't surface them
+    here because the wizard doesn't (yet) collect remote-endpoint config.
+    """
+    from pathlib import Path
+    from memorytalk.adapters import ADAPTERS
+    detected = []
+    missing = []
+    for name, cls in ADAPTERS.items():
+        loc = getattr(cls, "DEFAULT_LOCATION", None)
+        if not loc:
+            continue
+        if Path(loc).expanduser().exists():
+            detected.append((name, loc))
+        else:
+            missing.append((name, loc))
+    if detected:
+        err_console.print("[dim]Detected sources:[/dim]")
+        for name, loc in detected:
+            err_console.print(f"  [green]✓[/green] {name} → [cyan]{loc}[/cyan]")
+    if missing:
+        err_console.print("[dim]Not present (will be ignored):[/dim]")
+        for name, loc in missing:
+            err_console.print(f"  [dim]·[/dim] {name} → [dim]{loc}[/dim]")
+    if not detected and not missing:
+        err_console.print("[dim](no sync adapters with default locations are registered)[/dim]")
 
 
 def _probe_embedding(emb_block: dict) -> None:

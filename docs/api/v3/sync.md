@@ -48,9 +48,16 @@ CLI 对应单命令 [`memory.talk sync`](../../cli/v3/sync.md)。
   "status": "running",
   "phase": "watching",
   "uptime_seconds": 7980,
-  "adapters": ["claude-code"],
+  "adapters": ["claude-code", "codex"],
+  "endpoints": [
+    {"source": "claude-code", "location": "/home/user/.claude/projects",
+     "label": "/home/user/.claude/projects", "ok": true, "reason": null},
+    {"source": "codex", "location": "/home/user/.codex/sessions",
+     "label": "/home/user/.codex/sessions", "ok": true, "reason": null}
+  ],
   "watching": [
-    {"path": "/home/user/.claude/projects", "ok": true, "reason": null}
+    {"path": "/home/user/.claude/projects", "ok": true, "reason": null},
+    {"path": "/home/user/.codex/sessions",  "ok": true, "reason": null}
   ],
   "totals": {
     "discovered": 42,
@@ -58,11 +65,21 @@ CLI 对应单命令 [`memory.talk sync`](../../cli/v3/sync.md)。
     "skipped": 27, "errors": 0,
     "index_errors": 0
   },
+  "totals_by_endpoint": {
+    "claude-code@/home/user/.claude/projects": {
+      "discovered": 30, "imported": 2, "appended": 10,
+      "skipped": 18, "errors": 0, "index_errors": 0
+    },
+    "codex@/home/user/.codex/sessions": {
+      "discovered": 12, "imported": 1, "appended": 2,
+      "skipped": 9, "errors": 0, "index_errors": 0
+    }
+  },
   "last_event_at": "2026-05-20T14:32:18Z",
   "recent": [
-    {"at": "2026-05-20T14:32:18Z", "session_id": "sess_187c6576-...", "event": "rounds_appended", "rounds": 3},
-    {"at": "2026-05-20T14:30:02Z", "session_id": "sess_a91e2f44-...", "event": "rounds_appended", "rounds": 1},
-    {"at": "2026-05-20T14:21:55Z", "session_id": "sess_5dcf9a02-...", "event": "imported", "rounds": 18}
+    {"at": "2026-05-20T14:32:18Z", "session_id": "sess-15f0a7fb-90b0",
+     "event": "rounds_appended", "endpoint": "claude-code@/home/user/.claude/projects",
+     "rounds": 3}
   ],
   "index": {
     "total_sessions": 425,
@@ -71,7 +88,19 @@ CLI 对应单命令 [`memory.talk sync`](../../cli/v3/sync.md)。
     "missing_rounds": 0,
     "degraded_sessions": 0,
     "backfill_status": "idle",
-    "last_index_error": null
+    "last_index_error": null,
+    "by_endpoint": [
+      {"endpoint": "claude-code@/home/user/.claude/projects",
+       "source": "claude-code", "location": "/home/user/.claude/projects",
+       "label": "/home/user/.claude/projects",
+       "sessions": 400, "rounds": 12000, "indexed": 12000,
+       "missing": 0, "degraded": 0},
+      {"endpoint": "codex@/home/user/.codex/sessions",
+       "source": "codex", "location": "/home/user/.codex/sessions",
+       "label": "/home/user/.codex/sessions",
+       "sessions": 25, "rounds": 735, "indexed": 735,
+       "missing": 0, "degraded": 0}
+    ]
   }
 }
 ```
@@ -80,11 +109,13 @@ CLI 对应单命令 [`memory.talk sync`](../../cli/v3/sync.md)。
 |---|---|
 | `phase` | `backfilling`(冷扫中)/ `watching`(冷扫完成,只走文件事件) |
 | `uptime_seconds` | 距 watcher 启动的秒数 |
-| `adapters[]` | 已注册 adapter 名字 |
+| `adapters[]` | 已注册 adapter 名字(legacy 字段,新代码读 `endpoints[]`) |
+| `endpoints[]` | 0.7.x 新字段。每个 `(source, location)` 一行,含可达性 (`ok` / `reason`) |
 | `watching[]` | 每个监听根目录的健康状态;`ok=false` 表示目录不存在但 watcher 仍在 polling |
-| `totals` | 本次 lifespan 累计;**server 重启会归零**(全量历史看 sessions 表 + events.jsonl)。`index_errors` 单独计数"ingest OK 但 LanceDB 索引 partial / failed",跟 `errors` 不混 |
+| `totals` | 本次 lifespan 累计的跨 endpoint 总和;**server 重启会归零**(全量历史看 sessions 表 + events.jsonl)。`index_errors` 单独计数"ingest OK 但 LanceDB 索引 partial / failed",跟 `errors` 不混 |
+| `totals_by_endpoint` | 0.7.x 新字段。把 `totals` 拆到每个 `<source>@<label>` 上,方便 CLI 一行一行渲染 |
 | `last_event_at` | 最近一次事件时间,无事件则 null |
-| `recent[]` | 最近 N 条事件(按时间倒序);**内存 ring buffer**,容量 20,server 重启清空。新增 `index_partial` / `index_failed` 事件,带 `indexed` + `index_failed` 字段反映该次 ingest 的向量索引结果 |
+| `recent[]` | 最近 N 条事件(按时间倒序);**内存 ring buffer**,容量 20,server 重启清空。新增 `endpoint` 字段(0.7.x),携带 `<source>@<label>`,以及 `index_partial` / `index_failed` 事件带 `indexed` + `index_failed` 字段 |
 
 ### index health
 
@@ -109,6 +140,7 @@ CLI 对应单命令 [`memory.talk sync`](../../cli/v3/sync.md)。
 | `degraded_sessions` | `indexed_round_count < round_count` 的 session 数 |
 | `backfill_status` | `running` = 后台 task 正在补;`idle` = degraded queue 空;`disabled` = 没 embedder 或 lance(基础设施缺) |
 | `last_index_error` | backfill loop 最近遇到的错误(失败 session 自己的 `last_index_error` 在 sessions 表) |
+| `by_endpoint[]` | 按 `(source, location)` group 出来的 sessions/rounds/indexed/missing/degraded;CLI 拿来渲染"按 endpoint 一行"的表 |
 
 **消费方应该如何用**:
 - `degraded_sessions = 0` → 索引完整,search 看到的是全集

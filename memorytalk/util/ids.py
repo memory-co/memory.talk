@@ -1,8 +1,19 @@
 """Prefixed typed identifiers.
 
 v3 objects have type-prefixed ids so routing (e.g. ``/v3/read``) can
-dispatch by prefix with zero lookup cost. A raw platform session id gets
-prefixed exactly once at the ingest boundary via ``prefix_session_id``.
+dispatch by prefix with zero lookup cost.
+
+session_id format
+=================
+Canonical: ``sess-<loc8>-<lastseg>`` where ``loc8`` is an 8-hex
+sha256 of ``<source>#<location>`` and ``lastseg`` is the chunk after
+the final ``-`` in the upstream raw id. Minted by adapters via
+``BaseAdapter.mint_session_id``.
+
+The 0.7.x rewrite dropped the older ``sess_<full-uuid>`` format. Both
+``sess-`` and ``sess_`` are still recognized by ``parse_id`` (so a
+half-migrated install doesn't crash on read), but new minting always
+produces ``sess-``.
 """
 from __future__ import annotations
 from enum import Enum
@@ -10,7 +21,8 @@ from ulid import ULID
 
 
 CARD_PREFIX = "card_"
-SESSION_PREFIX = "sess_"
+SESSION_PREFIX = "sess-"          # canonical (new, 0.7.x)
+SESSION_PREFIX_LEGACY = "sess_"   # accepted on read for older data
 REVIEW_PREFIX = "review_"
 SEARCH_PREFIX = "sch_"
 EVENT_PREFIX = "evt_"
@@ -45,10 +57,22 @@ def new_event_id() -> str:
 
 
 def prefix_session_id(platform_id: str) -> str:
-    """Prefix a raw platform session id with ``sess_``. Idempotent."""
-    if platform_id.startswith(SESSION_PREFIX):
+    """Legacy: return a canonical session id, assuming claude-code's
+    default location. Idempotent across both ``sess-`` and ``sess_``.
+
+    Kept for the recall path where callers (claude-code hooks)
+    historically passed raw UUIDs. New ingest paths should mint via
+    ``BaseAdapter.mint_session_id`` instead — that one takes location
+    into account and works for any adapter.
+    """
+    if platform_id.startswith((SESSION_PREFIX, SESSION_PREFIX_LEGACY)):
         return platform_id
-    return f"{SESSION_PREFIX}{platform_id}"
+    # Lazy import to avoid the adapter package pulling in this util
+    # at import-time (the adapter base imports `mint_session_id` logic
+    # from this module's neighbors).
+    from memorytalk.adapters.claude_code import ClaudeCodeAdapter
+    adapter = ClaudeCodeAdapter(location=ClaudeCodeAdapter.DEFAULT_LOCATION)
+    return adapter.mint_session_id(platform_id)
 
 
 def parse_id(id_str: str) -> tuple[IdKind, str]:
@@ -56,6 +80,7 @@ def parse_id(id_str: str) -> tuple[IdKind, str]:
     for prefix, kind in (
         (CARD_PREFIX, IdKind.CARD),
         (SESSION_PREFIX, IdKind.SESSION),
+        (SESSION_PREFIX_LEGACY, IdKind.SESSION),
         (REVIEW_PREFIX, IdKind.REVIEW),
         (SEARCH_PREFIX, IdKind.SEARCH),
         (EVENT_PREFIX, IdKind.EVENT),

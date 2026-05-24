@@ -23,7 +23,8 @@ from memorytalk.repository import SQLiteStore
 from memorytalk.schemas import CreateReviewRequest
 from memorytalk.service.events import EventWriter
 from memorytalk.util.ids import (
-    CARD_PREFIX, REVIEW_PREFIX, SESSION_PREFIX, new_review_id,
+    CARD_PREFIX, REVIEW_PREFIX, SESSION_PREFIX, SESSION_PREFIX_LEGACY,
+    new_review_id,
 )
 from memorytalk.util.indexes import IndexesParseError, parse_indexes
 
@@ -50,7 +51,7 @@ class ReviewService:
             raise ReviewServiceError("score must be one of 1, 0, -1")
         if not req.card_id or not req.card_id.startswith(CARD_PREFIX):
             raise ReviewServiceError("invalid card_id prefix")
-        if not req.session_id or not req.session_id.startswith(SESSION_PREFIX):
+        if not req.session_id or not req.session_id.startswith((SESSION_PREFIX, SESSION_PREFIX_LEGACY)):
             raise ReviewServiceError("invalid session_id prefix")
 
         # Card existence + session existence + indexes range.
