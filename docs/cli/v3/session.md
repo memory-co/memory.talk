@@ -50,18 +50,52 @@ memory.talk session list \
 
 #### 输出 — Markdown(默认)
 
-````markdown
-# session list · 23 / 1247
+跟 [`search`](search.md#markdown-默认) 同款 H3-per-result 块布局 —— 不用表格,因为:1) 单行 metadata 装不下完整 cwd / 多个 tag 又不丢失语义;2) CLI 渲染一致性更好,LLM 消费时识别成本低;3) 后续要加 `read <sid>` 之类的可点引用时,块结构更适合 inline 命令提示。
 
-| created_at | session_id | source | cwd | rounds | tags |
-|---|---|---|---|---|---|
-| 2026-05-24 09:12 | `sess-15f0a7fb-…190b0` | claude-code | `~/work/billing-svc` | 47 | `project=billing status=wip` |
-| 2026-05-24 08:30 | `sess-d68dd382-…0e7f`  | codex       | `~/work/infra`        | 12 | `project=infra` |
-| 2026-05-23 14:21 | `sess-15f0a7fb-…b81c`  | claude-code | `~/.memory.talk/explore` | 8  | — |
-…
-````
+`````markdown
+# session list
 
-标题里 `N / Total`:`N` 是本次返回(受 `--limit` 截断),`Total` 是匹配条件的总数(给用户判断要不要扩 limit 的提示)。`cwd` 截到 50 char,超出用 `…`。`tags` 列空字典渲染为 `—`。
+`filter: endpoint=claude-code · tag=project=billing` · 23 / 1247 results
+
+---
+
+### [SESSION] `sess-15f0a7fb-…190b0` · claude-code · 47 rounds
+
+`tags: project=billing status=wip` · `cwd: ~/work/billing-svc` · 2026-05-24 09:12 (1 day ago)
+
+---
+
+### [SESSION] `sess-d68dd382-…0e7f` · codex · 12 rounds
+
+`tags: project=infra` · `cwd: ~/work/infra` · 2026-05-24 08:30 (1 day ago)
+
+---
+
+### [SESSION] `sess-15f0a7fb-…b81c` · claude-code · 8 rounds
+
+`cwd: ~/.memory.talk/explore` · 2026-05-23 14:21 (2 days ago)
+
+---
+
+_(showing 23 of 1247 — pass --limit higher to see more)_
+`````
+
+##### 约定
+
+- 顶行 `# session list`,**不**带 query(没有 query 概念)。
+- 第二行依次给出生效的过滤条件、返回数 / 总数 ——`23 / 1247` 表示"匹配 1247 条,本次返回 23 条"。没传任何过滤参数时第二行只有 `23 / 1247 results`,不出 `filter:` 段。
+- 每条 session 一个 H3 块,块之间用 `---` 分隔 —— 跟 `search` 完全一致。
+- H3 标题:`### [SESSION] \`<sid>\` · <source> · <round_count> rounds`
+  - `[SESSION]` 字面前缀(类比 search 里的 `[CARD]` / `[SESSION]`)
+  - sid 用反引号包住 —— 一眼能 copy-paste 给 `read`
+  - 长 sid 不省略(`sess-<8hex>-<lastseg>` 已经天然短)
+- 标题下空一行,接**一行 metadata**(中间用 ` · ` 分隔):
+  - `tags: K=V K=V` —— 反引号包成 inline code;空 tags 时**整段不出**(不打 `tags: —` 之类占位符)
+  - `cwd: <path>` —— 反引号包成 inline code;`$HOME` 会被压成 `~`;超 60 char 中间截断成 `<前 25>…<后 25>`
+  - 绝对时间 + 相对时间 —— `YYYY-MM-DD HH:MM (X units ago)`,units 用 `min` / `hour` / `day` / `week`(跟 search 同款)
+- 0 命中 → header 仍然出(`# session list\n\n\`filter: ...\` · 0 / 0 results`),不打 "no sessions found" 占位
+- 总数 > 返回数时,末尾追一行 `_(showing N of TOTAL — pass --limit higher to see more)_` —— 等价于 search 的 strong-floor hint,提示用户结果被截
+- **不**渲染 `metadata.cwd` 以外的 `metadata.*` 字段(平台原生 metadata 太杂,放进列表会噪声化;要看完整 metadata 走 `read <sid>`)
 
 #### 输出 — JSON(`--json`)
 
