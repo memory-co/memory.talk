@@ -16,6 +16,10 @@
     "project_id": "187c6576-...",
     "model": "claude-opus-4-7"
   },
+  "tags": {
+    "project": "billing",
+    "status": "wip"
+  },
   "rounds": [
     {
       "index": 1,
@@ -47,6 +51,7 @@
 | `rounds` | Round[] | 对话轮次,通过 `parent_id` 形成链表(支持分叉) |
 | `round_count` | integer | 总轮次数 |
 | `synced_at` | string | 最近一次 sync 落库的时间 |
+| `tags` | object | 0.8.x 新字段。string→string 字典,用户层面给 session 打的轻量标签。空字典表示无 tag。**跟 `metadata` 解耦** —— metadata 是平台原生字段(adapter 写入),tags 是用户字段(`memory.talk session tag` 写入)。详见 [CLI session.md](../../cli/v3/session.md) 和 [API sessions.md](../../api/v3/sessions.md)。约束:key 匹配 `^[a-zA-Z][a-zA-Z0-9_.-]*$`,value ≤ 200 char,单 session 总 key 数 ≤ 50 |
 
 ### session_id 生成规则(0.7.x)
 
@@ -58,7 +63,7 @@ session_id = "sess-" + sha256(source + "#" + location)[:8] + "-" + last_segment(
 - **`last_segment(upstream_id)`** —— 取 `-` 最后一段。UUID 的最后段是 12 hex,人工 id 落到这一段时易撞车,所以 SyncWatcher 跑出来的 sid 主要靠 loc 哈希区分,last segment 只是给人看的尾巴。
 - 整个 mint 过程是 deterministic 的 —— sync 进程崩了重跑,同一个上游文件还是落到同一个 sid。
 
-**v3 跟 v2 的差异**:v3 session schema **没有 `tags` 字段** —— tag 整套机制在 v3 下线。其它字段保持不变。
+**v3 跟 v2 的差异**:0.6.x 之前 session **没有 `tags` 字段**(随 v3 一起下线了)。**0.8.x 重新加回 tags 字段,但只在 session 这一层**:card 维持无 tag(card 用 `source_cards` lineage + 论坛动力学承担分类;session 没有这两层,要做"按项目分组 / 标 WIP"必须有轻量标签)。tag **类型也变了** —— v2 是字符串列表,v3 改回来是 string→string 字典,见下方 `tags` 字段。
 
 ### metadata.cwd
 
@@ -137,6 +142,7 @@ CREATE TABLE sessions (
   created_at              TEXT NOT NULL,
   synced_at               TEXT NOT NULL,
   metadata                TEXT NOT NULL DEFAULT '{}',
+  tags                    TEXT NOT NULL DEFAULT '{}',  -- 0.8.x 新增,user-level kv 标签
   round_count             INTEGER NOT NULL DEFAULT 0,
   last_round_id           TEXT,                -- ingest 的乐观锁游标
   -- 向量索引追踪(LanceDB rounds 表)。indexed_round_count < round_count

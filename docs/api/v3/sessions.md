@@ -161,6 +161,110 @@ Round / ContentBlock 结构见 [`../../structure/v3/session.md`](../../structure
 
 ---
 
+## GET /v3/sessions
+
+List session 元数据(**不带 rounds**)。CLI 入口 [`memory.talk session list`](../../cli/v3/session.md#session-list)。
+
+### 查询参数
+
+所有参数都可选,**默认列全部 session**(按 `created_at` 倒序,截 `limit`)。多参数 AND。
+
+| 参数 | 类型 | 说明 |
+|---|---|---|
+| `source` | string | adapter 名(精确匹配)。e.g. `?source=claude-code` |
+| `endpoint` | string | `<source>@<label>`。比 `source` 更细;label 不传时回退到 `location`,所以这里也接受 `<source>@<location>` 形式 |
+| `cwd` | string | `metadata.cwd` 前缀(完全展开后的绝对路径)。前缀匹配,**不**正则 |
+| `tag` | string,重复可叠 | `K=V` 严格匹配 / `K` 只校验 key 存在。多个 `tag` AND。e.g. `?tag=project=billing&tag=status=wip` |
+| `since` | ISO 8601 | `created_at >= since`。CLI 端的 `7d` / `12h` duration 在 CLI 层解析成 ISO 后再传 |
+| `until` | ISO 8601 | `created_at <= until` |
+| `limit` | int,默认 `20`,上限 `200` | 返回多少条 |
+
+### 响应
+
+```json
+{
+  "total": 1247,
+  "returned": 23,
+  "sessions": [
+    {
+      "session_id": "sess-15f0a7fb-...190b0",
+      "source": "claude-code",
+      "endpoint": "claude-code@/home/user/.claude/projects",
+      "location": "/home/user/.claude/projects",
+      "location_label": "/home/user/.claude/projects",
+      "cwd": "/home/user/work/billing-svc",
+      "created_at": "2026-05-24T09:12:03Z",
+      "synced_at": "2026-05-24T09:45:11Z",
+      "round_count": 47,
+      "tags": {"project": "billing", "status": "wip"}
+    }
+  ]
+}
+```
+
+- `total` 是匹配条件的总数(不受 `limit` 截断,服务端 `COUNT(*)` 取得);客户端用来提示"还有更多,加大 limit"。
+- `returned == len(sessions)`,等于 `min(total, limit)`。
+- `tags` 是个 string→string 字典,空字典 `{}` 表示无 tag。
+
+### 错误
+
+| 情况 | 状态 |
+|---|---|
+| `limit` 超出 `[1, 200]` | 400 |
+| `since` / `until` 不是合法 ISO 8601 | 400 |
+| `since` / `until` 时间窗反向(since > until) | 400 |
+| `tag` 串里出现非法 key | 400 |
+
+---
+
+## PATCH /v3/sessions/{session_id}/tags
+
+设 / 删 session 的 kv 标签,**PATCH 语义**(只动声明的 key,不传的 key 原样保留)。CLI 入口 [`memory.talk session tag`](../../cli/v3/session.md#session-tag)。
+
+### 请求体
+
+```json
+{
+  "set":   {"project": "billing", "status": "wip"},
+  "unset": ["draft", "obsolete"]
+}
+```
+
+- `set`(可选,默认 `{}`):key→value 字典。已存在的 key 覆盖,不存在的 key 新增。
+- `unset`(可选,默认 `[]`):要删除的 key 列表。key 不存在时**静默忽略**(不报错)。
+- **两个都不传 / 都空 = 查询当前 tags 的语法糖**。等同于 `GET` 该 session 的 `.tags`(我们没单独开一个 GET — `session tag <sid>` 不带任何参数走的就是 PATCH `{}, {}`)。
+
+### 约束(全部由服务端校验)
+
+| 约束 | 报错 |
+|---|---|
+| key 必须匹配 `^[a-zA-Z][a-zA-Z0-9_.-]*$` | 400 `tag key '<k>' invalid` |
+| value 长度 ≤ 200 char | 400 `tag value for '<k>' too long (max 200)` |
+| 单 session tag 总数 ≤ 50(以 PATCH 后的最终量算) | 400 `too many tags (max 50)` |
+| 同 key 同时出现在 `set` 和 `unset` | 400 `cannot both set and unset '<k>'` |
+| session_id 不存在 | 404 |
+
+任一违反 → **整次 PATCH 拒绝**,SQLite 不改。
+
+### 响应
+
+返回**改动后的全量 tags**(方便消费方拿到最终状态,不用回查):
+
+```json
+{
+  "session_id": "sess-15f0a7fb-...190b0",
+  "tags": {"project": "billing", "status": "wip"}
+}
+```
+
+### 副作用
+
+- 改写 SQLite `sessions.tags`。
+- 不改 `metadata`(metadata 是平台原生字段,tag 是用户字段,两者解耦)。
+- 不动 `rounds.jsonl` / LanceDB / events.jsonl —— tag 是元数据,不是对话事件。
+
+---
+
 ## 调用方
 
 - **内部**: `memorytalk.service.sync.SyncWatcher` 通过 in-process 直接调 `IngestService.ensure_session` / `append_rounds`,不走 HTTP。

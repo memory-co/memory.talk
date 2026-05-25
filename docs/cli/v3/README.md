@@ -74,7 +74,8 @@ memory.talk
 ├── review '<json>'                             # 对某张 card 回帖(score + comment,挂单 session 一段 indexes)
 ├── read <id>                                   # 读 card 或 session(按 id 前缀自动判型)
 ├── search <query> [--where DSL]                # 有意识检索:沉浮公式排序
-└── recall <session_id> <prompt>                # 无意识召回:hook 阶段极简 cards 注入 LLM context
+├── recall <session_id> <prompt>                # 无意识召回:hook 阶段极简 cards 注入 LLM context
+└── session list | tag                          # 列 session 元数据 / 给 session 打 kv 标签
 ```
 
 每个命令一份独立文档,见 [#六、命令详情](#六命令详情)。
@@ -118,7 +119,7 @@ memory.talk
 | v2 命令 / 概念 | v3 为什么不要 |
 |---|---|
 | `filter` | 论坛动力学(沉浮公式 + DSL)替代了"取景框",找特定子集走 `search --where`,不再写独立 filter 引擎 |
-| `tag` | 没有 tag 命令,session 也不再带 `tags` 字段 —— 元数据筛选靠 `source` / `created_at` 等已有字段足够,自动 tag 机制(`sync_session` / `explore`)随 filter 一起退场 |
+| `tag` | v2 的"tag 是一级一等公民,自动从 sync / explore 注入"那套机制被砍。**0.8.x 重新加回**一个轻量 tag —— 只在 session 这一层、user-side `memory.talk session tag` 手动写、不再有任何自动注入。详见 [session.md](session.md)。card 维持无 tag(归类靠 `source_cards` lineage + 论坛动力学) |
 | `link create` / `link list` | 用户 link 压成 card 的 `source_cards`(immutable);card↔session 仍由 `rounds[].session_id` 隐式承载,不再有独立 link 对象 |
 | `log` | events.jsonl / search_log 仍作为后端审计层存在,**但不开 CLI 查询入口** |
 | `rebuild` | embedding 重算捆在 `setup`(仅 dim 改时触发,就地重算所有 card 向量),不开独立 rebuild 命令 |
@@ -207,6 +208,7 @@ memory.talk setup                # 改 provider / dim,setup 就地重算所有 c
 | `read` | [read.md](read.md) |
 | `search` | [search.md](search.md) |
 | `recall` | [recall.md](recall.md) |
+| `session` | [session.md](session.md) |
 | `server` | 沿用 v2 [server.md](../v2/server.md) 契约,后续补独立 v3 版 |
 
 ## 七、设计原则
