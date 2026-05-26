@@ -16,6 +16,10 @@ v3 的核心数据结构 —— 从对话中提炼出的记忆单元。**append-
     {"card_id": "card_01jzaaaa", "relation": "supersedes"},
     {"card_id": "card_01jzbbbb", "relation": "derives_from"}
   ],
+  "tags": {
+    "project": "billing",
+    "status": "verified"
+  },
   "stats": {
     "review_up": 7,
     "review_down": 3,
@@ -44,6 +48,14 @@ v3 的核心数据结构 —— 从对话中提炼出的记忆单元。**append-
 | `rounds` | Round[] | 是 | 展开后的对话轮次(见下方 Round 结构),每条带 `session_id` + `index` 指回源 session。可为空数组(纯 source_cards 派生的高阶 card) |
 | `source_cards` | SourceCard[] | 否 | card 间关联,创建时确定,**不可改**(见下方 SourceCard 结构);空数组 / 不传等价 |
 | `created_at` | string | 自动 | ISO 8601 |
+
+### User-side metadata(可改,但跟 immutable payload 解耦)
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `tags` | object | 0.8.x 新字段。string→string 字典,user-side 手动打的轻量组织标签。**不参与论坛动力学**(不进 sort / 不算 stats / 不进 vector index),纯查询 / 归类用。约束:key 匹配 `^[a-zA-Z][a-zA-Z0-9_.-]*$`,value ≤ 200 char,单 card key 数 ≤ 50。详见 [`../../cli/v3/card.md#card-tag`](../../cli/v3/card.md#card-tag) |
+
+> tag 跟 immutable payload 解耦:**改 tag 不破坏 append-only 不变性**。append-only 约束的是 `insight` / `rounds` / `source_cards` —— 它们承载论坛主张和 lineage,改了就把"老观点复活"和"fork 谁取代谁"的判断基础挪走;tag 不在这个语义层,它只是给已存在的 card 贴归类标签。
 
 ### Runtime state(不在 payload 里,由后端实时维护)
 
@@ -145,6 +157,7 @@ CREATE TABLE card_stats (
 CREATE TABLE cards (
   card_id    TEXT PRIMARY KEY,
   insight    TEXT NOT NULL,
+  tags       TEXT NOT NULL DEFAULT '{}',  -- 0.8.x 新增,user-level kv 标签
   created_at TIMESTAMP NOT NULL
 );
 
@@ -168,5 +181,5 @@ CREATE TABLE card_source_cards (
 | 关联载体 | `links[]`(独立 link 对象 + TTL) | `source_cards[]`(card 字段 + 不可改) |
 | 状态 | `ttl` + view 续命 | `stats` + 沉浮公式 |
 | 创建后改 | `links` 可加可改 ttl | 全 immutable,只能新建 |
-| tag | 单独 sqlite 表,view card 时 join | 无 tag 概念 |
+| tag | 单独 sqlite 表(字符串列表),自动从 sync / explore 注入,view card 时 join | **0.8.x 加回**,但形态变了:string→string 字典存在 `cards.tags` 列里,只 user-side 手动 PATCH,不参与论坛动力学。详见 [`../../cli/v3/card.md`](../../cli/v3/card.md) |
 | 写入入参 | `summary` + `rounds` + (没 links,默认自动生成) | `insight` + `rounds` + `source_cards`(可选) |
