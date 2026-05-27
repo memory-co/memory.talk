@@ -155,3 +155,55 @@ async def test_404_on_missing_session(client):
         json={"set": {"x": "y"}},
     )
     assert r.status_code == 404
+
+
+# ────────── meta.json mirror ──────────
+
+async def _read_meta(app, source: str, sid: str) -> dict:
+    """Resolve the on-disk meta.json for a session and parse it."""
+    return await app.state.db.sessions.read_meta(source, sid) or {}
+
+
+async def test_patch_mirrors_tags_to_meta_json(client, app):
+    """PATCH /tags must write the same dict into meta.json — the file
+    is v3's audit / portability mirror; user-supplied tags belong in
+    the same persistence tier as ``metadata`` / ``round_count``."""
+    sid = await _seed(client)
+    await client.patch(
+        f"/v3/sessions/{sid}/tags",
+        json={"set": {"project": "billing", "status": "wip"}},
+    )
+    meta = await _read_meta(app, "claude-code", sid)
+    assert meta.get("tags") == {"project": "billing", "status": "wip"}
+
+
+async def test_create_writes_empty_tags_to_meta_json(client, app):
+    """Even with no PATCH, a freshly created session's meta.json should
+    carry ``tags: {}`` so the file's shape is uniform."""
+    sid = await _seed(client)
+    meta = await _read_meta(app, "claude-code", sid)
+    assert meta.get("tags") == {}
+
+
+async def test_append_after_patch_preserves_tags(client, app):
+    """A PATCH followed by another ingest (append) must NOT lose the
+    tags from meta.json. _refresh_meta has to read current tags from
+    SQLite and carry them through, otherwise the audit file goes
+    stale on every append."""
+    sid = await _seed(client)
+    await client.patch(
+        f"/v3/sessions/{sid}/tags",
+        json={"set": {"project": "billing"}},
+    )
+    # Ingest more rounds — same upstream id, second append.
+    r = await ingest_session(client, "t-1", rounds=[
+        {"round_id": "r1", "role": "human",
+         "content": [{"type": "text", "text": "hi"}]},
+        {"round_id": "r2", "role": "assistant",
+         "content": [{"type": "text", "text": "hello"}]},
+    ])
+    r.raise_for_status()
+    meta = await _read_meta(app, "claude-code", sid)
+    assert meta.get("tags") == {"project": "billing"}, (
+        "tags lost on append — _refresh_meta isn't carrying them forward"
+    )

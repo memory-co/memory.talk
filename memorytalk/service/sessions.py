@@ -178,6 +178,10 @@ class IngestService:
             await self.db.sessions.write_meta(req.source, sid, {
                 "session_id": sid, "source": req.source,
                 "created_at": req.created_at, "metadata": req.metadata,
+                # Always include ``tags`` so meta.json has a uniform
+                # shape from the very first write. Empty dict on create
+                # since tagging only happens via PATCH after the fact.
+                "tags": {},
                 "round_count": new_total, "synced_at": now,
             })
         else:
@@ -227,11 +231,21 @@ class IngestService:
     ) -> None:
         """Rewrite meta.json with the latest metadata + count. Cheap; we
         always do this on each append so downstream readers see fresh
-        cwd / metadata values."""
+        cwd / metadata values.
+
+        Tags are pulled from SQLite (the source of truth for
+        user-supplied tags) and carried into the mirror. Without this,
+        a ``PATCH /tags`` followed by an append would clobber the tags
+        on disk — SQLite would keep them, but meta.json would lose
+        them on every append, breaking the "files = full audit
+        mirror" invariant.
+        """
         meta = await self.db.sessions.read_meta(req.source, sid) or {}
+        current_tags = await self.db.sessions.get_tags(sid) or {}
         meta.update({
             "session_id": sid, "source": req.source,
             "metadata": req.metadata or existing.get("metadata") or {},
+            "tags": current_tags,
             "round_count": (
                 round_count_override
                 if round_count_override is not None

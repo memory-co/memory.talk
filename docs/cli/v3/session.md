@@ -27,7 +27,7 @@ memory.talk session
 memory.talk session list \
     [--source <name>] [--endpoint <source>@<label>] \
     [--cwd <prefix>] \
-    [--tag K=V ...] [--tag K ...] \
+    [--tag <expr> ...] \
     [--since <duration|date>] [-d <duration|date>] \
     [--until <duration|date>] \
     [--limit N] [--json]
@@ -40,13 +40,46 @@ memory.talk session list \
 | `--source` | adapter 名(`claude-code` / `codex` / …) | 按 source 卡 |
 | `--endpoint` | `<source>@<label>` | 比 `--source` 更细,精确到一个 endpoint。0.7.x 多 endpoint 后用 |
 | `--cwd` | 路径前缀 | 按 `metadata.cwd` 前缀匹配(复用 [explore namespace](explore.md) 同款逻辑) |
-| `--tag K=V` | `key=value` | tag 必须有这个 key 且 value 严格相等;多个 `--tag` AND |
-| `--tag K` | `key` | 只要存在这个 key 即命中(value 任意) |
+| `--tag` | 5 种表达式,见 [`--tag` 操作符](#tag-操作符) | 多个 `--tag` AND 串接 |
 | `--since` / `-d` | 持续时长或 ISO 日期 | session `created_at >= 起点`;`7d` / `12h` / `2w` / `2026-05-01` |
 | `--until` | 同上 | session `created_at <= 终点` |
 | `--limit` | 整数,默认 `20` | 最多返回多少条;按 `created_at` 倒序后截 |
 
 `--since` / `--until` duration 语法:`<int><unit>`,unit ∈ `{h, d, w}`(小时 / 天 / 周)。`-d` 是 `--since` 的短选项(高频用法,跟 `git log --since` 风格一致)。
+
+#### `--tag` 操作符
+
+| 表达式 | 语义 |
+|---|---|
+| `--tag K=V` | tag 的 key `K` 严格等于 `V` |
+| `--tag K!=V` | tag 的 key `K` **存在且不等于** `V`(严格 NE,**NULL 不算命中**;要把"没打 K"也包含进去再叠一个 `--tag !K`) |
+| `--tag K=V1,V2,V3` | tag 的 key `K` ∈ `{V1, V2, V3}`(IN,覆盖 OR 场景) |
+| `--tag K` | tag 里有 key `K`(任意值) |
+| `--tag !K` | tag 里**没有** key `K` |
+
+多个 `--tag` 用 AND 拼接;同一 key 给两次不同 eq 写法(`--tag project=a --tag project=b`)合法,**返回空集**(系统不替你猜矛盾意图)。
+
+**例子**
+
+```bash
+# 严格 ne,NULL 不算
+memory.talk session list --tag status!=draft
+
+# 没打过 project 标签的
+memory.talk session list --tag !project
+
+# status 落在这三个值任一
+memory.talk session list --tag status=wip,review,blocked
+
+# 组合:not draft AND 有 project
+memory.talk session list --tag status!=draft --tag project
+```
+
+**当前限制**
+
+- `K=V1,V2` 的 value 里**不支持** `,`(95% 的 tag value 是 slug 形,够用;真要带 `,` 再开 issue)
+- 没有 `LIKE` / 前缀通配(`K~=prefix*` 之类),后续按需补
+- 没有 `OR` 跨 key(`tag.A OR tag.B`)—— 想要 OR 用 IN 覆盖,真正跨字段 OR 当前 v3 全栈都没有(`search --where` 也只支持 AND)
 
 #### 输出 — Markdown(默认)
 

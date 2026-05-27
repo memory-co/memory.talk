@@ -35,6 +35,7 @@ from memorytalk.schemas import (
     TagPatchRequest, TagResponse,
 )
 from memorytalk.service import IngestServiceError
+from memorytalk.util.tag_filter import parse_tag_arg
 from memorytalk.util.tags import TagValidationError, apply_patch
 
 
@@ -78,41 +79,24 @@ def _parse_iso(value: str | None, *, field: str) -> str | None:
     return value
 
 
-def _split_tags(raw: list[str]) -> tuple[dict[str, str], list[str]]:
-    """Split repeated ``?tag=...`` query params into two collections.
+def _parse_tag_filters(raw: list[str]):
+    """Parse repeated ``?tag=...`` query params into TagPredicate list.
 
-    ``K=V`` → equality match (``tag_eq[K] = V``)
-    ``K``   → presence match (``tag_present.append(K)``)
-
-    Same key in both forms is allowed (intersect: must exist AND equal V).
+    Each item supports the 5-operator vocabulary documented in
+    ``docs/cli/v3/session.md`` and parsed by
+    :func:`memorytalk.util.tag_filter.parse_tag_arg` — eq / ne / in /
+    present / absent. Errors are turned into 400s right here so the
+    response is consistent across all parse failures.
     """
-    eq: dict[str, str] = {}
-    present: list[str] = []
-    for item in raw:
-        if not item:
-            continue
-        if "=" in item:
-            k, _, v = item.partition("=")
-            if not k:
-                raise HTTPException(
-                    status_code=400, detail=f"tag query param missing key: {item!r}",
-                )
-            eq[k] = v
-        else:
-            present.append(item)
-    # Key-shape validation deferred to the repo's per-key lookup —
-    # SQLite json_extract on a malformed path just returns NULL, which
-    # produces an empty result rather than a crash; we don't strictly
-    # need to reject here. But for symmetry with PATCH errors we do.
-    from memorytalk.util.tags import validate_key
+    preds = []
     try:
-        for k in eq:
-            validate_key(k)
-        for k in present:
-            validate_key(k)
+        for item in raw:
+            if not item:
+                continue
+            preds.append(parse_tag_arg(item))
     except TagValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return eq, present
+    return preds
 
 
 @router.get("/sessions", response_model=SessionListResponse)
@@ -132,14 +116,13 @@ async def get_sessions(
         raise HTTPException(
             status_code=400, detail="'since' must be <= 'until'",
         )
-    tag_eq, tag_present = _split_tags(tag)
+    tag_filters = _parse_tag_filters(tag)
 
     total, rows = await request.app.state.db.sessions.list_sessions(
         source=source,
         endpoint=endpoint,
         cwd_prefix=cwd,
-        tag_eq=tag_eq,
-        tag_present=tag_present,
+        tag_filters=tag_filters,
         since=since_iso,
         until=until_iso,
         limit=limit,

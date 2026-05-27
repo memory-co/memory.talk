@@ -174,6 +174,96 @@ async def test_filter_tag_malformed_key_rejected(client):
     assert r.status_code == 400
 
 
+# ────────── filter: tag operators (K!=V, !K, K=V1,V2) ──────────
+
+async def test_filter_tag_ne_strict_excludes_null(client):
+    """``K!=V`` is strict — sessions without the key at all are NOT
+    matched. To include them, the caller passes --tag !K too."""
+    a = await _seed(client, "ne-a")
+    b = await _seed(client, "ne-b")
+    c = await _seed(client, "ne-c")
+    await client.patch(f"/v3/sessions/{a}/tags",
+                       json={"set": {"status": "wip"}})
+    await client.patch(f"/v3/sessions/{b}/tags",
+                       json={"set": {"status": "draft"}})
+    # `c` has no status tag at all.
+    r = await client.get("/v3/sessions", params={"tag": "status!=draft"})
+    body = r.json()
+    # `a` matches (wip != draft); `b` doesn't (draft = draft);
+    # `c` doesn't (NULL is excluded by strict NE).
+    assert body["total"] == 1
+    assert body["sessions"][0]["session_id"] == a
+
+
+async def test_filter_tag_absent(client):
+    a = await _seed(client, "abs-a")
+    b = await _seed(client, "abs-b")
+    await client.patch(f"/v3/sessions/{a}/tags",
+                       json={"set": {"project": "billing"}})
+    # b is untagged.
+    r = await client.get("/v3/sessions", params={"tag": "!project"})
+    body = r.json()
+    assert body["total"] == 1
+    assert body["sessions"][0]["session_id"] == b
+
+
+async def test_filter_tag_in_list(client):
+    a = await _seed(client, "in-a")
+    b = await _seed(client, "in-b")
+    c = await _seed(client, "in-c")
+    await client.patch(f"/v3/sessions/{a}/tags",
+                       json={"set": {"status": "wip"}})
+    await client.patch(f"/v3/sessions/{b}/tags",
+                       json={"set": {"status": "review"}})
+    await client.patch(f"/v3/sessions/{c}/tags",
+                       json={"set": {"status": "done"}})
+    r = await client.get("/v3/sessions", params={"tag": "status=wip,review"})
+    body = r.json()
+    sids = {s["session_id"] for s in body["sessions"]}
+    assert sids == {a, b}
+
+
+async def test_filter_combining_ne_and_present(client):
+    """`--tag status!=draft --tag project` — "not draft AND has project"."""
+    a = await _seed(client, "comb-a")
+    b = await _seed(client, "comb-b")
+    c = await _seed(client, "comb-c")
+    await client.patch(f"/v3/sessions/{a}/tags",
+                       json={"set": {"status": "wip", "project": "billing"}})
+    await client.patch(f"/v3/sessions/{b}/tags",
+                       json={"set": {"status": "draft", "project": "billing"}})
+    await client.patch(f"/v3/sessions/{c}/tags",
+                       json={"set": {"status": "wip"}})  # missing project
+    r = await client.get(
+        "/v3/sessions",
+        params=[("tag", "status!=draft"), ("tag", "project")],
+    )
+    body = r.json()
+    assert body["total"] == 1
+    assert body["sessions"][0]["session_id"] == a
+
+
+async def test_contradictory_same_key_returns_empty(client):
+    """``--tag project=a --tag project=b`` is AND of two eq predicates
+    → no row can satisfy both. Returns empty result, NOT an error —
+    user wrote the filter, system doesn't second-guess it."""
+    a = await _seed(client, "contra-a")
+    await client.patch(f"/v3/sessions/{a}/tags",
+                       json={"set": {"project": "billing"}})
+    r = await client.get(
+        "/v3/sessions",
+        params=[("tag", "project=billing"), ("tag", "project=infra")],
+    )
+    assert r.status_code == 200
+    assert r.json()["total"] == 0
+
+
+async def test_filter_in_value_with_empty_member_rejected(client):
+    """``K=a,,b`` is treated as a typo by the parser — 400."""
+    r = await client.get("/v3/sessions", params={"tag": "status=a,,b"})
+    assert r.status_code == 400
+
+
 # ────────── filter: since / until ──────────
 
 async def test_filter_since_until(client, app):

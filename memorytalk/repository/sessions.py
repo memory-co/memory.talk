@@ -248,8 +248,7 @@ class SessionStore:
         source: str | None = None,
         endpoint: str | None = None,
         cwd_prefix: str | None = None,
-        tag_eq: dict[str, str] | None = None,
-        tag_present: list[str] | None = None,
+        tag_filters=None,  # list[TagPredicate] | None
         since: str | None = None,
         until: str | None = None,
         limit: int = 20,
@@ -264,9 +263,13 @@ class SessionStore:
         decomposes to source + label equality on the row's label
         (label-less rows fall back to comparing against location).
 
-        ``tag_eq`` and ``tag_present`` use SQLite JSON1 (``json_extract``)
-        — no FTS/index, fine at CLI scale (≤ thousands of sessions).
+        ``tag_filters`` are :class:`memorytalk.util.tag_filter.TagPredicate`
+        instances — translated to ``json_extract`` clauses via the
+        shared ``tag_filter.to_sql`` so the same SQL shape lands here
+        and in card list later.
         """
+        from memorytalk.util.tag_filter import to_sql as _tag_sql
+
         clauses: list[str] = []
         params: list = []
 
@@ -296,13 +299,10 @@ class SessionStore:
             clauses.append("cwd LIKE ? ESCAPE '\\'")
             params.append(escaped + "%")
 
-        for k, v in (tag_eq or {}).items():
-            clauses.append("json_extract(tags, ?) = ?")
-            params.extend([f"$.{k}", v])
-
-        for k in (tag_present or []):
-            clauses.append("json_extract(tags, ?) IS NOT NULL")
-            params.append(f"$.{k}")
+        if tag_filters:
+            t_clauses, t_params = _tag_sql(tag_filters, column="tags")
+            clauses.extend(t_clauses)
+            params.extend(t_params)
 
         if since:
             clauses.append("created_at >= ?")
@@ -340,16 +340,43 @@ class SessionStore:
         return json.loads(row["tags"] or "{}")
 
     async def replace_tags(self, session_id: str, tags: dict) -> bool:
-        """Wholesale write the tags column. ``tags`` is assumed
-        already validated (call ``util.tags.apply_patch`` first).
-        Returns False if the session_id doesn't exist (so the API can
-        return 404 without a separate existence check)."""
-        cur = await self.conn.execute(
+        """Wholesale write the tags column **and** mirror to meta.json.
+
+        ``tags`` is assumed already validated (call
+        ``util.tags.apply_patch`` first). Returns False if the
+        session_id doesn't exist (so the API can return 404 without a
+        separate existence check).
+
+        Meta mirror rationale: ``meta.json`` is the file-layer audit
+        copy of session metadata; ``tags`` is a user-supplied fact
+        (not a derived runtime signal like ``stats``), so it belongs in
+        the same persistence tier as ``metadata`` / ``round_count`` /
+        ``synced_at``. Without this mirror you can't tarball-relocate
+        a data root without also carrying the SQLite file.
+        """
+        async with self.conn.execute(
+            "SELECT source FROM sessions WHERE session_id = ?", (session_id,),
+        ) as cur:
+            row = await cur.fetchone()
+        if row is None:
+            return False
+        source = row["source"]
+
+        await self.conn.execute(
             "UPDATE sessions SET tags = ? WHERE session_id = ?",
             (json.dumps(tags, ensure_ascii=False), session_id),
         )
         await self.conn.commit()
-        return cur.rowcount > 0
+
+        # Mirror into meta.json. If the file is missing (degraded state
+        # — sqlite row exists but the audit file was deleted), we still
+        # write a partial mirror with just the tags; the next append's
+        # ``_refresh_meta`` rewrites the file completely with all the
+        # other fields, so self-healing is automatic.
+        meta = await self.read_meta(source, session_id) or {}
+        meta["tags"] = tags
+        await self.write_meta(source, session_id, meta)
+        return True
 
     @staticmethod
     def _row(row) -> dict:
