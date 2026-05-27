@@ -13,7 +13,9 @@ from memorytalk.schemas.search import (
 from memorytalk.schemas.session import (
     AppendRoundsRequest, AppendRoundsResponse,
     ContentBlock, EnsureSessionRequest, EnsureSessionResponse,
-    ReadAfterResult, Round, RoundInput, Session, SourceProbe,
+    ReadAfterResult, Round, RoundInput, Session,
+    SessionListResponse, SessionMeta, SourceProbe,
+    TagPatchRequest, TagResponse,
 )
 from memorytalk.schemas.status import StatusResponse
 from memorytalk.schemas.sync import (
@@ -31,7 +33,9 @@ __all__ = [
     "ContentBlock",
     "AppendRoundsRequest", "AppendRoundsResponse",
     "EnsureSessionRequest", "EnsureSessionResponse",
-    "ReadAfterResult", "Round", "RoundInput", "Session", "SourceProbe",
+    "ReadAfterResult", "Round", "RoundInput", "Session",
+    "SessionListResponse", "SessionMeta", "SourceProbe",
+    "TagPatchRequest", "TagResponse",
     "StatusResponse",
     "SyncStartResponse", "SyncStatusResponse", "SyncStopResponse",
 ]

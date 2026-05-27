@@ -19,12 +19,13 @@ def test_top_level_help():
     result = runner.invoke(main, ["--help"])
     assert result.exit_code == 0
     for cmd in ("server", "read", "setup", "sync", "search", "card",
-                "review", "recall"):
+                "review", "recall", "session"):
         assert cmd in result.output
 
 
 @pytest.mark.parametrize("cmd", [
     "server", "read", "setup", "sync", "search", "card", "review", "recall",
+    "session",
 ])
 def test_each_command_help_succeeds(cmd):
     """Each subcommand has its own ``--help`` path. A click decoration

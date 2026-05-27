@@ -33,6 +33,10 @@ DDL = [
         created_at              TEXT NOT NULL,
         synced_at               TEXT NOT NULL,
         metadata                TEXT NOT NULL DEFAULT '{}',
+        tags                    TEXT NOT NULL DEFAULT '{}',
+                                                     -- 0.8.x user-side kv tags (separate from
+                                                     -- platform-native ``metadata``); written by
+                                                     -- PATCH /v3/sessions/{sid}/tags only.
         round_count             INTEGER NOT NULL DEFAULT 0,
         last_round_id           TEXT,                -- platform round_id of round_count'th round
         -- Vector index tracking (lance rounds table)
@@ -171,6 +175,16 @@ async def _additive_migrations(conn: aiosqlite.Connection) -> None:
         )
     if "location_label" not in cols:
         await conn.execute("ALTER TABLE sessions ADD COLUMN location_label TEXT")
+
+    # 1d. User-side kv tags column (added 0.8.x for ``memory.talk session
+    #     tag`` + filterable ``session list --tag``). Stored as a JSON
+    #     object string; reads parse it on the fly. We don't index it —
+    #     query volume is low (CLI-driven) and JSON1 ``json_extract``
+    #     handles per-key lookups without a column index.
+    if "tags" not in cols:
+        await conn.execute(
+            "ALTER TABLE sessions ADD COLUMN tags TEXT NOT NULL DEFAULT '{}'"
+        )
 
     # 2. If the legacy ``rounds_index`` table is around, derive
     #    last_round_id from it (max-idx round per session), then drop it.

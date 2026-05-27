@@ -240,18 +240,133 @@ class SessionStore:
             })
         return out
 
+    # ─── 0.8.x: list + user-side tags ──────────────────────────────
+
+    async def list_sessions(
+        self,
+        *,
+        source: str | None = None,
+        endpoint: str | None = None,
+        cwd_prefix: str | None = None,
+        tag_eq: dict[str, str] | None = None,
+        tag_present: list[str] | None = None,
+        since: str | None = None,
+        until: str | None = None,
+        limit: int = 20,
+    ) -> tuple[int, list[dict]]:
+        """Filtered session list for ``GET /v3/sessions``.
+
+        Returns ``(total, rows)`` — ``total`` is the unbounded match
+        count (so the CLI can tell the user "23 of 1247"), ``rows`` is
+        the page (``limit`` longest, ``created_at`` desc).
+
+        Filters are AND-combined. ``endpoint`` (``<source>@<label>``)
+        decomposes to source + label equality on the row's label
+        (label-less rows fall back to comparing against location).
+
+        ``tag_eq`` and ``tag_present`` use SQLite JSON1 (``json_extract``)
+        — no FTS/index, fine at CLI scale (≤ thousands of sessions).
+        """
+        clauses: list[str] = []
+        params: list = []
+
+        if source:
+            clauses.append("source = ?")
+            params.append(source)
+
+        if endpoint:
+            # endpoint = ``<source>@<label-or-location>``. The label is
+            # display-side only; the canonical match is on
+            # (source, location). When ``location_label`` is set we
+            # accept either; when it isn't, fall back to location.
+            ep_source, _, ep_tail = endpoint.partition("@")
+            clauses.append("source = ?")
+            params.append(ep_source)
+            clauses.append(
+                "(location_label = ? OR (location_label IS NULL AND location = ?))"
+            )
+            params.extend([ep_tail, ep_tail])
+
+        if cwd_prefix:
+            # SQLite has no native prefix-match operator; LIKE with a
+            # literal % suffix is the conventional approach. Escape ``%``
+            # and ``_`` in the user input so a path like ``foo_bar`` isn't
+            # interpreted as a wildcard match.
+            escaped = cwd_prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            clauses.append("cwd LIKE ? ESCAPE '\\'")
+            params.append(escaped + "%")
+
+        for k, v in (tag_eq or {}).items():
+            clauses.append("json_extract(tags, ?) = ?")
+            params.extend([f"$.{k}", v])
+
+        for k in (tag_present or []):
+            clauses.append("json_extract(tags, ?) IS NOT NULL")
+            params.append(f"$.{k}")
+
+        if since:
+            clauses.append("created_at >= ?")
+            params.append(since)
+
+        if until:
+            clauses.append("created_at <= ?")
+            params.append(until)
+
+        where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+
+        async with self.conn.execute(
+            f"SELECT COUNT(*) FROM sessions {where}", params,
+        ) as cur:
+            total = (await cur.fetchone())[0]
+
+        async with self.conn.execute(
+            f"SELECT * FROM sessions {where} "
+            f"ORDER BY created_at DESC LIMIT ?",
+            params + [limit],
+        ) as cur:
+            rows = await cur.fetchall()
+        return total, [self._row(r) for r in rows]
+
+    async def get_tags(self, session_id: str) -> dict | None:
+        """Return the tags dict, or ``None`` if the session row is missing.
+        Distinct return shape from "empty dict" so callers can tell
+        404 vs "exists, no tags"."""
+        async with self.conn.execute(
+            "SELECT tags FROM sessions WHERE session_id = ?", (session_id,),
+        ) as cur:
+            row = await cur.fetchone()
+        if row is None:
+            return None
+        return json.loads(row["tags"] or "{}")
+
+    async def replace_tags(self, session_id: str, tags: dict) -> bool:
+        """Wholesale write the tags column. ``tags`` is assumed
+        already validated (call ``util.tags.apply_patch`` first).
+        Returns False if the session_id doesn't exist (so the API can
+        return 404 without a separate existence check)."""
+        cur = await self.conn.execute(
+            "UPDATE sessions SET tags = ? WHERE session_id = ?",
+            (json.dumps(tags, ensure_ascii=False), session_id),
+        )
+        await self.conn.commit()
+        return cur.rowcount > 0
+
     @staticmethod
     def _row(row) -> dict:
+        keys = row.keys()
         return {
             "session_id": row["session_id"],
             "source": row["source"],
+            "location": row["location"] if "location" in keys else "",
+            "location_label": row["location_label"] if "location_label" in keys else None,
             "cwd": row["cwd"],
             "created_at": row["created_at"],
             "synced_at": row["synced_at"],
             "metadata": json.loads(row["metadata"] or "{}"),
+            "tags": json.loads(row["tags"] or "{}") if "tags" in keys else {},
             "round_count": row["round_count"],
             "last_round_id": row["last_round_id"],
-            "indexed_round_count": row["indexed_round_count"] if "indexed_round_count" in row.keys() else 0,
-            "last_index_error": row["last_index_error"] if "last_index_error" in row.keys() else None,
-            "last_index_attempted_at": row["last_index_attempted_at"] if "last_index_attempted_at" in row.keys() else None,
+            "indexed_round_count": row["indexed_round_count"] if "indexed_round_count" in keys else 0,
+            "last_index_error": row["last_index_error"] if "last_index_error" in keys else None,
+            "last_index_attempted_at": row["last_index_attempted_at"] if "last_index_attempted_at" in keys else None,
         }

@@ -143,3 +143,45 @@ class AppendRoundsResponse(BaseModel):
     index_failed_count: int = 0
     index_status: Literal["ok", "partial", "failed"] = "ok"
     index_error: str | None = None
+
+
+# ─── 0.8.x: list + tag maintenance ──────────────────────────────────
+
+class SessionMeta(BaseModel):
+    """One row in ``GET /v3/sessions``. Metadata-only — no ``rounds``,
+    no LanceDB lookups (``read <sid>`` covers full content)."""
+    session_id: str
+    source: str
+    endpoint: str  # ``<source>@<label-or-location>`` — convenience join
+    location: str = ""
+    location_label: str | None = None
+    cwd: str | None = None
+    created_at: str
+    synced_at: str
+    round_count: int = 0
+    tags: dict[str, str] = Field(default_factory=dict)
+
+
+class SessionListResponse(BaseModel):
+    total: int
+    returned: int
+    sessions: list[SessionMeta] = Field(default_factory=list)
+
+
+class TagPatchRequest(BaseModel):
+    """Body of ``PATCH /v3/sessions/{sid}/tags`` (and cards later).
+
+    PATCH semantics: only the keys listed in ``set`` / ``unset`` are
+    touched; everything else on the row's tag dict is preserved. Empty
+    ``set`` + empty ``unset`` is a no-op query (the response still
+    returns the current full tag dict)."""
+    set: dict[str, str] = Field(default_factory=dict)
+    unset: list[str] = Field(default_factory=list)
+
+
+class TagResponse(BaseModel):
+    """Response of PATCH (and the implicit query when both lists are
+    empty). Always returns the **full** post-merge tag dict so callers
+    don't need a separate GET."""
+    session_id: str
+    tags: dict[str, str] = Field(default_factory=dict)

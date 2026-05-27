@@ -645,3 +645,104 @@ def _fmt_time(iso_str: str | None) -> str:
     local = dt.astimezone()
     abs_str = local.strftime("%Y-%m-%d %H:%M")
     return f"{abs_str} ({rel})"
+
+
+# ────────── session list / tag ──────────
+
+def fmt_session_list(payload: dict, filter_summary: str = "") -> str:
+    """Render ``GET /v3/sessions`` as H3-per-result blocks.
+
+    Mirrors search.md / docs/cli/v3/session.md exactly:
+      - top header line
+      - filter echo + N / TOTAL on the second line
+      - one `### [SESSION] ...` block per row, `---` between them
+      - footer hint when total > returned
+    """
+    total = int(payload.get("total") or 0)
+    returned = int(payload.get("returned") or 0)
+    sessions = payload.get("sessions") or []
+
+    lines = ["# session list", ""]
+    if filter_summary:
+        lines.append(f"`filter: {filter_summary}` · {returned} / {total} results")
+    else:
+        lines.append(f"{returned} / {total} results")
+    lines.append("")
+
+    for s in sessions:
+        sid = s.get("session_id") or "?"
+        src = s.get("source") or "?"
+        rc = int(s.get("round_count") or 0)
+        lines.append("---")
+        lines.append("")
+        lines.append(f"### [SESSION] `{sid}` · {src} · {rc} rounds")
+        lines.append("")
+        lines.append(_session_meta_line(s))
+        lines.append("")
+
+    if total > returned:
+        lines.append("---")
+        lines.append("")
+        lines.append(
+            f"_(showing {returned} of {total} — pass --limit higher to see more)_"
+        )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def fmt_session_tag(payload: dict, *, is_query: bool) -> str:
+    """Render PATCH /v3/sessions/<sid>/tags response.
+
+    `is_query` is True when the CLI sent an empty body (no K=V / -K) —
+    output a query table; otherwise output the one-line "ok: …" confirm.
+    """
+    sid = payload.get("session_id") or "?"
+    tags = payload.get("tags") or {}
+
+    if is_query:
+        if not tags:
+            return "(no tags)\n"
+        lines = [f"# {sid} · tags", "", "| key | value |", "|---|---|"]
+        for k in sorted(tags):
+            lines.append(f"| {k} | {tags[k]} |")
+        return "\n".join(lines) + "\n"
+
+    if not tags:
+        return f"ok: `{sid}` · tags cleared\n"
+    pretty = " ".join(f"{k}={tags[k]}" for k in sorted(tags))
+    return f"ok: `{sid}` · tags = `{pretty}`\n"
+
+
+def _session_meta_line(s: dict) -> str:
+    """Build the single-line metadata strip under each session H3.
+
+    Format:  `tags: K=V K=V` · `cwd: <path>` · 2026-05-24 09:12 (1 day ago)
+
+    Each segment is conditionally included — empty tags / missing cwd
+    are silently dropped so the line doesn't have stray ``—`` markers.
+    """
+    parts: list[str] = []
+    tags = s.get("tags") or {}
+    if tags:
+        kv = " ".join(f"{k}={tags[k]}" for k in sorted(tags))
+        parts.append(f"`tags: {kv}`")
+    cwd = s.get("cwd")
+    if cwd:
+        parts.append(f"`cwd: {_shorten_cwd(cwd)}`")
+    when = _fmt_time(s.get("created_at"))
+    if when:
+        parts.append(when)
+    return " · ".join(parts) if parts else "_(no metadata)_"
+
+
+def _shorten_cwd(path: str, *, max_len: int = 60) -> str:
+    """``$HOME/...`` → ``~/...``; long paths get a middle ellipsis.
+    Pure cosmetic — doesn't affect the underlying field."""
+    import os
+    home = os.path.expanduser("~")
+    if home and path.startswith(home):
+        path = "~" + path[len(home):]
+    if len(path) <= max_len:
+        return path
+    head = path[: max_len // 2 - 1]
+    tail = path[-(max_len // 2 - 1):]
+    return f"{head}…{tail}"
