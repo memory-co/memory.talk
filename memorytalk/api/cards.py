@@ -1,10 +1,24 @@
-"""POST /v3/cards."""
+"""POST /v3/cards + GET /v3/cards + PATCH /v3/cards/{cid}/tags.
+
+Card read is via ``POST /v3/read`` (no ``GET /v3/cards/{cid}`` — read is
+the universal entry point keyed by id prefix). List + tag PATCH are
+maintenance endpoints, designed to mirror the session counterparts so
+the two object types' management UX stays consistent.
+"""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+import datetime as _dt
 
-from memorytalk.schemas import CreateCardRequest, CreateCardResponse
+from fastapi import APIRouter, HTTPException, Query, Request
+
+from memorytalk.schemas import (
+    CardListResponse, CardMeta, CardTagResponse,
+    CreateCardRequest, CreateCardResponse,
+    TagPatchRequest,
+)
 from memorytalk.service import CardConflict, CardServiceError
+from memorytalk.util.tag_filter import parse_tag_arg
+from memorytalk.util.tags import TagValidationError, apply_patch
 
 
 router = APIRouter()
@@ -22,3 +36,95 @@ async def post_cards(payload: CreateCardRequest, request: Request) -> CreateCard
     except CardServiceError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return CreateCardResponse(card_id=card_id)
+
+
+# ─── 0.8.x: list + tag maintenance ──────────────────────────────────
+
+
+def _parse_iso(value: str | None, *, field: str) -> str | None:
+    if value is None:
+        return None
+    try:
+        _dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=400, detail=f"invalid ISO 8601 in '{field}': {value!r}",
+        )
+    return value
+
+
+def _parse_tag_filters(raw: list[str]):
+    """Parse repeated ``?tag=...`` params via the shared tag_filter
+    parser — same 5-form vocabulary used by session list."""
+    preds = []
+    try:
+        for item in raw:
+            if not item:
+                continue
+            preds.append(parse_tag_arg(item))
+    except TagValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return preds
+
+
+@router.get("/cards", response_model=CardListResponse)
+async def get_cards(
+    request: Request,
+    tag: list[str] = Query(default_factory=list),
+    since: str | None = Query(None),
+    until: str | None = Query(None),
+    limit: int = Query(20, ge=1, le=200),
+):
+    since_iso = _parse_iso(since, field="since")
+    until_iso = _parse_iso(until, field="until")
+    if since_iso and until_iso and since_iso > until_iso:
+        raise HTTPException(
+            status_code=400, detail="'since' must be <= 'until'",
+        )
+    tag_filters = _parse_tag_filters(tag)
+
+    total, rows = await request.app.state.db.cards.list_cards(
+        tag_filters=tag_filters,
+        since=since_iso,
+        until=until_iso,
+        limit=limit,
+    )
+    cards = [
+        CardMeta(
+            card_id=r["card_id"],
+            insight=r["insight"],
+            created_at=r["created_at"],
+            tags=r.get("tags") or {},
+            stats=r.get("stats") or {},
+        )
+        for r in rows
+    ]
+    return CardListResponse(total=total, returned=len(cards), cards=cards)
+
+
+@router.patch("/cards/{card_id}/tags", response_model=CardTagResponse)
+async def patch_card_tags(
+    card_id: str, payload: TagPatchRequest, request: Request,
+):
+    """Set / unset / query tags. Empty body = query (returns current
+    tags unchanged). Validates before any write — partial application
+    is impossible by construction."""
+    store = request.app.state.db.cards
+    current = await store.get_tags(card_id)
+    if current is None:
+        raise HTTPException(
+            status_code=404, detail=f"card {card_id!r} not found",
+        )
+
+    try:
+        merged = apply_patch(current, payload.set, payload.unset)
+    except TagValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    if payload.set or payload.unset:
+        ok = await store.replace_tags(card_id, merged)
+        if not ok:
+            raise HTTPException(
+                status_code=404, detail=f"card {card_id!r} not found",
+            )
+    return CardTagResponse(card_id=card_id, tags=merged)

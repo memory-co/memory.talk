@@ -1,7 +1,8 @@
 """Pydantic schemas — request / response shapes for the v3 HTTP API."""
 from memorytalk.schemas.card import Card, CardStats, SourceCard, CardRound
 from memorytalk.schemas.cards import (
-    CardRoundRef, CreateCardRequest, CreateCardResponse,
+    CardListResponse, CardMeta, CardRoundRef, CardTagResponse,
+    CreateCardRequest, CreateCardResponse,
 )
 from memorytalk.schemas.read import ReadRequest, ReadResponse
 from memorytalk.schemas.recall import RecalledCard, RecallRequest, RecallResponse
@@ -25,7 +26,8 @@ from memorytalk.schemas.sync import (
 
 __all__ = [
     "Card", "CardStats", "SourceCard", "CardRound",
-    "CardRoundRef", "CreateCardRequest", "CreateCardResponse",
+    "CardListResponse", "CardMeta", "CardRoundRef", "CardTagResponse",
+    "CreateCardRequest", "CreateCardResponse",
     "ReadRequest", "ReadResponse",
     "RecalledCard", "RecallRequest", "RecallResponse",
     "Review", "CreateReviewRequest", "CreateReviewResponse",

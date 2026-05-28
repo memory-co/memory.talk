@@ -734,6 +734,96 @@ def _session_meta_line(s: dict) -> str:
     return " · ".join(parts) if parts else "_(no metadata)_"
 
 
+# ────────── card list / tag ──────────
+
+def fmt_card_list(payload: dict, filter_summary: str = "") -> str:
+    """Render ``GET /v3/cards`` as H3-per-result blocks.
+
+    Mirrors docs/cli/v3/card.md exactly and stays visually aligned
+    with ``fmt_search`` ``[CARD]`` blocks so list + search outputs
+    read consistently:
+
+      - top header line
+      - filter echo + N / TOTAL on the second line
+      - one ``### [CARD]`` block per row with inline stats
+      - insight as a paragraph, then a tags + time metadata line
+      - footer hint when total > returned
+    """
+    total = int(payload.get("total") or 0)
+    returned = int(payload.get("returned") or 0)
+    cards = payload.get("cards") or []
+
+    lines = ["# card list", ""]
+    if filter_summary:
+        lines.append(f"`filter: {filter_summary}` · {returned} / {total} results")
+    else:
+        lines.append(f"{returned} / {total} results")
+    lines.append("")
+
+    for c in cards:
+        cid = c.get("card_id") or "?"
+        stats = c.get("stats") or {}
+        stats_str = (
+            f"↑{stats.get('review_up', 0)} ↓{stats.get('review_down', 0)} · "
+            f"reviews {stats.get('review_count', 0)} · "
+            f"reads {stats.get('read_count', 0)} · "
+            f"recalls {stats.get('recall_count', 0)}"
+        )
+        lines.append("---")
+        lines.append("")
+        lines.append(f"### [CARD] `{cid}` · `{stats_str}`")
+        lines.append("")
+        lines.append(c.get("insight") or "")
+        lines.append("")
+        lines.append(_card_meta_line(c))
+        lines.append("")
+
+    if total > returned:
+        lines.append("---")
+        lines.append("")
+        lines.append(
+            f"_(showing {returned} of {total} — pass --limit higher to see more)_"
+        )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def fmt_card_tag(payload: dict, *, is_query: bool) -> str:
+    """Render PATCH /v3/cards/<cid>/tags response.
+
+    `is_query` is True when the CLI sent an empty body — output a
+    query table; otherwise output the one-line "ok: …" confirm.
+    """
+    cid = payload.get("card_id") or "?"
+    tags = payload.get("tags") or {}
+
+    if is_query:
+        if not tags:
+            return "(no tags)\n"
+        lines = [f"# {cid} · tags", "", "| key | value |", "|---|---|"]
+        for k in sorted(tags):
+            lines.append(f"| {k} | {tags[k]} |")
+        return "\n".join(lines) + "\n"
+
+    if not tags:
+        return f"ok: `{cid}` · tags cleared\n"
+    pretty = " ".join(f"{k}={tags[k]}" for k in sorted(tags))
+    return f"ok: `{cid}` · tags = `{pretty}`\n"
+
+
+def _card_meta_line(c: dict) -> str:
+    """Build the single-line metadata strip under each card H3:
+       `tags: ...` · 2026-05-24 09:12 (1 day ago)"""
+    parts: list[str] = []
+    tags = c.get("tags") or {}
+    if tags:
+        kv = " ".join(f"{k}={tags[k]}" for k in sorted(tags))
+        parts.append(f"`tags: {kv}`")
+    when = _fmt_time(c.get("created_at"))
+    if when:
+        parts.append(when)
+    return " · ".join(parts) if parts else "_(no metadata)_"
+
+
 def _shorten_cwd(path: str, *, max_len: int = 60) -> str:
     """``$HOME/...`` → ``~/...``; long paths get a middle ellipsis.
     Pure cosmetic — doesn't affect the underlying field."""

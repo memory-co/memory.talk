@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from memorytalk.schemas.card import SourceCard
+from memorytalk.schemas.card import CardStats, SourceCard
 
 
 class CardRoundRef(BaseModel):
@@ -33,8 +33,43 @@ class CreateCardRequest(BaseModel):
     # Optional pre-supplied id; auto-generated when missing. Must start
     # with the card prefix — checked in the service.
     card_id: str | None = None
+    # 0.8.x: optional user-side tags. Validated identically to PATCH
+    # /v3/cards/{cid}/tags; any violation rejects the whole create.
+    tags: dict[str, str] = Field(default_factory=dict)
 
 
 class CreateCardResponse(BaseModel):
     status: Literal["ok"] = "ok"
     card_id: str
+
+
+# ─── 0.8.x: list ───────────────────────────────────────────────────
+
+class CardMeta(BaseModel):
+    """One row in ``GET /v3/cards``.
+
+    Carries the same fields as ``Card`` payload-side **plus** stats
+    and tags, but **without** the expanded ``rounds`` array — list
+    output is metadata-only (``read <cid>`` covers full content).
+    """
+    card_id: str
+    insight: str
+    created_at: str
+    tags: dict[str, str] = Field(default_factory=dict)
+    stats: CardStats = Field(default_factory=CardStats)
+
+
+class CardListResponse(BaseModel):
+    total: int
+    returned: int
+    cards: list[CardMeta] = Field(default_factory=list)
+
+
+class CardTagResponse(BaseModel):
+    """Response of ``PATCH /v3/cards/{cid}/tags`` — full post-merge
+    tag dict. Mirrors :class:`TagResponse` in shape; we keep them as
+    siblings rather than a shared class because the id field name
+    (``card_id`` vs ``session_id``) is part of each endpoint's contract.
+    """
+    card_id: str
+    tags: dict[str, str] = Field(default_factory=dict)

@@ -37,6 +37,7 @@ from memorytalk.util.ids import (
     CARD_PREFIX, SESSION_PREFIX, SESSION_PREFIX_LEGACY, new_card_id,
 )
 from memorytalk.util.indexes import IndexesParseError, parse_indexes
+from memorytalk.util.tags import TagValidationError, validate_tag_dict
 
 
 _ALLOWED_RELATIONS = {"derives_from", "supersedes"}
@@ -88,6 +89,16 @@ class CardService:
         if req.card_id and await self.db.cards.exists(card_id):
             raise CardConflict(f"card_id {card_id} already exists")
 
+        # ── tags validation (pre-flight; reject whole create) ────────────
+        # Validate before any DB write so a bad tag doesn't leave a
+        # partially-created card behind. Same constraints PATCH uses.
+        tags = dict(req.tags or {})
+        if tags:
+            try:
+                validate_tag_dict(tags)
+            except TagValidationError as e:
+                raise CardServiceError(str(e)) from e
+
         # ── expand rounds ─────────────────────────────────────────────────
         expanded_rounds, referenced_sessions = await self._expand_rounds(req.rounds)
 
@@ -103,7 +114,7 @@ class CardService:
         now = _utc_iso()
 
         # ── 1. SQL ───────────────────────────────────────────────────────
-        await self.db.cards.insert(card_id, req.insight, expanded_rounds, now)
+        await self.db.cards.insert(card_id, req.insight, expanded_rounds, now, tags=tags)
         await self.db.cards.init_stats(card_id, now)
         if req.source_cards:
             await self.db.cards.insert_source_cards(card_id, [
@@ -112,6 +123,9 @@ class CardService:
             ])
 
         # ── 2. File mirror ───────────────────────────────────────────────
+        # card.json is the immutable-payload mirror — tags live in
+        # their own ``tags.json`` sidecar so a later ``card tag`` PATCH
+        # never has to touch card.json.
         await self.db.cards.write_doc({
             "card_id": card_id,
             "insight": req.insight,
@@ -122,6 +136,8 @@ class CardService:
             ],
             "created_at": now,
         })
+        if tags:
+            await self.db.cards.write_tags_file(card_id, tags)
 
         # ── 3. LanceDB ───────────────────────────────────────────────────
         # Best-effort — like the sessions path, vector failure shouldn't

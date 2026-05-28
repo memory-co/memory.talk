@@ -59,6 +59,10 @@ DDL = [
         card_id     TEXT PRIMARY KEY,
         insight     TEXT NOT NULL,
         rounds      TEXT NOT NULL DEFAULT '[]',  -- CardRound[] JSON
+        tags        TEXT NOT NULL DEFAULT '{}',  -- 0.8.x user-side kv tags
+                                                  -- (separate from card.json — that's the
+                                                  -- immutable payload mirror; tags live in
+                                                  -- their own sidecar file)
         created_at  TEXT NOT NULL
     )
     """,
@@ -184,6 +188,18 @@ async def _additive_migrations(conn: aiosqlite.Connection) -> None:
     if "tags" not in cols:
         await conn.execute(
             "ALTER TABLE sessions ADD COLUMN tags TEXT NOT NULL DEFAULT '{}'"
+        )
+
+    # 1e. User-side kv tags on cards (0.8.x). Stored as JSON object;
+    #     parallel to sessions.tags, queried via the shared
+    #     ``util/tag_filter.to_sql`` translator. Decoupled from card.json
+    #     so the immutable-payload invariant stays intact (changing a
+    #     tag never touches card.json).
+    async with conn.execute("PRAGMA table_info(cards)") as cursor:
+        card_cols = {row[1] for row in await cursor.fetchall()}
+    if "tags" not in card_cols:
+        await conn.execute(
+            "ALTER TABLE cards ADD COLUMN tags TEXT NOT NULL DEFAULT '{}'"
         )
 
     # 2. If the legacy ``rounds_index`` table is around, derive
