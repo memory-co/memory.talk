@@ -110,6 +110,12 @@ def create_app(config: Config | None = None) -> FastAPI:
             db=db, vectors=vectors, embedder=embedder,
         )
         app.state.backfill.start()
+        # Guaranteed one-shot compaction on every boot — grinds down the
+        # append-only fragment pile (cause of EMFILE in vector search)
+        # so a restart always makes progress. Side path off the re-embed
+        # loop: gated only on vectors, runs in the background, never
+        # blocks startup. See IndexBackfill.trigger_startup_compaction.
+        app.state.backfill.trigger_startup_compaction()
 
         yield
 

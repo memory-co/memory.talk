@@ -112,6 +112,44 @@ class LanceStore:
         table = await self.db.open_table(self.ROUNDS)
         await table.delete(f"session_id = '{session_id}'")
 
+    # ────────── compaction ──────────
+
+    async def optimize(self, table_name: str) -> dict:
+        """Compact small fragments + prune old dataset versions.
+
+        Why this is load-bearing: the ingest / backfill path is
+        append-only — every embedder batch is one ``table.add`` →
+        one new fragment + one new dataset version (manifest + txn
+        file). Left unchecked these accumulate without bound (tens of
+        thousands of files in production). Search has **no vector ANN
+        index** (the only index we build is FTS), so vector queries
+        flat-scan every fragment, opening every fragment's files at
+        once — past a few thousand fragments this blows the process
+        file-descriptor ceiling (EMFILE / "Too many open files").
+
+        ``optimize`` is LanceDB's VACUUM: merge fragments, fold new
+        data into indices, and prune old versions. We pass
+        ``cleanup_older_than=timedelta(0)`` so **every version except
+        the latest is removed** — that's what actually reclaims the
+        manifest/txn file explosion (plain compaction merges data but
+        leaves the old versions' files around until pruned). Trade-off:
+        dataset time-travel history is discarded; v3 doesn't use it.
+
+        ``delete_unverified`` stays at its safe default (False) so a
+        concurrent ingest / backfill write in flight can't be corrupted.
+
+        No-op (returns ``skipped``) when the table doesn't exist yet.
+        """
+        import datetime as _dt
+
+        if not await self._exists(table_name):
+            return {"table": table_name, "skipped": "missing"}
+        table = await self.db.open_table(table_name)
+        stats = await table.optimize(cleanup_older_than=_dt.timedelta(0))
+        # OptimizeStats shape drifts across lancedb versions; don't
+        # hard-depend on field names — stringify for the caller's log.
+        return {"table": table_name, "stats": str(stats)}
+
     # ────────── FTS index maintenance ──────────
 
     async def ensure_fts_index(self, table_name: str) -> None:

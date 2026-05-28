@@ -32,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import datetime as _dt
 import logging
+import time
 from typing import Literal
 
 from memorytalk.provider.embedding import Embedder
@@ -59,6 +60,13 @@ _POLL_INTERVAL_SECONDS = 60.0
 # a single pass — different sessions still get tried in sequence.
 _PER_SESSION_RETRY_SLEEP = 2.0
 
+# How often the background loop runs LanceDB compaction. The append-only
+# ingest path leaks one fragment per embedder batch; compaction merges
+# them back down so vector search (which flat-scans fragments) doesn't
+# accumulate enough open files to hit EMFILE. 30 min trades a little
+# periodic IO for bounded fragment growth between passes.
+_COMPACT_INTERVAL_SECONDS = 1800.0
+
 
 class IndexBackfill:
     """Owns the backfill loop + exposes status for ``/v3/sync/status``."""
@@ -69,17 +77,26 @@ class IndexBackfill:
         vectors: LanceStore | None,
         embedder: Embedder | None,
         poll_interval_seconds: float = _POLL_INTERVAL_SECONDS,
+        compact_interval_seconds: float = _COMPACT_INTERVAL_SECONDS,
     ):
         self.db = db
         self.vectors = vectors
         self.embedder = embedder
         self.poll_interval_seconds = poll_interval_seconds
+        self.compact_interval_seconds = compact_interval_seconds
         # Externally-visible state (read by ``api/sync.py``).
         self.status: Literal["running", "idle", "disabled"] = (
             "disabled" if (vectors is None or embedder is None) else "idle"
         )
         self.last_error: str | None = None
         self._task: asyncio.Task | None = None
+        # Compaction runs on its own cadence, independent of the
+        # re-embed loop. Seed ``_last_compact_at`` to *now* so the
+        # periodic timer doesn't immediately fire on top of the
+        # startup one-shot (``trigger_startup_compaction``) — the first
+        # periodic compaction lands one full interval after boot.
+        self._compact_task: asyncio.Task | None = None
+        self._last_compact_at: float = time.monotonic()
 
     # ─── lifecycle ───────────────────────────────────────────────────
 
@@ -93,21 +110,73 @@ class IndexBackfill:
             return
         self._task = asyncio.create_task(self._loop(), name="memorytalk.backfill")
 
-    async def stop(self) -> None:
-        if self._task is None:
+    def trigger_startup_compaction(self) -> None:
+        """Fire a one-shot compaction in the background at boot.
+
+        Deliberately a *side path* off the re-embed loop: it's gated
+        only on ``vectors`` (not ``embedder``), so even an
+        embedder-less boot still compacts leftover fragments from a
+        prior run. This is the "restart always re-runs compaction"
+        guarantee — a degenerate fragment pile gets ground down on
+        every server start without operator action.
+        """
+        if self.vectors is None:
             return
-        self._task.cancel()
-        try:
-            await self._task
-        except (asyncio.CancelledError, Exception):
-            pass
+        if self._compact_task is not None and not self._compact_task.done():
+            return
+        self._compact_task = asyncio.create_task(
+            self._compact_once(), name="memorytalk.compact.startup",
+        )
+
+    async def stop(self) -> None:
+        for task in (self._task, self._compact_task):
+            if task is None:
+                continue
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
         self._task = None
+        self._compact_task = None
         self.status = "idle"
+
+    # ─── compaction ──────────────────────────────────────────────────
+
+    async def _compact_once(self) -> None:
+        """Compact both LanceDB tables. Swallows errors (best-effort
+        maintenance — a compaction failure must never take the server
+        down or block re-embedding). Records the attempt time so the
+        periodic timer paces off it."""
+        self._last_compact_at = time.monotonic()
+        if self.vectors is None:
+            return
+        for table_name in (self.vectors.ROUNDS, self.vectors.CARDS):
+            try:
+                result = await self.vectors.optimize(table_name)
+                _log.info("compaction done %s", result)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                # EMFILE here is possible on a first run against a
+                # badly-fragmented table (compaction itself opens
+                # files). Log + move on; the next start retries and
+                # each partial merge makes the next attempt lighter.
+                _log.exception("compaction failed table=%s", table_name)
+                self.last_error = f"compact {table_name}: {e}"
 
     # ─── loop ────────────────────────────────────────────────────────
 
     async def _loop(self) -> None:
         while True:
+            # Periodic compaction rides the same loop — checked every
+            # iteration but gated on its own interval so it runs at most
+            # once per ``compact_interval_seconds`` regardless of how
+            # often the degraded-poll wakes up.
+            if (time.monotonic() - self._last_compact_at
+                    >= self.compact_interval_seconds):
+                await self._compact_once()
+
             try:
                 degraded = await self.db.sessions.list_degraded(
                     limit=_BATCH_OF_SESSIONS
