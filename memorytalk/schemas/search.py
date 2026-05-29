@@ -11,6 +11,15 @@ class SearchRequest(BaseModel):
     query: str = ""
     where: str | None = None
     top_k: int | None = None  # falls back to settings.search.default_top_k
+    # ── 0.8.x: --recall debug lens ──────────────────────────────────
+    # When True, the search service mimics ``RecallService``:
+    # cards-only, raw RRF relevance (no ranking_formula), and (when
+    # ``recall_session_id`` is supplied) dedup against that session's
+    # recall_log. Strictly read-only — does NOT bump recall_count or
+    # write recall_log entries. Use it to tune queries against the
+    # live recall behavior without polluting state.
+    recall_mode: bool = False
+    recall_session_id: str | None = None
 
 
 class _SessionHitContext(BaseModel):
@@ -58,4 +67,11 @@ class SearchResponse(BaseModel):
     search_id: str
     query: str
     count: int
+    # 0.8.x — discriminator between normal search and the --recall
+    # debug lens, so audit / programmatic consumers can tell them apart
+    # without comparing top-level body shapes.
+    mode: Literal["search", "recall"] = "search"
+    # Set only on recall-mode + session_id supplied. Lets the JSON
+    # consumer see the dedup scope used to produce these results.
+    session_id: str | None = None
     results: list[CardResult | SessionResult] = Field(default_factory=list)

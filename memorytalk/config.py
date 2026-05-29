@@ -16,10 +16,17 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 
-_DEFAULT_RANKING_FORMULA = (
-    "relevance + 0.1 * (review_up - review_down) "
-    "+ 0.02 * log(read_count + 1) - 0.005 * age_days"
-)
+_DEFAULT_RANKING_FORMULA = "relevance"
+# ↑ As of 0.8.x: explicit search defaults to pure relevance (raw RRF
+# score from LanceDB hybrid recall). Earlier defaults mixed in forum-
+# dynamics signals (review_up - review_down + log(read_count+1) - age),
+# which made identifier-style queries like `vvp-ai` unreliable — the
+# strongest text match could rank below weakly-matched high-read
+# cards. The forum-stats counters are still maintained on every card
+# and remain queryable via ``--where 'DSL'`` (filter); the *ranking*
+# is just left as relevance. Users who want forum dynamics back can
+# set ``settings.search.ranking_formula`` to a richer expression like
+# the old default. See docs/cli/v3/search.md.
 
 
 class ConfigValidationError(RuntimeError):

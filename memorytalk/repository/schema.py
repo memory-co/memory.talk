@@ -125,6 +125,13 @@ DDL = [
         query          TEXT NOT NULL,
         where_dsl      TEXT,
         top_k          INTEGER NOT NULL,
+        mode           TEXT NOT NULL DEFAULT 'search',
+                                            -- 0.8.x: 'search' or 'recall'.
+                                            -- Audit replay distinguishes
+                                            -- normal queries from the
+                                            -- `search --recall` debug
+                                            -- lens (different ranking
+                                            -- semantics).
         created_at     TEXT NOT NULL,
         response_json  TEXT NOT NULL
     )
@@ -200,6 +207,17 @@ async def _additive_migrations(conn: aiosqlite.Connection) -> None:
     if "tags" not in card_cols:
         await conn.execute(
             "ALTER TABLE cards ADD COLUMN tags TEXT NOT NULL DEFAULT '{}'"
+        )
+
+    # 1f. ``mode`` column on search_log (0.8.x — `search --recall`
+    #     audit needs to distinguish lens). Old rows default to
+    #     'search', which matches historical behavior.
+    async with conn.execute("PRAGMA table_info(search_log)") as cursor:
+        slog_cols = {row[1] for row in await cursor.fetchall()}
+    if slog_cols and "mode" not in slog_cols:
+        await conn.execute(
+            "ALTER TABLE search_log ADD COLUMN "
+            "mode TEXT NOT NULL DEFAULT 'search'"
         )
 
     # 2. If the legacy ``rounds_index`` table is around, derive

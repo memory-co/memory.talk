@@ -21,12 +21,13 @@ class SearchLogStore:
         top_k: int,
         created_at: str,
         response: dict,
+        mode: str = "search",
     ) -> None:
         await self.conn.execute(
             "INSERT INTO search_log "
-            "(search_id, query, where_dsl, top_k, created_at, response_json) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (search_id, query, where_dsl, top_k, created_at,
+            "(search_id, query, where_dsl, top_k, mode, created_at, response_json) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (search_id, query, where_dsl, top_k, mode, created_at,
              json.dumps(response, ensure_ascii=False)),
         )
         await self.conn.commit()

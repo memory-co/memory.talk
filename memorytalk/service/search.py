@@ -119,7 +119,23 @@ class SearchService:
 
     async def search(
         self, query: str, where: str | None, top_k: int | None,
+        recall_mode: bool = False, recall_session_id: str | None = None,
     ) -> SearchResponse:
+        """Hybrid card + session search.
+
+        ``recall_mode=True`` flips this into the "what would recall
+        surface for this query, right now" lens (issue #4 v7 / vvp-ai
+        debug surface). The differences from normal search:
+
+          - cards-only — recall by definition only returns cards
+          - raw RRF relevance, formula skipped — recall today doesn't
+            apply ``ranking_formula`` (``service/recall.py`` returns
+            LanceDB hits in their reranked order)
+          - optional ``recall_session_id`` for dedup preview against
+            that session's ``recall_log``
+          - **read-only**: no ``recall_count`` bump, no ``recall_log``
+            write. Used for tuning, not for actually recalling.
+        """
         top_k = top_k or self.config.settings.search.default_top_k
         flt = dsl_mod.parse(where or "")
 
@@ -138,18 +154,38 @@ class SearchService:
 
         if flt.scope_includes("card"):
             card_candidates = await self._collect_card_candidates(query, qvec, top_k)
-        if flt.scope_includes("session"):
+        # Recall mode is cards-only by definition — skip the session
+        # collection entirely (saves the LanceDB rounds query too).
+        if not recall_mode and flt.scope_includes("session"):
             session_candidates = await self._collect_session_candidates(query, qvec, top_k)
 
         # ──────── 2. DSL filter ────────
         card_candidates = [c for c in card_candidates if flt.evaluate(c, "card")]
         session_candidates = [c for c in session_candidates if flt.evaluate(c, "session")]
 
-        # ──────── 3. Score via ranking formula ────────
-        for c in card_candidates:
-            c["final_score"] = self._score(c, kind="card")
-        for c in session_candidates:
-            c["final_score"] = self._score(c, kind="session")
+        # ──────── 2.5. Recall-mode dedup against recall_log ────────
+        # Strictly read-only: we *filter out* already-recalled cards
+        # for the user's preview, but we don't write to recall_log or
+        # bump recall_count. That's specifically what ``service/recall.py``
+        # does on the live path; we're a debug lens.
+        if recall_mode and recall_session_id:
+            candidate_ids = [c["card_id"] for c in card_candidates if c.get("card_id")]
+            already = await self.db.recall.already_recalled(
+                recall_session_id, candidate_ids,
+            )
+            card_candidates = [
+                c for c in card_candidates if c["card_id"] not in already
+            ]
+
+        # ──────── 3. Score: recall mode = raw relevance, normal = formula ────────
+        if recall_mode:
+            for c in card_candidates:
+                c["final_score"] = float(c.get("relevance", 0.0))
+        else:
+            for c in card_candidates:
+                c["final_score"] = self._score(c, kind="card")
+            for c in session_candidates:
+                c["final_score"] = self._score(c, kind="session")
 
         # ──────── 4. Merge + sort + cut ────────
         merged: list[tuple[str, dict]] = (
@@ -173,11 +209,13 @@ class SearchService:
         search_id = new_search_id()
         response = SearchResponse(
             search_id=search_id, query=query, count=len(results),
+            mode="recall" if recall_mode else "search",
+            session_id=recall_session_id if recall_mode else None,
             results=results,
         )
 
         # ──────── 6. Audit log ────────
-        await self._log(search_id, query, where, top_k, response)
+        await self._log(search_id, query, where, top_k, response, mode=response.mode)
 
         return response
 
@@ -356,13 +394,13 @@ class SearchService:
 
     async def _log(
         self, search_id: str, query: str, where: str | None,
-        top_k: int, response: SearchResponse,
+        top_k: int, response: SearchResponse, mode: str = "search",
     ) -> None:
         body = response.model_dump(mode="json")
         now = _utc_iso()
         await self.db.search_log.insert(
             search_id=search_id, query=query, where_dsl=where,
-            top_k=top_k, created_at=now, response=body,
+            top_k=top_k, created_at=now, response=body, mode=mode,
         )
         # File mirror — one jsonl per UTC date.
         date_str = now[:10]
@@ -370,7 +408,7 @@ class SearchService:
         path.parent.mkdir(parents=True, exist_ok=True)
         record = {
             "search_id": search_id, "query": query, "where_dsl": where,
-            "top_k": top_k, "created_at": now, "response": body,
+            "top_k": top_k, "mode": mode, "created_at": now, "response": body,
         }
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record, ensure_ascii=False) + "\n")

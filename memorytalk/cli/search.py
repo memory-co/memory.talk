@@ -18,10 +18,18 @@ from memorytalk.config import Config
               help="DSL filter (see docs/cli/v3/search.md#DSL)")
 @click.option("--top-k", "top_k", type=int, default=None,
               help="Total result cap (default = settings.search.default_top_k)")
+@click.option("--recall", "recall_mode", is_flag=True, default=False,
+              help="Debug lens: rank like `recall` (cards-only, raw RRF, "
+                   "no ranking_formula). Combine with --session to also "
+                   "preview that session's recall_log dedup. Read-only — "
+                   "does NOT bump recall_count or write recall_log.")
+@click.option("--session", "session_id", type=str, default=None,
+              help="Session id for recall-mode dedup (only meaningful "
+                   "with --recall).")
 @click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON")
 def search(
     query: str, where: str | None, top_k: int | None,
-    json_out: bool,
+    recall_mode: bool, session_id: str | None, json_out: bool,
 ) -> None:
     """Hybrid FTS + vector search across cards and sessions."""
     cfg = Config()
@@ -30,6 +38,18 @@ def search(
         body["where"] = where
     if top_k is not None:
         body["top_k"] = top_k
+    if recall_mode:
+        body["recall_mode"] = True
+    if session_id:
+        if not recall_mode:
+            # --session without --recall is a probable mistake; flag it
+            # rather than silently dropping the field.
+            emit_md_err(fmt_error(
+                "--session only takes effect with --recall (it scopes "
+                "the recall-log dedup preview)"
+            ))
+            sys.exit(1)
+        body["recall_session_id"] = session_id
     try:
         result = api("POST", "/v3/search", cfg, json_body=body)
     except ApiError as e:

@@ -5,7 +5,7 @@ v3 主检索入口。hybrid FTS + 向量检索 + 元数据 / stats DSL 过滤,**
 命中的 `card_id` / `session_id` 直接返回给调用方 —— 拿到就能喂给 `read`。
 
 ```bash
-memory.talk search <query> [--where DSL] [--top-k N] [--json]
+memory.talk search <query> [--where DSL] [--top-k N] [--recall [--session SID]] [--json]
 ```
 
 | 参数 | 默认 | 说明 |
@@ -13,6 +13,8 @@ memory.talk search <query> [--where DSL] [--top-k N] [--json]
 | `<query>` | — | 检索文本。可为空字符串(配合 `--where` 做纯元数据 / stats 过滤) |
 | `--where`, `-w` | 无 | 元数据 / stats / type 过滤 DSL,见 [#DSL](#dsl) |
 | `--top-k` | `settings.search.default_top_k`(默认 10) | **总**结果数上限(card + session 合计) |
+| `--recall` | 关 | 切换到 recall 视角(cards-only,裸 RRF,跳过 `ranking_formula`)。详见 [#--recall-调试视角](#--recall-调试视角) |
+| `--session` | 无 | 仅 `--recall` 下生效,模拟该 session 的 `recall_log` dedup |
 | `--json` | 关 | 输出 JSON 而非默认 Markdown |
 
 > 0.8.x 起**去掉了 strong-floor 过滤**(原先用一个 hardcode 阈值把弱匹配藏起来,带 `--all` 才显示)。实践中它会误伤合理的弱召回,而且阈值依赖 reranker / 公式很难调对 —— 现在 `search` 直接返回排序后的 top_k 全部,排序质量交给 `ranking_formula` 一层负责。`--all` 选项随之移除。
@@ -262,17 +264,52 @@ LanceDB 落地后的踩坑清单
 - `review_up` / `review_down` / `review_neutral` / `review_count` / `read_count` / `recall_count` —— card.stats 各字段;**sessions 全部置 0**(session 本身没有论坛 stats)
 - `age_days` —— 距 `created_at` 的天数
 
-默认公式(配在 `settings.search.ranking_formula`,可改):
+**0.8.x 默认公式**(配在 `settings.search.ranking_formula`,可改):
 
 ```
-relevance + 0.1 * (review_up - review_down) + 0.02 * log(read_count + 1) - 0.005 * age_days
+relevance
 ```
 
-跨 card / session 的可比性来自:**两类候选都过同一公式**。card 有 stats 加分,session 这些项为 0 —— 全新没 review 的 card 跟同相关度的 session **公平竞争**,被讨论扎实的老 card 自然超过相关度相近的新 session。这是论坛动力学的核心。
+也就是裸 RRF 相关度,**不掺 stats**。
 
-公式只走 settings,**不进 CLI 参数** —— 想"只按相关度"就改成 `relevance`,想纯 Reddit hot 就改成 `(review_up - review_down) / pow(age_days + 2, 1.5)` —— 长什么样取决于你怎么想"沉浮"。
+为什么默认是这样:`search` 是主动调用,query 通常是关键词或 identifier(`vvp-ai` / `LanceDB` / `AONE_SANDBOX_ID`),用户意图是**找最相关的内容**。早期版本默认带 `+ 0.02 * log(read_count + 1)` 这类沉浮项时,一张"被看过 5 次但弱相关"的 card 可以反超"精确命中但 read=0"的 card,实践中误排明显(见 [`docs/report/2026-05-30-search-vvp-ai-hyphen-identifier.md`](../report/))。0.8.x 把默认收敛为 `relevance` 一项,让"主动搜索的人想要精确"这件事按本能生效。
 
-临时只想看某个切片(shadow / 高争议 / 只 card / 只 session)走 `--where` 过滤,默认公式跑出来的顺序在子集内自然合理 —— 详见下面 DSL 示例。
+公式仍走 settings,**不进 CLI 参数** —— 想要论坛动力学回来就改成例如:
+
+```
+relevance + 0.1 * (review_up - review_down) - 0.005 * age_days
+```
+
+想做 shadow knowledge 调查(高 read 低 review 的 card),空 query + DSL filter 仍然可以:
+
+```bash
+memory.talk search "" -w 'read_count > 10 AND review_count = 0'
+```
+
+排序由当前 `ranking_formula` 决定 —— 默认 `relevance` 下空 query 大家相关度都是 0,顺序意义不大;**真要按 stats 排序去 surface shadow,自定义 `ranking_formula` 加上 `read_count` 项**(临时切到这个 setting,看完再切回 `relevance`),或者用 `--recall` 视角(下一节)看 recall 的 cards-only RRF 排序。
+
+跨 card / session 的可比性仍然来自:**两类候选都过同一公式**。card 有 stats 字段,session 这些项统一置 0,所以 `relevance` 这一项在两边同尺度上比较。
+
+### `--recall` 调试视角
+
+主动搜索默认按 `ranking_formula` 排,而 `recall`(hook 阶段自动召回)走另一条路径,**完全不跑公式**,直接按 LanceDB cards 表的 hybrid RRF 顺序返回。如果想在不实际触发 recall 的情况下"预览"那条路径会返回什么、按什么顺序,加 `--recall`:
+
+```bash
+# 看 recall 视角下,vvp-ai 这个 query 会拿到什么
+memory.talk search "vvp-ai" --recall
+
+# 加 --session 模拟某个 session 的 recall_log dedup
+memory.talk search "vvp-ai" --recall --session sess-15f0a7fb-...
+```
+
+`--recall` 跟主动搜索的 4 点区别:
+
+1. **cards-only** —— 跟 recall 接口一致,不返回 session results
+2. **跳过 `ranking_formula`** —— 用裸 RRF relevance 排序,不掺 stats
+3. **`--session` 触发 dedup 预览** —— 把该 session `recall_log` 已记的 card 从结果里过滤掉
+4. **完全只读** —— 不写 `recall_log`,不 bump `recall_count`,审计在 `search_log` 用 `mode=recall` 标识
+
+跟 `--where` 兼容,跟 `--top-k` / `--json` 兼容。`--session` 单独用(不带 `--recall`)会报错。
 
 ## 追踪语义
 

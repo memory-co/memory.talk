@@ -207,3 +207,169 @@ class TestAudit:
             if any(rec["query"] == "audit topic" for rec in lines):
                 return
         pytest.fail("audit topic record not found in jsonl mirror")
+
+
+# ────────── 0.8.x: default formula is pure relevance ──────────
+
+class TestPureRelevanceDefault:
+    """Regression net for the vvp-ai class of bug (report-v7).
+
+    Before 0.8.x the default ``ranking_formula`` mixed in
+    ``+ 0.02 * log(read_count + 1)``, which could lift a weakly-matched
+    high-read card above a strongly-matched zero-read card. The
+    default is now ``"relevance"`` — these tests pin that change."""
+
+    async def test_strong_relevance_beats_high_read_weak_relevance(self, app):
+        """Direct service-level test: with the default formula
+        (``relevance``), a candidate with higher raw relevance must
+        outrank one with lower relevance regardless of read_count.
+
+        Driven through ``SearchService._score`` rather than the LanceDB
+        path so the assertion doesn't depend on dummy-embedder vector
+        noise — this is specifically a regression net for the formula
+        change (issue #4 v7 / vvp-ai case)."""
+        svc = app.state.search
+        strong = {"relevance": 0.033, "read_count": 0, "review_up": 0,
+                  "review_down": 0, "review_neutral": 0, "review_count": 0,
+                  "recall_count": 0, "created_at": "2026-05-29T00:00:00Z"}
+        weak_but_read = {"relevance": 0.013, "read_count": 5, "review_up": 0,
+                         "review_down": 0, "review_neutral": 0,
+                         "review_count": 0, "recall_count": 0,
+                         "created_at": "2026-05-29T00:00:00Z"}
+        # With ``settings.search.ranking_formula = "relevance"`` (the
+        # 0.8.x default), score == relevance — the high-read card
+        # cannot lift past the strong match.
+        assert svc._score(strong, kind="card") > svc._score(weak_but_read, kind="card")
+
+    async def test_response_carries_mode_search(self, client):
+        r = await client.post("/v3/search", json={"query": "anything"})
+        body = r.json()
+        assert body["mode"] == "search"
+        assert body["session_id"] is None
+
+
+# ────────── 0.8.x: --recall debug mode ──────────
+
+class TestRecallMode:
+    async def test_recall_mode_excludes_session_results(self, app, client):
+        """Recall is cards-only by definition (matches RecallService)."""
+        await _ingest(client, "rec-1", "sha1", [
+            _round("r1", "human", "alpha topic only in session"),
+        ])
+        await _seed_card(
+            app, card_id="card_01RECA", insight="alpha topic card",
+        )
+        r = await client.post(
+            "/v3/search",
+            json={"query": "alpha topic", "recall_mode": True, "top_k": 10},
+        )
+        body = r.json()
+        assert body["mode"] == "recall"
+        types = {it["type"] for it in body["results"]}
+        assert types == {"card"} or types == set()  # no session results
+
+    async def test_recall_mode_ignores_ranking_formula(self, app, client, monkeypatch):
+        """Even if the user has customized ranking_formula to include
+        forum signals, recall mode must NOT apply it — by-definition
+        recall ranking is raw relevance only."""
+        # Customize formula to one that would change order: heavy
+        # boost on reads. Then recall mode should ignore it.
+        from memorytalk.util.formula import compile_formula
+        custom = compile_formula("relevance + 10 * read_count")
+        app.state.search._formula = custom
+        # Card A: weak relevance (no query token), high reads.
+        # Card B: strong relevance (contains query), zero reads.
+        await _seed_card(
+            app, card_id="card_01RM_A", insight="unrelated content", reads=5,
+        )
+        await _seed_card(
+            app, card_id="card_01RM_B", insight="distinctword relevant insight",
+        )
+        # Normal search would prefer A (10 * 5 reads). Recall mode
+        # must prefer B (pure relevance).
+        r = await client.post(
+            "/v3/search",
+            json={"query": "distinctword", "recall_mode": True, "top_k": 5},
+        )
+        ranks = [it.get("card_id") for it in r.json()["results"] if it["type"] == "card"]
+        # B must be present and either alone or ranked above A.
+        assert "card_01RM_B" in ranks
+        if "card_01RM_A" in ranks:
+            assert ranks.index("card_01RM_B") < ranks.index("card_01RM_A"), ranks
+
+    async def test_recall_mode_dedups_against_session(self, app, client):
+        """``recall_session_id`` filters out cards already in that
+        session's ``recall_log``."""
+        await _seed_card(
+            app, card_id="card_01DD_A", insight="alpha alpha alpha",
+        )
+        await _seed_card(
+            app, card_id="card_01DD_B", insight="alpha beta gamma",
+        )
+        # Mark card A as already recalled for sess-xyz.
+        await app.state.db.recall.record(
+            "sess-xyz", ["card_01DD_A"], "2026-05-29T00:00:00Z",
+        )
+        r = await client.post("/v3/search", json={
+            "query": "alpha", "recall_mode": True,
+            "recall_session_id": "sess-xyz", "top_k": 10,
+        })
+        body = r.json()
+        ids = [it.get("card_id") for it in body["results"] if it["type"] == "card"]
+        assert "card_01DD_A" not in ids
+        assert "card_01DD_B" in ids
+        assert body["session_id"] == "sess-xyz"
+
+    async def test_recall_mode_does_not_bump_recall_count(self, app, client):
+        """``--recall`` is read-only — recall_count must not move."""
+        await _seed_card(
+            app, card_id="card_01NB_X", insight="no-bump query",
+        )
+        before = (await app.state.db.cards.get_stats("card_01NB_X"))["recall_count"]
+        await client.post("/v3/search", json={
+            "query": "no-bump", "recall_mode": True,
+            "recall_session_id": "sess-some", "top_k": 10,
+        })
+        after = (await app.state.db.cards.get_stats("card_01NB_X"))["recall_count"]
+        assert after == before, "recall mode must NOT bump recall_count"
+
+    async def test_recall_mode_does_not_write_recall_log(self, app, client):
+        """And the recall_log must stay untouched — otherwise next call
+        would silently filter the same card out."""
+        await _seed_card(
+            app, card_id="card_01NL_X", insight="no-log content",
+        )
+        await client.post("/v3/search", json={
+            "query": "no-log", "recall_mode": True,
+            "recall_session_id": "sess-none", "top_k": 10,
+        })
+        # If we recorded the card, calling already_recalled would now
+        # mark it as already seen.
+        already = await app.state.db.recall.already_recalled(
+            "sess-none", ["card_01NL_X"],
+        )
+        assert "card_01NL_X" not in already
+
+
+# ────────── 0.8.x: search_log mode column ──────────
+
+class TestAuditMode:
+    async def test_search_log_mode_search_for_normal_query(self, app, client):
+        await _seed_card(app, card_id="card_01LM_S", insight="mode search row")
+        await client.post("/v3/search", json={"query": "mode search"})
+        async with app.state.db.conn.execute(
+            "SELECT mode FROM search_log ORDER BY created_at DESC LIMIT 1"
+        ) as cur:
+            row = await cur.fetchone()
+        assert row[0] == "search"
+
+    async def test_search_log_mode_recall_for_recall_query(self, app, client):
+        await _seed_card(app, card_id="card_01LM_R", insight="mode recall row")
+        await client.post("/v3/search", json={
+            "query": "mode recall", "recall_mode": True,
+        })
+        async with app.state.db.conn.execute(
+            "SELECT mode FROM search_log ORDER BY created_at DESC LIMIT 1"
+        ) as cur:
+            row = await cur.fetchone()
+        assert row[0] == "recall"

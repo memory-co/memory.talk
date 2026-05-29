@@ -23,6 +23,8 @@ CLI 对应 [`search`](../../cli/v3/search.md) 命令。
 | `query` | 是 | — | 检索文本;**可空字符串**(配合 `where` 做纯元数据 / stats 过滤) |
 | `where` | 否 | 无 | DSL,见下方 |
 | `top_k` | 否 | `settings.search.default_top_k`(默认 10) | **总**结果数上限(card + session 合计) |
+| `recall_mode` | 否 | `false` | 0.8.x 新增。`true` 时切到 recall 视角:cards-only、跳过 `ranking_formula`、按裸 RRF 排序。**只读** —— 不写 `recall_log`,不 bump `recall_count`。CLI 对应 `--recall` |
+| `recall_session_id` | 否 | `null` | 仅在 `recall_mode=true` 下有意义:模拟该 session 的 `recall_log` dedup。CLI 对应 `--session` |
 
 ### 响应
 
@@ -30,6 +32,8 @@ CLI 对应 [`search`](../../cli/v3/search.md) 命令。
 {
   "search_id": "sch_01K7XABC...",
   "query": "LanceDB 选型",
+  "mode": "search",
+  "session_id": null,
   "count": 4,
   "results": [
     {
@@ -101,6 +105,8 @@ CLI 对应 [`search`](../../cli/v3/search.md) 命令。
 |---|---|---|
 | `search_id` | string | `sch_<ULID>`,审计 id |
 | `query` | string | 回显请求 |
+| `mode` | `"search"` / `"recall"` | 0.8.x 新增。`search` 是正常路径;`recall` 是 `recall_mode=true` 的调试视角(cards-only + 裸 RRF + 可选 dedup) |
+| `session_id` | string\|null | 0.8.x 新增。仅 `mode=recall` 且请求带 `recall_session_id` 时不为 null,回显 dedup 作用域 |
 | `count` | int | `results[]` 长度(`== top_k` 时说明被截断) |
 | `results` | object[] | 混合 card / session,按 `score` 降序 |
 
@@ -183,13 +189,25 @@ CLI 对应 [`search`](../../cli/v3/search.md) 命令。
 - `review_up` / `review_down` / `review_neutral` / `review_count` / `read_count` / `recall_count` —— card.stats;**sessions 全部置 0**
 - `age_days` —— 距 `created_at` 的天数
 
-默认公式:
+**0.8.x 默认公式**:
 
 ```
-relevance + 0.1 * (review_up - review_down) + 0.02 * log(read_count + 1) - 0.005 * age_days
+relevance
 ```
 
-跨 type 可比的关键:**两类候选过同一公式**,session 的 stats 项天然为 0,所以"sessions 只靠 relevance 和 age 拼分,cards 还能加 stats 加分"是涌现的偏序,而非硬编码"卡先于会话"。
+即裸 RRF 相关度,不掺 stats。理由:`search` 是主动调用,query 多为关键词 / identifier,用户意图是"找最相关的",不应被路过型 stats 信号反超(详见 [`../../report/2026-05-30-search-vvp-ai-hyphen-identifier.md`](../../report/))。
+
+要回到论坛动力学排序,改 settings:
+
+```
+relevance + 0.1 * (review_up - review_down) - 0.005 * age_days
+```
+
+跨 type 可比性:两类候选过同一公式,session 的 stats 项天然为 0。默认 `relevance` 下,sessions 跟 cards 在裸 RRF 同尺度上比较。
+
+### `recall_mode=true` 的排序差异
+
+跟 `mode=search` 相比,`recall_mode=true` **跳过 `ranking_formula` 整个评估**,直接用 cards 的 `relevance`(裸 RRF)排序。**即使用户自定义了 `ranking_formula`,recall 视角也不应用** —— 这是设计上的"recall 一定是裸 RRF"硬约束(跟 `service/recall.py` 行为对齐)。
 
 ### DSL
 
