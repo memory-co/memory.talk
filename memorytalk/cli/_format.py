@@ -354,15 +354,12 @@ def fmt_recall(payload: dict) -> str:
 def fmt_search(payload: dict) -> str:
     query = payload.get("query") or ""
     count = payload.get("count", 0)
-    hidden = int(payload.get("hidden_count") or 0)
     sid = payload.get("search_id", "")
     header = f"`search_id={sid}` · {count} results"
-    if hidden:
-        header += f" · {hidden} hidden"
     parts: list[str] = [f"# search: {query}" if query else "# search",
                         "", header, ""]
 
-    if count == 0 and hidden == 0:
+    if count == 0:
         return "\n".join(parts) + "\n"
 
     for entry in payload.get("results") or []:
@@ -372,13 +369,6 @@ def fmt_search(payload: dict) -> str:
             parts.append(_fmt_search_card(entry))
         elif entry.get("type") == "session":
             parts.append(_fmt_search_session(entry))
-        parts.append("")
-
-    if hidden:
-        parts.append(
-            f"_({hidden} weak result{'s' if hidden != 1 else ''} hidden "
-            "by strong-floor filter — pass `--all` to see)_"
-        )
         parts.append("")
 
     return "\n".join(parts).rstrip() + "\n"

@@ -17,7 +17,8 @@
 | `query` | 是 | 检索文本;可空(配合 `where` 做纯元数据 / stats 过滤) |
 | `where` | 否 | DSL,见 [`../../api/v3/search.md#DSL`](../../api/v3/search.md#dsl) |
 | `top_k` | 否 | **总**结果数上限(card + session 合计),默认 `settings.search.default_top_k` |
-| `show_all` | 否 | 默认 `false`。`false` 时走 strong-floor 过滤(见 [#strong-floor-过滤](#strong-floor-过滤));`true` 跳过过滤,返回 top_k 全部 |
+
+> 0.8.x 起 **strong-floor 过滤 + `show_all` 字段已移除**。搜索直接返回排序后的 top_k 全部,不再有"弱匹配被藏"的概念,排序质量单独由 `ranking_formula` 负责。
 
 ## 输出
 
@@ -114,7 +115,6 @@ UI 层(CLI Markdown 渲染)对两种 result 用**同一种 H3 标题结构**:`##
 | `search_id` | string | `sch_<ULID>`,审计 id |
 | `query` | string | 回显请求 |
 | `count` | integer | `results[]` 长度(可能 ≤ `top_k`,等于 `top_k` 说明被截断了) |
-| `hidden_count` | integer | 被 [strong-floor 过滤](#strong-floor-过滤)切掉的条数;`show_all=true` 时固定 `0` |
 | `results` | object[] | 混合 card / session,按 `score` 降序排列 |
 
 ### `results[]` 共有字段
@@ -320,62 +320,17 @@ combined = 1 - (0.7 * vec_sim + 0.3 * bm25_raw)
 3. **某 hit 看着"不那么贴"** → 多半是纯向量召回拿了 RRF 分,词面零命中。看 hit text 里是否含 query token
 4. **整体分都偏低** → query 在 LanceDB 召回阶段就稀疏,扩 oversample(`_CARD_OVERSAMPLE` / `_ROUNDS_OVERSAMPLE`)或换公式让 stats 权重盖过 relevance
 
-## Strong-floor 过滤
+## ~~Strong-floor 过滤~~(0.8.x 移除)
 
-排序完之后的最后一步(在 step 5 build response 之前)。**降低 query 结果里"陪跑"的弱命中**。
+0.6–0.7 期间排序后有一个 strong-floor 过滤层:对每类(card / session)按一个 hardcode 阈值(session `0.02` / card `0.1`)做"有强匹配就只留强匹配"的裁剪,被裁的条数记在 `hidden_count`,`show_all=true` / CLI `--all` 可跳过。
 
-### 规则
+**0.8.x 整层移除**,理由:
 
-对每一类(`card` / `session`)**独立**做一遍:
+- 阈值跟 reranker(RRF K=60)+ ranking_formula 强耦合,换任一个都得重算,实践中很难调对;
+- 它会误伤合理的弱召回(尤其纯向量命中),"被藏"反而比"排在后面"更糟 —— 用户看不到就以为没有;
+- 排序质量本该由 `ranking_formula` 一层负责;再叠一个二值裁剪是职责重叠。
 
-```
-if any item.final_score >= floor:
-    keep only items where final_score >= floor
-else:
-    keep all items   # 没有强匹配,弱匹配总比啥都没有强
-```
-
-阈值 **hardcode**(`memorytalk/service/search.py`):
-
-| 类型 | 常量 | 值 | 理由 |
-|---|---|---|---|
-| session | `_SESSION_STRONG_FLOOR` | `0.02` | session.final_score ≈ `max(hits[].score)` - 小 age decay。RRF 单路 rank-1 ≈ `1/61 ≈ 0.0164`,两路均 rank-1 ≈ `2/61 ≈ 0.0328`。`0.02` 意味着"至少一路靠前命中" |
-| card | `_CARD_STRONG_FLOOR` | `0.1` | card.final_score = RRF + `0.1·(up-down)` + `0.02·log(read+1)` - `0.005·age`。无 stats reinforcement 时 RRF 单独 ~`0.03`(同 session 尺度)。`0.1` ≈ "至少 1 个 review_up 或若干 read",分隔"用户验证过"和"刚召回的噪声" |
-
-两个值的比例(0.02 vs 0.1)反映 **card 自带 stats bonus、session 没有** 这个不可比性。**不能 global 用同一个阈值**(0.02 对 card 几乎全过,0.1 对 session 几乎全砍)。
-
-### 为什么 hardcode 不进 settings
-
-阈值跟 reranker(当前 RRF K=60)+ ranking_formula 强耦合。改 reranker 或公式,阈值要同步重算,放 settings 容易让用户独立调一个 → 失配 → 体验下降。改阈值就改源码 + 跑测试(`tests/service/test_search_filter.py:test_floor_values_match_constants` 会强制 review)。
-
-### 跳过过滤:`show_all=true`
-
-请求带 `show_all: true` → 整步跳过,返回 top_k 全部。`hidden_count` 固定 `0`。
-
-CLI 用 `--all` / `-a` 走这条。`POST /v3/search` 也可直接传。
-
-### `hidden_count` 字段
-
-response 顶层字段,**所有响应都有**(默认 `0`)。
-
-- 不分 card / session(汇总,实务上够用 — 知道"还有多少被藏起来"就行)
-- 想看被藏的内容 → 同一 query 重新发,带 `show_all=true`
-- **不**等于"top_k 之外被切掉的"(那些根本没进 step 4.5);**只**反映 step 4.5 切掉的
-
-### 边界 case
-
-| 场景 | 行为 |
-|---|---|
-| 某类型完全没结果 | 该类型跳过(没东西可过滤);其它类型照常 |
-| 整体没结果 | `count=0` + `hidden_count=0`,响应正常返回 |
-| 所有 session 都 < `0.02` | 全留,`hidden_count` 不计 session |
-| 所有 card 都 < `0.1` 但 ≥ `0.02` | 全留 card(card 走 0.1 floor);session 独立 |
-| 同时有强 card 和强 session | 各自 floor 各自过 |
-| `show_all=true` + 有可过滤的 | 全返,`hidden_count=0`(语义"用户要求全显") |
-
-### 跟 v2 的差异
-
-v2 没有这个过滤层,所有 top_k 结果都展示。v3 加入是为了解决"强匹配被弱匹配包围"的体感问题(详见 [`../report/2026-05-21-search-noisy-or-aggregation-bug.md`](../report/2026-05-21-search-noisy-or-aggregation-bug.md))—— 那个问题的根因之一是排序,改 max 聚合 + RRF 之后已修;strong-floor 是**进一步**减噪,让"有强匹配时只看强匹配"。
+现在 `search` 直接返回排序后的 top_k 全部。`show_all` 请求字段、`hidden_count` 响应字段、CLI `--all` 选项随之删除。要"只看强匹配",用 `--where` 按 stats / 相关度自己卡(如 `review_count >= 1`)。
 
 ## 高亮渲染
 

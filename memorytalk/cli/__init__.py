@@ -15,7 +15,7 @@ import click
 @click.option(
     "--no-pager", "no_pager", is_flag=True, default=False,
     help="Disable the scrollable pager (only applies to commands that "
-         "opt-in — currently just `read`). Equivalent to NO_PAGER=1.",
+         "opt-in — currently `read` and `search`). Equivalent to NO_PAGER=1.",
 )
 def main(no_pager: bool) -> None:
     """memory.talk v3."""

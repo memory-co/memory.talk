@@ -127,7 +127,7 @@ _(showing 23 of 1247 — pass --limit higher to see more)_
   - `cwd: <path>` —— 反引号包成 inline code;`$HOME` 会被压成 `~`;超 60 char 中间截断成 `<前 25>…<后 25>`
   - 绝对时间 + 相对时间 —— `YYYY-MM-DD HH:MM (X units ago)`,units 用 `min` / `hour` / `day` / `week`(跟 search 同款)
 - 0 命中 → header 仍然出(`# session list\n\n\`filter: ...\` · 0 / 0 results`),不打 "no sessions found" 占位
-- 总数 > 返回数时,末尾追一行 `_(showing N of TOTAL — pass --limit higher to see more)_` —— 等价于 search 的 strong-floor hint,提示用户结果被截
+- 总数 > 返回数时,末尾追一行 `_(showing N of TOTAL — pass --limit higher to see more)_`,提示用户结果被 `--limit` 截断
 - **不**渲染 `metadata.cwd` 以外的 `metadata.*` 字段(平台原生 metadata 太杂,放进列表会噪声化;要看完整 metadata 走 `read <sid>`)
 
 #### 输出 — JSON(`--json`)

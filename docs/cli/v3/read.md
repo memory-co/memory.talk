@@ -21,7 +21,7 @@ memory.talk read sess_187c6576 | less     # 显式 pipe,不 pager
 
 ### Pager 行为
 
-`read` 是目前**唯一**进 pager 的命令(其它命令暂不开启 —— 跟 git 只让 `log` / `diff` / `show` 进 pager 一个套路)。具体规则:
+`read` 和 [`search`](search.md) 进 pager(其它命令暂不开启 —— 跟 git 只让 `log` / `diff` / `show` 进 pager 一个套路)。具体规则:
 
 | 条件 | 行为 |
 |---|---|

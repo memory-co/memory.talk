@@ -6,7 +6,9 @@ import click
 
 from memorytalk.cli._format import fmt_error, fmt_search
 from memorytalk.cli._http import ApiError, api, extract_error_message
-from memorytalk.cli._render import emit_json, emit_json_err, emit_md, emit_md_err
+from memorytalk.cli._render import (
+    emit_json, emit_json_err, emit_md_err, emit_md_paged,
+)
 from memorytalk.config import Config
 
 
@@ -16,12 +18,10 @@ from memorytalk.config import Config
               help="DSL filter (see docs/cli/v3/search.md#DSL)")
 @click.option("--top-k", "top_k", type=int, default=None,
               help="Total result cap (default = settings.search.default_top_k)")
-@click.option("--all", "-a", "show_all", is_flag=True, default=False,
-              help="Disable the strong-floor filter; show everything in top_k")
 @click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON")
 def search(
     query: str, where: str | None, top_k: int | None,
-    show_all: bool, json_out: bool,
+    json_out: bool,
 ) -> None:
     """Hybrid FTS + vector search across cards and sessions."""
     cfg = Config()
@@ -30,8 +30,6 @@ def search(
         body["where"] = where
     if top_k is not None:
         body["top_k"] = top_k
-    if show_all:
-        body["show_all"] = True
     try:
         result = api("POST", "/v3/search", cfg, json_body=body)
     except ApiError as e:
@@ -50,4 +48,9 @@ def search(
     if json_out:
         emit_json(result)
     else:
-        emit_md(fmt_search(result))
+        # Long result blocks (cards + per-session hit fences + ctx
+        # windows) routinely exceed a terminal page; route through the
+        # same less-style pager that ``read`` uses. Subprocess / pipe /
+        # ``--no-pager`` / ``--json`` fall back to plain output — see
+        # emit_md_paged docstring.
+        emit_md_paged(fmt_search(result))

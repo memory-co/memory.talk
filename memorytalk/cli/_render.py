@@ -12,7 +12,7 @@ Errors:
 - Markdown mode → ``**error:** <msg>`` to stderr, exit 1
 - JSON mode    → ``{"error": ...}`` to stdout, exit 1
 
-Pager (opt-in per command, currently only ``read``):
+Pager (opt-in per command — currently ``read`` and ``search``):
 
 - ``emit_md_paged`` wraps rich rendering in a less-style pager when
   both stdin and stdout are TTYs. Subprocess / pipe / ``--json`` paths
