@@ -23,10 +23,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 @pytest.fixture
 def data_root(tmp_path: Path) -> Path:
-    """A fresh, isolated data root with a dummy-embedder settings.json."""
+    """A fresh, isolated data root with a dummy-embedder settings.json.
+
+    ``index.lance_flush_rows=1`` and ``lance_flush_interval_seconds=0``
+    make the IndexWriteBuffer behave like the pre-buffer code path:
+    every ``add_rounds`` triggers an immediate flush, the background
+    flusher task is disabled. Tests can then assert search visibility
+    right after ``ingest_session`` without an explicit flush call.
+    """
     settings = {
         "embedding": {"provider": "dummy", "dim": 384},
         "sync": {"debounce_ms": 50},
+        "index": {
+            "lance_flush_rows": 1,
+            "lance_flush_interval_seconds": 0,
+        },
     }
     (tmp_path / "settings.json").write_text(json.dumps(settings))
     return tmp_path

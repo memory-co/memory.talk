@@ -78,12 +78,18 @@ class IndexBackfill:
         embedder: Embedder | None,
         poll_interval_seconds: float = _POLL_INTERVAL_SECONDS,
         compact_interval_seconds: float = _COMPACT_INTERVAL_SECONDS,
+        index_buffer=None,  # IndexWriteBuffer | None
     ):
         self.db = db
         self.vectors = vectors
         self.embedder = embedder
         self.poll_interval_seconds = poll_interval_seconds
         self.compact_interval_seconds = compact_interval_seconds
+        # When provided, all LanceDB writes go through the buffer so
+        # backfill respects the same fragment-count discipline as ingest.
+        # _reindex_session forces a flush at end-of-session so per-
+        # session indexed counters land before the next session starts.
+        self.index_buffer = index_buffer
         # Externally-visible state (read by ``api/sync.py``).
         self.status: Literal["running", "idle", "disabled"] = (
             "disabled" if (vectors is None or embedder is None) else "idle"
@@ -97,6 +103,11 @@ class IndexBackfill:
         # periodic compaction lands one full interval after boot.
         self._compact_task: asyncio.Task | None = None
         self._last_compact_at: float = time.monotonic()
+        # ISO-time + dedicated error field for /v3/sync/status lance
+        # health (separate from self.last_error which mixes re-embed
+        # failures and compaction failures).
+        self.last_compact_at_iso: str | None = None
+        self.last_compact_error: str | None = None
 
     # ─── lifecycle ───────────────────────────────────────────────────
 
@@ -149,8 +160,10 @@ class IndexBackfill:
         down or block re-embedding). Records the attempt time so the
         periodic timer paces off it."""
         self._last_compact_at = time.monotonic()
+        self.last_compact_at_iso = _utc_iso()
         if self.vectors is None:
             return
+        compact_error: str | None = None
         for table_name in (self.vectors.ROUNDS, self.vectors.CARDS):
             try:
                 result = await self.vectors.optimize(table_name)
@@ -163,7 +176,11 @@ class IndexBackfill:
                 # files). Log + move on; the next start retries and
                 # each partial merge makes the next attempt lighter.
                 _log.exception("compaction failed table=%s", table_name)
-                self.last_error = f"compact {table_name}: {e}"
+                compact_error = f"compact {table_name}: {e}"
+                self.last_error = compact_error
+        # Clear on full success so the status field reflects current
+        # state, not the last historical failure.
+        self.last_compact_error = compact_error
 
     # ─── loop ────────────────────────────────────────────────────────
 
@@ -263,6 +280,16 @@ class IndexBackfill:
         # them in sequence (not transactional across two stores) means
         # a crash here leaves "0 in lance, 0 in counter" which is still
         # a valid degraded state that the next pass will retry.
+        #
+        # Drain the IndexWriteBuffer first when present — otherwise a
+        # pending row for this sid from a concurrent ingest would be
+        # written *after* our delete, leaving the index inconsistent
+        # with sessions.indexed_round_count.
+        if self.index_buffer is not None:
+            try:
+                await self.index_buffer.flush()
+            except Exception:
+                pass  # observability lives on the buffer itself
         await self.vectors.delete_session_rounds(sid)
         # Reset counter via bump with -current to land at 0.
         current_indexed = int(s["indexed_round_count"] or 0)
@@ -291,10 +318,22 @@ class IndexBackfill:
                 }
                 for r, v in zip(chunk, vectors)
             ]
-            await self.vectors.add_rounds(lance_rows)
-            await self.db.sessions.bump_indexed_count(
-                sid, len(chunk), _utc_iso(),
-            )
+            if self.index_buffer is not None:
+                await self.index_buffer.add_rounds(sid, lance_rows)
+            else:
+                await self.vectors.add_rounds(lance_rows)
+                await self.db.sessions.bump_indexed_count(
+                    sid, len(chunk), _utc_iso(),
+                )
+
+        # End-of-session flush — ensures this session's bump_indexed_count
+        # lands before the loop moves to the next degraded row, so the
+        # backfill snapshot in list_degraded() reflects reality.
+        if self.index_buffer is not None:
+            try:
+                await self.index_buffer.flush()
+            except Exception:
+                pass
 
         # Clear last_error on full success.
         await self.db.sessions.bump_indexed_count(sid, 0, _utc_iso())

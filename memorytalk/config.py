@@ -101,6 +101,26 @@ class ExploreConfig(BaseModel):
     auto_default_limit: int = 5
 
 
+class IndexConfig(BaseModel):
+    """Vector index write tuning (0.8.x — issue #4 §4.3 fix).
+
+    Decouples LanceDB ``table.add()`` batch size from the embedder's
+    per-request cap. Embedding still batches small (API limit); these
+    knobs control how the embedded rows aggregate before they hit
+    LanceDB, which directly drives fragment count and downstream fd
+    pressure on search.
+    """
+    # Row count that triggers a synchronous flush. 500 is a balance
+    # between fragment-count savings (50× fewer fragments than the
+    # naive embedder-batch-sized writes at DashScope's 10-cap) and
+    # search-visibility latency for newly-ingested rounds.
+    lance_flush_rows: int = 500
+    # Wall-clock interval for the background flusher — catches the
+    # last partial batch when ingest is bursty then idle. 0 disables
+    # the background tick (tests use this).
+    lance_flush_interval_seconds: float = 30.0
+
+
 class Settings(BaseModel):
     server: ServerConfig = ServerConfig()
     vector: ProviderConfig = ProviderConfig(provider="lancedb")
@@ -110,6 +130,7 @@ class Settings(BaseModel):
     recall: RecallConfig = RecallConfig()
     sync: SyncConfig = SyncConfig()
     explore: ExploreConfig = ExploreConfig()
+    index: IndexConfig = IndexConfig()
 
 
 def _default_data_root() -> Path:

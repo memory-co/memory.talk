@@ -82,6 +82,35 @@ class _IndexHealthByEndpoint(BaseModel):
     degraded: int
 
 
+class _LanceHealth(BaseModel):
+    """0.8.x: surface the LanceDB layer's own health signals so EMFILE
+    risk is visible *before* search starts 500-ing.
+
+    Field choices follow issue #4 §6.6 — we want to spot two things
+    that the index-counts view above can't catch:
+
+      1. **Write pipeline:** is the IndexWriteBuffer keeping up, or are
+         flushes failing / pending rows piling up?
+      2. **Search pipeline:** has compaction been running, and has the
+         process needed to recover from EMFILE since boot?
+    """
+    # IndexWriteBuffer state.
+    pending_vector_rows: int = 0
+    last_flush_at: str | None = None
+    last_flush_error: str | None = None
+    flush_count_since_boot: int = 0
+    # IndexBackfill compaction state (last attempt seconds-ago).
+    last_compaction_at: str | None = None
+    last_compaction_error: str | None = None
+    # LanceStore EMFILE recovery count + most recent occurrence.
+    emfile_recoveries_since_boot: int = 0
+    last_emfile_at: str | None = None
+    # Process fd ceiling — flagged as observability since the issue's
+    # whole story turns on macOS-launchd 256 default.
+    fd_soft_limit: int | None = None
+    fd_hard_limit: int | None = None
+
+
 class _IndexHealth(BaseModel):
     """Snapshot of how complete the LanceDB rounds index is. Aggregated
     on each ``GET /v3/sync/status`` from the ``sessions`` table — fields
@@ -95,6 +124,10 @@ class _IndexHealth(BaseModel):
     last_index_error: str | None = None
     # Per-endpoint breakdown so the CLI can render one row per source.
     by_endpoint: list[_IndexHealthByEndpoint] = Field(default_factory=list)
+    # 0.8.x — LanceDB-layer health signals (write pipeline + EMFILE).
+    # Separate sub-block so the index-completion picture above stays
+    # uncluttered by lower-level operational signals.
+    lance: _LanceHealth = Field(default_factory=_LanceHealth)
 
 
 class _SyncLastRun(BaseModel):

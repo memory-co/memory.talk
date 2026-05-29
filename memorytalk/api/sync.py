@@ -12,6 +12,50 @@ from fastapi import APIRouter, Query, Request
 router = APIRouter()
 
 
+def _gather_lance_health(state) -> dict:
+    """Collect LanceDB-layer observability for ``index.lance``.
+
+    Pulls from three sources: the IndexWriteBuffer (write pipeline),
+    IndexBackfill (compaction cadence), and LanceStore (EMFILE
+    recovery count). All fields default to safe zeros / None when the
+    corresponding component is absent so a partially-disabled boot
+    still returns a well-shaped response.
+    """
+    buf = getattr(state, "index_buffer", None)
+    backfill = getattr(state, "backfill", None)
+    vectors = getattr(state, "vectors", None)
+
+    soft = hard = None
+    try:
+        import resource
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    except (ImportError, OSError):
+        # Windows / sandboxed envs — leave None so the field's
+        # absence is the signal.
+        pass
+
+    return {
+        "pending_vector_rows": (buf.pending_rows if buf is not None else 0),
+        "last_flush_at": (buf.last_flush_at_iso if buf is not None else None),
+        "last_flush_error": (buf.last_flush_error if buf is not None else None),
+        "flush_count_since_boot": (buf.flush_count if buf is not None else 0),
+        "last_compaction_at": (
+            backfill.last_compact_at_iso if backfill is not None else None
+        ),
+        "last_compaction_error": (
+            backfill.last_compact_error if backfill is not None else None
+        ),
+        "emfile_recoveries_since_boot": (
+            vectors.emfile_recoveries if vectors is not None else 0
+        ),
+        "last_emfile_at": (
+            vectors.last_emfile_at_iso if vectors is not None else None
+        ),
+        "fd_soft_limit": soft,
+        "fd_hard_limit": hard,
+    }
+
+
 @router.get("/sync/status")
 async def get_sync_status(request: Request, limit: int = Query(5, ge=0, le=20)):
     config = request.app.state.config
@@ -31,6 +75,7 @@ async def get_sync_status(request: Request, limit: int = Query(5, ge=0, le=20)):
     index["last_index_error"] = (
         backfill.last_error if backfill is not None else None
     )
+    index["lance"] = _gather_lance_health(request.app.state)
 
     if not config.settings.sync.enabled:
         return {"status": "disabled", "index": index}

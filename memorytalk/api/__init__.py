@@ -32,6 +32,7 @@ from memorytalk.service import (
     RecallService, ReviewService,
 )
 from memorytalk.service.backfill import IndexBackfill
+from memorytalk.service.index_buffer import IndexWriteBuffer
 from memorytalk.service.search import SearchService
 from memorytalk.service.sync import SyncWatcher
 
@@ -71,9 +72,22 @@ def create_app(config: Config | None = None) -> FastAPI:
         app.state.vectors = vectors
         app.state.embedder = embedder
         app.state.events = events
+        # IndexWriteBuffer aggregates LanceDB inserts across sessions so
+        # one ``table.add()`` carries many embedder batches' worth of
+        # rows. Without it the ingest path creates one fragment per
+        # embedder batch (10 with DashScope) → vector search eventually
+        # EMFILEs on fd ceiling. See service/index_buffer.py and
+        # docs/issue #4 §4.3.
+        app.state.index_buffer = IndexWriteBuffer(
+            vectors=vectors, db=db,
+            flush_rows=config.settings.index.lance_flush_rows,
+            flush_interval_seconds=config.settings.index.lance_flush_interval_seconds,
+        )
+        app.state.index_buffer.start()
         app.state.read = ReadService(db=db, events=events)
         app.state.ingest = IngestService(
             db=db, vectors=vectors, embedder=embedder, events=events,
+            index_buffer=app.state.index_buffer,
         )
         app.state.sync_checkpoints = sync_checkpoints
         app.state.sync = SyncWatcher(
@@ -108,6 +122,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         # lifespan shutdown.
         app.state.backfill = IndexBackfill(
             db=db, vectors=vectors, embedder=embedder,
+            index_buffer=app.state.index_buffer,
         )
         app.state.backfill.start()
         # Guaranteed one-shot compaction on every boot — grinds down the
@@ -127,6 +142,12 @@ def create_app(config: Config | None = None) -> FastAPI:
             pass
         try:
             await app.state.backfill.stop()
+        except Exception:
+            pass
+        # Drain in-flight LanceDB writes before tearing down the DB
+        # — otherwise pending vectors are lost on shutdown.
+        try:
+            await app.state.index_buffer.stop()
         except Exception:
             pass
         await db.close()

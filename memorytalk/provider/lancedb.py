@@ -11,10 +11,26 @@ in search results come from the ``cards`` table. SQLite holds zero search
 state; jsonl files hold zero search state.
 """
 from __future__ import annotations
+import asyncio
+import datetime as _dt
+import logging
 from pathlib import Path
 from typing import Optional
 
 import pyarrow as pa
+
+
+_log = logging.getLogger("memorytalk.lancedb")
+
+
+def _is_emfile(exc: BaseException) -> bool:
+    """Recognize Lance's wrapped EMFILE — comes through as a
+    ``RuntimeError`` whose ``str()`` contains "Too many open files".
+    We can't match on errno because Lance wraps the OS error inside
+    its own ``LanceError(IO)`` before raising. String match is fragile
+    but it's the only signal Lance gives us on this path."""
+    msg = str(exc)
+    return "Too many open files" in msg or "(os error 24)" in msg
 
 
 def _segment(text: str) -> str:
@@ -38,6 +54,16 @@ class LanceStore:
         self.db = db
         self.data_dir = data_dir
         self.dim = dim
+        # Per-table "FTS index confirmed present" memo. Avoids a
+        # ``list_indices()`` round trip on every search call once we've
+        # verified the index exists. Invalidated only on process restart
+        # (we don't drop FTS indices at runtime).
+        self._fts_index_known: set[str] = set()
+        # EMFILE recovery state — see _recover_from_emfile / _search_with_recovery.
+        self._recovery_lock = asyncio.Lock()
+        self.emfile_recoveries: int = 0
+        self.last_emfile_at_iso: str | None = None
+        self.last_recovery_error: str | None = None
         self._cards_schema = pa.schema([
             pa.field("card_id", pa.string()),
             pa.field("text", pa.string()),
@@ -155,28 +181,43 @@ class LanceStore:
     async def ensure_fts_index(self, table_name: str) -> None:
         """Create the FTS index on the ``text`` column if absent.
 
-        LanceDB's hybrid search needs an FTS index on the text column.
-        Calling this once before queries is enough (the index is shared
-        across queries; LanceDB picks up new rows automatically). Cheap
-        no-op when the index already exists.
+        Idempotent + memoized: once we've confirmed an FTS index covers
+        ``text`` for a given table in this process, future calls are
+        free. We don't drop indices at runtime, so the memo can't go
+        stale within a single process lifetime — invalidation = restart.
+
+        **Exception handling note (issue #4 §4.2 fix):** earlier this
+        function swallowed any error from ``list_indices()`` and
+        fell through to ``create_index(..., replace=True)``. Under
+        EMFILE the swallowed list call was followed by a fresh index
+        build, *adding* pressure exactly when the process was already
+        over its fd quota. Now: a successful ``list_indices()`` that
+        returns no ``text`` index is the only signal to create; any
+        IO exception from ``list_indices()`` propagates so the upstream
+        EMFILE recovery path can take over instead of compounding.
         """
+        if table_name in self._fts_index_known:
+            return
         if not await self._exists(table_name):
             return
         from lancedb.index import FTS
         table = await self.db.open_table(table_name)
-        try:
-            indices = await table.list_indices()
-            for idx in indices:
-                cols = getattr(idx, "columns", None) or []
-                if "text" in cols:
-                    return  # already indexed
-        except Exception:
-            pass  # treat as "no index" and create one
-        # whitespace tokenizer because ingest already segments via jieba.
+        # Let list_indices' exceptions bubble — see docstring.
+        indices = await table.list_indices()
+        for idx in indices:
+            cols = getattr(idx, "columns", None) or []
+            if "text" in cols:
+                self._fts_index_known.add(table_name)
+                return
+        # Confirmed absent — create. ``replace=False`` so a concurrent
+        # creator can't race us into a double build; if that ever fires
+        # the second caller gets a clear error rather than a silent
+        # second-rebuild storm.
         await table.create_index(
             "text", config=FTS(base_tokenizer="whitespace", with_position=True),
-            replace=True,
+            replace=False,
         )
+        self._fts_index_known.add(table_name)
 
     # ────────── search ──────────
 
@@ -193,10 +234,9 @@ class LanceStore:
         text/vector but callers usually just need card_id + relevance).
         Empty query → vector-only; no query and no vector → empty result.
         """
-        if not await self._exists(self.CARDS):
-            return []
-        table = await self.db.open_table(self.CARDS)
-        return await _run_hybrid(table, query, vector, top_k, where)
+        return await self._search_with_recovery(
+            self.CARDS, query, vector, top_k, where,
+        )
 
     async def search_rounds(
         self,
@@ -211,10 +251,88 @@ class LanceStore:
         responsible for aggregating per session, dereffing the text from
         jsonl for display, etc.
         """
-        if not await self._exists(self.ROUNDS):
+        return await self._search_with_recovery(
+            self.ROUNDS, query, vector, top_k, where,
+        )
+
+    # ────────── EMFILE recovery (issue #4 §6.2 fix) ──────────
+
+    async def _search_with_recovery(
+        self, table_name: str, query: str,
+        vector: list[float] | None, top_k: int, where: str | None,
+    ) -> list[dict]:
+        """Run a hybrid search; on EMFILE, drive a recovery once + retry.
+
+        Recovery (compaction + connection reset) is necessary because:
+        - compaction reclaims fragments on disk → fewer files to open;
+        - the in-process LanceDB readers hold fds to files Compaction
+          unlinked → only a fresh ``connect_async`` releases those.
+
+        Retry is gated to exactly one attempt: if the post-recovery
+        query still EMFILEs the underlying fragment / fd-budget mismatch
+        is past what we can fix in-process, and the original error
+        propagates as a 500 — operator action (restart, raise ulimit)
+        is required.
+        """
+        if not await self._exists(table_name):
             return []
-        table = await self.db.open_table(self.ROUNDS)
-        return await _run_hybrid(table, query, vector, top_k, where)
+        try:
+            table = await self.db.open_table(table_name)
+            return await _run_hybrid(table, query, vector, top_k, where)
+        except Exception as e:
+            if not _is_emfile(e):
+                raise
+            _log.warning(
+                "EMFILE on search table=%s; triggering recovery", table_name,
+            )
+            await self._recover_from_emfile()
+            # Single retry — see docstring.
+            if not await self._exists(table_name):
+                return []
+            table = await self.db.open_table(table_name)
+            return await _run_hybrid(table, query, vector, top_k, where)
+
+    async def _recover_from_emfile(self) -> None:
+        """Compact both tables + reset the LanceDB connection.
+
+        Lock-protected so concurrent EMFILE-ing requests don't pile up
+        N recoveries. The first request through the lock does the work;
+        followers see ``emfile_recoveries`` advanced and skip — they
+        proceed straight to retry, which now sees a fresh connection.
+        """
+        gen_before = self.emfile_recoveries
+        async with self._recovery_lock:
+            if self.emfile_recoveries > gen_before:
+                return  # someone else recovered while we waited
+            # 1. Compact — best-effort; failure here doesn't block retry.
+            for table_name in (self.ROUNDS, self.CARDS):
+                try:
+                    await self.optimize(table_name)
+                except Exception as e:
+                    _log.exception(
+                        "optimize during EMFILE recovery failed table=%s",
+                        table_name,
+                    )
+                    self.last_recovery_error = (
+                        f"optimize {table_name}: {e}"
+                    )
+            # 2. Reset connection — closes the held fds. Without this,
+            # post-compaction the process is still pinned to old files.
+            try:
+                import lancedb
+                try:
+                    await self.db.close()
+                except Exception:
+                    pass  # already closed / unsupported — best effort
+                self.db = await lancedb.connect_async(str(self.data_dir))
+            except Exception as e:
+                _log.exception("connection reset during EMFILE recovery failed")
+                self.last_recovery_error = f"reconnect: {e}"
+                raise
+            self.emfile_recoveries += 1
+            self.last_emfile_at_iso = _dt.datetime.now(_dt.UTC).isoformat(
+                timespec="seconds",
+            ).replace("+00:00", "Z")
 
 
 async def _run_hybrid(

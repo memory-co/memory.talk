@@ -90,11 +90,17 @@ class IngestService:
         vectors: LanceStore | None,
         embedder: Embedder | None,
         events: EventWriter,
+        index_buffer=None,  # IndexWriteBuffer | None
     ):
         self.db = db
         self.vectors = vectors
         self.embedder = embedder
         self.events = events
+        # When None, ``_index_vectors`` falls back to direct
+        # ``vectors.add_rounds`` calls — preserving the old behavior
+        # for callers that haven't been wired to a buffer (e.g. some
+        # standalone test setups).
+        self.index_buffer = index_buffer
 
     # ────────── ensure_session ──────────
 
@@ -328,12 +334,20 @@ class IngestService:
                     }
                     for r, v in zip(chunk, vectors)
                 ]
-                await self.vectors.add_rounds(lance_rows)
+                # Route through the buffer when available — aggregates
+                # across embedder batches so LanceDB sees one big
+                # ``table.add()`` instead of many tiny ones, dropping
+                # fragment count + fd pressure. The buffer's flush also
+                # owns ``bump_indexed_count`` so the SQLite counter
+                # tracks LanceDB-landed rows, not just embedded ones.
+                if self.index_buffer is not None:
+                    await self.index_buffer.add_rounds(sid, lance_rows)
+                else:
+                    await self.vectors.add_rounds(lance_rows)
+                    await self.db.sessions.bump_indexed_count(
+                        sid, len(chunk), now,
+                    )
                 succeeded += len(chunk)
-                # Persist immediately so a crash mid-loop leaves the
-                # SQLite counter accurate — backfill resumes from the
-                # right offset.
-                await self.db.sessions.bump_indexed_count(sid, len(chunk), now)
             except Exception as e:
                 _log.exception(
                     "vector index batch failed sid=%s offset=%d size=%d",
