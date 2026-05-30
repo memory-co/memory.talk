@@ -13,20 +13,20 @@ v3 simplifications vs v2:
   explore are surfaced through their own commands (or not configured
   via setup at all).
 
-What it still does:
-
-1. Loads existing ``settings.json`` if any; diffs new vs old.
-2. Prompts: embedding provider + model + dim (+ openai endpoint / key);
-   vector provider; relation provider; server port.
-3. Probes the embedding provider before writing (fail-fast).
-4. Atomic write of ``settings.json``; ensure_dirs.
-5. Offers to start the server (first install) or restart it (modify mode
-   when the running server still has the old config).
+**Wizard shape: flat list of steps, no early returns.** The wizard
+iterates ``_STEPS`` and runs every entry exactly once. Each step is
+idempotent and decides for itself whether to act. There is intentionally
+no "if no diff, return early" path through the middle of the wizard —
+that pattern repeatedly caused new bottom-of-wizard steps to get
+silently skipped on re-runs where settings.json was untouched. Adding a
+new step = appending one entry to ``_STEPS``; it cannot be bypassed.
 """
 from __future__ import annotations
 import shutil
 import sys
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Callable
 
 import click
 
@@ -85,8 +85,40 @@ def setup() -> None:
     emit_md(_summary_md(cfg, result))
 
 
+# ──────────────────────────── pipeline ────────────────────────────────
+
+@dataclass
+class _Ctx:
+    """Mutable context threaded through every step.
+
+    ``owned`` accumulates input collected by ``_run_*`` steps and is
+    persisted by the ``persist`` step. ``new`` / ``diff`` / ``written``
+    are populated by ``persist`` for downstream steps to read.
+    """
+    cfg: Config
+    base: dict
+    is_first_install: bool
+    owned: dict = field(default_factory=dict)
+    new: dict | None = None
+    diff: list[str] = field(default_factory=list)
+    written: bool = False
+
+
+@dataclass(frozen=True)
+class _Step:
+    """One pipeline entry. ``section`` is the banner to print before
+    ``run``; ``None`` means no banner."""
+    name: str
+    section: str | None
+    run: Callable[[_Ctx], dict]
+
+
 def _wizard(cfg: Config, old_raw: dict | None, is_first_install: bool) -> dict:
-    """Returns a dict describing what the run did, for the summary."""
+    """Run every step in ``_STEPS`` exactly once and build the summary.
+
+    Do NOT add early returns / mid-pipeline shortcuts here. Each step
+    owns its own "is there anything to do?" check and is idempotent.
+    """
     mode = "首次安装" if is_first_install else "已有配置 — 修改模式"
     err_console.print(f"[bold]memory.talk setup[/bold] · {mode}")
     err_console.print(f"data_root: [cyan]{cfg.data_root}[/cyan]\n")
@@ -95,19 +127,33 @@ def _wizard(cfg: Config, old_raw: dict | None, is_first_install: bool) -> dict:
     # dump. Mixing model defaults in would re-introduce the old bug
     # where wizard-untouched fields (search.ranking_formula etc.) got
     # materialized to disk and stopped tracking schema-default changes.
-    base = dict(old_raw) if old_raw else {}
+    ctx = _Ctx(
+        cfg=cfg,
+        base=dict(old_raw) if old_raw else {},
+        is_first_install=is_first_install,
+    )
 
-    # ── embedding ───────────────────────────────────────────────────────
-    section("Embedding")
+    results: dict[str, dict] = {}
+    for step in _STEPS:
+        if step.section is not None:
+            section(step.section)
+        results[step.name] = step.run(ctx)
+
+    return _build_result(ctx, results)
+
+
+# ─────────────────────── individual step bodies ──────────────────────
+
+def _run_embedding(ctx: _Ctx) -> dict:
+    """Prompt for embedding config, probe it (fail-fast), stash in owned."""
     # First-install pre-fill: recommended starting template (DashScope's
     # text-embedding-v4 over an OpenAI-compatible endpoint). The wizard
-    # still prompts for every field — user can override anything before
-    # the probe runs. We override emb_base here rather than the schema
-    # default (EmbeddingConfig.provider="local") so that fresh Config()
-    # calls without persisted settings still resolve to a local-only,
-    # no-network, no-API-key state — important for tests and for the
-    # "config went missing" recovery path.
-    if is_first_install:
+    # still prompts for every field. We override emb_base here rather
+    # than the schema default (EmbeddingConfig.provider="local") so that
+    # fresh Config() calls without persisted settings still resolve to a
+    # local-only, no-network, no-API-key state — important for tests and
+    # for the "config went missing" recovery path.
+    if ctx.is_first_install:
         emb_base = {
             "provider": "openai",
             "endpoint": "https://dashscope.aliyuncs.com/compatible-mode/v1/embeddings",
@@ -115,109 +161,136 @@ def _wizard(cfg: Config, old_raw: dict | None, is_first_install: bool) -> dict:
             "dim": 1024,
         }
     else:
-        emb_base = dict(base.get("embedding") or {})
-    emb = _step_embedding(emb_base)
+        emb_base = dict(ctx.base.get("embedding") or {})
+    emb = _collect_embedding(emb_base)
 
-    # Probe the embedding before writing — fail-fast.
     err_console.print("[dim]probing embedding provider...[/dim]")
     _probe_embedding(emb)
     err_console.print("[green]✓ embedding verified[/green]")
 
-    # ── storage ─────────────────────────────────────────────────────────
-    section("Storage")
+    ctx.owned["embedding"] = emb
+    return {"emb": emb}
+
+
+def _run_storage(ctx: _Ctx) -> dict:
     vector_provider = _choice(
         "vector provider", ["lancedb"],
-        (base.get("vector") or {}).get("provider", "lancedb"),
+        (ctx.base.get("vector") or {}).get("provider", "lancedb"),
     )
     relation_provider = _choice(
         "relation provider", ["sqlite"],
-        (base.get("relation") or {}).get("provider", "sqlite"),
+        (ctx.base.get("relation") or {}).get("provider", "sqlite"),
     )
+    ctx.owned["vector"] = {"provider": vector_provider}
+    ctx.owned["relation"] = {"provider": relation_provider}
+    return {"vector": vector_provider, "relation": relation_provider}
 
-    # ── server ──────────────────────────────────────────────────────────
-    section("Server")
-    port_default = str(int((base.get("server") or {}).get("port", 7788)))
+
+def _run_server_config(ctx: _Ctx) -> dict:
+    port_default = str(int((ctx.base.get("server") or {}).get("port", 7788)))
     port_str = console.text(
         "server port",
         default=port_default,
         validate=lambda v: (v.strip().isdigit() and 1 <= int(v) <= 65535)
         or "must be an integer in 1..65535",
     )
+    ctx.owned["server"] = {"port": int(port_str)}
+    return {"port": int(port_str)}
 
-    # ── sync ────────────────────────────────────────────────────────────
-    section("Sync")
+
+def _run_sync(ctx: _Ctx) -> dict:
     # Probe what'll auto-detect so the user can see ahead of time which
     # CLIs will be picked up. Endpoint discovery itself happens in the
     # SyncWatcher at server start — this is purely informational.
     _show_detected_endpoints()
-    old_sync = base.get("sync") or {}
-    enabled_default = old_sync.get("enabled", True if is_first_install else False)
+    old_sync = ctx.base.get("sync") or {}
+    enabled_default = old_sync.get(
+        "enabled", True if ctx.is_first_install else False,
+    )
     sync_enabled = console.confirm(
         "Enable backend sync? (auto-ingest Claude Code / Codex sessions etc.)",
         default=enabled_default,
     )
+    ctx.owned["sync"] = {"enabled": sync_enabled}
+    return {"enabled": sync_enabled}
 
-    # ── PATCH onto base ─────────────────────────────────────────────────
-    # Setup writes ONLY the fields it actually prompted for. Anything
-    # else the user had in settings.json — sync.debounce_ms, search.*,
-    # recall.*, explore.*, embedding.batch_size, future fields — is
-    # left untouched. This keeps "defaults that haven't been explicitly
-    # overridden" tracking the Settings schema, so future default
-    # changes (like the 0.8.2 ranking_formula -> "relevance") flow
-    # through on next load without manual intervention.
-    owned = {
-        "server":   {"port": int(port_str)},
-        "vector":   {"provider": vector_provider},
-        "relation": {"provider": relation_provider},
-        "embedding": emb,
-        "sync":     {"enabled": sync_enabled},
-    }
-    new = _patch_owned(base, owned)
 
-    # ── diff + persist ──────────────────────────────────────────────────
-    diff = diff_settings(base, new)
-    if not is_first_install and not diff:
-        err_console.print("\n[dim]no field changed — nothing to write[/dim]")
-        return {
-            "changed": [], "diff": [],
-            "settings_path": cfg.settings_path,
-            "server_action": None,
-            "embedding_dim_changed": False,
-        }
+def _run_persist(ctx: _Ctx) -> dict:
+    """Diff owned fields against existing settings.json and write iff diff.
 
-    write_settings_atomic(cfg.settings_path, new)
-    cfg._settings = None  # invalidate cached Settings
-    cfg.ensure_dirs()
+    Setup writes ONLY the fields it actually prompted for. Anything else
+    the user had in settings.json — sync.debounce_ms, search.*, recall.*,
+    explore.*, embedding.batch_size, future fields — is left untouched.
+    This keeps "defaults that haven't been explicitly overridden"
+    tracking the Settings schema, so future default changes (like the
+    0.8.2 ranking_formula -> "relevance") flow through on next load
+    without manual intervention.
+    """
+    ctx.new = _patch_owned(ctx.base, ctx.owned)
+    ctx.diff = diff_settings(ctx.base, ctx.new)
+    if ctx.diff:
+        write_settings_atomic(ctx.cfg.settings_path, ctx.new)
+        ctx.cfg._settings = None  # invalidate cached Settings
+        ctx.written = True
+    else:
+        err_console.print("\n[dim]settings.json unchanged[/dim]")
+    ctx.cfg.ensure_dirs()
+    return {"wrote": ctx.written, "diff": ctx.diff}
 
-    # ── embedding dim change → would trigger reembed (deferred) ─────────
-    old_dim = (base.get("embedding") or {}).get("dim")
-    new_dim = emb.get("dim")
+
+def _run_server_proc(ctx: _Ctx) -> dict:
+    """Start the daemon (first install) or offer restart (config drift)."""
+    return {"action": _maybe_start_or_restart(
+        ctx.cfg, ctx.is_first_install, bool(ctx.diff),
+    )}
+
+
+def _run_hooks(ctx: _Ctx) -> dict:
+    """Multi-select prompt: install / keep / remove memory.talk's recall
+    hook in each detected host AI CLI (Claude Code, Codex, …)."""
+    return _step_install_hooks(ctx.cfg)
+
+
+# ──────────────────────────── step registry ───────────────────────────
+
+_STEPS: tuple[_Step, ...] = (
+    _Step("embedding",     "Embedding",     _run_embedding),
+    _Step("storage",       "Storage",       _run_storage),
+    _Step("server_config", "Server",        _run_server_config),
+    _Step("sync",          "Sync",          _run_sync),
+    _Step("persist",       None,            _run_persist),
+    _Step("server_proc",   None,            _run_server_proc),
+    _Step("hooks",         "Recall hooks",  _run_hooks),
+)
+
+
+def _build_result(ctx: _Ctx, results: dict[str, dict]) -> dict:
+    """Translate per-step results into the dict ``_summary_md`` expects."""
+    # Embedding dim change → would trigger reembed (deferred). Derived
+    # from base vs owned rather than tracked in a step because it's
+    # purely informational and doesn't fan out into another action.
+    old_dim = (ctx.base.get("embedding") or {}).get("dim")
+    new_emb = ctx.owned.get("embedding") or {}
+    new_dim = new_emb.get("dim")
     dim_changed = (
         old_dim is not None
-        and not is_first_install
+        and not ctx.is_first_install
         and old_dim != new_dim
     )
 
-    # ── server start / restart ──────────────────────────────────────────
-    server_action = _maybe_start_or_restart(cfg, is_first_install, bool(diff))
-
-    # ── recall hooks ────────────────────────────────────────────────────
-    # Done AFTER server start so the hook command has a backend to call
-    # at the next prompt. Step is self-skipping when memory.talk isn't on
-    # PATH (it'd be a broken install).
-    hooks_summary = _step_install_hooks(cfg)
-
     return {
-        "changed": diff,
-        "diff": diff,
-        "settings_path": cfg.settings_path,
-        "server_action": server_action,
+        "changed": ctx.diff,
+        "diff": ctx.diff,
+        "settings_path": ctx.cfg.settings_path,
+        "server_action": results.get("server_proc", {}).get("action"),
         "embedding_dim_changed": dim_changed,
-        "hooks": hooks_summary,
+        "hooks": results.get("hooks") or {},
     }
 
 
-def _step_embedding(base: dict) -> dict:
+# ────────────────────────── input collectors ──────────────────────────
+
+def _collect_embedding(base: dict) -> dict:
     provider = _select("embedding provider", _EMB_OPTIONS,
                        default=base.get("provider", "local"))
 
@@ -246,18 +319,15 @@ def _step_embedding(base: dict) -> dict:
     return out
 
 
-def _step_install_hooks(cfg: Config) -> dict:
-    """Multi-select prompt: install / keep / remove memory.talk's recall
-    hook in each detected host AI CLI (Claude Code, Codex, …).
+# ────────────────────────── hook install step ─────────────────────────
 
-    Idempotent: re-run shows current state inline and ``Enter`` on the
-    default selection (all detected hosts checked) holds state for the
-    already-installed and installs the missing.
+def _step_install_hooks(cfg: Config) -> dict:
+    """Idempotent: re-run shows current state inline and ``Enter`` on
+    the default selection (all detected hosts checked) holds state for
+    already-installed hosts and installs missing ones.
 
     Returns a summary dict consumed by ``_summary_md``.
     """
-    section("Recall hooks")
-
     # Hook install is interactive-only: it shows a multi-select and can
     # block on the Codex trust dialog. Non-TTY runs (tests, piped input,
     # CI) silently skip so they don't surprise the user with side effects.
@@ -471,6 +541,8 @@ def _verify(r: _HookRow, cfg: Config) -> bool:
     return False
 
 
+# ──────────────────────────── helpers ─────────────────────────────────
+
 def _patch_owned(base: dict, owned: dict[str, dict]) -> dict:
     """Apply ``owned`` updates onto ``base`` at field-level granularity.
 
@@ -490,10 +562,10 @@ def _patch_owned(base: dict, owned: dict[str, dict]) -> dict:
     doesn't synthesize cleanup of unrelated keys.
     """
     new = dict(base)
-    for section, fields in owned.items():
-        section_data = dict(new.get(section, {}))
+    for sect, fields in owned.items():
+        section_data = dict(new.get(sect, {}))
         section_data.update(fields)
-        new[section] = section_data
+        new[sect] = section_data
     return new
 
 
@@ -504,10 +576,10 @@ def _show_detected_endpoints() -> None:
     ``settings.sync.endpoints`` to participate; we don't surface them
     here because the wizard doesn't (yet) collect remote-endpoint config.
     """
-    from memorytalk.adapters import ADAPTERS
+    from memorytalk.adapters import ADAPTERS as SYNC_ADAPTERS
     detected = []
     missing = []
-    for name, cls in ADAPTERS.items():
+    for name, cls in SYNC_ADAPTERS.items():
         loc = getattr(cls, "DEFAULT_LOCATION", None)
         if not loc:
             continue
