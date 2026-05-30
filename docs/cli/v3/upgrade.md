@@ -86,7 +86,7 @@ Successfully installed memorytalk-0.5.2
 ✓ upgraded to 0.5.2
 
 ⚠ If the server is running, restart it to load the new code:
-    memory.talk server stop && memory.talk server start
+    memory.talk server restart
 ```
 
 ### `--check`

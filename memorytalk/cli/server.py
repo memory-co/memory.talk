@@ -14,7 +14,9 @@ from pathlib import Path
 
 import click
 
-from memorytalk.cli._format import fmt_server_start, fmt_server_stop, fmt_status
+from memorytalk.cli._format import (
+    fmt_server_restart, fmt_server_start, fmt_server_stop, fmt_status,
+)
 from memorytalk.cli._http import ApiError, api
 from memorytalk.cli._render import emit_json, emit_md
 from memorytalk.config import Config
@@ -115,6 +117,84 @@ def stop_server_proc(cfg: Config) -> dict:
     return {"status": "stopped", "pid": pid}
 
 
+# Graceful-exit budget after SIGTERM. The lifespan __aexit__ has to
+# stop the sync watcher, drain the IndexWriteBuffer, close the LanceDB
+# connection and shut SQLite down — on a busy install with a half-full
+# buffer that's ~1–3 s typical, with headroom for outliers. After this
+# window we escalate to SIGKILL so ``restart`` never hangs the CLI.
+_RESTART_GRACE_SECONDS = 10.0
+_RESTART_POLL_INTERVAL = 0.1
+
+
+def restart_server_proc(cfg: Config) -> dict:
+    """Stop the running daemon (if any) + wait for graceful exit +
+    start fresh. Returns one of:
+
+        {"status": "restarted",
+         "previous_pid": int, "pid": int, "port": int}
+            — there was a daemon, it died cleanly, new one is up.
+
+        {"status": "started", "pid": int, "port": int}
+            — no daemon was running; same shape as a plain ``start``.
+
+        {"status": "failed",
+         "exit_code": int, "error": str, "previous_pid": int | None}
+            — the *new* daemon failed startup; the previous one is
+              already gone (we don't roll back — leaves logs intact for
+              debugging).
+
+    Waits up to ``_RESTART_GRACE_SECONDS`` for the old process to exit,
+    then SIGKILLs if it's still around. Without this wait, the new
+    daemon races the old one for the TCP port and gets EADDRINUSE.
+    """
+    previous_pid: int | None = None
+    if cfg.pid_path.exists():
+        try:
+            previous_pid = int(cfg.pid_path.read_text().strip())
+        except ValueError:
+            previous_pid = None
+
+    if previous_pid is not None and pid_alive(previous_pid):
+        try:
+            os.kill(previous_pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        deadline = time.monotonic() + _RESTART_GRACE_SECONDS
+        while time.monotonic() < deadline:
+            if not pid_alive(previous_pid):
+                break
+            time.sleep(_RESTART_POLL_INTERVAL)
+        else:
+            # 10 s and still alive — escalate. SIGKILL is uncatchable;
+            # the kernel reaps the process so ``pid_alive`` flips fast.
+            try:
+                os.kill(previous_pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            # Tiny window for the kernel to actually reap.
+            time.sleep(0.3)
+
+    # Stale pid/port files would let start_server_proc misread "already
+    # running" — clear them regardless of how we got here.
+    cfg.pid_path.unlink(missing_ok=True)
+    cfg.port_path.unlink(missing_ok=True)
+
+    start_payload = start_server_proc(cfg)
+    status = start_payload.get("status")
+    if status == "failed":
+        return {**start_payload, "previous_pid": previous_pid}
+    if previous_pid is not None:
+        # Distinguish from a fresh start so the user sees "the old
+        # daemon was actually replaced", not just "a daemon started".
+        return {
+            "status": "restarted",
+            "previous_pid": previous_pid,
+            "pid": start_payload["pid"],
+            "port": start_payload["port"],
+        }
+    return start_payload  # status="started" — no previous daemon
+
+
 def _emit(payload: dict, json_out: bool, md_formatter) -> None:
     if json_out:
         emit_json(payload)
@@ -138,6 +218,17 @@ def server_stop(json_out: bool) -> None:
     cfg = Config()
     payload = stop_server_proc(cfg)
     _emit(payload, json_out, fmt_server_stop)
+
+
+@server.command("restart")
+@click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON")
+def server_restart(json_out: bool) -> None:
+    """Stop the running daemon (if any) and start it again."""
+    cfg = Config()
+    payload = restart_server_proc(cfg)
+    _emit(payload, json_out, fmt_server_restart)
+    if payload.get("status") == "failed":
+        sys.exit(1)
 
 
 @server.command("status")

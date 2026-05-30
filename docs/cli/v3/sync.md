@@ -149,7 +149,7 @@ sync.db checkpoint 的主键是 `(source, location, raw_session_id)`,跟 session
 ## 跟其他命令的边界
 
 - **`server start/stop`**:control plane。server 是 sync 的宿主进程;server 一停 watcher 必停;server 起来时若 `settings.sync.enabled=true` 自动拉起 watcher。
-- **`setup`**:setup 的 Sync section 写 `settings.sync.enabled`。改了之后跑 `server stop && server start` 即可生效;setup 也会在结尾问要不要重启。
+- **`setup`**:setup 的 Sync section 写 `settings.sync.enabled`。改了之后跑 `server restart` 即可生效;setup 也会在结尾问要不要重启。
 - **`server logs`**:只 tail `server.log`(uvicorn + memorytalk app 主日志)。sync watcher 的细粒度日志(每个文件事件 / append 结果 / 冲突 / backfill milestones)单独落 `~/.memory.talk/logs/sync/watch.log`。
 
 ## 错误

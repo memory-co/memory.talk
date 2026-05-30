@@ -48,6 +48,25 @@ def fmt_server_stop(payload: dict) -> str:
     return f"**{status}**\n"
 
 
+def fmt_server_restart(payload: dict) -> str:
+    status = payload.get("status", "")
+    if status == "restarted":
+        return (
+            f"**restarted** · prev pid `{payload.get('previous_pid')}` "
+            f"→ pid `{payload['pid']}` · port `{payload['port']}`\n"
+        )
+    if status == "started":
+        # No previous daemon — restart degenerated into a fresh start.
+        return (
+            f"**started** · pid `{payload['pid']}` · port `{payload['port']}` "
+            "(was not running)\n"
+        )
+    if status == "failed":
+        # Reuse start's failure shape — same fields are populated.
+        return fmt_server_start(payload)
+    return f"**{status}**\n"
+
+
 def fmt_status(payload: dict) -> str:
     if payload.get("status") == "not_running":
         return (
