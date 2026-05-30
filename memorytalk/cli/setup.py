@@ -85,8 +85,11 @@ def _wizard(cfg: Config, old_raw: dict | None, is_first_install: bool) -> dict:
     err_console.print(f"[bold]memory.talk setup[/bold] · {mode}")
     err_console.print(f"data_root: [cyan]{cfg.data_root}[/cyan]\n")
 
-    base = dict(old_raw) if old_raw else Settings().model_dump()
-    new = dict(base)
+    # ``base`` is the raw existing settings.json — NOT a Settings model
+    # dump. Mixing model defaults in would re-introduce the old bug
+    # where wizard-untouched fields (search.ranking_formula etc.) got
+    # materialized to disk and stopped tracking schema-default changes.
+    base = dict(old_raw) if old_raw else {}
 
     # ── embedding ───────────────────────────────────────────────────────
     section("Embedding")
@@ -108,7 +111,6 @@ def _wizard(cfg: Config, old_raw: dict | None, is_first_install: bool) -> dict:
     else:
         emb_base = dict(base.get("embedding") or {})
     emb = _step_embedding(emb_base)
-    new["embedding"] = emb
 
     # Probe the embedding before writing — fail-fast.
     err_console.print("[dim]probing embedding provider...[/dim]")
@@ -117,14 +119,14 @@ def _wizard(cfg: Config, old_raw: dict | None, is_first_install: bool) -> dict:
 
     # ── storage ─────────────────────────────────────────────────────────
     section("Storage")
-    new["vector"] = {"provider": _choice(
+    vector_provider = _choice(
         "vector provider", ["lancedb"],
         (base.get("vector") or {}).get("provider", "lancedb"),
-    )}
-    new["relation"] = {"provider": _choice(
+    )
+    relation_provider = _choice(
         "relation provider", ["sqlite"],
         (base.get("relation") or {}).get("provider", "sqlite"),
-    )}
+    )
 
     # ── server ──────────────────────────────────────────────────────────
     section("Server")
@@ -135,7 +137,6 @@ def _wizard(cfg: Config, old_raw: dict | None, is_first_install: bool) -> dict:
         validate=lambda v: (v.strip().isdigit() and 1 <= int(v) <= 65535)
         or "must be an integer in 1..65535",
     )
-    new["server"] = {"port": int(port_str)}
 
     # ── sync ────────────────────────────────────────────────────────────
     section("Sync")
@@ -149,19 +150,23 @@ def _wizard(cfg: Config, old_raw: dict | None, is_first_install: bool) -> dict:
         "Enable backend sync? (auto-ingest Claude Code / Codex sessions etc.)",
         default=enabled_default,
     )
-    new["sync"] = {
-        "enabled": sync_enabled,
-        "debounce_ms": old_sync.get("debounce_ms", 200),
-    }
 
-    # Carry over sections we don't prompt for (search / recall / explore).
-    # They keep whatever the existing file had; defaults filled in by the
-    # Settings model on first install.
-    for key in ("search", "recall", "explore"):
-        if key in base:
-            new[key] = base[key]
-        else:
-            new[key] = getattr(Settings(), key).model_dump()
+    # ── PATCH onto base ─────────────────────────────────────────────────
+    # Setup writes ONLY the fields it actually prompted for. Anything
+    # else the user had in settings.json — sync.debounce_ms, search.*,
+    # recall.*, explore.*, embedding.batch_size, future fields — is
+    # left untouched. This keeps "defaults that haven't been explicitly
+    # overridden" tracking the Settings schema, so future default
+    # changes (like the 0.8.2 ranking_formula -> "relevance") flow
+    # through on next load without manual intervention.
+    owned = {
+        "server":   {"port": int(port_str)},
+        "vector":   {"provider": vector_provider},
+        "relation": {"provider": relation_provider},
+        "embedding": emb,
+        "sync":     {"enabled": sync_enabled},
+    }
+    new = _patch_owned(base, owned)
 
     # ── diff + persist ──────────────────────────────────────────────────
     diff = diff_settings(base, new)
@@ -226,6 +231,32 @@ def _step_embedding(base: dict) -> dict:
         )
         out["timeout"] = base.get("timeout", 30.0)
     return out
+
+
+def _patch_owned(base: dict, owned: dict[str, dict]) -> dict:
+    """Apply ``owned`` updates onto ``base`` at field-level granularity.
+
+    For each section in ``owned``:
+      - Merge ``owned[section]`` keys into ``base[section]`` (creating
+        the section if missing).
+      - Keys that are in ``base[section]`` but NOT in ``owned[section]``
+        are preserved as-is.
+
+    Sections that aren't in ``owned`` at all (e.g. ``search``, ``recall``,
+    ``explore``, ``index``) are returned untouched.
+
+    Provider switch (openai → local) note: stale provider-specific
+    keys like ``endpoint`` / ``auth_key`` survive in the file. They're
+    inert when ``provider != "openai"`` (Settings just ignores them on
+    load). Strict patch — wizard owns what wizard prompted for; it
+    doesn't synthesize cleanup of unrelated keys.
+    """
+    new = dict(base)
+    for section, fields in owned.items():
+        section_data = dict(new.get(section, {}))
+        section_data.update(fields)
+        new[section] = section_data
+    return new
 
 
 def _show_detected_endpoints() -> None:
