@@ -1,6 +1,6 @@
 [project]
 name = "memorytalk"
-version = "0.8.5"
+version = "0.8.6"
 description = "Persistent cross-session memory for AI agents — Talk-Card architecture with forum-dynamics sinking/floating (v3)"
 readme = "README.md"
 requires-python = ">=3.10"
