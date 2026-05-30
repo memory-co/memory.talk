@@ -41,7 +41,7 @@ from memorytalk.hooks import materialize as hook_materialize
 from memorytalk.hooks import probe as hook_probe
 from memorytalk.hooks import state as hook_state
 from memorytalk.util import console
-from memorytalk.util.console import CheckOption, err_console, section
+from memorytalk.util.console import err_console, section
 from memorytalk.util.settings_io import (
     diff_settings, read_settings_raw, write_settings_atomic,
 )
@@ -322,15 +322,16 @@ def _collect_embedding(base: dict) -> dict:
 # ────────────────────────── hook install step ─────────────────────────
 
 def _step_install_hooks(cfg: Config) -> dict:
-    """Idempotent: re-run shows current state inline and ``Enter`` on
-    the default selection (all detected hosts checked) holds state for
-    already-installed hosts and installs missing ones.
+    """One Y/n confirm per detected host AI CLI. Y keeps/installs the
+    recall hook, n removes it (or skips if not installed). Default is
+    always Y so accepting all defaults installs everything detected.
 
-    Returns a summary dict consumed by ``_summary_md``.
+    Idempotent: re-run shows current state in the prompt, ``Enter`` on
+    each holds state for already-installed hosts and installs missing.
     """
-    # Hook install is interactive-only: it shows a multi-select and can
-    # block on the Codex trust dialog. Non-TTY runs (tests, piped input,
-    # CI) silently skip so they don't surprise the user with side effects.
+    # Hook install is interactive-only: prompts may block on the Codex
+    # TUI trust step. Non-TTY runs (tests, piped input, CI) silently
+    # skip so they don't surprise the user with side effects.
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         return {"skipped": "non-interactive shell"}
 
@@ -363,26 +364,26 @@ def _step_install_hooks(cfg: Config) -> dict:
             err_console.print(f"  [dim]·[/dim] {r.adapter.display_name}")
         return {"hosts": []}
 
-    options = [
-        CheckOption(
-            value=r.adapter.name,
-            title=_format_option_title(r, cfg),
-            checked=r.presence is not None,
-            disabled="not found in PATH" if r.presence is None else None,
-        )
-        for r in rows
-    ]
-
-    selected = set(console.checkbox(
-        "Toggle host integrations (space to flip, enter to apply):",
-        options,
-    ))
-
     summary_hosts: list[dict] = []
     for r in rows:
         if r.presence is None:
+            err_console.print(
+                f"[dim]· {r.adapter.display_name}: not found on PATH, skipping[/dim]"
+            )
             continue
-        wanted = r.adapter.name in selected
+
+        # One header line per host, then one Y/n.
+        ver = r.presence.version or "?"
+        err_console.print(
+            f"\n[bold]{r.adapter.display_name}[/bold] "
+            f"[dim]v{ver}[/dim] — {_state_phrase(r, cfg)}"
+        )
+        wanted = console.confirm(
+            "install hook?" if r.state is HostState.ABSENT
+            else "keep hook installed?",
+            default=True,
+        )
+
         installed_now = r.state != HostState.ABSENT
         if wanted:
             summary_hosts.append(_apply_install(r, cfg))
@@ -406,34 +407,25 @@ class HookRow:
         self.materialized = materialized
 
 
-def _format_option_title(r: HookRow, cfg: Config) -> str:
-    name = f"{r.adapter.display_name}"
-    if r.presence is None:
-        return f"{name:14}  (not found in PATH)"
-    ver = r.presence.version or "?"
-    tag = _state_tag(r, cfg)
-    return f"{name:14}  v{ver:<10}  {tag}"
-
-
-def _state_tag(r: HookRow, cfg: Config) -> str:
+def _state_phrase(r: HookRow, cfg: Config) -> str:
+    """Short human-readable description of current install state."""
     s = r.state
     if s is HostState.ABSENT:
-        return "absent — will install"
+        return "[dim]not installed[/dim]"
     if s is HostState.INSTALLED:
         ts = hook_state.last_verified(cfg.data_root, r.adapter.name)
-        suffix = f" (probed {ts})" if ts else ""
-        return f"installed{suffix}"
+        return f"[green]installed[/green]" + (f" [dim](probed {ts})[/dim]" if ts else "")
     if s is HostState.INSTALLED_VERIFIED:
-        return "installed-verified"
+        return "[green]installed (verified)[/green]"
     if s is HostState.INSTALLED_DRIFT:
-        return "installed but bundle changed — will re-materialize"
+        return "[yellow]installed but bundle changed (will refresh)[/yellow]"
     if s is HostState.INSTALLED_DISABLED:
-        return "installed but disabled — will re-enable"
+        return "[yellow]installed but disabled (will re-enable)[/yellow]"
     if s is HostState.INSTALLED_FAILED:
-        return "[red]install failed — manual fix needed[/red]"
+        return "[red]installed but failing to load[/red]"
     if s is HostState.INSTALLED_UNTRUSTED:
-        return "[yellow]installed, awaiting trust in host TUI[/yellow]"
-    return str(s.value)
+        return "[yellow]installed, awaiting TUI trust[/yellow]"
+    return s.value
 
 
 def _apply_install(r: HookRow, cfg: Config) -> dict:

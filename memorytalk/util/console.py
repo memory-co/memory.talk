@@ -109,41 +109,6 @@ def text(
     return answer
 
 
-@dataclass
-class CheckOption:
-    """One row in a checkbox() menu."""
-    value: str
-    title: str
-    checked: bool = True
-    disabled: str | None = None  # non-None = greyed out, with this reason
-
-
-def checkbox(label: str, options: list[CheckOption]) -> list[str]:
-    """Multi-select. Returns chosen values (subset of options[*].value).
-    Disabled options are never returned even if checked.
-
-    Non-TTY fallback: returns the values of all non-disabled, checked
-    options as-is (no prompt, no editing). Suitable for CI where the
-    intent is "accept defaults"."""
-    enabled = [o for o in options if not o.disabled]
-    if not _is_interactive():
-        return [o.value for o in enabled if o.checked]
-
-    choices = [
-        Choice(
-            title=o.title,
-            value=o.value,
-            checked=o.checked,
-            disabled=o.disabled,
-        )
-        for o in options
-    ]
-    answer = questionary.checkbox(label, choices=choices).ask()
-    if answer is None:
-        raise KeyboardInterrupt
-    return list(answer)
-
-
 def confirm(label: str, default: bool = True) -> bool:
     """y/n prompt."""
     if _is_interactive():
