@@ -13,7 +13,7 @@ def assets_root() -> Path:
     """Real filesystem path of the wheel-bundled plugin assets.
     Works for editable installs and standard wheel installs (where the
     package-data ends up alongside the .py modules in site-packages)."""
-    return Path(memorytalk.__file__).parent / "_hook_assets"
+    return Path(memorytalk.__file__).parent / "hook_assets"
 
 
 def host_asset_dir(host_subdir: str) -> Path:
