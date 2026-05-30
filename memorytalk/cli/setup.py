@@ -14,12 +14,12 @@ v3 simplifications vs v2:
   via setup at all).
 
 **Wizard shape: flat list of steps, no early returns.** The wizard
-iterates ``_STEPS`` and runs every entry exactly once. Each step is
+iterates ``STEPS`` and runs every entry exactly once. Each step is
 idempotent and decides for itself whether to act. There is intentionally
 no "if no diff, return early" path through the middle of the wizard —
 that pattern repeatedly caused new bottom-of-wizard steps to get
 silently skipped on re-runs where settings.json was untouched. Adding a
-new step = appending one entry to ``_STEPS``; it cannot be bypassed.
+new step = appending one entry to ``STEPS``; it cannot be bypassed.
 """
 from __future__ import annotations
 import shutil
@@ -88,7 +88,7 @@ def setup() -> None:
 # ──────────────────────────── pipeline ────────────────────────────────
 
 @dataclass
-class _Ctx:
+class Ctx:
     """Mutable context threaded through every step.
 
     ``owned`` accumulates input collected by ``_run_*`` steps and is
@@ -105,16 +105,16 @@ class _Ctx:
 
 
 @dataclass(frozen=True)
-class _Step:
+class Step:
     """One pipeline entry. ``section`` is the banner to print before
     ``run``; ``None`` means no banner."""
     name: str
     section: str | None
-    run: Callable[[_Ctx], dict]
+    run: Callable[[Ctx], dict]
 
 
 def _wizard(cfg: Config, old_raw: dict | None, is_first_install: bool) -> dict:
-    """Run every step in ``_STEPS`` exactly once and build the summary.
+    """Run every step in ``STEPS`` exactly once and build the summary.
 
     Do NOT add early returns / mid-pipeline shortcuts here. Each step
     owns its own "is there anything to do?" check and is idempotent.
@@ -127,14 +127,14 @@ def _wizard(cfg: Config, old_raw: dict | None, is_first_install: bool) -> dict:
     # dump. Mixing model defaults in would re-introduce the old bug
     # where wizard-untouched fields (search.ranking_formula etc.) got
     # materialized to disk and stopped tracking schema-default changes.
-    ctx = _Ctx(
+    ctx = Ctx(
         cfg=cfg,
         base=dict(old_raw) if old_raw else {},
         is_first_install=is_first_install,
     )
 
     results: dict[str, dict] = {}
-    for step in _STEPS:
+    for step in STEPS:
         if step.section is not None:
             section(step.section)
         results[step.name] = step.run(ctx)
@@ -144,7 +144,7 @@ def _wizard(cfg: Config, old_raw: dict | None, is_first_install: bool) -> dict:
 
 # ─────────────────────── individual step bodies ──────────────────────
 
-def _run_embedding(ctx: _Ctx) -> dict:
+def _run_embedding(ctx: Ctx) -> dict:
     """Prompt for embedding config, probe it (fail-fast), stash in owned."""
     # First-install pre-fill: recommended starting template (DashScope's
     # text-embedding-v4 over an OpenAI-compatible endpoint). The wizard
@@ -172,7 +172,7 @@ def _run_embedding(ctx: _Ctx) -> dict:
     return {"emb": emb}
 
 
-def _run_storage(ctx: _Ctx) -> dict:
+def _run_storage(ctx: Ctx) -> dict:
     vector_provider = _choice(
         "vector provider", ["lancedb"],
         (ctx.base.get("vector") or {}).get("provider", "lancedb"),
@@ -186,7 +186,7 @@ def _run_storage(ctx: _Ctx) -> dict:
     return {"vector": vector_provider, "relation": relation_provider}
 
 
-def _run_server_config(ctx: _Ctx) -> dict:
+def _run_server_config(ctx: Ctx) -> dict:
     port_default = str(int((ctx.base.get("server") or {}).get("port", 7788)))
     port_str = console.text(
         "server port",
@@ -198,7 +198,7 @@ def _run_server_config(ctx: _Ctx) -> dict:
     return {"port": int(port_str)}
 
 
-def _run_sync(ctx: _Ctx) -> dict:
+def _run_sync(ctx: Ctx) -> dict:
     # Probe what'll auto-detect so the user can see ahead of time which
     # CLIs will be picked up. Endpoint discovery itself happens in the
     # SyncWatcher at server start — this is purely informational.
@@ -215,7 +215,7 @@ def _run_sync(ctx: _Ctx) -> dict:
     return {"enabled": sync_enabled}
 
 
-def _run_persist(ctx: _Ctx) -> dict:
+def _run_persist(ctx: Ctx) -> dict:
     """Diff owned fields against existing settings.json and write iff diff.
 
     Setup writes ONLY the fields it actually prompted for. Anything else
@@ -238,14 +238,14 @@ def _run_persist(ctx: _Ctx) -> dict:
     return {"wrote": ctx.written, "diff": ctx.diff}
 
 
-def _run_server_proc(ctx: _Ctx) -> dict:
+def _run_server_proc(ctx: Ctx) -> dict:
     """Start the daemon (first install) or offer restart (config drift)."""
     return {"action": _maybe_start_or_restart(
         ctx.cfg, ctx.is_first_install, bool(ctx.diff),
     )}
 
 
-def _run_hooks(ctx: _Ctx) -> dict:
+def _run_hooks(ctx: Ctx) -> dict:
     """Multi-select prompt: install / keep / remove memory.talk's recall
     hook in each detected host AI CLI (Claude Code, Codex, …)."""
     return _step_install_hooks(ctx.cfg)
@@ -253,18 +253,18 @@ def _run_hooks(ctx: _Ctx) -> dict:
 
 # ──────────────────────────── step registry ───────────────────────────
 
-_STEPS: tuple[_Step, ...] = (
-    _Step("embedding",     "Embedding",     _run_embedding),
-    _Step("storage",       "Storage",       _run_storage),
-    _Step("server_config", "Server",        _run_server_config),
-    _Step("sync",          "Sync",          _run_sync),
-    _Step("persist",       None,            _run_persist),
-    _Step("server_proc",   None,            _run_server_proc),
-    _Step("hooks",         "Recall hooks",  _run_hooks),
+STEPS: tuple[Step, ...] = (
+    Step("embedding",     "Embedding",     _run_embedding),
+    Step("storage",       "Storage",       _run_storage),
+    Step("server_config", "Server",        _run_server_config),
+    Step("sync",          "Sync",          _run_sync),
+    Step("persist",       None,            _run_persist),
+    Step("server_proc",   None,            _run_server_proc),
+    Step("hooks",         "Recall hooks",  _run_hooks),
 )
 
 
-def _build_result(ctx: _Ctx, results: dict[str, dict]) -> dict:
+def _build_result(ctx: Ctx, results: dict[str, dict]) -> dict:
     """Translate per-step results into the dict ``_summary_md`` expects."""
     # Embedding dim change → would trigger reembed (deferred). Derived
     # from base vs owned rather than tracked in a step because it's
@@ -343,7 +343,7 @@ def _step_install_hooks(cfg: Config) -> dict:
         )
         return {"skipped": "memory.talk not in PATH"}
 
-    rows: list[_HookRow] = []
+    rows: list[HookRow] = []
     for adapter in ADAPTERS:
         presence = adapter.detect()
         mdir = hook_materialize.materialized_dir(cfg.data_root, adapter.asset_subdir)
@@ -351,7 +351,7 @@ def _step_install_hooks(cfg: Config) -> dict:
             adapter.current_state(mdir) if presence is not None
             else HostState.ABSENT
         )
-        rows.append(_HookRow(
+        rows.append(HookRow(
             adapter=adapter, presence=presence, state=state, materialized=mdir,
         ))
 
@@ -395,7 +395,7 @@ def _step_install_hooks(cfg: Config) -> dict:
     return {"hosts": summary_hosts}
 
 
-class _HookRow:
+class HookRow:
     """Internal row state for the hooks step."""
     __slots__ = ("adapter", "presence", "state", "materialized")
 
@@ -406,7 +406,7 @@ class _HookRow:
         self.materialized = materialized
 
 
-def _format_option_title(r: _HookRow, cfg: Config) -> str:
+def _format_option_title(r: HookRow, cfg: Config) -> str:
     name = f"{r.adapter.display_name}"
     if r.presence is None:
         return f"{name:14}  (not found in PATH)"
@@ -415,7 +415,7 @@ def _format_option_title(r: _HookRow, cfg: Config) -> str:
     return f"{name:14}  v{ver:<10}  {tag}"
 
 
-def _state_tag(r: _HookRow, cfg: Config) -> str:
+def _state_tag(r: HookRow, cfg: Config) -> str:
     s = r.state
     if s is HostState.ABSENT:
         return "absent — will install"
@@ -436,7 +436,7 @@ def _state_tag(r: _HookRow, cfg: Config) -> str:
     return str(s.value)
 
 
-def _apply_install(r: _HookRow, cfg: Config) -> dict:
+def _apply_install(r: HookRow, cfg: Config) -> dict:
     adapter = r.adapter
     if r.state is HostState.INSTALLED_FAILED:
         err_console.print(
@@ -481,7 +481,7 @@ def _apply_install(r: _HookRow, cfg: Config) -> dict:
     return {"host": adapter.name, "action": "verified"}
 
 
-def _apply_uninstall(r: _HookRow, cfg: Config) -> dict:
+def _apply_uninstall(r: HookRow, cfg: Config) -> dict:
     adapter = r.adapter
     err_console.print(f"\n▸ {adapter.display_name} — uninstalling")
     try:
@@ -529,7 +529,7 @@ def _wait_for_trust(adapter) -> bool:
     return False
 
 
-def _verify(r: _HookRow, cfg: Config) -> bool:
+def _verify(r: HookRow, cfg: Config) -> bool:
     token = hook_probe.new_token()
     argv = r.adapter.probe_command(token)
     if hook_probe.run_probe(argv):

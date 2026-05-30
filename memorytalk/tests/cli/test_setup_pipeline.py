@@ -1,8 +1,8 @@
 """Regression tests for the ``_wizard`` pipeline shape.
 
 These pin down the invariant that bit us twice before refactoring: every
-step in ``_STEPS`` runs exactly once on every wizard invocation, even
-when ``settings.json`` doesn't change. New steps appended to ``_STEPS``
+step in ``STEPS`` runs exactly once on every wizard invocation, even
+when ``settings.json`` doesn't change. New steps appended to ``STEPS``
 must be impossible to silently skip via an early-return added upstream.
 """
 from __future__ import annotations
@@ -36,7 +36,7 @@ def _register_dummy_embedder():
 
 
 def test_every_step_runs_exactly_once(tmp_path, monkeypatch):
-    """The wizard must invoke every entry in ``_STEPS`` once, in order.
+    """The wizard must invoke every entry in ``STEPS`` once, in order.
 
     This is the core invariant guarding against the recurring bug class
     where an early-return in the middle of ``_wizard`` (e.g. "no diff —
@@ -47,7 +47,7 @@ def test_every_step_runs_exactly_once(tmp_path, monkeypatch):
 
     calls: list[str] = []
     original_runs = {}
-    for step in setup_mod._STEPS:
+    for step in setup_mod.STEPS:
         original_runs[step.name] = step.run
 
     def _make_spy(name, original):
@@ -57,10 +57,10 @@ def test_every_step_runs_exactly_once(tmp_path, monkeypatch):
         return _spy
 
     spied = tuple(
-        setup_mod._Step(s.name, s.section, _make_spy(s.name, s.run))
-        for s in setup_mod._STEPS
+        setup_mod.Step(s.name, s.section, _make_spy(s.name, s.run))
+        for s in setup_mod.STEPS
     )
-    monkeypatch.setattr(setup_mod, "_STEPS", spied)
+    monkeypatch.setattr(setup_mod, "STEPS", spied)
 
     from memorytalk.cli import main
     runner = CliRunner()
@@ -94,15 +94,15 @@ def test_resetup_with_no_changes_still_runs_all_steps(tmp_path, monkeypatch):
     # Second run — accept all defaults so settings.json is identical.
     calls: list[str] = []
     spied = tuple(
-        setup_mod._Step(
+        setup_mod.Step(
             s.name, s.section,
             (lambda name, original: lambda ctx: (
                 calls.append(name) or original(ctx)
             ))(s.name, s.run),
         )
-        for s in setup_mod._STEPS
+        for s in setup_mod.STEPS
     )
-    monkeypatch.setattr(setup_mod, "_STEPS", spied)
+    monkeypatch.setattr(setup_mod, "STEPS", spied)
     r2 = runner.invoke(main, ["setup"], input=_wizard_stdin())
     assert r2.exit_code == 0, r2.output
 
