@@ -74,6 +74,24 @@ memory.talk setup
 
 > setup 可重复跑 —— 第二次会进"修改模式",每个字段默认就是当前值,Enter 跳过,改了就询问是否重启服务。
 
+#### Recall hook 注入(Claude Code / Codex)
+
+wizard 末尾会探测你机器上的 AI CLI(Claude Code / Codex / …),用一个 **multi-select 列表**让你按需勾选:勾上 = 装 `memory.talk recall --hook` 进对应 host 的 plugin 里,取消勾选已装的 = 卸载。默认全勾。
+
+```
+── Recall hooks ──
+  [x] Claude Code  v2.1.157   absent — will install
+  [x] Codex        v0.133.0   absent — will install
+```
+
+实现要点:
+- 用 host 自己的 plugin 系统(`claude plugin install`、`codex plugin add`),**不动用户的 `~/.claude/settings.json` 或 `~/.codex/config.toml` 的 `hooks` 块**
+- Plugin 资源跟 wheel 一起发,wizard 把它实体化到 `~/.memory.talk/hook_plugins/<host>/`
+- 装完默认跑一次 probe 端到端验证(用一个 magic token,无需 API key 也能验)
+- **Codex 多一步**: trust 必须在 TUI 里按 `t`(Codex 的安全模型,memory.talk 不会替你绕过)。wizard 会暂停 + 引导 + 等你回 Enter + 重读 config 验证 trust hash 已落地
+
+幂等:再跑一次 setup,这个 step 会展示当前状态(`installed-verified` / `installed but bundle changed` / `installed-untrusted` 等),Enter 不动则保持现状。
+
 ### 跑起来
 
 ```bash

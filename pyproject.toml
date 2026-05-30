@@ -44,6 +44,21 @@ local = [
 include = ["memorytalk*"]
 exclude = ["memorytalk.tests*"]
 
+[tool.setuptools.package-data]
+# Plugin assets injected by ``setup`` into host AI CLIs (Claude Code,
+# Codex, …). Setuptools' glob silently skips dotted dirs like
+# ``.claude-plugin`` / ``.codex-plugin`` / ``.agents``, so we list each
+# path that hosts CLIs actually need. Keep in sync with anything new
+# we add under ``memorytalk/_hook_assets/``.
+memorytalk = [
+    "_hook_assets/claude_code/.claude-plugin/marketplace.json",
+    "_hook_assets/claude_code/plugins/*/.claude-plugin/plugin.json",
+    "_hook_assets/claude_code/plugins/*/hooks/hooks.json",
+    "_hook_assets/codex/.agents/plugins/marketplace.json",
+    "_hook_assets/codex/plugins/*/.codex-plugin/plugin.json",
+    "_hook_assets/codex/plugins/*/hooks/hooks.json",
+]
+
 [build-system]
 requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"

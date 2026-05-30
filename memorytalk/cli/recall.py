@@ -108,6 +108,21 @@ def _run_hook_mode(top_k: int | None) -> None:
             _emit("")
             return
 
+        # ── setup probe short-circuit ──────────────────────────────────
+        # When ``memory.talk setup`` verifies hooks end-to-end, it spawns
+        # the host CLI with a magic token as the user prompt. If our hook
+        # actually fires, we land here with that token — write a sentinel
+        # file the setup step can poll for, then return without calling
+        # the backend (no API key / running server required to verify).
+        from memorytalk.hooks.probe import PROBE_PREFIX, sentinel_path
+        if prompt.startswith(PROBE_PREFIX):
+            try:
+                sentinel_path(prompt).write_text("ok\n", encoding="utf-8")
+            except OSError:
+                pass
+            _emit("")
+            return
+
         cfg = Config()
 
         # Suppress recall when the caller's cwd is the explore workspace.

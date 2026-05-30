@@ -1,0 +1,6 @@
+{
+  "name": "memory-talk-recall",
+  "version": "1",
+  "description": "Pipes each UserPromptSubmit through `memory.talk recall --hook` to inject relevant memories.",
+  "license": "Apache-2.0"
+}

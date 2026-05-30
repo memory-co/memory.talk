@@ -1,0 +1,15 @@
+{
+  "name": "memory-talk",
+  "owner": {
+    "name": "memory.talk",
+    "url": "https://github.com/memorytalk/memorytalk"
+  },
+  "plugins": [
+    {
+      "name": "memory-talk-recall",
+      "source": "./plugins/memory-talk-recall",
+      "description": "memory.talk auto-recall on every prompt",
+      "category": "productivity"
+    }
+  ]
+}

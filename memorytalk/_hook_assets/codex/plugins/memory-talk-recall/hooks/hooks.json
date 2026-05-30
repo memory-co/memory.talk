@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "memory.talk recall --hook"
+          }
+        ]
+      }
+    ]
+  }
+}

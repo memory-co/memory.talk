@@ -1,0 +1,12 @@
+{
+  "name": "memory-talk",
+  "interface": {"displayName": "memory.talk"},
+  "plugins": [
+    {
+      "name": "memory-talk-recall",
+      "source": {"source": "local", "path": "./plugins/memory-talk-recall"},
+      "policy": {"installation": "AVAILABLE", "authentication": "ON_USE"},
+      "category": "Productivity"
+    }
+  ]
+}

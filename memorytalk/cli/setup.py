@@ -24,7 +24,9 @@ What it still does:
    when the running server still has the old config).
 """
 from __future__ import annotations
+import shutil
 import sys
+from pathlib import Path
 
 import click
 
@@ -34,8 +36,12 @@ from memorytalk.cli.server import (
     _server_responsive, pid_alive, start_server_proc, stop_server_proc,
 )
 from memorytalk.config import Config, ConfigValidationError, Settings
+from memorytalk.hooks import ADAPTERS, HostState
+from memorytalk.hooks import materialize as hook_materialize
+from memorytalk.hooks import probe as hook_probe
+from memorytalk.hooks import state as hook_state
 from memorytalk.util import console
-from memorytalk.util.console import err_console, section
+from memorytalk.util.console import CheckOption, err_console, section
 from memorytalk.util.settings_io import (
     diff_settings, read_settings_raw, write_settings_atomic,
 )
@@ -195,12 +201,19 @@ def _wizard(cfg: Config, old_raw: dict | None, is_first_install: bool) -> dict:
     # ── server start / restart ──────────────────────────────────────────
     server_action = _maybe_start_or_restart(cfg, is_first_install, bool(diff))
 
+    # ── recall hooks ────────────────────────────────────────────────────
+    # Done AFTER server start so the hook command has a backend to call
+    # at the next prompt. Step is self-skipping when memory.talk isn't on
+    # PATH (it'd be a broken install).
+    hooks_summary = _step_install_hooks(cfg)
+
     return {
         "changed": diff,
         "diff": diff,
         "settings_path": cfg.settings_path,
         "server_action": server_action,
         "embedding_dim_changed": dim_changed,
+        "hooks": hooks_summary,
     }
 
 
@@ -231,6 +244,231 @@ def _step_embedding(base: dict) -> dict:
         )
         out["timeout"] = base.get("timeout", 30.0)
     return out
+
+
+def _step_install_hooks(cfg: Config) -> dict:
+    """Multi-select prompt: install / keep / remove memory.talk's recall
+    hook in each detected host AI CLI (Claude Code, Codex, …).
+
+    Idempotent: re-run shows current state inline and ``Enter`` on the
+    default selection (all detected hosts checked) holds state for the
+    already-installed and installs the missing.
+
+    Returns a summary dict consumed by ``_summary_md``.
+    """
+    section("Recall hooks")
+
+    # Hook install is interactive-only: it shows a multi-select and can
+    # block on the Codex trust dialog. Non-TTY runs (tests, piped input,
+    # CI) silently skip so they don't surprise the user with side effects.
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        return {"skipped": "non-interactive shell"}
+
+    if not shutil.which("memory.talk"):
+        err_console.print(
+            "[yellow]⚠ `memory.talk` is not on PATH — skipping hook installation.[/]\n"
+            "  The hook command is `memory.talk recall --hook`; it must resolve\n"
+            "  when AI CLIs spawn it. Reinstall via `pipx install memorytalk`\n"
+            "  (or another method that puts the script on PATH), then re-run setup."
+        )
+        return {"skipped": "memory.talk not in PATH"}
+
+    rows: list[_HookRow] = []
+    for adapter in ADAPTERS:
+        presence = adapter.detect()
+        mdir = hook_materialize.materialized_dir(cfg.data_root, adapter.asset_subdir)
+        state = (
+            adapter.current_state(mdir) if presence is not None
+            else HostState.ABSENT
+        )
+        rows.append(_HookRow(
+            adapter=adapter, presence=presence, state=state, materialized=mdir,
+        ))
+
+    if not any(r.presence for r in rows):
+        err_console.print(
+            "[dim]No supported AI CLIs detected on PATH. Install one of:[/dim]"
+        )
+        for r in rows:
+            err_console.print(f"  [dim]·[/dim] {r.adapter.display_name}")
+        return {"hosts": []}
+
+    options = [
+        CheckOption(
+            value=r.adapter.name,
+            title=_format_option_title(r, cfg),
+            checked=r.presence is not None,
+            disabled="not found in PATH" if r.presence is None else None,
+        )
+        for r in rows
+    ]
+
+    selected = set(console.checkbox(
+        "Toggle host integrations (space to flip, enter to apply):",
+        options,
+    ))
+
+    summary_hosts: list[dict] = []
+    for r in rows:
+        if r.presence is None:
+            continue
+        wanted = r.adapter.name in selected
+        installed_now = r.state != HostState.ABSENT
+        if wanted:
+            summary_hosts.append(_apply_install(r, cfg))
+        elif installed_now:
+            summary_hosts.append(_apply_uninstall(r, cfg))
+        else:
+            summary_hosts.append({
+                "host": r.adapter.name, "action": "skip", "state": "absent",
+            })
+    return {"hosts": summary_hosts}
+
+
+class _HookRow:
+    """Internal row state for the hooks step."""
+    __slots__ = ("adapter", "presence", "state", "materialized")
+
+    def __init__(self, adapter, presence, state, materialized):
+        self.adapter = adapter
+        self.presence = presence
+        self.state = state
+        self.materialized = materialized
+
+
+def _format_option_title(r: _HookRow, cfg: Config) -> str:
+    name = f"{r.adapter.display_name}"
+    if r.presence is None:
+        return f"{name:14}  (not found in PATH)"
+    ver = r.presence.version or "?"
+    tag = _state_tag(r, cfg)
+    return f"{name:14}  v{ver:<10}  {tag}"
+
+
+def _state_tag(r: _HookRow, cfg: Config) -> str:
+    s = r.state
+    if s is HostState.ABSENT:
+        return "absent — will install"
+    if s is HostState.INSTALLED:
+        ts = hook_state.last_verified(cfg.data_root, r.adapter.name)
+        suffix = f" (probed {ts})" if ts else ""
+        return f"installed{suffix}"
+    if s is HostState.INSTALLED_VERIFIED:
+        return "installed-verified"
+    if s is HostState.INSTALLED_DRIFT:
+        return "installed but bundle changed — will re-materialize"
+    if s is HostState.INSTALLED_DISABLED:
+        return "installed but disabled — will re-enable"
+    if s is HostState.INSTALLED_FAILED:
+        return "[red]install failed — manual fix needed[/red]"
+    if s is HostState.INSTALLED_UNTRUSTED:
+        return "[yellow]installed, awaiting trust in host TUI[/yellow]"
+    return str(s.value)
+
+
+def _apply_install(r: _HookRow, cfg: Config) -> dict:
+    adapter = r.adapter
+    if r.state is HostState.INSTALLED_FAILED:
+        err_console.print(
+            f"[red]✘ {adapter.display_name}: in failed state — "
+            f"run `{adapter.name} plugin list` and resolve manually.[/red]"
+        )
+        return {"host": adapter.name, "action": "skip", "state": "failed"}
+
+    err_console.print(f"\n▸ {adapter.display_name}")
+
+    # Materialize the bundled assets onto disk. Returns True if it
+    # actually wrote — false means hash matched, no I/O.
+    changed = hook_materialize.materialize(adapter.asset_subdir, r.materialized)
+    if changed:
+        err_console.print(f"  [green]✓[/green] assets materialized → {r.materialized}")
+    else:
+        err_console.print(f"  [dim]·[/dim] assets up to date")
+
+    try:
+        adapter.install(r.materialized)
+    except RuntimeError as e:
+        err_console.print(f"  [red]✘ install failed:[/red] {e}")
+        return {"host": adapter.name, "action": "install-failed", "error": str(e)}
+    err_console.print(f"  [green]✓[/green] plugin installed")
+
+    if adapter.needs_trust and not adapter.trust_ok():
+        if not _wait_for_trust(adapter):
+            return {
+                "host": adapter.name, "action": "trust-required",
+                "state": "installed-untrusted",
+            }
+
+    if not _verify(r, cfg):
+        err_console.print(
+            f"  [yellow]⚠ probe did not detect the hook firing.[/yellow]\n"
+            f"  [dim]The plugin is installed but verification failed — try a real "
+            f"prompt in {adapter.display_name} manually.[/dim]"
+        )
+        return {"host": adapter.name, "action": "installed-unverified"}
+
+    err_console.print(f"  [green]✓[/green] verified end-to-end")
+    return {"host": adapter.name, "action": "verified"}
+
+
+def _apply_uninstall(r: _HookRow, cfg: Config) -> dict:
+    adapter = r.adapter
+    err_console.print(f"\n▸ {adapter.display_name} — uninstalling")
+    try:
+        adapter.uninstall()
+    except RuntimeError as e:
+        err_console.print(f"  [red]✘ uninstall failed:[/red] {e}")
+        return {"host": adapter.name, "action": "uninstall-failed", "error": str(e)}
+    if r.materialized.exists():
+        shutil.rmtree(r.materialized, ignore_errors=True)
+    hook_state.clear(cfg.data_root, adapter.name)
+    err_console.print(f"  [green]✓[/green] removed plugin, marketplace, and assets")
+    return {"host": adapter.name, "action": "uninstalled"}
+
+
+def _wait_for_trust(adapter) -> bool:
+    """Block on user completing one-time trust in host's TUI (Codex).
+    Non-interactive shells exit early with a warning — CI must re-run
+    interactively to finish trust."""
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        err_console.print(
+            f"  [yellow]⚠ {adapter.display_name} requires one-time trust via its TUI.[/yellow]\n"
+            f"  [dim]Re-run `memory.talk setup` interactively to complete this step.[/dim]"
+        )
+        return False
+    err_console.print(
+        f"\n  [yellow]⚠ {adapter.display_name} requires one-time trust:[/yellow]\n"
+        f"    1. Open a new terminal and run:  [cyan]codex[/cyan]\n"
+        f"    2. Wait for the [bold]Hooks need review[/bold] dialog\n"
+        f"       (or type [cyan]/hooks[/cyan] inside the TUI)\n"
+        f"    3. Press [bold]2[/bold] (Trust all and continue)\n"
+        f"    4. ESC to exit the TUI"
+    )
+    try:
+        input("\n  Press Enter when done (Ctrl-C to abort this host): ")
+    except (KeyboardInterrupt, EOFError):
+        err_console.print("  [dim]skipped[/dim]")
+        return False
+    if adapter.trust_ok():
+        err_console.print("  [green]✓[/green] trust detected")
+        return True
+    err_console.print(
+        "  [red]✘ trust state not found in ~/.codex/config.toml — "
+        "re-run setup after pressing 't' in the TUI.[/red]"
+    )
+    return False
+
+
+def _verify(r: _HookRow, cfg: Config) -> bool:
+    token = hook_probe.new_token()
+    argv = r.adapter.probe_command(token)
+    if hook_probe.run_probe(argv):
+        hook_state.record_verified(
+            cfg.data_root, r.adapter.name,
+            hook_materialize.bundled_hash(r.adapter.asset_subdir),
+        )
+        return True
+    return False
 
 
 def _patch_owned(base: dict, owned: dict[str, dict]) -> dict:
@@ -266,7 +504,6 @@ def _show_detected_endpoints() -> None:
     ``settings.sync.endpoints`` to participate; we don't surface them
     here because the wizard doesn't (yet) collect remote-endpoint config.
     """
-    from pathlib import Path
     from memorytalk.adapters import ADAPTERS
     detected = []
     missing = []
@@ -355,6 +592,12 @@ def _summary_md(cfg: Config, result: dict) -> str:
         lines.append(f"| server | {result['server_action']} |")
     else:
         lines.append("| server | (unchanged) |")
+    hooks = result.get("hooks") or {}
+    if "skipped" in hooks:
+        lines.append(f"| hooks | skipped — {hooks['skipped']} |")
+    elif hooks.get("hosts"):
+        host_strs = [f"{h['host']}={h['action']}" for h in hooks["hosts"]]
+        lines.append(f"| hooks | {', '.join(host_strs)} |")
     if result["embedding_dim_changed"]:
         lines.append("| notice | **embedding dim changed** — re-embed all cards via `memory.talk setup` once card writes are implemented |")
     return "\n".join(lines) + "\n"
