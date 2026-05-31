@@ -250,20 +250,10 @@ async def _additive_migrations(conn: aiosqlite.Connection) -> None:
     #    separate ``sync.db`` (see ``repository/sync_checkpoint.py``).
     await conn.execute("DROP TABLE IF EXISTS ingest_log")
 
-    # 4. 0.9.0: drop ``recall_log`` (replaced by ``recall_event`` +
-    #    ``recall.jsonl`` file). History is intentionally not migrated
-    #    — the old table never stored prompts, so a faithful
-    #    ``RecallEvent`` row can't be reconstructed. The old table's
-    #    own DDL comment was "in-memory-ish — cleared on rebuild", so
-    #    losing it is the documented contract.
-    await conn.execute("DROP INDEX IF EXISTS idx_recall_log_session")
-    await conn.execute("DROP TABLE IF EXISTS recall_log")
-
-    # 5. 0.9.0: drop ``card_stats.recall_count`` column — popularity is
-    #    now derived from ``recall_event`` on read. SQLite ALTER TABLE
-    #    DROP COLUMN requires 3.35+ (Mar 2021); Python 3.10+ ships well
-    #    above that.
-    async with conn.execute("PRAGMA table_info(card_stats)") as cursor:
-        stats_cols = {row[1] for row in await cursor.fetchall()}
-    if "recall_count" in stats_cols:
-        await conn.execute("ALTER TABLE card_stats DROP COLUMN recall_count")
+    # 0.9.x: NO in-place migration from 0.8.x ``recall_log`` /
+    # ``card_stats.recall_count`` — upgrades require deleting
+    # ``~/.memory.talk`` and starting fresh. The recall subsystem
+    # changed shape too deeply (file canonical, session_id namespace
+    # correction) to make a partial in-place migration meaningful.
+    # New installs hit the fresh DDL above and have no legacy rows
+    # to worry about.
