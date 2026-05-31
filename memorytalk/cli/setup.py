@@ -447,6 +447,25 @@ def _apply_install(r: HookRow, cfg: Config) -> dict:
     else:
         err_console.print(f"  [dim]·[/dim] assets up to date")
 
+    # Force re-install when our marketplace content changed AND the
+    # plugin is already in the host's cache. Host CLIs(Codex / Claude
+    # Code)copy plugin files into their own cache at ``plugin add``
+    # time and never re-read our marketplace directory afterwards.
+    # ``marketplace upgrade`` only re-pulls if the plugin manifest's
+    # ``version`` field bumped, which we don't reliably do — so to
+    # guarantee the new ``hooks.json`` reaches the host, we
+    # uninstall + reinstall. The cost (re-trust step on Codex) is
+    # unavoidable anyway since the trust hash is tied to hook content.
+    if changed and r.state != HostState.ABSENT:
+        err_console.print(
+            "  [dim]· content changed — forcing reinstall to refresh "
+            "host plugin cache[/dim]"
+        )
+        try:
+            adapter.uninstall()
+        except RuntimeError as e:
+            err_console.print(f"  [yellow]⚠ uninstall before reinstall: {e}[/yellow]")
+
     try:
         adapter.install(r.materialized)
     except RuntimeError as e:
