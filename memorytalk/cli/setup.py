@@ -456,9 +456,10 @@ def _apply_install(r: HookRow, cfg: Config) -> dict:
 
     if adapter.needs_trust and not adapter.trust_ok():
         if not _wait_for_trust(adapter):
+            _rollback_install(r, cfg)
             return {
-                "host": adapter.name, "action": "trust-required",
-                "state": "installed-untrusted",
+                "host": adapter.name,
+                "action": "aborted-trust-rolled-back",
             }
 
     if not _verify(r, cfg):
@@ -489,36 +490,61 @@ def _apply_uninstall(r: HookRow, cfg: Config) -> dict:
 
 
 def _wait_for_trust(adapter) -> bool:
-    """Block on user completing one-time trust in host's TUI (Codex).
-    Non-interactive shells exit early with a warning — CI must re-run
-    interactively to finish trust."""
+    """Loop until the host TUI grants trust, or the user gives up.
+
+    Models embedding probe: keep checking until success, never settle
+    for a half state. Returns True iff trust was granted. False means
+    the caller MUST roll back the plugin install — we never leave
+    Codex in a "plugin registered but never trusted" state.
+    """
+    # Non-interactive shells can't pause for the TUI dance — bail and
+    # let the caller roll back. CI must re-run setup interactively.
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         err_console.print(
-            f"  [yellow]⚠ {adapter.display_name} requires one-time trust via its TUI.[/yellow]\n"
-            f"  [dim]Re-run `memory.talk setup` interactively to complete this step.[/dim]"
+            f"  [yellow]⚠ {adapter.display_name} needs one-time TUI trust; "
+            f"re-run setup in an interactive shell.[/yellow]"
         )
         return False
+
     err_console.print(
-        f"\n  [yellow]⚠ {adapter.display_name} requires one-time trust:[/yellow]\n"
-        f"    1. Open a new terminal and run:  [cyan]codex[/cyan]\n"
-        f"    2. Wait for the [bold]Hooks need review[/bold] dialog\n"
-        f"       (or type [cyan]/hooks[/cyan] inside the TUI)\n"
-        f"    3. Press [bold]2[/bold] (Trust all and continue)\n"
-        f"    4. ESC to exit the TUI"
+        f"  [yellow]⚠ {adapter.display_name} needs one-time TUI trust. "
+        f"In another terminal run [cyan]codex[/cyan], "
+        f'accept "Hooks need review → Trust all and continue".[/yellow]'
     )
+    while True:
+        try:
+            input("  Press Enter to re-check (Ctrl-C to skip and roll back): ")
+        except (KeyboardInterrupt, EOFError):
+            err_console.print()  # newline after ^C
+            return False
+        if adapter.trust_ok():
+            err_console.print("  [green]✓[/green] trust detected")
+            return True
+        err_console.print(
+            "  [yellow]⚠ still not trusted — try again[/yellow]"
+        )
+
+
+def _rollback_install(r: HookRow, cfg: Config) -> None:
+    """Undo what ``_apply_install`` did before trust was granted: remove
+    the host-side plugin registration, drop the materialized assets,
+    clear the state cache. Best-effort — log failures but never raise,
+    because rollback runs on an already-failing code path."""
+    err_console.print("  [dim]· rolling back plugin install...[/dim]")
+    adapter = r.adapter
     try:
-        input("\n  Press Enter when done (Ctrl-C to abort this host): ")
-    except (KeyboardInterrupt, EOFError):
-        err_console.print("  [dim]skipped[/dim]")
-        return False
-    if adapter.trust_ok():
-        err_console.print("  [green]✓[/green] trust detected")
-        return True
+        adapter.uninstall()
+    except Exception as e:  # noqa: BLE001
+        err_console.print(
+            f"  [yellow]⚠ uninstall during rollback returned: {e}[/yellow]"
+        )
+    if r.materialized.exists():
+        shutil.rmtree(r.materialized, ignore_errors=True)
+    hook_state.clear(cfg.data_root, adapter.name)
     err_console.print(
-        "  [red]✘ trust state not found in ~/.codex/config.toml — "
-        "re-run setup after pressing 't' in the TUI.[/red]"
+        f"  [green]✓[/green] {adapter.display_name} plugin removed "
+        f"[dim](re-run setup later if you change your mind)[/dim]"
     )
-    return False
 
 
 def _verify(r: HookRow, cfg: Config) -> bool:
