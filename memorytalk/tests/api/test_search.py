@@ -298,17 +298,24 @@ class TestRecallMode:
             assert ranks.index("card_01RM_B") < ranks.index("card_01RM_A"), ranks
 
     async def test_recall_mode_dedups_against_session(self, app, client):
-        """``recall_session_id`` filters out cards already in that
-        session's ``recall_log``."""
+        """``recall_session_id`` filters out cards already returned in
+        that session's ``recall_event`` history (0.9.0: derived via
+        json_each, no separate dedup table)."""
         await _seed_card(
             app, card_id="card_01DD_A", insight="alpha alpha alpha",
         )
         await _seed_card(
             app, card_id="card_01DD_B", insight="alpha beta gamma",
         )
-        # Mark card A as already recalled for sess-xyz.
-        await app.state.db.recall.record(
-            "sess-xyz", ["card_01DD_A"], "2026-05-29T00:00:00Z",
+        # Mark card A as already recalled for sess-xyz by inserting a
+        # synthetic recall_event row.
+        await app.state.db.recall.insert_event(
+            event_id="evt_test_seed",
+            session_id="sess-xyz",
+            prompt="seed",
+            ts="2026-05-29T00:00:00Z",
+            returned_card_ids=["card_01DD_A"],
+            skipped_card_ids=[],
         )
         r = await client.post("/v3/search", json={
             "query": "alpha", "recall_mode": True,
@@ -321,21 +328,23 @@ class TestRecallMode:
         assert body["session_id"] == "sess-xyz"
 
     async def test_recall_mode_does_not_bump_recall_count(self, app, client):
-        """``--recall`` is read-only — recall_count must not move."""
+        """``--recall`` is read-only — derived recall_count must not move."""
         await _seed_card(
             app, card_id="card_01NB_X", insight="no-bump query",
         )
-        before = (await app.state.db.cards.get_stats("card_01NB_X"))["recall_count"]
+        counts_before = await app.state.db.recall.recall_counts(["card_01NB_X"])
         await client.post("/v3/search", json={
             "query": "no-bump", "recall_mode": True,
             "recall_session_id": "sess-some", "top_k": 10,
         })
-        after = (await app.state.db.cards.get_stats("card_01NB_X"))["recall_count"]
-        assert after == before, "recall mode must NOT bump recall_count"
+        counts_after = await app.state.db.recall.recall_counts(["card_01NB_X"])
+        assert counts_after == counts_before, (
+            "search --recall must NOT write recall_event"
+        )
 
-    async def test_recall_mode_does_not_write_recall_log(self, app, client):
-        """And the recall_log must stay untouched — otherwise next call
-        would silently filter the same card out."""
+    async def test_recall_mode_does_not_write_recall_event(self, app, client):
+        """And the recall_event table must stay untouched — otherwise
+        next call would silently filter the same card out."""
         await _seed_card(
             app, card_id="card_01NL_X", insight="no-log content",
         )
@@ -343,8 +352,6 @@ class TestRecallMode:
             "query": "no-log", "recall_mode": True,
             "recall_session_id": "sess-none", "top_k": 10,
         })
-        # If we recorded the card, calling already_recalled would now
-        # mark it as already seen.
         already = await app.state.db.recall.already_recalled(
             "sess-none", ["card_01NL_X"],
         )

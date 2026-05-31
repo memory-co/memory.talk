@@ -250,12 +250,25 @@ class SearchService:
                 "relevance": float(row["_score"]),
                 "stats": stats,
                 # Flatten stats so DSL `where: 'review_count = 0'` works without
-                # the predicate having to know about nested dicts.
+                # the predicate having to know about nested dicts. ``recall_count``
+                # is derived and merged in below from RecallStore.
                 **{k: stats.get(k, 0) for k in (
                     "review_up", "review_down", "review_neutral",
-                    "review_count", "read_count", "recall_count",
+                    "review_count", "read_count",
                 )},
             })
+
+        # Bulk-fetch derived recall_counts in one SQL query (json_each
+        # over recall_event); merge into each candidate's stats + flat
+        # fields. Avoids per-card round-trips. Empty list short-circuits.
+        if out:
+            counts = await self.db.recall.recall_counts(
+                [c["card_id"] for c in out]
+            )
+            for c in out:
+                rc = counts.get(c["card_id"], 0)
+                c["stats"]["recall_count"] = rc
+                c["recall_count"] = rc
         return out
 
     async def _collect_session_candidates(

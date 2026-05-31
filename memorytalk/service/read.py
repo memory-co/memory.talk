@@ -54,6 +54,10 @@ class ReadService:
         await self.events.card_event(card_id, "read", read_at=now)
 
         stats_dict = await self.db.cards.get_stats(card_id)
+        # Merge in derived recall_count (single source of truth lives in
+        # recall_event; card_stats no longer carries the column).
+        counts = await self.db.recall.recall_counts([card_id])
+        stats_dict["recall_count"] = counts.get(card_id, 0)
         source_cards = await self.db.cards.list_source_cards(card_id)
         reviews_rows = await self.db.reviews.list_for_card(card_id)
 

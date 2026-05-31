@@ -137,29 +137,37 @@ class CardStore:
     # ────────── card_stats ──────────
 
     async def init_stats(self, card_id: str, now: str) -> None:
-        """Insert a stats row for a freshly created card (all zeros)."""
+        """Insert a stats row for a freshly created card (all zeros).
+
+        ``recall_count`` is intentionally not a column anymore (0.9.0).
+        Recall popularity is derived from ``recall_event`` at read time
+        via ``RecallStore.recall_counts``."""
         await self.conn.execute(
             "INSERT INTO card_stats "
             "(card_id, review_up, review_down, review_neutral, review_count, "
-            " read_count, recall_count, updated_at) "
-            "VALUES (?, 0, 0, 0, 0, 0, 0, ?)",
+            " read_count, updated_at) "
+            "VALUES (?, 0, 0, 0, 0, 0, ?)",
             (card_id, now),
         )
         await self.conn.commit()
 
     async def get_stats(self, card_id: str) -> dict:
         """Return the stats row (all zeros if missing — happens for tests that
-        create card rows directly without the service)."""
+        create card rows directly without the service).
+
+        Does NOT include ``recall_count`` — that's derived. Display-layer
+        callers should merge in ``RecallStore.recall_counts([card_id])``
+        when they need it."""
         async with self.conn.execute(
             "SELECT review_up, review_down, review_neutral, review_count, "
-            "read_count, recall_count FROM card_stats WHERE card_id = ?",
+            "read_count FROM card_stats WHERE card_id = ?",
             (card_id,),
         ) as cursor:
             row = await cursor.fetchone()
         if not row:
             return {
                 "review_up": 0, "review_down": 0, "review_neutral": 0,
-                "review_count": 0, "read_count": 0, "recall_count": 0,
+                "review_count": 0, "read_count": 0,
             }
         return {
             "review_up": row["review_up"],
@@ -167,20 +175,11 @@ class CardStore:
             "review_neutral": row["review_neutral"],
             "review_count": row["review_count"],
             "read_count": row["read_count"],
-            "recall_count": row["recall_count"],
         }
 
     async def bump_read(self, card_id: str, now: str, delta: int = 1) -> None:
         await self.conn.execute(
             "UPDATE card_stats SET read_count = read_count + ?, updated_at = ? "
-            "WHERE card_id = ?",
-            (delta, now, card_id),
-        )
-        await self.conn.commit()
-
-    async def bump_recall(self, card_id: str, now: str, delta: int = 1) -> None:
-        await self.conn.execute(
-            "UPDATE card_stats SET recall_count = recall_count + ?, updated_at = ? "
             "WHERE card_id = ?",
             (delta, now, card_id),
         )
@@ -286,8 +285,7 @@ class CardStore:
             f"       COALESCE(s.review_down, 0)    AS review_down, "
             f"       COALESCE(s.review_neutral, 0) AS review_neutral, "
             f"       COALESCE(s.review_count, 0)   AS review_count, "
-            f"       COALESCE(s.read_count, 0)     AS read_count, "
-            f"       COALESCE(s.recall_count, 0)   AS recall_count "
+            f"       COALESCE(s.read_count, 0)     AS read_count "
             f"FROM cards c LEFT JOIN card_stats s ON c.card_id = s.card_id "
             f"{where} ORDER BY c.created_at DESC LIMIT ?",
             params + [limit],
@@ -306,7 +304,8 @@ class CardStore:
                     "review_neutral": r["review_neutral"],
                     "review_count":   r["review_count"],
                     "read_count":     r["read_count"],
-                    "recall_count":   r["recall_count"],
+                    # recall_count merged in by service layer via
+                    # RecallStore.recall_counts() — derived, not stored.
                 },
             })
         return total, out

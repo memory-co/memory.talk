@@ -47,6 +47,12 @@ class SessionStore:
     def _events_key(self, source: str, session_id: str) -> str:
         return f"{self.PREFIX}/{source}/{self._bucket(session_id)}/{session_id}/events.jsonl"
 
+    def _recall_key(self, source: str, session_id: str) -> str:
+        """0.9.0: per-session canonical recall log (one line per hook call).
+        Sits alongside meta/rounds/events under the same session dir so
+        a session's whole footprint is in one place on disk."""
+        return f"{self.PREFIX}/{source}/{self._bucket(session_id)}/{session_id}/recall.jsonl"
+
     # ────────── file-layer ops ──────────
 
     async def write_meta(self, source: str, session_id: str, meta: dict) -> None:
@@ -74,6 +80,18 @@ class SessionStore:
     async def append_event(self, source: str, session_id: str, event: dict) -> None:
         await self.storage.append_text(
             self._events_key(source, session_id),
+            json.dumps(event, ensure_ascii=False) + "\n",
+        )
+
+    async def append_recall_event(
+        self, source: str, session_id: str, event: dict,
+    ) -> None:
+        """0.9.0: append one recall event line to the canonical
+        ``recall.jsonl``. This is the source of truth for recall;
+        ``recall_event`` SQLite table is a derived index, see
+        ``docs/structure/v3/recall.md``."""
+        await self.storage.append_text(
+            self._recall_key(source, session_id),
             json.dumps(event, ensure_ascii=False) + "\n",
         )
 

@@ -1,4 +1,4 @@
-"""Verify the probe short-circuit in ``recall --hook``: when the prompt
+"""Verify the probe short-circuit in ``recall hook``: when the prompt
 starts with the magic prefix, write a sentinel and exit 0 without
 touching the backend (no API key / no running server required)."""
 from __future__ import annotations
@@ -24,7 +24,9 @@ def test_probe_writes_sentinel_and_exits_zero(tmp_path: Path, monkeypatch) -> No
     })
 
     runner = CliRunner()
-    result = runner.invoke(recall, ["--hook"], input=payload)
+    result = runner.invoke(
+        recall, ["hook", "--source", "claude-code"], input=payload,
+    )
     try:
         assert result.exit_code == 0, result.output
         # Hook contract: stdout must be valid hookSpecificOutput JSON

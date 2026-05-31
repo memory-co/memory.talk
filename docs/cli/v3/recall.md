@@ -16,22 +16,64 @@
 
 ## `memory.talk recall hook`
 
-跟旧 `recall` 完全等价(只是被收进子命令)。两种调用姿势二选一:
+跟旧 `recall --hook` 等价,但**必须显式声明 host(`--source`)** —— 服务端用 `(--source, --location, raw_uuid)` 三参数算正确的 canonical session_id。详见 [`../../structure/v3/recall.md#session_id-怎么算`](../../structure/v3/recall.md#session_id-怎么算)。
+
+两种调用姿势二选一:
 
 ```bash
 # 1. hook 模式:stdin 喂 JSON payload(host AI CLI 装的就是这个)
-echo '{"session_id":"...","prompt":"...","cwd":"..."}' | memory.talk recall hook
+echo '{"session_id":"...","prompt":"...","cwd":"..."}' \
+  | memory.talk recall hook --source claude-code
 
 # 2. 手动模式:位置参数(调试 / cron / 任意自动化)
-memory.talk recall hook <session_id> <prompt> [--top-k N] [--json]
+memory.talk recall hook --source claude-code [--location PATH] \
+  <session_id> <prompt> [--top-k N] [--json]
 ```
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
-| `<session_id>` | — | hook 模式从 stdin 拿;手动模式必填位置参数。命名空间跟 [sync](sync.md) 一致(平台原始 id,服务端加 `sess_` 前缀) |
+| `--source` | **必填** | host adapter 名,如 `claude-code` / `codex`。决定调哪个 adapter 算 canonical session_id。**没有默认值** —— 留默认就会重蹈 0.8.x bug(写死 claude-code 导致 Codex 算错) |
+| `--location` | adapter 的 `DEFAULT_LOCATION` | host 的 session 文件根目录。单 endpoint 用户用默认即可;多 endpoint 用户需显式传 |
+| `<session_id>` | — | hook 模式从 stdin 拿;手动模式必填。**raw upstream id**(如 Claude Code 的 UUID),服务端经 `BaseAdapter.mint_session_id(--source, --location)` 算 canonical 后再存 |
 | `<prompt>` | — | 同上 |
 | `--top-k` | 3 | 召回上限。极小是有意的:无意识召回不该塞太多稀释 prompt |
 | `--json` | 关 | 输出 JSON 而非 Markdown |
+
+### plugin assets:每个 host 一个专属命令字符串
+
+setup wizard 在实体化每个 host 的 plugin 时,把对应 `--source` / `--location` 写进 plugin 的 `hooks.json`:
+
+```jsonc
+// hook_assets/claude_code/.../hooks.json (wheel 模板)
+{
+  "hooks": {
+    "UserPromptSubmit": [{
+      "hooks": [{
+        "type": "command",
+        "command": "memory.talk recall hook --source claude-code"
+      }]
+    }]
+  }
+}
+```
+
+```jsonc
+// hook_assets/codex/.../hooks.json
+{
+  "hooks": {
+    "UserPromptSubmit": [{
+      "hooks": [{
+        "type": "command",
+        "command": "memory.talk recall hook --source codex"
+      }]
+    }]
+  }
+}
+```
+
+`--location` 默认走 adapter 的 `DEFAULT_LOCATION`(Claude Code = `~/.claude/projects`,Codex = `~/.codex/sessions`)。多 endpoint 用户编辑实体化后的 `hooks.json` 加 `--location` 即可,wizard 在下次 re-materialize 时**保留用户的修改**(对比 hash 时把 wheel 模板 vs on-disk 当成两个独立 source,有冲突时提示用户)。
+
+> 升级路径:0.8.x → 0.9.0 时,旧的 plugin 命令是 `memory.talk recall --hook`(没有 source 声明)。新的 setup 跑一次 hook step,bundled assets hash 跟磁盘上的旧 hash 不一致 → 触发 re-materialize + re-install,host 端 plugin 的 hooks.json 自动覆盖成新版本。**用户只需要重跑一次 `memory.talk setup`**。
 
 ### 跟 [search](search.md) 的差别
 
@@ -342,8 +384,21 @@ memory.talk recall read sess_187c6576-...
 
 ## Open questions(实现前请拍板)
 
-1. **schema rename:`recall_log` → `recall_event`**,旧表 drop 不迁移。OK?(历史本来是 "in-memory-ish",且没存 prompt 无法补)
-2. **`--hook` flag 移除**:旧 `memory.talk recall --hook` 这种姿势完全砍掉,只留 `memory.talk recall hook`。setup 会更新 `hook_assets/` 里 plugin 的 `hooks.json`,用户 re-run setup 时新 plugin 覆盖旧的。OK?还是保留 `--hook` 一两个版本做兼容?
-3. **`recall hook` 是否支持位置参数**(调试用):我建议保留(零额外成本),但你说话算。
-4. **`recall read` 时间排序默认方向**:我建议时间顺序(老 → 新),`--reverse` 倒序。理由:read 是看"这个 session 怎么走过来的",叙事顺读更自然。
-5. **0.9.0 minor bump**(因为 schema 改了)。OK?
+已确认(✅) / 仍待拍板:
+
+- ✅ **schema rename:`recall_log` → `recall_event`**,旧表 drop 不迁移
+- ✅ **三子命令 hook / list / read**
+- ✅ **`card_stats.recall_count` 砍掉改 derived**,single source of truth
+- ✅ **Recall 跟 Review 分两个对象,不合并**(Review 后续可选反向引用 `recall_event_id`,0.9.0 范围外)
+- ✅ **方案 A:`recall hook` 加 `--source` (必填) + `--location` (默认 adapter DEFAULT_LOCATION)**,canonical session_id 由 `BaseAdapter.mint_session_id` 算
+- ✅ **`recall hook` 保留位置参数**(调试 / 手动用)
+- ✅ **0.9.0 minor bump**(schema 改 + 修 Codex bug)
+
+仍待拍板:
+
+1. **旧 `memory.talk recall --hook` flag 完全砍掉,还是保留一两版兼容**?
+   - 砍掉:plugin assets 升级 + setup re-run,半小时事
+   - 保留:`--hook` 加 deprecation warning,内部转发到 `hook` 子命令。代价:多写一个 alias 适配
+   - 我推**砍掉**,因为兼容 `--hook` 也救不了 session_id bug(没传 `--source` 一样算错),用户必须重跑 setup 拿新 plugin
+2. **`recall read` 默认时间顺序老→新,`--reverse` 倒序**?推荐
+3. **`--source` 不传时的行为**?推荐:**直接报错退出**(不要默认 claude-code,那就是 0.8.x bug 的源头)。错误信息指向 setup 命令

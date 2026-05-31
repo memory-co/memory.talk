@@ -5,7 +5,15 @@ from memorytalk.schemas.cards import (
     CreateCardRequest, CreateCardResponse,
 )
 from memorytalk.schemas.read import ReadRequest, ReadResponse
-from memorytalk.schemas.recall import RecalledCard, RecallRequest, RecallResponse
+from memorytalk.schemas.recall import (
+    RecallEventOut,
+    RecallListResponse,
+    RecallReadResponse,
+    RecallRequest,
+    RecallResponse,
+    RecallSessionSummary,
+    RecalledCard,
+)
 from memorytalk.schemas.review import Review
 from memorytalk.schemas.reviews import CreateReviewRequest, CreateReviewResponse
 from memorytalk.schemas.search import (
@@ -30,6 +38,7 @@ __all__ = [
     "CreateCardRequest", "CreateCardResponse",
     "ReadRequest", "ReadResponse",
     "RecalledCard", "RecallRequest", "RecallResponse",
+    "RecallEventOut", "RecallListResponse", "RecallReadResponse", "RecallSessionSummary",
     "Review", "CreateReviewRequest", "CreateReviewResponse",
     "CardResult", "SearchRequest", "SearchResponse", "SessionHit", "SessionResult",
     "ContentBlock",

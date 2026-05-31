@@ -67,6 +67,10 @@ DDL = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_cards_created ON cards(created_at)",
+    # 0.9.0: ``recall_count`` column was removed. Recall popularity is
+    # now derived on read from ``recall_event.returned_ids`` via
+    # ``json_each``. See ``docs/structure/v3/recall.md`` for the
+    # single-source-of-truth rationale.
     """
     CREATE TABLE IF NOT EXISTS card_stats (
         card_id         TEXT PRIMARY KEY,
@@ -75,7 +79,6 @@ DDL = [
         review_neutral  INTEGER NOT NULL DEFAULT 0,
         review_count    INTEGER NOT NULL DEFAULT 0,
         read_count      INTEGER NOT NULL DEFAULT 0,
-        recall_count    INTEGER NOT NULL DEFAULT 0,
         updated_at      TEXT NOT NULL,
         FOREIGN KEY (card_id) REFERENCES cards(card_id)
     )
@@ -107,16 +110,23 @@ DDL = [
     "CREATE INDEX IF NOT EXISTS idx_reviews_card ON reviews(card_id, created_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_reviews_session ON reviews(session_id)",
 
-    # ── recall_log (in-memory-ish — cleared on rebuild) ──────────────────
+    # ── recall_event (0.9.0; supersedes ``recall_log``) ──────────────────
+    # Derived index over the canonical ``recall.jsonl`` file under
+    # ``sessions/<source>/<sid[0:2]>/<sid>/``. ``recall_event`` carries
+    # only the card_ids needed for dedup + display; insight snapshots
+    # live in the jsonl file. See ``docs/structure/v3/recall.md``.
     """
-    CREATE TABLE IF NOT EXISTS recall_log (
-        session_id   TEXT NOT NULL,
-        card_id      TEXT NOT NULL,
-        recalled_at  TEXT NOT NULL,
-        PRIMARY KEY (session_id, card_id)
+    CREATE TABLE IF NOT EXISTS recall_event (
+        event_id      TEXT PRIMARY KEY,
+        session_id    TEXT NOT NULL,             -- canonical: sess-<loc8>-<lastseg>
+        prompt        TEXT NOT NULL,
+        ts            TEXT NOT NULL,             -- UTC ISO 8601
+        returned_ids  TEXT NOT NULL,             -- JSON array of card_ids
+        skipped_ids   TEXT NOT NULL              -- JSON array of card_ids
     )
     """,
-    "CREATE INDEX IF NOT EXISTS idx_recall_log_session ON recall_log(session_id)",
+    "CREATE INDEX IF NOT EXISTS idx_recall_event_session_ts "
+    "ON recall_event(session_id, ts DESC)",
 
     # ── search_log (audit) ───────────────────────────────────────────────
     """
@@ -239,3 +249,21 @@ async def _additive_migrations(conn: aiosqlite.Connection) -> None:
     # 3. Drop the legacy sync-checkpoint table — sync state moved to a
     #    separate ``sync.db`` (see ``repository/sync_checkpoint.py``).
     await conn.execute("DROP TABLE IF EXISTS ingest_log")
+
+    # 4. 0.9.0: drop ``recall_log`` (replaced by ``recall_event`` +
+    #    ``recall.jsonl`` file). History is intentionally not migrated
+    #    — the old table never stored prompts, so a faithful
+    #    ``RecallEvent`` row can't be reconstructed. The old table's
+    #    own DDL comment was "in-memory-ish — cleared on rebuild", so
+    #    losing it is the documented contract.
+    await conn.execute("DROP INDEX IF EXISTS idx_recall_log_session")
+    await conn.execute("DROP TABLE IF EXISTS recall_log")
+
+    # 5. 0.9.0: drop ``card_stats.recall_count`` column — popularity is
+    #    now derived from ``recall_event`` on read. SQLite ALTER TABLE
+    #    DROP COLUMN requires 3.35+ (Mar 2021); Python 3.10+ ships well
+    #    above that.
+    async with conn.execute("PRAGMA table_info(card_stats)") as cursor:
+        stats_cols = {row[1] for row in await cursor.fetchall()}
+    if "recall_count" in stats_cols:
+        await conn.execute("ALTER TABLE card_stats DROP COLUMN recall_count")

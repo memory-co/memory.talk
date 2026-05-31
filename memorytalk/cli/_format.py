@@ -368,6 +368,68 @@ def fmt_recall(payload: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
+def fmt_recall_sessions(payload: dict) -> str:
+    """``recall list`` Markdown: per-session table, most-recent first."""
+    sessions = payload.get("sessions") or []
+    if not sessions:
+        return "# recall · no recall history\n"
+    lines = [
+        f"# recall · **{len(sessions)} session{'s' if len(sessions) != 1 else ''}**",
+        "",
+        "| session_id | recalls | unique cards | last recall |",
+        "|---|---|---|---|",
+    ]
+    for s in sessions:
+        lines.append(
+            f"| `{s['session_id']}` | {s['recalls']} | "
+            f"{s['unique_cards']} | {s['last_recall']} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def fmt_recall_read(payload: dict) -> str:
+    """``recall read <sid>`` Markdown: timeline of recall events."""
+    sid = payload.get("session_id") or ""
+    events = payload.get("events") or []
+    if not events:
+        return f"# recall · `{sid}` — no recall history\n"
+
+    first_ts = events[0]["ts"]
+    last_ts = events[-1]["ts"]
+    lines = [
+        f"# recall · `{sid}`",
+        "",
+        f"**{len(events)} event{'s' if len(events) != 1 else ''}** · "
+        f"first {first_ts} · last {last_ts}",
+    ]
+    for i, ev in enumerate(events, start=1):
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+        lines.append(f"## [{i}] {ev['ts']}")
+        lines.append("")
+        lines.append(f"> {ev['prompt']}")
+        lines.append("")
+        returned = ev.get("returned") or []
+        if returned:
+            lines.append("**returned**:")
+            for c in returned:
+                insight = c.get("insight") or "_(no insight)_"
+                lines.append(f"- `{c['card_id']}`  {insight}")
+        else:
+            lines.append("**returned**: _none_ (all candidates already recalled)")
+        lines.append("")
+        skipped = ev.get("skipped") or []
+        if skipped:
+            lines.append(
+                "**skipped** (already recalled this session): "
+                + ", ".join(f"`{c['card_id']}`" for c in skipped)
+            )
+        else:
+            lines.append("**skipped** (already recalled this session): _none_")
+    return "\n".join(lines) + "\n"
+
+
 # ────────── search ──────────
 
 def fmt_search(payload: dict) -> str:

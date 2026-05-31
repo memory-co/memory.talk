@@ -56,25 +56,6 @@ def new_event_id() -> str:
     return f"{EVENT_PREFIX}{ULID()}"
 
 
-def prefix_session_id(platform_id: str) -> str:
-    """Legacy: return a canonical session id, assuming claude-code's
-    default location. Idempotent across both ``sess-`` and ``sess_``.
-
-    Kept for the recall path where callers (claude-code hooks)
-    historically passed raw UUIDs. New ingest paths should mint via
-    ``BaseAdapter.mint_session_id`` instead — that one takes location
-    into account and works for any adapter.
-    """
-    if platform_id.startswith((SESSION_PREFIX, SESSION_PREFIX_LEGACY)):
-        return platform_id
-    # Lazy import to avoid the adapter package pulling in this util
-    # at import-time (the adapter base imports `mint_session_id` logic
-    # from this module's neighbors).
-    from memorytalk.adapters.claude_code import ClaudeCodeAdapter
-    adapter = ClaudeCodeAdapter(location=ClaudeCodeAdapter.DEFAULT_LOCATION)
-    return adapter.mint_session_id(platform_id)
-
-
 def parse_id(id_str: str) -> tuple[IdKind, str]:
     """Parse a prefixed id into (kind, raw). Raises ``InvalidIdError`` on unknown prefix."""
     for prefix, kind in (

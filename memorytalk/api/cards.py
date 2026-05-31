@@ -89,6 +89,20 @@ async def get_cards(
         until=until_iso,
         limit=limit,
     )
+    # Derived recall_count merge — list_cards strips it (column no
+    # longer exists), recall_event is the source of truth.
+    if rows:
+        counts = await request.app.state.db.recall.recall_counts(
+            [r["card_id"] for r in rows]
+        )
+        for r in rows:
+            (r["stats"] or {}).setdefault(
+                "recall_count", counts.get(r["card_id"], 0),
+            )
+            if r.get("stats") is None:
+                r["stats"] = {"recall_count": counts.get(r["card_id"], 0)}
+            else:
+                r["stats"]["recall_count"] = counts.get(r["card_id"], 0)
     cards = [
         CardMeta(
             card_id=r["card_id"],

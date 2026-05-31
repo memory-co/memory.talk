@@ -37,7 +37,6 @@ from memorytalk.schemas import (
     RoundInput,
 )
 from memorytalk.service.events import EventWriter
-from memorytalk.util.ids import prefix_session_id
 
 
 _log = logging.getLogger("memorytalk.ingest")
@@ -109,10 +108,11 @@ class IngestService:
         server's cursor stands for this canonical session_id.
 
         Caller (sync watcher) is responsible for minting the canonical
-        id via ``BaseAdapter.mint_session_id``; we accept it verbatim.
-        Old code paths that handed in raw upstream ids go through
-        ``prefix_session_id`` themselves (only the recall hook does
-        this; see ``util/ids.py``).
+        id via ``BaseAdapter.mint_session_id``. The recall hook does
+        its own minting via the adapter selected by ``--source`` /
+        ``--location``; ``RecallService`` handles that and writes the
+        already-canonicalized id, so callers here can rely on
+        ``req.session_id`` being canonical.
         """
         sid = req.session_id
         existing = await self.db.sessions.get(sid)

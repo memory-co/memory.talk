@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "memory.talk recall --hook"
+            "command": "memory.talk recall hook --source codex"
           }
         ]
       }
