@@ -27,6 +27,7 @@ Append-only & DAG invariants:
 """
 from __future__ import annotations
 import datetime as _dt
+import logging
 
 from memorytalk.provider.embedding import Embedder
 from memorytalk.provider.lancedb import LanceStore
@@ -42,6 +43,8 @@ from memorytalk.util.tags import TagValidationError, validate_tag_dict
 
 _ALLOWED_RELATIONS = {"derives_from", "supersedes"}
 
+_log = logging.getLogger(__name__)
+
 
 class CardServiceError(Exception):
     """4xx-equivalent: validation failed, request rejected."""
@@ -49,6 +52,10 @@ class CardServiceError(Exception):
 
 class CardConflict(CardServiceError):
     """409-equivalent: the supplied card_id already exists."""
+
+
+class CardNotFound(CardServiceError):
+    """404-equivalent: card_id doesn't exist."""
 
 
 def _utc_iso() -> str:
@@ -168,6 +175,68 @@ class CardService:
             )
 
         return card_id
+
+    # ──────── delete ────────
+
+    async def delete(self, card_id: str) -> dict:
+        """Remove a card from SQLite + vector + file. Idempotent in the
+        sense that re-calling on an already-deleted id raises CardNotFound
+        (not a silent no-op — callers should not call us twice).
+
+        Order matters:
+
+          1. Read summary (reviews count + inbound refs) for response.
+          2. Delete reviews (separate store, no FK cascade).
+          3. Delete SQLite card rows (cards + card_stats + outbound
+             source_cards, atomic).
+          4. Delete LanceDB vector (best-effort — orphan rows are
+             filtered out at search time by ``card_row is None`` checks).
+          5. Delete filesystem dir (best-effort — orphan dirs are
+             cosmetic, no read path scans them).
+
+        Steps 4 + 5 are best-effort: by the time we get there SQLite has
+        already committed the deletion, and reverting it would leave us
+        with a card the user thinks is gone but vector/files still show
+        up in odd places. Failures get logged; the response still says
+        "deleted" because from the user's POV it IS deleted. Cleanup
+        scripts handle the orphans later.
+        """
+        row = await self.db.cards.get(card_id)
+        if row is None:
+            raise CardNotFound(f"card {card_id} not found")
+
+        inbound = await self.db.cards.count_inbound_refs(card_id)
+
+        # 1. Reviews first — separate store, no FK cascade.
+        reviews_deleted = await self.db.reviews.delete_for_card(card_id)
+
+        # 2. SQLite — atomic across cards / card_stats / outbound source_cards.
+        await self.db.cards.delete(card_id)
+
+        # 3. Vector — best-effort.
+        if self.vectors is not None:
+            try:
+                await self.vectors.delete_cards([card_id])
+            except Exception as e:  # noqa: BLE001
+                _log.warning(
+                    "vector delete failed for %s; card_row is None will "
+                    "filter orphan at search time: %s", card_id, e,
+                )
+
+        # 4. Files — best-effort.
+        try:
+            await self.db.cards.delete_files(card_id)
+        except Exception as e:  # noqa: BLE001
+            _log.warning(
+                "file delete failed for %s; orphan dir is cosmetic: %s",
+                card_id, e,
+            )
+
+        return {
+            "card_id": card_id,
+            "reviews_deleted": reviews_deleted,
+            "inbound_refs_dangling": inbound,
+        }
 
     # ──────── helpers ────────
 

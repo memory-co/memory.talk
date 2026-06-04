@@ -12,11 +12,12 @@ import datetime as _dt
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from memorytalk.schemas import (
-    CardListResponse, CardMeta, CardTagResponse,
+    CardDeleteResponse, CardListResponse, CardMeta, CardTagResponse,
     CreateCardRequest, CreateCardResponse,
     TagPatchRequest,
 )
 from memorytalk.service import CardConflict, CardServiceError
+from memorytalk.service.cards import CardNotFound
 from memorytalk.util.tag_filter import parse_tag_arg
 from memorytalk.util.tags import TagValidationError, apply_patch
 
@@ -142,3 +143,24 @@ async def patch_card_tags(
                 status_code=404, detail=f"card {card_id!r} not found",
             )
     return CardTagResponse(card_id=card_id, tags=merged)
+
+
+@router.delete("/cards/{card_id}", response_model=CardDeleteResponse)
+async def delete_card(card_id: str, request: Request) -> CardDeleteResponse:
+    """Hard-delete a card: SQLite row + reviews + outbound source_cards
+    + vector embedding + per-card filesystem dir.
+
+    Inbound source_cards (other cards that reference this one) are NOT
+    cascaded — they become dangling references, which the response
+    surfaces as ``inbound_refs_dangling`` so callers can warn the
+    user. recall_event rows that mention this card_id are NOT touched
+    — they're historical records, deleting the card doesn't rewrite
+    history."""
+    svc = request.app.state.cards
+    if svc is None:
+        raise HTTPException(status_code=503, detail="cards service unavailable")
+    try:
+        result = await svc.delete(card_id)
+    except CardNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return CardDeleteResponse(**result)

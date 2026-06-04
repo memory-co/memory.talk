@@ -19,15 +19,15 @@ from memorytalk.repository import SQLiteStore
 from memorytalk.schemas import (
     Card, CardRound, CardStats, ContentBlock, Review, Round, Session, SourceCard,
 )
+# CardNotFound is owned by service.cards (the card service is the canonical
+# place for card lifecycle errors); re-exported here for callers that
+# historically imported it from service.read.
+from memorytalk.service.cards import CardNotFound
 from memorytalk.service.events import EventWriter
 
 
 class ReadServiceError(Exception):
     """Base for read service errors."""
-
-
-class CardNotFound(ReadServiceError):
-    pass
 
 
 class SessionNotFound(ReadServiceError):

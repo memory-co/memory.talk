@@ -15,16 +15,135 @@ def test_card_group_lists_subcommands():
     runner = CliRunner()
     r = runner.invoke(main, ["card", "--help"])
     assert r.exit_code == 0
-    for sub in ("create", "list", "tag"):
+    for sub in ("create", "list", "tag", "delete"):
         assert sub in r.output
 
 
-@pytest.mark.parametrize("sub", ["create", "list", "tag"])
+@pytest.mark.parametrize("sub", ["create", "list", "tag", "delete"])
 def test_card_subcommand_help_succeeds(sub):
     from memorytalk.cli import main
     runner = CliRunner()
     r = runner.invoke(main, ["card", sub, "--help"])
     assert r.exit_code == 0, r.output
+
+
+# ────────── card delete ──────────
+
+def test_card_delete_yes_flag_skips_confirm(monkeypatch):
+    """``--yes`` MUST short-circuit the pre-fetch (POST /v3/read) and
+    the click.confirm prompt; only HTTP call should be DELETE."""
+    calls: list[tuple[str, str]] = []
+
+    def _fake_api(method, path, cfg, json_body=None, timeout=30.0, params=None):
+        calls.append((method, path))
+        if method == "DELETE":
+            return {
+                "card_id": "card_01xx", "reviews_deleted": 3,
+                "inbound_refs_dangling": 1,
+            }
+        raise AssertionError(f"unexpected call: {method} {path}")
+
+    from memorytalk.cli import card as card_mod
+    monkeypatch.setattr(card_mod, "api", _fake_api)
+
+    from memorytalk.cli import main
+    runner = CliRunner()
+    r = runner.invoke(main, ["card", "delete", "card_01xx", "--yes"])
+    assert r.exit_code == 0, r.output
+    assert calls == [("DELETE", "/v3/cards/card_01xx")], calls
+    assert "deleted" in r.output
+    assert "3 reviews" in r.output
+    assert "1 inbound" in r.output
+
+
+def test_card_delete_confirm_yes(monkeypatch):
+    """Interactive: pre-fetch shows insight, user answers y, DELETE runs."""
+    def _fake_api(method, path, cfg, json_body=None, timeout=30.0, params=None):
+        if method == "POST" and path == "/v3/read":
+            return {"card": {
+                "card_id": "card_01yy", "insight": "lancedb pick",
+                "created_at": "2026-05-24T09:12:00Z", "reviews": [],
+            }}
+        if method == "DELETE":
+            return {"card_id": "card_01yy", "reviews_deleted": 0,
+                    "inbound_refs_dangling": 0}
+        raise AssertionError(f"unexpected: {method} {path}")
+
+    from memorytalk.cli import card as card_mod
+    monkeypatch.setattr(card_mod, "api", _fake_api)
+
+    from memorytalk.cli import main
+    runner = CliRunner()
+    r = runner.invoke(main, ["card", "delete", "card_01yy"], input="y\n")
+    assert r.exit_code == 0, r.output
+    assert "deleted" in r.output
+
+
+def test_card_delete_confirm_no_aborts(monkeypatch):
+    """Interactive: user answers 'n' → no DELETE call, exit 1."""
+    saw_delete = {"hit": False}
+
+    def _fake_api(method, path, cfg, json_body=None, timeout=30.0, params=None):
+        if method == "POST" and path == "/v3/read":
+            return {"card": {
+                "card_id": "card_01zz", "insight": "abc",
+                "created_at": "2026-05-24T09:12:00Z", "reviews": [],
+            }}
+        if method == "DELETE":
+            saw_delete["hit"] = True
+        raise AssertionError(f"unexpected: {method} {path}")
+
+    from memorytalk.cli import card as card_mod
+    monkeypatch.setattr(card_mod, "api", _fake_api)
+
+    from memorytalk.cli import main
+    runner = CliRunner()
+    r = runner.invoke(main, ["card", "delete", "card_01zz"], input="n\n")
+    assert r.exit_code != 0
+    assert not saw_delete["hit"], "user said no — DELETE must not have run"
+
+
+def test_card_delete_json_skips_confirm(monkeypatch):
+    """--json implies non-interactive: skip the preview + confirm."""
+    calls: list[tuple[str, str]] = []
+
+    def _fake_api(method, path, cfg, json_body=None, timeout=30.0, params=None):
+        calls.append((method, path))
+        if method == "DELETE":
+            return {"card_id": "card_01jj", "reviews_deleted": 0,
+                    "inbound_refs_dangling": 0}
+        raise AssertionError(f"unexpected: {method} {path}")
+
+    from memorytalk.cli import card as card_mod
+    monkeypatch.setattr(card_mod, "api", _fake_api)
+
+    from memorytalk.cli import main
+    runner = CliRunner()
+    r = runner.invoke(main, ["card", "delete", "card_01jj", "--json"])
+    assert r.exit_code == 0, r.output
+    assert calls == [("DELETE", "/v3/cards/card_01jj")]
+    import json as _json
+    body = _json.loads(r.stdout.strip())
+    assert body["card_id"] == "card_01jj"
+
+
+# ────────── fmt_card_delete ──────────
+
+def test_fmt_card_delete_simple():
+    from memorytalk.cli._format import fmt_card_delete
+    out = fmt_card_delete({"card_id": "card_01x", "reviews_deleted": 0,
+                           "inbound_refs_dangling": 0})
+    assert "deleted" in out
+    assert "card_01x" in out
+
+
+def test_fmt_card_delete_with_reviews_and_dangling():
+    from memorytalk.cli._format import fmt_card_delete
+    out = fmt_card_delete({"card_id": "card_01y", "reviews_deleted": 3,
+                           "inbound_refs_dangling": 2})
+    assert "3 reviews removed" in out
+    assert "2 inbound" in out
+    assert "dangling" in out
 
 
 def test_old_card_json_form_is_gone():

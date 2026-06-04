@@ -32,6 +32,12 @@ class CardStore:
         raw = card_id[len("card_"):] if card_id.startswith("card_") else card_id
         return (raw[:2] if len(raw) >= 2 else raw).lower()
 
+    def _card_dir_key(self, card_id: str) -> str:
+        """Per-card directory prefix; used by ``delete_files`` to rmtree
+        the whole card footprint (card.json + events.jsonl + reviews.jsonl
+        + tags.json) in one shot."""
+        return f"{self.PREFIX}/{self._bucket(card_id)}/{card_id}"
+
     def _doc_key(self, card_id: str) -> str:
         return f"{self.PREFIX}/{self._bucket(card_id)}/{card_id}/card.json"
 
@@ -228,6 +234,48 @@ class CardStore:
         ) as cursor:
             rows = await cursor.fetchall()
         return [{"card_id": r["source_card_id"], "relation": r["relation"]} for r in rows]
+
+    async def count_inbound_refs(self, card_id: str) -> int:
+        """How many *other* cards reference this card via source_cards
+        (i.e. would be left with a dangling reference if we delete it).
+        Covered by ``idx_csc_source``."""
+        async with self.conn.execute(
+            "SELECT COUNT(*) FROM card_source_cards WHERE source_card_id = ?",
+            (card_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+        return row[0]
+
+    # ────────── delete (0.9.x) ──────────
+
+    async def delete(self, card_id: str) -> None:
+        """Atomic SQLite tx removing the card row + everything 1:1 with it
+        (``card_stats``, outbound ``card_source_cards``). Caller is
+        responsible for reviews (separate store) + vector + files.
+
+        ``card_source_cards`` rows where ``source_card_id = card_id``
+        (inbound refs) are intentionally LEFT IN PLACE — see
+        ``count_inbound_refs``. The other card's "references this one"
+        link becomes dangling, but cascading deletes upstream would
+        be a destructive surprise."""
+        # Single transaction so a mid-flight failure leaves no
+        # half-state (no orphan card_stats / source_cards rows).
+        await self.conn.execute(
+            "DELETE FROM card_source_cards WHERE card_id = ?", (card_id,),
+        )
+        await self.conn.execute(
+            "DELETE FROM card_stats WHERE card_id = ?", (card_id,),
+        )
+        await self.conn.execute(
+            "DELETE FROM cards WHERE card_id = ?", (card_id,),
+        )
+        await self.conn.commit()
+
+    async def delete_files(self, card_id: str) -> None:
+        """Recursively remove the card's per-card directory (card.json,
+        events.jsonl, reviews.jsonl, tags.json). Best-effort — missing
+        directory is a no-op."""
+        await self.storage.delete_prefix(self._card_dir_key(card_id))
 
     # ─── 0.8.x: list + user-side tags ──────────────────────────────
 

@@ -65,6 +65,21 @@ class CardListResponse(BaseModel):
     cards: list[CardMeta] = Field(default_factory=list)
 
 
+class CardDeleteResponse(BaseModel):
+    """Response for ``DELETE /v3/cards/{card_id}``.
+
+    ``reviews_deleted`` and ``inbound_refs_dangling`` give the caller
+    enough information to surface the blast radius. We don't return a
+    ``files_deleted`` / ``vector_deleted`` because those are
+    best-effort cleanup; from the user's POV the card IS gone."""
+    card_id: str
+    reviews_deleted: int = 0
+    # Number of OTHER cards that referenced this one via source_cards.
+    # Those references now dangle (cards point at a missing card_id).
+    # Not cascaded by design — see docs/structure/v3/talk-card.md.
+    inbound_refs_dangling: int = 0
+
+
 class CardTagResponse(BaseModel):
     """Response of ``PATCH /v3/cards/{cid}/tags`` — full post-merge
     tag dict. Mirrors :class:`TagResponse` in shape; we keep them as

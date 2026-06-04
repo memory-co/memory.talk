@@ -5,12 +5,13 @@ domain code. Domain operations like "write a session's meta.json" live
 in ``repository/<kind>.py`` and call into Storage with full keys.
 
 Primitives:
-- ``write_text(key, content)`` — atomic put
-- ``read_text(key)``           — get; None if missing
-- ``append_text(key, content)``— append-only (caller pre-formats lines)
-- ``exists(key)``              — head
-- ``delete(key)``              — best-effort; missing is OK
-- ``list_subkeys(prefix)``     — recursive list of file keys under prefix
+- ``write_text(key, content)``  — atomic put
+- ``read_text(key)``            — get; None if missing
+- ``append_text(key, content)`` — append-only (caller pre-formats lines)
+- ``exists(key)``               — head
+- ``delete(key)``               — best-effort; missing is OK
+- ``delete_prefix(prefix)``     — recursive rmtree; missing prefix is OK
+- ``list_subkeys(prefix)``      — recursive list of file keys under prefix
 
 Keys are forward-slash strings rooted at the data root, e.g.
 ``sessions/claude-code/la/sess_lancedb/meta.json``.
@@ -29,6 +30,7 @@ class Storage(Protocol):
     async def append_text(self, key: str, content: str) -> None: ...
     async def exists(self, key: str) -> bool: ...
     async def delete(self, key: str) -> None: ...
+    async def delete_prefix(self, prefix: str) -> None: ...
     async def list_subkeys(self, prefix: str) -> list[str]: ...
 
 
@@ -75,6 +77,21 @@ class LocalStorage:
             p.unlink()
         except FileNotFoundError:
             pass
+
+    async def delete_prefix(self, prefix: str) -> None:
+        """Recursively remove the directory at ``prefix``. Missing prefix
+        is OK (no-op). Synchronous ``shutil.rmtree`` is fine here — the
+        IO is one syscall per inode, no fan-out worth offloading."""
+        import shutil
+        p = self._path(prefix)
+        if not p.exists():
+            return
+        if p.is_file():
+            # Defensive — caller probably meant ``delete`` for a single
+            # file; do the obvious thing rather than refuse.
+            p.unlink()
+            return
+        shutil.rmtree(p)
 
     async def list_subkeys(self, prefix: str) -> list[str]:
         base = self._path(prefix)

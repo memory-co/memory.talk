@@ -44,6 +44,19 @@ class ReviewStore:
             rows = await cursor.fetchall()
         return [dict(r) for r in rows]
 
+    async def delete_for_card(self, card_id: str) -> int:
+        """Delete all reviews of a card. Returns the number of rows
+        removed (so the service layer can report it in the response).
+
+        Used by ``CardService.delete``; reviews-of-a-deleted-card make
+        no sense and ``reviews.card_id`` FK has no ON DELETE CASCADE."""
+        async with self.conn.execute(
+            "DELETE FROM reviews WHERE card_id = ?", (card_id,),
+        ) as cursor:
+            n = cursor.rowcount
+        await self.conn.commit()
+        return n
+
     async def count(self) -> int:
         async with self.conn.execute("SELECT COUNT(*) FROM reviews") as cursor:
             row = await cursor.fetchone()

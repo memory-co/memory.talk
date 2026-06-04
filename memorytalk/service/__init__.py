@@ -1,10 +1,10 @@
 """Service layer — orchestrates repository + provider; one class per noun."""
 from memorytalk.service.cards import (
-    CardConflict, CardService, CardServiceError,
+    CardConflict, CardNotFound, CardService, CardServiceError,
 )
 from memorytalk.service.events import EventWriter
 from memorytalk.service.read import (
-    CardNotFound, ReadService, SessionNotFound, ReadServiceError,
+    ReadService, SessionNotFound, ReadServiceError,
 )
 from memorytalk.service.recall import RecallService, RecallServiceError
 from memorytalk.service.reviews import (

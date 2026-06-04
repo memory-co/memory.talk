@@ -858,6 +858,30 @@ def fmt_card_list(payload: dict, filter_summary: str = "") -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def fmt_card_delete(payload: dict) -> str:
+    """Render DELETE /v3/cards/<cid> response.
+
+    One-line confirmation + a hint about inbound-ref dangling when
+    applicable. We deliberately don't moan about every detail (vector
+    cleared / files cleared / etc.) — those are best-effort and
+    typically silent."""
+    cid = payload.get("card_id") or "?"
+    reviews = int(payload.get("reviews_deleted", 0) or 0)
+    dangling = int(payload.get("inbound_refs_dangling", 0) or 0)
+
+    bits = [f"deleted · `{cid}`"]
+    if reviews:
+        bits.append(
+            f"{reviews} review{'s' if reviews != 1 else ''} removed",
+        )
+    if dangling:
+        bits.append(
+            f"⚠ {dangling} inbound `source_cards` reference"
+            f"{'s' if dangling != 1 else ''} now dangling",
+        )
+    return " · ".join(bits) + "\n"
+
+
 def fmt_card_tag(payload: dict, *, is_query: bool) -> str:
     """Render PATCH /v3/cards/<cid>/tags response.
 
