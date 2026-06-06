@@ -29,6 +29,6 @@
 | Review 怎么影响 card stats | [review-impact.md](review-impact.md) |
 | Read 副作用(read_count + 事件) | [read-side-effects.md](read-side-effects.md) |
 | 向量索引补齐 + EMFILE 恢复 | [index-backfill.md](index-backfill.md) |
-| Search 能力模块抽取(SearchProvider 端口 + local/server 可插拔，提案) | [search-provider-extraction.md](search-provider-extraction.md) |
+| searchbase 通用搜索底座抽取(SearchBackend 端口 + local/server 可插拔，提案) | [searchbase-extraction.md](searchbase-extraction.md) |
 | File-canonical 模式(card/review/session/recall 共用) | [file-canonical-pattern.md](file-canonical-pattern.md) |
 | Explore cwd suppression(hook 模式开关) | [explore-cwd-suppression.md](explore-cwd-suppression.md) |
