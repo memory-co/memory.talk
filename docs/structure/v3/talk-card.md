@@ -1,6 +1,9 @@
 # Talk-Card
 
-v3 的核心数据结构 —— 从对话中提炼出的记忆单元。**append-only**:payload 创建即冻结;stats 是 runtime 状态由后端实时维护。论坛动力学语义见 [`../../cli/v3/README.md`](../../cli/v3/README.md)。
+v3 的核心数据结构 —— 从对话中提炼出的记忆单元。**append-only**:payload 创建即冻结;stats 是 runtime 状态由后端实时维护。
+
+论坛动力学语义见 [`../../works/v3/forum-dynamics.md`](../../works/v3/forum-dynamics.md)。
+创建/删除流程见 [`../../works/v3/card-creation-flow.md`](../../works/v3/card-creation-flow.md) / [`../../works/v3/card-deletion-flow.md`](../../works/v3/card-deletion-flow.md)。
 
 ## Schema
 
@@ -35,7 +38,7 @@ v3 的核心数据结构 —— 从对话中提炼出的记忆单元。**append-
 }
 ```
 
-> 上面是 `POST /v3/read` 响应里**合并后**的视图。底层落盘 / SQLite 是分开存的:`card.json` 只存 immutable payload;stats / reviews 在 SQLite。详见 [#存储](#存储)。
+上面是 `POST /v3/read` 响应里**合并后**的视图。底层 `card.json` 只存 immutable payload;stats / reviews 在 SQLite,详见 [#存储](#存储)。
 
 ## 字段
 
@@ -45,17 +48,15 @@ v3 的核心数据结构 —— 从对话中提炼出的记忆单元。**append-
 |---|---|---|---|
 | `card_id` | string | 自动 | `card_<ULID>`,不提供则自动生成 |
 | `insight` | string | 是 | 一句话认知洞见,也是 embedding 锚点 |
-| `rounds` | Round[] | 是 | 展开后的对话轮次(见下方 Round 结构),每条带 `session_id` + `index` 指回源 session。可为空数组(纯 source_cards 派生的高阶 card) |
-| `source_cards` | SourceCard[] | 否 | card 间关联,创建时确定,**不可改**(见下方 SourceCard 结构);空数组 / 不传等价 |
+| `rounds` | Round[] | 是 | 展开后的对话轮次(见 [#Round](#round-talk-card-中)),每条带 `session_id` + `index` 指回源 session。可为空数组 |
+| `source_cards` | SourceCard[] | 否 | card 间关联,创建时确定不可改 |
 | `created_at` | string | 自动 | ISO 8601 |
 
 ### User-side metadata(可改,但跟 immutable payload 解耦)
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `tags` | object | 0.8.x 新字段。string→string 字典,user-side 手动打的轻量组织标签。**不参与论坛动力学**(不进 sort / 不算 stats / 不进 vector index),纯查询 / 归类用。约束:key 匹配 `^[a-zA-Z][a-zA-Z0-9_.-]*$`,value ≤ 200 char,单 card key 数 ≤ 50。详见 [`../../cli/v3/card.md#card-tag`](../../cli/v3/card.md#card-tag) |
-
-> tag 跟 immutable payload 解耦:**改 tag 不破坏 append-only 不变性**。append-only 约束的是 `insight` / `rounds` / `source_cards` —— 它们承载论坛主张和 lineage,改了就把"老观点复活"和"fork 谁取代谁"的判断基础挪走;tag 不在这个语义层,它只是给已存在的 card 贴归类标签。
+| `tags` | object | string→string 字典,用户手动打的轻量标签。约束:key 匹配 `^[a-zA-Z][a-zA-Z0-9_.-]*$`,value ≤ 200 char,单 card key 数 ≤ 50。详见 [`../../cli/v3/card.md`](../../cli/v3/card.md) |
 
 ### Runtime state(不在 payload 里,由后端实时维护)
 
@@ -76,54 +77,38 @@ v3 的核心数据结构 —— 从对话中提炼出的记忆单元。**append-
 | `session_id` | string | 该 round 来自哪个 session |
 | `index` | integer | 该 round 在源 session 里的 `index` |
 
-跟 Session 中的 Round 不同:**没有** `round_id` / `parent_id` / `timestamp` / `content` block 等原始结构。要追溯原始 round,用 `session_id` + `index` 直接定位源 session 的 `rounds[index]`。这是记忆,不是录像。
-
-`session_id` / `index` 只是元数据,**不进向量检索** —— 向量侧只 embed `insight`,数字 id 在语义检索里没意义。
+跟 Session 中的 Round 不同:没有 `round_id` / `parent_id` / `timestamp` / `content` block。要追溯原始 round 用 `session_id` + `index` 定位 session 的 `rounds[index]`。
 
 完整 Session Round 结构见 [session.md](session.md)。
 
 ## SourceCard
 
-card 之间的关联,创建时确定,**不可改**。
-
 | 字段 | 类型 | 必填 | 说明 |
 |---|---|---|---|
-| `card_id` | string | 是 | 被引用 card 的 id,必须是 `card_<...>` |
+| `card_id` | string | 是 | 被引用 card 的 id,必须 `card_<...>` |
 | `relation` | string | 是 | 关系类型 |
 
 `relation` 取值:
 
 | 值 | 语义 |
 |---|---|
-| `derives_from` | 本卡基于该 card 蒸馏 / 综述(高阶 card 引用低阶 card 的典型形态) |
-| `supersedes` | 本卡**反驳并替代**该 card(fork 语义)。老 card 不被删,后续是否真被取代由动力学说了算 —— 没有"立即把老 card 打成 dormant"这种硬切换 |
+| `derives_from` | 本卡基于该 card 蒸馏 / 综述 |
+| `supersedes` | 本卡反驳并替代该 card(fork 语义) |
 
-后续可能扩展 `cites` / `merges` 等;后端遇未识别 `relation` 返回 400。
-
-**lineage DAG 不变性**:card 创建后不可改 + `source_cards` 只能引用**创建时已存在**的 card,物理时序就保证 lineage 图是有向无环图。后端不做环检测。
+后端遇未识别 `relation` 返回 400。lineage DAG 由"创建时必须存在"+ append-only 联合保证,见 [`../../works/v3/card-creation-flow.md`](../../works/v3/card-creation-flow.md)。
 
 ## Stats
 
-后端实时维护的计数器,**真讨论 vs 路过分开**(对应论坛动力学 §5):
+| 字段 | 含义 |
+|---|---|
+| `review_up` | `score=+1` review 数 |
+| `review_down` | `score=-1` review 数 |
+| `review_neutral` | `score=0` review 数 |
+| `review_count` | review 总数(= up + down + neutral) |
+| `read_count` | `POST /v3/read` 命中本卡的次数 |
+| `recall_count` | `POST /v3/recall` 返回过本卡的次数(0.9.0 起 derived,见 [forum-dynamics.md](../../works/v3/forum-dynamics.md)) |
 
-| 字段 | 含义 | 累加时机 |
-|---|---|---|
-| `review_up` | `+1` review 数 | `POST /v3/reviews` 且 `score=1` |
-| `review_down` | `-1` review 数 | `POST /v3/reviews` 且 `score=-1` |
-| `review_neutral` | `0` review 数(中立) | `POST /v3/reviews` 且 `score=0` |
-| `review_count` | review 总数(= up + down + neutral) | 每次 `POST /v3/reviews` |
-| `read_count` | `POST /v3/read` 命中本卡的次数 | 每次 read card |
-| `recall_count` | `POST /v3/recall` 返回过本卡的次数 | 每次新返回(被 skipped_already_recalled 跳掉的不计) |
-
-**沉浮公式**(默认配在 `settings.search.ranking_formula`)消费这些字段:
-
-```
-relevance + 0.1 * (review_up - review_down) + 0.02 * log(read_count + 1) - 0.005 * age_days
-```
-
-`review_neutral` 默认权重 0,但仍单独存,允许用户改公式时调用(讨论广度信号)。
-
-完整公式 / 变量 / DSL 引用见 [`../../cli/v3/search.md`](../../cli/v3/search.md#排序)。
+stats 的累加细节 + 公式怎么消费这些字段 见 [`../../works/v3/forum-dynamics.md`](../../works/v3/forum-dynamics.md) 和 [`../../works/v3/search-ranking.md`](../../works/v3/search-ranking.md)。
 
 ## 存储
 
@@ -132,8 +117,9 @@ relevance + 0.1 * (review_up - review_down) + 0.02 * log(read_count + 1) - 0.005
 ```
 cards/{card_id[5:7]}/{card_id}/
 ├── card.json           # immutable payload + created_at
-├── events.jsonl        # created / reviewed / read_at / recalled_at
-└── reviews.jsonl       # 本卡所有 review 的镜像(audit / portability)
+├── events.jsonl        # created / reviewed / read_at
+├── reviews.jsonl       # 本卡所有 review 的镜像(audit / portability)
+└── tags.json           # user-side tags sidecar(0.8.x)
 ```
 
 `{card_id[5:7]}` 是 ULID 部分的前 2 个字符(跳过 `card_` 前缀)。
@@ -141,7 +127,7 @@ cards/{card_id[5:7]}/{card_id}/
 ### Runtime state(SQLite)
 
 ```sql
--- 卡的 stats(行级 upsert)
+-- 卡的 stats(0.9.0 起 recall_count 列被 drop,改 derived)
 CREATE TABLE card_stats (
   card_id        TEXT PRIMARY KEY,
   review_up      INTEGER NOT NULL DEFAULT 0,
@@ -149,29 +135,32 @@ CREATE TABLE card_stats (
   review_neutral INTEGER NOT NULL DEFAULT 0,
   review_count   INTEGER NOT NULL DEFAULT 0,
   read_count     INTEGER NOT NULL DEFAULT 0,
-  recall_count   INTEGER NOT NULL DEFAULT 0,
-  updated_at     TIMESTAMP NOT NULL
+  updated_at     TIMESTAMP NOT NULL,
+  FOREIGN KEY (card_id) REFERENCES cards(card_id)
 );
 
 -- card 索引(查询用)
 CREATE TABLE cards (
   card_id    TEXT PRIMARY KEY,
   insight    TEXT NOT NULL,
-  tags       TEXT NOT NULL DEFAULT '{}',  -- 0.8.x 新增,user-level kv 标签
+  tags       TEXT NOT NULL DEFAULT '{}',
   created_at TIMESTAMP NOT NULL
 );
 
 -- source_cards 关系(查询用)
 CREATE TABLE card_source_cards (
-  card_id         TEXT NOT NULL,    -- 本卡
-  source_card_id  TEXT NOT NULL,    -- 被引用的 card
-  relation        TEXT NOT NULL,    -- derives_from / supersedes / ...
-  seq             INTEGER NOT NULL, -- 在 source_cards[] 里的位置
+  card_id         TEXT NOT NULL,
+  source_card_id  TEXT NOT NULL,
+  relation        TEXT NOT NULL,
+  seq             INTEGER NOT NULL,
   PRIMARY KEY (card_id, seq)
 );
+CREATE INDEX idx_csc_source ON card_source_cards(source_card_id);
 ```
 
 向量侧只 embed `insight`,索引在 `vectors/` 目录(LanceDB)。
+
+存储分层(file canonical + SQLite index)总体模式见 [`../../works/v3/file-canonical-pattern.md`](../../works/v3/file-canonical-pattern.md)。
 
 ## 跟 v2 的差异
 
@@ -181,5 +170,4 @@ CREATE TABLE card_source_cards (
 | 关联载体 | `links[]`(独立 link 对象 + TTL) | `source_cards[]`(card 字段 + 不可改) |
 | 状态 | `ttl` + view 续命 | `stats` + 沉浮公式 |
 | 创建后改 | `links` 可加可改 ttl | 全 immutable,只能新建 |
-| tag | 单独 sqlite 表(字符串列表),自动从 sync / explore 注入,view card 时 join | **0.8.x 加回**,但形态变了:string→string 字典存在 `cards.tags` 列里,只 user-side 手动 PATCH,不参与论坛动力学。详见 [`../../cli/v3/card.md`](../../cli/v3/card.md) |
-| 写入入参 | `summary` + `rounds` + (没 links,默认自动生成) | `insight` + `rounds` + `source_cards`(可选) |
+| tag | 单独 sqlite 表(字符串列表) | `cards.tags` 列(string→string 字典),不参与论坛动力学 |

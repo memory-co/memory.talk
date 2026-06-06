@@ -162,7 +162,7 @@ CLI 对应 [`search`](../../cli/v3/search.md) 命令。
 - **被讨论扎实的老 card** 自然超过相关度相近的新 session
 - **多 round 命中的 session** 通过聚合 `relevance` 获得高分(本质上等价于"多次命中加分")
 
-详细公式 + 变量见 [#排序](#排序)。
+详细公式 + 变量见 [#排序](../../works/v3/search-ranking.md)。
 
 ### 返回体规则
 

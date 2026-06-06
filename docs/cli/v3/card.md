@@ -17,7 +17,7 @@ memory.talk card
 
 1. **写入 vs 维护分开**。`create` 是认知动作(沉淀一个新洞见),`list` / `tag` 是组织动作(给已有 card 归类 / 找出特定子集)。两类操作的关注点不同 —— 拆子命令让职责面干净。
 2. **card 的内容仍 append-only,但 tag 是元数据,不是内容**。`insight` / `rounds` / `source_cards` 一旦创建仍**不可改**(论坛动力学的基础),`tag` 是 user-side metadata,跟 stats / `read_count` 同等地位 —— 改 tag 不破坏 [README §七](README.md#七设计原则) 的 append-only 不变性。
-3. **list 只接结构性 / metadata 过滤,不接 stats**。"按 review_up 找 / 找 shadow card / 找争议 card" 是论坛动力学的查询,继续走 [`search "" -w '...'`](search.md#dsl)。`card list` 的位置是:**按物理属性(tag / 创建时间)找子集做批量维护**,不跟 search 的动力学查询重叠。
+3. **list 只接结构性 / metadata 过滤,不接 stats**。"按 review_up 找 / 找 shadow card / 找争议 card" 是论坛动力学的查询,继续走 [`search "" -w '...'`](../../works/v3/dsl.md)。`card list` 的位置是:**按物理属性(tag / 创建时间)找子集做批量维护**,不跟 search 的动力学查询重叠。
 4. **tag 是 key-value 字典,跟 session tag 同结构**。跨对象一致的 tag 模型(string→string,同款约束)让用户记忆负担最小;后续要做"按 tag 跨 card+session 联合查"也水到渠成。
 
 ---
@@ -137,7 +137,7 @@ memory.talk card list \
 | `--until` | 同上 | card `created_at <= 终点` |
 | `--limit` | 整数,默认 `20`,上限 `200` | 最多返回多少条;按 `created_at` 倒序后截 |
 
-> 不接 stats 过滤(`review_up >= N`、`read_count` 等)—— 这类查询走 [`search "" -w 'DSL'`](search.md#dsl),不在 `card list` 重复实现。
+> 不接 stats 过滤(`review_up >= N`、`read_count` 等)—— 这类查询走 [`search "" -w 'DSL'`](../../works/v3/dsl.md),不在 `card list` 重复实现。
 >
 > 不接 lineage 过滤(`--cites <sid>` / `--derives-from <cid>` / `--supersedes <cid>`)—— 后续 PR 补,本轮先把结构性 + tag 拉通。
 

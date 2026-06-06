@@ -36,7 +36,7 @@
 | `-1` | 踩 + "其实我不这么想" | 沉降 | `review_down += 1`, `review_count += 1` |
 | `0` | 楼下歪楼但提到了主题 | **不影响沉浮**(默认公式权重为 0) | `review_neutral += 1`, `review_count += 1` |
 
-详见 [Talk-Card#Stats](talk-card.md#stats) 和 [`../../cli/v3/search.md#排序`](../../cli/v3/search.md#排序)。
+详见 [Talk-Card#Stats](talk-card.md#stats) 和 [`../../works/v3/search-ranking.md`](../../works/v3/search-ranking.md)。
 
 ### `(card_id, session_id)` 唯一性
 

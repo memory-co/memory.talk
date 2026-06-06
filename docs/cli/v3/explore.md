@@ -2,35 +2,9 @@
 
 **LLM 主导的 card 维护工作台**:在一个隔离环境里启动 Claude Code,让它读会话、抽新 card 或给老 card 写 review。memory.talk 自己不抽不评 —— 抽 / 评是 LLM 的活,explore 负责**拉起 claude + 隔离 + 跟踪产出**。
 
-跟 [sync](sync.md) 的关系:sync 是后端 watchdog,实时把所有 Claude Code session 落到 backend(包括 explore 自己跑出来的)。explore 不调用 sync,sync 不知道 explore 在跑 —— 两条独立通路在 backend 数据层自然汇合。
+机制(cwd 隔离 + recall hook 真空区 + 无独立工作队列)详见 [`../../works/v3/explore-cwd-suppression.md`](../../works/v3/explore-cwd-suppression.md)。
 
-## 设计原则
-
-1. **explore namespace 靠 cwd 物理隔离**。所有 claude 进程都在 `<explore.cwd>` 下起;这个目录下的 session 在 backend 里通过 `metadata.cwd` 字段被识别为"explore session"。**不**依赖 tag / 任何额外元数据 —— cwd 是 Claude Code 原生的 project 分桶机制,backend 只是消费它。
-2. **explore namespace 是 recall hook 的真空区**。`<explore.cwd>/.claude/settings.json` 显式覆盖 user-level recall hook,在这里跑的 claude 不会被自动召回打扰 —— 抽 card / 写 review 场景里 LLM 需要清醒决定"我要看什么",不需要"系统帮我想起来"。
-3. **explore 不持有独立工作队列状态**。候选 session 直接从 backend 查("没被任何 card 引用过"是个 SQL 自然推得的集合);产出从 backend 反查("这条 session 上产出了几张 card / 几条 review")。无 cursor、无 checkpoint、无 explore-side state file。
-
-## settings.json
-
-```json
-{
-  "explore": {
-    "cwd": "~/.memory.talk/explore"
-  }
-}
-```
-
-| 字段 | 默认 | 说明 |
-|---|---|---|
-| `explore.cwd` | `~/.memory.talk/explore` | claude 启动目录。绝对路径或 `~/` 起头。backend 做 namespace 判断时按**完全展开后的绝对路径前缀**匹配 `session.metadata.cwd`。 |
-
-setup wizard 首次跑会:
-
-1. `mkdir -p <explore.cwd>` —— 创建空目录
-2. 在 `<explore.cwd>/.claude/settings.json` 写 hook 覆盖(`UserPromptSubmit: []`)
-3. 摘要里报告"explore 目录已就绪"
-
-已存在目录不动 —— setup 幂等。详见 [setup.md](setup.md)。
+`settings.explore.cwd` 默认 `~/.memory.talk/explore`,由 setup wizard 创建。详见 [setup.md](setup.md)。
 
 ## 子命令
 

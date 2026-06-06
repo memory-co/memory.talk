@@ -211,6 +211,8 @@ memory.talk setup                # 改 provider / dim,setup 就地重算所有 c
 | `session` | [session.md](session.md) |
 | `server` | 沿用 v2 [server.md](../v2/server.md) 契约,后续补独立 v3 版 |
 
+> 数据结构 / schema 见 [`../../structure/v3/`](../../structure/v3/);HTTP API 见 [`../../api/v3/`](../../api/v3/);**机制 / pipeline / 设计决策** 见 [`../../works/v3/`](../../works/v3/)。
+
 ## 七、设计原则
 
 四条不变性,前两条沿用 v2,后两条 v3 新立:

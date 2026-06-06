@@ -15,7 +15,7 @@
 | 字段 | 必填 | 说明 |
 |---|---|---|
 | `query` | 是 | 检索文本;可空(配合 `where` 做纯元数据 / stats 过滤) |
-| `where` | 否 | DSL,见 [`../../api/v3/search.md#DSL`](../../api/v3/search.md#dsl) |
+| `where` | 否 | DSL,见 [`../../api/v3/search.md#DSL`](../../works/v3/dsl.md) |
 | `top_k` | 否 | **总**结果数上限(card + session 合计),默认 `settings.search.default_top_k` |
 
 > 0.8.x 起 **strong-floor 过滤 + `show_all` 字段已移除**。搜索直接返回排序后的 top_k 全部,不再有"弱匹配被藏"的概念,排序质量单独由 `ranking_formula` 负责。

@@ -2,6 +2,10 @@
 
 本地 API,v3 CLI 通过调用这些接口实现功能。所有接口返回 JSON。所有 v3 路由统一以 `/v3` 前缀挂载。
 
+- CLI 使用说明见 [`../../cli/v3/`](../../cli/v3/)
+- 数据结构 / schema 见 [`../../structure/v3/`](../../structure/v3/)
+- 机制 / pipeline / 设计决策见 [`../../works/v3/`](../../works/v3/)
+
 ```
 Search      POST   /v3/search                   主检索入口
 Recall      POST   /v3/recall                   hook 阶段无意识召回(极简)
