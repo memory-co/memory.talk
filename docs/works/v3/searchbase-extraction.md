@@ -39,12 +39,18 @@ memorytalk/
     server/                 ← 未来的服务器版（现在只搭骨架）
       __init__.py
       backend.py            ← ServerSearchBackend：NotImplementedError 占位
-    tests/                  ← 模块自包含测试（和 local/server 平级）
-      conftest.py
-      test_local_backend.py
-      test_buffer.py
-      test_chunking.py      ← 从 tests/provider/test_embedding_chunking.py 搬来
-      test_emfile.py        ← 从 tests/provider/test_emfile_recovery.py 搬来
+```
+
+**测试沿用现有集中结构**，不迁进模块。在 `tests/` 下新增 `tests/searchbase/`：
+
+```
+tests/
+  searchbase/               ← 新增，和 tests/service、tests/provider 平级
+    __init__.py
+    test_local_backend.py
+    test_buffer.py          ← 从 tests/service/test_index_buffer.py 搬来
+    test_chunking.py        ← 从 tests/provider/test_embedding_chunking.py 搬来
+    test_emfile.py          ← 从 tests/provider/test_emfile_recovery.py 搬来
 ```
 
 搬完之后，旧 `provider/` 只剩 `storage.py`（文件镜像）—— 那是另一种能力，**本次不动**（将来可独立成 `storage/`）。
@@ -149,7 +155,7 @@ app.state.search = search
 1. ~~模块名~~ → **已定：`searchbase`**（通用搜索底座，与业务侧 `service/search.py` 区分开）。
 2. **lance 不可用时**：backend 永远返回、用 `ready=False` 让 api 返回 503（废掉 `if vectors is None` 的散落判断）。
 3. **`server/` 本次只搭骨架**（`NotImplementedError`），先把架子立起来。
-4. **测试搬迁**：把 `tests/provider/*` 和 `tests/service/test_index_buffer.py` 挪进 `searchbase/tests/` ＝ 立一个**模块内测试**新惯例（`searchbase/tests/conftest.py` vs 共用 rootdir conftest 待定）。
+4. ~~测试搬迁~~ → **已定：测试沿用现有集中结构**，不进模块。在 `tests/` 下新增 `tests/searchbase/`（和 `tests/service`、`tests/provider` 平级），共用 rootdir 的 `tests/conftest.py`。
 
 ## 实施顺序（每步保持测试绿）
 
