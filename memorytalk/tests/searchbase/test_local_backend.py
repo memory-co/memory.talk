@@ -95,7 +95,9 @@ async def test_auto_split_collection_hides_chunking(data_root):
 async def test_maintenance_loop_compacts_periodically(data_root):
     # The maintenance coroutine compacts at startup AND on an interval —
     # not just once — so a long-running server keeps fragments in check
-    # without waiting for a restart or an EMFILE.
+    # without waiting for a restart or an EMFILE. Reads the counter
+    # through the public ``health()`` surface (the counter itself lives
+    # on ``Maintenance`` after the 0.8.x refactor).
     config = Config(data_root)
     config.ensure_dirs()
     b = await LocalSearchBackend.create(
@@ -106,7 +108,8 @@ async def test_maintenance_loop_compacts_periodically(data_root):
     )
     try:
         await asyncio.sleep(0.3)
-        assert b._index.compactions >= 2  # startup + >=1 periodic tick
+        health = await b.health()
+        assert health.detail["compactions"] >= 2  # startup + >=1 tick
     finally:
         await b.close()
 
@@ -141,11 +144,13 @@ async def test_emfile_recovery_repopulates_collections(backend):
     # Recovery compacts every known collection. If the known-set is
     # stale/empty (e.g. a read-only boot whose initial list_tables
     # failed), recovery must re-list tables so it actually compacts
-    # something instead of looping over nothing.
+    # something instead of looping over nothing. Driven via the
+    # Maintenance subsystem after the 0.8.x refactor (recovery policy
+    # moved out of the index).
     await backend.upsert("cards", [Doc(id="c1", text="x")])
     index = backend._index
     index._collections.clear()
 
-    await index._recover_from_emfile()
+    await backend._maintenance.recover_from_emfile()
 
-    assert "cards" in index._collections
+    assert "cards" in index.known_collections

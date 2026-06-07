@@ -12,12 +12,18 @@ and letting the business re-fill it. So there is deliberately no
 inference, no migration, no rebuild logic here.
 
 Reuses the proven LanceDB internals (hybrid RRF search, FTS index
-memoization, EMFILE recovery, version-pruning compaction) generalized to
-operate over any collection rather than two hardcoded tables.
+memoization) generalized to operate over any collection rather than two
+hardcoded tables.
+
+Self-maintenance (periodic compaction + EMFILE recovery + observability
+counters) lives in :mod:`memorytalk.searchbase.local.maintenance` —
+this file only exposes the *low-level* ops maintenance needs:
+``optimize(collection)``, ``reset_connection()``, ``known_collections``,
+``refresh_known_collections()``. Policy (when to compact, EMFILE
+fallback, who counts what) is the Maintenance class's job.
 """
 from __future__ import annotations
 
-import asyncio
 import datetime as _dt
 import logging
 from pathlib import Path
@@ -80,18 +86,16 @@ class CollectionIndex:
         # Per-collection "FTS index confirmed present" memo — avoids a
         # list_indices() round trip on every search once verified.
         self._fts_index_known: set[str] = set()
-        # Collections this instance manages — recovery/compaction iterate
-        # these. Seeded from the declared set at construction.
+        # Collections this instance manages — maintenance iterates these.
+        # Seeded from the declared set at construction; refreshed from
+        # ``_list_tables()`` via ``refresh_known_collections()``.
         self._collections: set[str] = set(self._declared)
-        # EMFILE recovery state.
-        self._recovery_lock = asyncio.Lock()
-        self.emfile_recoveries: int = 0
-        self.last_emfile_at_iso: str | None = None
-        self.last_recovery_error: str | None = None
-        # Compaction observability (surfaced via health()).
-        self.last_compact_at_iso: str | None = None
-        self.last_compact_error: str | None = None
-        self.compactions: int = 0
+        # Maintenance back-reference. Wired by ``LocalSearchBackend.create``
+        # immediately after the index is built; ``_search_with_recovery``
+        # delegates the EMFILE branch through this. ``None`` means no
+        # maintenance is attached (degraded: EMFILEs re-raise instead of
+        # auto-recovering).
+        self._maintenance = None
 
     @classmethod
     async def create(
@@ -209,42 +213,62 @@ class CollectionIndex:
         )
         self._fts_index_known.add(collection)
 
-    # ─── compaction ───
+    # ─── low-level maintenance ops ───
+    #
+    # Policy (when to compact, how to recover from EMFILE, what to
+    # count) lives in ``searchbase/local/maintenance.py``; what's here
+    # is just the LanceDB-intimate ops it needs.
+
+    @property
+    def known_collections(self) -> set[str]:
+        """Collections this index has ever seen — declared at construction
+        plus anything discovered via ``refresh_known_collections``. Read
+        by Maintenance to iterate compaction targets."""
+        return self._collections
+
+    async def refresh_known_collections(self) -> None:
+        """Refresh ``known_collections`` from the live table list.
+        Tolerates ``_list_tables`` failure (caller is typically on a
+        maintenance hot path and should fall through with whatever's
+        already in the set)."""
+        try:
+            self._collections.update(await self._list_tables())
+        except Exception:
+            pass
 
     async def optimize(self, collection: str) -> dict:
-        """LanceDB VACUUM: merge fragments + prune all but the latest
-        version (cleanup_older_than=0). Load-bearing against the
-        append-only fragment pile that EMFILEs vector search."""
+        """LanceDB VACUUM for one collection: merge fragments + prune
+        all but the latest version (``cleanup_older_than=0``). Returns
+        a small stats dict for the caller's log; no-op (returns
+        ``{skipped: "missing"}``) if the collection's table doesn't
+        exist on disk yet."""
         if not await self._exists(collection):
             return {"collection": collection, "skipped": "missing"}
         table = await self.db.open_table(collection)
         stats = await table.optimize(cleanup_older_than=_dt.timedelta(0))
         return {"collection": collection, "stats": str(stats)}
 
-    async def compact_all(self) -> None:
-        """Best-effort compaction of every known collection — merge the
-        append-only fragment pile back down so vector search (which
-        flat-scans fragments) stays off the fd ceiling. Driven by the
-        backend's maintenance loop (once at startup, then on an interval)."""
+    async def reset_connection(self) -> None:
+        """Close the LanceDB connection and reopen it.
+
+        Load-bearing in EMFILE recovery: compaction alone reclaims
+        files on disk but the in-process readers still hold the old
+        file descriptors. Only ``connect_async`` releases them. After
+        this call, the next ``open_table`` returns a fresh reader
+        against the freshly-merged on-disk state.
+        """
+        import lancedb
         try:
-            self._collections.update(await self._list_tables())
+            await self.db.close()
         except Exception:
-            pass
-        self.last_compact_at_iso = _dt.datetime.now(_dt.UTC).isoformat(
-            timespec="seconds",
-        ).replace("+00:00", "Z")
-        compact_error: str | None = None
-        for collection in list(self._collections):
-            try:
-                result = await self.optimize(collection)
-                _log.info("compaction done %s", result)
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                _log.exception("compaction failed collection=%s", collection)
-                compact_error = f"compact {collection}: {e}"
-        self.last_compact_error = compact_error
-        self.compactions += 1
+            pass  # already closed / unsupported — best effort
+        self.db = await lancedb.connect_async(str(self.data_dir))
+
+    def attach_maintenance(self, maintenance) -> None:
+        """Wire the Maintenance back-reference. Called once by
+        ``LocalSearchBackend.create`` after instantiating both objects;
+        no-op for fresh-build paths that don't need EMFILE recovery."""
+        self._maintenance = maintenance
 
     # ─── search ───
 
@@ -263,6 +287,18 @@ class CollectionIndex:
         self, collection: str, query: str,
         vector: list[float] | None, top_k: int, where: str | None,
     ) -> list[dict]:
+        """Run a hybrid query with EMFILE auto-recovery.
+
+        On EMFILE, delegate to :class:`Maintenance` (one subsystem owns
+        the lock + the reconnect + the counters) and then retry the
+        query exactly once. A second EMFILE propagates — at that point
+        the in-process recovery can't fix the underlying fd-budget vs
+        fragment-count mismatch, and operator action is required.
+
+        If no Maintenance is attached (degraded init), EMFILEs
+        re-raise as-is — better a loud failure than a silent partial
+        result on a broken backend.
+        """
         if not await self._exists(collection):
             return []
         try:
@@ -271,46 +307,16 @@ class CollectionIndex:
         except Exception as e:
             if not _is_emfile(e):
                 raise
-            _log.warning("EMFILE on search collection=%s; recovering", collection)
-            await self._recover_from_emfile()
+            if self._maintenance is None:
+                # No Maintenance wired — let the caller see the EMFILE
+                # rather than mask it with a broken retry.
+                raise
+            _log.warning(
+                "EMFILE on search collection=%s; delegating to maintenance",
+                collection,
+            )
+            await self._maintenance.recover_from_emfile()
             if not await self._exists(collection):
                 return []
             table = await self.db.open_table(collection)
             return await _run_hybrid(table, query, vector, top_k, where)
-
-    async def _recover_from_emfile(self) -> None:
-        gen_before = self.emfile_recoveries
-        async with self._recovery_lock:
-            if self.emfile_recoveries > gen_before:
-                return
-            # Re-list tables so recovery compacts the real fragment pile
-            # even if the known-set went stale. Compaction is the step
-            # that actually relieves EMFILE.
-            try:
-                self._collections.update(await self._list_tables())
-            except Exception:
-                pass  # fall through with whatever we already know
-            for collection in list(self._collections):
-                try:
-                    await self.optimize(collection)
-                except Exception as e:
-                    _log.exception(
-                        "optimize during EMFILE recovery failed collection=%s",
-                        collection,
-                    )
-                    self.last_recovery_error = f"optimize {collection}: {e}"
-            try:
-                import lancedb
-                try:
-                    await self.db.close()
-                except Exception:
-                    pass
-                self.db = await lancedb.connect_async(str(self.data_dir))
-            except Exception as e:
-                _log.exception("connection reset during EMFILE recovery failed")
-                self.last_recovery_error = f"reconnect: {e}"
-                raise
-            self.emfile_recoveries += 1
-            self.last_emfile_at_iso = _dt.datetime.now(_dt.UTC).isoformat(
-                timespec="seconds",
-            ).replace("+00:00", "Z")

@@ -1,20 +1,25 @@
 """LocalSearchBackend — embedding + CollectionIndex behind the port.
 
-Owns the embedder and the generic CollectionIndex (and, for the rounds
-write path, a background maintenance coroutine). Maps generic Docs onto
-generic ``{id, text, vector, **fields}`` rows. There is deliberately NO
-card / round / session vocabulary here — ``collection`` is an opaque
-string and every collection flows through the same code path.
+Owns the embedder, the generic CollectionIndex, and a Maintenance
+subsystem (compaction loop + EMFILE recovery + observability). Maps
+generic Docs onto generic ``{id, text, vector, **fields}`` rows. There
+is deliberately NO card / round / session vocabulary here —
+``collection`` is an opaque string and every collection flows through
+the same code path.
+
+Self-management is delegated to :class:`Maintenance` (one file owns it)
+rather than spread across this module's ``_maintenance_loop`` and
+``CollectionIndex``'s recovery methods.
 """
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 
 from memorytalk.searchbase._types import (
     Doc, Hit, IndexHealth, Query, SearchError,
 )
 from memorytalk.searchbase.local.index import CollectionIndex
+from memorytalk.searchbase.local.maintenance import Maintenance
 
 
 # Lance score/aux columns that are not stored Doc fields.
@@ -64,7 +69,9 @@ class LocalSearchBackend:
         self._max_text_length = max_text_length
         self._auto_split = auto_split
         self._compact_interval_seconds = compact_interval_seconds
-        self._maint_task: asyncio.Task | None = None
+        # Wired in ``create``. ``None`` only during the brief window
+        # between __init__ and create's setup, or after ``close``.
+        self._maintenance: Maintenance | None = None
 
     @classmethod
     async def create(
@@ -75,7 +82,8 @@ class LocalSearchBackend:
         """Open a named instance with a fixed declared schema. ``name``
         maps to a sub-directory of ``data_dir``, so different schema
         versions live in different directories. The returned instance is
-        already running — fd/compaction maintenance starts here."""
+        already running — Maintenance is started here, so periodic
+        compaction + EMFILE recovery are live before the first caller."""
         index = await CollectionIndex.create(
             Path(data_dir) / name, dim=dim, collections=collections,
         )
@@ -86,45 +94,24 @@ class LocalSearchBackend:
             index, embedder, max_text_length, auto_split,
             compact_interval_seconds,
         )
-        # Own the fd/fragment maintenance: compact once at startup, then on
-        # an interval, in the background (never blocks boot). EMFILE
-        # recovery is handled inline inside CollectionIndex.search.
-        self._maint_task = asyncio.create_task(self._maintenance_loop())
+        # Wire maintenance: one subsystem owns the compaction loop, the
+        # EMFILE recovery, and all the observability counters.
+        # ``index.attach_maintenance`` lets the search hot path delegate
+        # EMFILEs back through the Maintenance singleton without owning
+        # any of the policy.
+        self._maintenance = Maintenance(
+            index, compact_interval_seconds=compact_interval_seconds,
+        )
+        index.attach_maintenance(self._maintenance)
+        await self._maintenance.start()
         return self
-
-    async def _maintenance_loop(self) -> None:
-        """Compact at startup, then every ``compact_interval_seconds``.
-        Best-effort — compaction errors are recorded on the index and
-        never escape the loop."""
-        index = self._index
-        if index is None:
-            return
-        try:
-            await index.compact_all()
-            while True:
-                await asyncio.sleep(self._compact_interval_seconds)
-                await index.compact_all()
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            # compact_all already swallows per-collection failures; this
-            # only catches a truly unexpected loop error so it doesn't go
-            # silent.
-            import logging
-            logging.getLogger("memorytalk.searchbase").exception(
-                "maintenance loop crashed",
-            )
 
     # ─── lifecycle ───
 
     async def close(self) -> None:
-        if self._maint_task is not None:
-            self._maint_task.cancel()
-            try:
-                await self._maint_task
-            except (asyncio.CancelledError, Exception):
-                pass
-            self._maint_task = None
+        if self._maintenance is not None:
+            await self._maintenance.stop()
+            self._maintenance = None
         self._index = None
 
     @property
@@ -132,16 +119,13 @@ class LocalSearchBackend:
         return self._index is not None
 
     async def health(self) -> IndexHealth:
-        detail: dict = {}
-        if self._index is not None:
-            detail = {
-                "emfile_recoveries": self._index.emfile_recoveries,
-                "last_emfile_at_iso": self._index.last_emfile_at_iso,
-                "last_recovery_error": self._index.last_recovery_error,
-                "last_compact_at_iso": self._index.last_compact_at_iso,
-                "last_compact_error": self._index.last_compact_error,
-                "compactions": self._index.compactions,
-            }
+        """Surface Maintenance's six-field health dict directly. We
+        don't add or rearrange anything here — the Maintenance class
+        is the single source of truth for what self-maintenance
+        reports."""
+        detail: dict = (
+            self._maintenance.health() if self._maintenance is not None else {}
+        )
         return IndexHealth(ready=self.ready, detail=detail)
 
     # ─── write ───
