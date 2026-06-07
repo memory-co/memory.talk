@@ -30,41 +30,13 @@ from pathlib import Path
 
 import pyarrow as pa
 
-from memorytalk.searchbase.local._lance_helpers import (
-    _in_clause, _is_emfile, _run_hybrid, _segment,
+from memorytalk.searchbase.local.util import (
+    RESERVED_COLUMNS, TYPE_TAGS,
+    collapse_chunks, in_clause, is_emfile, run_hybrid, segment,
 )
 
 
 _log = logging.getLogger("memorytalk.searchbase.index")
-
-_RESERVED = ("id", "text", "vector", "_base_id", "_chunk")
-
-# Declared field type tags → Arrow types. Unknown tag → KeyError, which
-# is the right fail-fast: a typo in a collection schema is a code bug.
-_TYPE_TAGS = {
-    "str": pa.string(),
-    "int": pa.int64(),
-    "float": pa.float64(),
-    "bool": pa.bool_(),
-}
-
-
-def _collapse_chunks(rows: list[dict]) -> list[dict]:
-    """Collapse chunk rows of an auto_split collection back to one row
-    per logical doc: group by ``_base_id``, keep the best-scoring chunk,
-    and present its ``id`` as the logical (base) id. Chunking is thus
-    invisible to the caller."""
-    best: dict[str, dict] = {}
-    for r in rows:
-        base = r.get("_base_id") or r.get("id")
-        score = float(r.get("_score", 0.0))
-        if base not in best or score > float(best[base].get("_score", 0.0)):
-            row = dict(r)
-            row["id"] = base
-            best[base] = row
-    return sorted(
-        best.values(), key=lambda r: float(r.get("_score", 0.0)), reverse=True,
-    )
 
 
 class CollectionIndex:
@@ -131,9 +103,9 @@ class CollectionIndex:
             cols.append(pa.field("_base_id", pa.string()))
             cols.append(pa.field("_chunk", pa.int32()))
         for name, tag in self._declared[collection].get("fields", {}).items():
-            if name in _RESERVED:
+            if name in RESERVED_COLUMNS:
                 continue
-            cols.append(pa.field(name, _TYPE_TAGS[tag]))
+            cols.append(pa.field(name, TYPE_TAGS[tag]))
         return pa.schema(cols)
 
     # ─── write ───
@@ -148,15 +120,15 @@ class CollectionIndex:
         prepared = []
         for r in rows:
             r2 = dict(r)
-            r2["text"] = _segment(r.get("text") or "")
+            r2["text"] = segment(r.get("text") or "")
             prepared.append(r2)
         table = await self.db.open_table(collection)
         if collection in self._auto_split:
             keys = list({r["_base_id"] for r in prepared if r.get("_base_id") is not None})
-            expr = _in_clause(keys, "_base_id")
+            expr = in_clause(keys, "_base_id")
         else:
             keys = [r["id"] for r in prepared if r.get("id") is not None]
-            expr = _in_clause(keys, "id")
+            expr = in_clause(keys, "id")
         if expr:
             await table.delete(expr)
         await table.add(prepared)
@@ -168,7 +140,7 @@ class CollectionIndex:
         # ids are logical doc ids; for auto_split they key on _base_id so
         # all of a doc's chunks are removed.
         column = "_base_id" if collection in self._auto_split else "id"
-        expr = _in_clause(ids, column)
+        expr = in_clause(ids, column)
         if expr:
             await table.delete(expr)
 
@@ -280,7 +252,7 @@ class CollectionIndex:
             collection, query, vector, top_k, where,
         )
         if collection in self._auto_split:
-            rows = _collapse_chunks(rows)
+            rows = collapse_chunks(rows)
         return rows
 
     async def _search_with_recovery(
@@ -303,9 +275,9 @@ class CollectionIndex:
             return []
         try:
             table = await self.db.open_table(collection)
-            return await _run_hybrid(table, query, vector, top_k, where)
+            return await run_hybrid(table, query, vector, top_k, where)
         except Exception as e:
-            if not _is_emfile(e):
+            if not is_emfile(e):
                 raise
             if self._maintenance is None:
                 # No Maintenance wired — let the caller see the EMFILE
@@ -319,4 +291,4 @@ class CollectionIndex:
             if not await self._exists(collection):
                 return []
             table = await self.db.open_table(collection)
-            return await _run_hybrid(table, query, vector, top_k, where)
+            return await run_hybrid(table, query, vector, top_k, where)

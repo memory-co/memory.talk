@@ -42,7 +42,10 @@ async def test_lance_health_emfile_counter_reflects_recoveries(app, client, monk
     ])
 
     state = {"fails": 1}
-    orig = index_mod._run_hybrid
+    # 0.8.x helpers were consolidated into searchbase.local.util — the
+    # name imported here is the same object, monkeypatching on the
+    # index module's binding is what actually swaps the call site.
+    orig = index_mod.run_hybrid
 
     async def flaky(table, *a, **kw):
         if state["fails"] > 0:
@@ -52,7 +55,7 @@ async def test_lance_health_emfile_counter_reflects_recoveries(app, client, monk
             )
         return await orig(table, *a, **kw)
 
-    monkeypatch.setattr(index_mod, "_run_hybrid", flaky)
+    monkeypatch.setattr(index_mod, "run_hybrid", flaky)
     before = (await client.get("/v3/sync/status")).json()["index"]["lance"]
     await searchbase.search(ROUNDS, Query(text="", top_k=5))
     after = (await client.get("/v3/sync/status")).json()["index"]["lance"]

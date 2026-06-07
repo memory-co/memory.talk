@@ -66,4 +66,7 @@ async def build_search_backend(config):
         embedder=get_embedder(config),
         collections=SCHEMAS,
         max_text_length=MAX_TEXT_LENGTH,
+        # Per-category file logs under logs/searchbase/.
+        # searchbase itself just gets a Path — no Config awareness.
+        log_dir=config.searchbase_log_dir,
     )

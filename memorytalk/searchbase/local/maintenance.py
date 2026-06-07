@@ -27,17 +27,12 @@ attribute reads from the maintenance side.
 from __future__ import annotations
 
 import asyncio
-import datetime as _dt
 import logging
+
+from memorytalk.searchbase.local.util import utc_iso
 
 
 _log = logging.getLogger("memorytalk.searchbase.maintenance")
-
-
-def _utc_iso() -> str:
-    return _dt.datetime.now(_dt.UTC).isoformat(
-        timespec="seconds",
-    ).replace("+00:00", "Z")
 
 
 class Maintenance:
@@ -163,7 +158,7 @@ class Maintenance:
             # collections we already knew about — better some
             # compaction than none.
             pass
-        self.last_compact_at_iso = _utc_iso()
+        self.last_compact_at_iso = utc_iso()
         compact_error: str | None = None
         for collection in list(self._index.known_collections):
             try:
@@ -227,7 +222,7 @@ class Maintenance:
                 raise
 
             self.emfile_recoveries += 1
-            self.last_emfile_at_iso = _utc_iso()
+            self.last_emfile_at_iso = utc_iso()
 
     # ─── observability ───────────────────────────────────────────────
 

@@ -13,47 +13,25 @@ rather than spread across this module's ``_maintenance_loop`` and
 """
 from __future__ import annotations
 
+import logging
+import time
 from pathlib import Path
 
 from memorytalk.searchbase._types import (
     Doc, Hit, IndexHealth, Query, SearchError,
 )
+from memorytalk.searchbase.local._logging import setup_file_logging
 from memorytalk.searchbase.local.index import CollectionIndex
 from memorytalk.searchbase.local.maintenance import Maintenance
-
-
-# Lance score/aux columns that are not stored Doc fields.
-_NON_FIELD = (
-    "id", "text", "vector", "_score", "_distance", "_relevance_score",
-    "_base_id", "_chunk",
+from memorytalk.searchbase.local.util import (
+    NON_DOC_FIELDS, split_text, where_from_match,
 )
 
 
-def _split_text(text: str, max_len: int) -> list[str]:
-    """Fixed-size chunks of ``text`` (at most ``max_len`` chars each).
-    Always returns at least one chunk."""
-    text = text or ""
-    if len(text) <= max_len:
-        return [text]
-    return [text[i:i + max_len] for i in range(0, len(text), max_len)]
-
-
-def _sql_literal(value) -> str:
-    """Render a field value as a LanceDB SQL literal — quote strings
-    (escaping single quotes), leave numbers bare."""
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, (int, float)):
-        return str(value)
-    return "'" + str(value).replace("'", "''") + "'"
-
-
-def _where_from_match(match: dict | None) -> str | None:
-    """Generic field-equality filter. ``match`` keys are stored column
-    names — the backend never interprets what they mean."""
-    if not match:
-        return None
-    return " AND ".join(f"{k} = {_sql_literal(v)}" for k, v in match.items())
+# Loggers per category — these write to dedicated files when log_dir
+# is configured at create-time. See searchbase/local/_logging.py.
+_qlog = logging.getLogger("memorytalk.searchbase.query")
+_ilog = logging.getLogger("memorytalk.searchbase.index")
 
 
 # How often the maintenance coroutine compacts fragments. 30 min trades
@@ -78,12 +56,22 @@ class LocalSearchBackend:
         cls, *, name: str, data_dir, dim: int, embedder,
         collections: dict[str, dict], max_text_length: int = 100_000,
         compact_interval_seconds: float = _COMPACT_INTERVAL_SECONDS,
+        log_dir: Path | str | None = None,
     ) -> "LocalSearchBackend":
         """Open a named instance with a fixed declared schema. ``name``
         maps to a sub-directory of ``data_dir``, so different schema
         versions live in different directories. The returned instance is
         already running — Maintenance is started here, so periodic
-        compaction + EMFILE recovery are live before the first caller."""
+        compaction + EMFILE recovery are live before the first caller.
+
+        ``log_dir`` (optional): if provided, searchbase writes per-category
+        log files under it (``maintenance.log`` / ``query.log`` /
+        ``index.log``) — see ``searchbase/local/_logging.py``. When
+        ``None``, the loggers exist but no file handlers are attached
+        (messages go to whatever the global logging config does, which
+        for tests is usually nowhere)."""
+        if log_dir is not None:
+            setup_file_logging(log_dir)
         index = await CollectionIndex.create(
             Path(data_dir) / name, dim=dim, collections=collections,
         )
@@ -138,6 +126,10 @@ class LocalSearchBackend:
         else:
             rows = await self._plain_rows(docs)
         await self._index.upsert(collection, rows)
+        _ilog.info(
+            "upsert coll=%s docs=%d rows=%d",
+            collection, len(docs), len(rows),
+        )
 
     async def _plain_rows(self, docs: list[Doc]) -> list[dict]:
         """One row per doc; over-length is rejected (no silent loss)."""
@@ -159,7 +151,7 @@ class LocalSearchBackend:
         read — the index collapses it back. ``id`` = ``f"{base}#{i}"``."""
         plan: list[tuple[Doc, int, str]] = []
         for d in docs:
-            for i, chunk in enumerate(_split_text(d.text, self._max_text_length)):
+            for i, chunk in enumerate(split_text(d.text, self._max_text_length)):
                 plan.append((d, i, chunk))
         vecs = await self._embedder.embed([chunk for _, _, chunk in plan])
         return [
@@ -174,22 +166,28 @@ class LocalSearchBackend:
         if self._index is None:
             return
         await self._index.delete(collection, ids)
+        _ilog.info("delete coll=%s ids=%d", collection, len(ids))
 
     async def delete_where(self, collection: str, match: dict) -> None:
         if self._index is None:
             return
-        await self._index.delete_where(collection, _where_from_match(match))
+        await self._index.delete_where(collection, where_from_match(match))
+        _ilog.info(
+            "delete_where coll=%s match=%s",
+            collection, ",".join(sorted(match)) if match else "",
+        )
 
     async def count(self, collection: str, match: dict | None = None) -> int:
         if self._index is None:
             return 0
-        return await self._index.count(collection, _where_from_match(match))
+        return await self._index.count(collection, where_from_match(match))
 
     # ─── read ───
 
     async def search(self, collection: str, query: Query) -> list[Hit]:
         if self._index is None:
             return []
+        t0 = time.monotonic()
         await self._index.ensure_fts_index(collection)
         qvec = (
             await self._embedder.embed_one(query.text)
@@ -197,13 +195,24 @@ class LocalSearchBackend:
         )
         rows = await self._index.search(
             collection, query.text, qvec, query.top_k,
-            _where_from_match(query.filters),
+            where_from_match(query.filters),
         )
-        return [
+        hits = [
             Hit(
                 id=r["id"],
                 score=float(r.get("_score", 0.0)),
-                fields={k: v for k, v in r.items() if k not in _NON_FIELD},
+                fields={k: v for k, v in r.items() if k not in NON_DOC_FIELDS},
             )
             for r in rows
         ]
+        # query.log line: enough to tune top_k / spot pathological queries
+        # without exposing the actual query text (which the business audit
+        # log captures separately at logs/search/<UTC>.jsonl).
+        ms = int((time.monotonic() - t0) * 1000)
+        _qlog.info(
+            "query coll=%s top_k=%d q_chars=%d filters=%s hits=%d ms=%d",
+            collection, query.top_k, len(query.text or ""),
+            ",".join(sorted(query.filters)) if query.filters else "",
+            len(hits), ms,
+        )
+        return hits
