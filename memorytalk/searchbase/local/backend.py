@@ -51,19 +51,26 @@ def _where_from_match(match: dict | None) -> str | None:
     return " AND ".join(f"{k} = {_sql_literal(v)}" for k, v in match.items())
 
 
+# How often the maintenance coroutine compacts fragments. 30 min trades
+# a little periodic IO for bounded fragment growth between restarts.
+_COMPACT_INTERVAL_SECONDS = 1800.0
+
+
 class LocalSearchBackend:
     def __init__(self, index: CollectionIndex, embedder, max_text_length: int,
-                 auto_split: set[str]):
+                 auto_split: set[str], compact_interval_seconds: float):
         self._embedder = embedder
         self._index: CollectionIndex | None = index
         self._max_text_length = max_text_length
         self._auto_split = auto_split
+        self._compact_interval_seconds = compact_interval_seconds
         self._maint_task: asyncio.Task | None = None
 
     @classmethod
     async def create(
         cls, *, name: str, data_dir, dim: int, embedder,
         collections: dict[str, dict], max_text_length: int = 100_000,
+        compact_interval_seconds: float = _COMPACT_INTERVAL_SECONDS,
     ) -> "LocalSearchBackend":
         """Open a named instance with a fixed declared schema. ``name``
         maps to a sub-directory of ``data_dir``, so different schema
@@ -75,12 +82,38 @@ class LocalSearchBackend:
         auto_split = {
             n for n, spec in collections.items() if spec.get("auto_split")
         }
-        self = cls(index, embedder, max_text_length, auto_split)
-        # Own the fd/fragment maintenance: a one-shot startup compaction
-        # in the background (never blocks boot). EMFILE recovery is
-        # handled inline inside CollectionIndex.search.
-        self._maint_task = asyncio.create_task(index.compact_all())
+        self = cls(
+            index, embedder, max_text_length, auto_split,
+            compact_interval_seconds,
+        )
+        # Own the fd/fragment maintenance: compact once at startup, then on
+        # an interval, in the background (never blocks boot). EMFILE
+        # recovery is handled inline inside CollectionIndex.search.
+        self._maint_task = asyncio.create_task(self._maintenance_loop())
         return self
+
+    async def _maintenance_loop(self) -> None:
+        """Compact at startup, then every ``compact_interval_seconds``.
+        Best-effort — compaction errors are recorded on the index and
+        never escape the loop."""
+        index = self._index
+        if index is None:
+            return
+        try:
+            await index.compact_all()
+            while True:
+                await asyncio.sleep(self._compact_interval_seconds)
+                await index.compact_all()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # compact_all already swallows per-collection failures; this
+            # only catches a truly unexpected loop error so it doesn't go
+            # silent.
+            import logging
+            logging.getLogger("memorytalk.searchbase").exception(
+                "maintenance loop crashed",
+            )
 
     # ─── lifecycle ───
 
@@ -107,6 +140,7 @@ class LocalSearchBackend:
                 "last_recovery_error": self._index.last_recovery_error,
                 "last_compact_at_iso": self._index.last_compact_at_iso,
                 "last_compact_error": self._index.last_compact_error,
+                "compactions": self._index.compactions,
             }
         return IndexHealth(ready=self.ready, detail=detail)
 

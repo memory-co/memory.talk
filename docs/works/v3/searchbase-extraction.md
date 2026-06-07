@@ -96,7 +96,7 @@ backend = await LocalSearchBackend.create(
 
   → 业务代码一行不用改，眼里永远只有逻辑 doc。rounds 必须切（单轮可能很长，否则超长 round 会让 backfill 死循环）。
 
-**fd / 压缩 / EMFILE 全在内部。** create 时后台跑一次 compaction；search 遇 EMFILE 自动「压缩+重连+重试一次」。`health().detail` 只给数字（`emfile_recoveries` / `last_compact_*` / …），供 `/v3/sync/status`。
+**碎片合并 / fd / EMFILE 全在内部、自动。** 实例自带后台维护协程（`close()` 停）：**启动压一次 + 每 `compact_interval_seconds`（默认 1800s）周期压一次**，把 append-only 碎片合并掉；search 万一仍遇 EMFILE 再「压缩+重连+重试一次」兜底。`health().detail` 给数字（`compactions` / `last_compact_*` / `emfile_recoveries` / …），供 `/v3/sync/status`。
 
 ## 业务映射（在 `service/`）
 
@@ -131,7 +131,7 @@ await self.search.delete_where(ROUNDS, {"session_id": sid})
 ## 和旧实现的行为差异（都是有意简化）
 
 1. **rounds 索引变「整 session 全有或全无」**（原来按 chunk 部分成功）。失败→session 降级→backfill 重试，仍收敛，只是失败粒度变粗。
-2. **去掉每 30 分钟周期性压缩**，只剩启动压缩 + EMFILE 触发压缩。
+2. **周期性压缩从 backfill 搬进 searchbase 的维护协程**（启动 + 每 30 分钟），不再是 backfill 的职责；语义不变。
 3. **索引目录变 `<vectors_dir>/v1/`**——老用户原扁平索引成了「上个版本」，由 backfill 重建。
 
 ## 设计史（为什么是现在这样）

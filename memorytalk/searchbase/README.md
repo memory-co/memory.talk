@@ -99,8 +99,12 @@ await backend.close()                # 关停后台协程
 **实例 = 版本（蓝绿升级）**
 一个实例 = 一个命名目录 + 一套固定 schema。**改 schema = 开一个新名字的新实例**，由业务把数据回填进去；老实例继续服务，切过去再删。searchbase 不含任何 rebuild / 迁移 / backfill 逻辑。
 
-**fd / 压缩 / EMFILE —— 全在内部**
-启动时后台跑一次 compaction（碎片合并），搜索遇到 EMFILE 自动「压缩 + 重连 + 重试一次」。这些细节不对外暴露，`health().detail` 只给可观测数字。
+**碎片合并 / fd / EMFILE —— 全在内部、自动**
+实例自带一个后台维护协程（`close()` 时停）：
+- **启动压一次** + 之后**每 `compact_interval_seconds`（默认 30 分钟）压一次** —— 把 append-only 攒下的碎片合并掉，避免向量搜索（要扫所有 fragment）撞 fd 上限（EMFILE）。
+- 搜索万一仍撞 EMFILE：自动「压缩 + 重连 + 重试一次」兜底。
+
+这些细节不对外暴露；`health().detail` 给可观测数字（`compactions` / `last_compact_at_iso` / `emfile_recoveries` / …）。
 
 ---
 

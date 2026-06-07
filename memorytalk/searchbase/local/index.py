@@ -88,9 +88,10 @@ class CollectionIndex:
         self.emfile_recoveries: int = 0
         self.last_emfile_at_iso: str | None = None
         self.last_recovery_error: str | None = None
-        # Startup-compaction observability (surfaced via health()).
+        # Compaction observability (surfaced via health()).
         self.last_compact_at_iso: str | None = None
         self.last_compact_error: str | None = None
+        self.compactions: int = 0
 
     @classmethod
     async def create(
@@ -221,10 +222,10 @@ class CollectionIndex:
         return {"collection": collection, "stats": str(stats)}
 
     async def compact_all(self) -> None:
-        """Best-effort compaction of every known collection. Run as a
-        one-shot background task at instance startup so a restart always
-        grinds down the append-only fragment pile (the "restart always
-        compacts" guarantee that keeps vector search off the fd ceiling)."""
+        """Best-effort compaction of every known collection — merge the
+        append-only fragment pile back down so vector search (which
+        flat-scans fragments) stays off the fd ceiling. Driven by the
+        backend's maintenance loop (once at startup, then on an interval)."""
         try:
             self._collections.update(await self._list_tables())
         except Exception:
@@ -236,15 +237,14 @@ class CollectionIndex:
         for collection in list(self._collections):
             try:
                 result = await self.optimize(collection)
-                _log.info("startup compaction done %s", result)
+                _log.info("compaction done %s", result)
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                _log.exception(
-                    "startup compaction failed collection=%s", collection,
-                )
+                _log.exception("compaction failed collection=%s", collection)
                 compact_error = f"compact {collection}: {e}"
         self.last_compact_error = compact_error
+        self.compactions += 1
 
     # ─── search ───
 

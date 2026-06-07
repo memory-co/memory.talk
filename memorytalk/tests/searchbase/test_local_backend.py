@@ -6,6 +6,8 @@ collections of Docs.
 """
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from memorytalk.config import Config
@@ -86,6 +88,25 @@ async def test_auto_split_collection_hides_chunking(data_root):
 
         await b.delete("notes", ["n1"])
         assert await b.count("notes") == 0  # all chunks gone
+    finally:
+        await b.close()
+
+
+async def test_maintenance_loop_compacts_periodically(data_root):
+    # The maintenance coroutine compacts at startup AND on an interval —
+    # not just once — so a long-running server keeps fragments in check
+    # without waiting for a restart or an EMFILE.
+    config = Config(data_root)
+    config.ensure_dirs()
+    b = await LocalSearchBackend.create(
+        name="v1", data_dir=config.vectors_dir,
+        dim=config.settings.embedding.dim, embedder=get_embedder(config),
+        collections={"cards": {"fields": {}}},
+        compact_interval_seconds=0.05,
+    )
+    try:
+        await asyncio.sleep(0.3)
+        assert b._index.compactions >= 2  # startup + >=1 periodic tick
     finally:
         await b.close()
 
