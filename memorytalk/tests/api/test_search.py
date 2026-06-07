@@ -30,10 +30,12 @@ def _round(rid: str, role: str, text: str) -> dict:
 async def _seed_card(app, *, card_id: str, insight: str,
                      up: int = 0, down: int = 0, neutral: int = 0,
                      reads: int = 0) -> None:
-    """Insert a card + stats directly into the store, then push to LanceDB."""
+    """Insert a card + stats directly into the store, then index it."""
+    from memorytalk.searchbase import Doc
+    from memorytalk.service.searchbase_schema import CARDS, cap_text
+
     db = app.state.db
-    vectors = app.state.vectors
-    embedder = app.state.embedder
+    searchbase = app.state.searchbase
     now = _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     await db.cards.insert(card_id, insight, [], now)
     await db.cards.init_stats(card_id, now)
@@ -45,9 +47,10 @@ async def _seed_card(app, *, card_id: str, insight: str,
         await db.cards.bump_review(card_id, 0, now)
     for _ in range(reads):
         await db.cards.bump_read(card_id, now)
-    if vectors and embedder:
-        vec = await embedder.embed_one(insight)
-        await vectors.add_card(card_id, insight, vec)
+    if searchbase is not None:
+        await searchbase.upsert(CARDS, [
+            Doc(id=card_id, text=cap_text(insight), fields={}),
+        ])
 
 
 # ────────── core paths ──────────

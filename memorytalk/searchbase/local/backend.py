@@ -8,6 +8,8 @@ string and every collection flows through the same code path.
 """
 from __future__ import annotations
 
+import asyncio
+
 from memorytalk.searchbase import Doc, Hit, IndexHealth, Query, SearchError
 # NOTE: the embedder still lives under provider/ for now; it moves into
 # searchbase/local/ in the file-relocation step.
@@ -43,6 +45,7 @@ class LocalSearchBackend:
         self._embedder = get_embedder(config)
         self._index: CollectionIndex | None = index
         self._max_text_length = max_text_length
+        self._maint_task: asyncio.Task | None = None
 
     @classmethod
     async def create(
@@ -52,18 +55,29 @@ class LocalSearchBackend:
         """Open a named instance with a fixed declared schema. ``name``
         maps to a directory under the data root, so different schema
         versions live in different directories. The returned instance is
-        already running — there is no separate ``start``."""
+        already running — fd/compaction maintenance starts here."""
         index = await CollectionIndex.create(
             config.vectors_dir / name,
             dim=config.settings.embedding.dim,
             collections=collections,
         )
-        return cls(config, index, max_text_length)
+        self = cls(config, index, max_text_length)
+        # Own the fd/fragment maintenance: a one-shot startup compaction
+        # in the background (never blocks boot). EMFILE recovery is
+        # handled inline inside CollectionIndex.search.
+        self._maint_task = asyncio.create_task(index.compact_all())
+        return self
 
     # ─── lifecycle ───
 
     async def close(self) -> None:
-        # TODO(rounds): drain the buffer + stop the coroutine here.
+        if self._maint_task is not None:
+            self._maint_task.cancel()
+            try:
+                await self._maint_task
+            except (asyncio.CancelledError, Exception):
+                pass
+            self._maint_task = None
         self._index = None
 
     @property
@@ -77,6 +91,8 @@ class LocalSearchBackend:
                 "emfile_recoveries": self._index.emfile_recoveries,
                 "last_emfile_at_iso": self._index.last_emfile_at_iso,
                 "last_recovery_error": self._index.last_recovery_error,
+                "last_compact_at_iso": self._index.last_compact_at_iso,
+                "last_compact_error": self._index.last_compact_error,
             }
         return IndexHealth(ready=self.ready, detail=detail)
 
@@ -121,7 +137,10 @@ class LocalSearchBackend:
         if self._index is None:
             return []
         await self._index.ensure_fts_index(collection)
-        qvec = await self._embedder.embed_one(query.text) if query.text else None
+        qvec = (
+            await self._embedder.embed_one(query.text)
+            if query.text and query.text.strip() else None
+        )
         rows = await self._index.search(
             collection, query.text, qvec, query.top_k,
             _where_from_match(query.filters),

@@ -24,9 +24,7 @@ from pathlib import Path
 
 import pyarrow as pa
 
-# Pure helpers reused from the legacy store; they move into this file
-# when provider/lancedb.py is finally deleted.
-from memorytalk.provider.lancedb import (
+from memorytalk.searchbase.local._lance_helpers import (
     _in_clause, _is_emfile, _run_hybrid, _segment,
 )
 
@@ -63,6 +61,9 @@ class CollectionIndex:
         self.emfile_recoveries: int = 0
         self.last_emfile_at_iso: str | None = None
         self.last_recovery_error: str | None = None
+        # Startup-compaction observability (surfaced via health()).
+        self.last_compact_at_iso: str | None = None
+        self.last_compact_error: str | None = None
 
     @classmethod
     async def create(
@@ -177,6 +178,32 @@ class CollectionIndex:
         table = await self.db.open_table(collection)
         stats = await table.optimize(cleanup_older_than=_dt.timedelta(0))
         return {"collection": collection, "stats": str(stats)}
+
+    async def compact_all(self) -> None:
+        """Best-effort compaction of every known collection. Run as a
+        one-shot background task at instance startup so a restart always
+        grinds down the append-only fragment pile (the "restart always
+        compacts" guarantee that keeps vector search off the fd ceiling)."""
+        try:
+            self._collections.update(await self._list_tables())
+        except Exception:
+            pass
+        self.last_compact_at_iso = _dt.datetime.now(_dt.UTC).isoformat(
+            timespec="seconds",
+        ).replace("+00:00", "Z")
+        compact_error: str | None = None
+        for collection in list(self._collections):
+            try:
+                result = await self.optimize(collection)
+                _log.info("startup compaction done %s", result)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                _log.exception(
+                    "startup compaction failed collection=%s", collection,
+                )
+                compact_error = f"compact {collection}: {e}"
+        self.last_compact_error = compact_error
 
     # ─── search ───
 

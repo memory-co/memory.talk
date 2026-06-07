@@ -28,34 +28,21 @@ async def test_status_includes_lance_health_block(client):
         assert key in lance, f"missing {key} in lance health: {lance}"
 
 
-async def test_lance_health_fields_reflect_buffer_state(app, client):
-    """After a flush goes through the buffer, the status fields move."""
-    # Drive a write through the index_buffer.
-    buf = app.state.index_buffer
-    buf.flush_count = 0  # baseline so the test can assert a delta
-    await buf.add_rounds("sess-x", [{
-        "session_id": "sess-x", "idx": 1, "role": "human",
-        "text": "hi", "vector": [0.0] * 384,
-    }])  # threshold=1 → auto-flush in tests
-    body = (await client.get("/v3/sync/status")).json()
-    lance = body["index"]["lance"]
-    assert lance["flush_count_since_boot"] >= 1
-    assert lance["last_flush_at"] is not None
-    assert lance["pending_vector_rows"] == 0  # drained
-
-
 async def test_lance_health_emfile_counter_reflects_recoveries(app, client, monkeypatch):
     """Drive a fake EMFILE → recovery → assert the counter advanced
     in the sync/status payload."""
-    vectors = app.state.vectors
-    await vectors.add_rounds([{
-        "session_id": "sess-x", "idx": 1, "role": "human",
-        "text": "hi", "vector": [0.0] * 384,
-    }])
+    from memorytalk.searchbase import Doc, Query
+    from memorytalk.searchbase.local import index as index_mod
+    from memorytalk.service.searchbase_schema import ROUNDS
 
-    from memorytalk.provider import lancedb as lance_mod
+    searchbase = app.state.searchbase
+    await searchbase.upsert(ROUNDS, [
+        Doc(id="sess-x:1", text="hi",
+            fields={"session_id": "sess-x", "idx": 1, "role": "human"}),
+    ])
+
     state = {"fails": 1}
-    orig = lance_mod._run_hybrid
+    orig = index_mod._run_hybrid
 
     async def flaky(table, *a, **kw):
         if state["fails"] > 0:
@@ -65,9 +52,9 @@ async def test_lance_health_emfile_counter_reflects_recoveries(app, client, monk
             )
         return await orig(table, *a, **kw)
 
-    monkeypatch.setattr(lance_mod, "_run_hybrid", flaky)
+    monkeypatch.setattr(index_mod, "_run_hybrid", flaky)
     before = (await client.get("/v3/sync/status")).json()["index"]["lance"]
-    await vectors.search_rounds("", [0.0] * 384, top_k=5)
+    await searchbase.search(ROUNDS, Query(text="", top_k=5))
     after = (await client.get("/v3/sync/status")).json()["index"]["lance"]
     assert after["emfile_recoveries_since_boot"] == before["emfile_recoveries_since_boot"] + 1
     assert after["last_emfile_at"] is not None

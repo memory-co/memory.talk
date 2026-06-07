@@ -27,8 +27,8 @@ import math
 from pathlib import Path
 
 from memorytalk.config import Config
-from memorytalk.provider.embedding import Embedder
-from memorytalk.provider.lancedb import LanceStore
+from memorytalk.searchbase import Query, SearchBackend
+from memorytalk.service.searchbase_schema import CARDS, ROUNDS
 from memorytalk.repository import SQLiteStore
 from memorytalk.schemas import (
     CardResult, CardStats, SearchResponse, SessionHit, SessionResult,
@@ -100,13 +100,11 @@ class SearchService:
         self,
         config: Config,
         db: SQLiteStore,
-        vectors: LanceStore | None,
-        embedder: Embedder | None,
+        search: "SearchBackend | None",
     ):
         self.config = config
         self.db = db
-        self.vectors = vectors
-        self.embedder = embedder
+        self.searchbase = search
         # Compile formula once. If user gave us garbage in settings, fail
         # loudly here so the FastAPI lifespan dies — better than blowing
         # up on the first query at 3am.
@@ -143,21 +141,15 @@ class SearchService:
         card_candidates: list[dict] = []
         session_candidates: list[dict] = []
 
-        # Embedding for vector half of hybrid search. Empty query → no
-        # vector (relevance comes from a stats-only formula or pure DSL filter).
-        qvec: list[float] | None = None
-        if query and query.strip() and self.embedder is not None:
-            try:
-                qvec = await self.embedder.embed_one(query)
-            except Exception:
-                qvec = None
-
+        # searchbase embeds the query for the vector half of hybrid search
+        # internally; empty query → relevance from a stats-only formula or
+        # pure DSL filter.
         if flt.scope_includes("card"):
-            card_candidates = await self._collect_card_candidates(query, qvec, top_k)
+            card_candidates = await self._collect_card_candidates(query, top_k)
         # Recall mode is cards-only by definition — skip the session
-        # collection entirely (saves the LanceDB rounds query too).
+        # collection entirely (saves the rounds query too).
         if not recall_mode and flt.scope_includes("session"):
-            session_candidates = await self._collect_session_candidates(query, qvec, top_k)
+            session_candidates = await self._collect_session_candidates(query, top_k)
 
         # ──────── 2. DSL filter ────────
         card_candidates = [c for c in card_candidates if flt.evaluate(c, "card")]
@@ -222,32 +214,27 @@ class SearchService:
     # ──────── candidate builders ────────
 
     async def _collect_card_candidates(
-        self, query: str, qvec: list[float] | None, top_k: int,
+        self, query: str, top_k: int,
     ) -> list[dict]:
-        if self.vectors is None:
+        if self.searchbase is None:
             return []
-        # Make sure FTS index exists before the first query of the process.
-        try:
-            await self.vectors.ensure_fts_index(self.vectors.CARDS)
-        except Exception:
-            pass
-        hits = await self.vectors.search_cards(
-            query=query, vector=qvec, top_k=top_k * _CARD_OVERSAMPLE,
+        hits = await self.searchbase.search(
+            CARDS, Query(text=query, top_k=top_k * _CARD_OVERSAMPLE),
         )
         out: list[dict] = []
-        for row in hits:
-            card_id = row.get("card_id")
+        for hit in hits:
+            card_id = hit.id
             if not card_id:
                 continue
             card_row = await self.db.cards.get(card_id)
             if card_row is None:
-                continue  # LanceDB might point at a card that was rolled back
+                continue  # index might point at a card that was rolled back
             stats = await self.db.cards.get_stats(card_id)
             out.append({
                 "card_id": card_id,
                 "insight": card_row["insight"],
                 "created_at": card_row["created_at"],
-                "relevance": float(row["_score"]),
+                "relevance": float(hit.score),
                 "stats": stats,
                 # Flatten stats so DSL `where: 'review_count = 0'` works without
                 # the predicate having to know about nested dicts. ``recall_count``
@@ -272,27 +259,23 @@ class SearchService:
         return out
 
     async def _collect_session_candidates(
-        self, query: str, qvec: list[float] | None, top_k: int,
+        self, query: str, top_k: int,
     ) -> list[dict]:
-        if self.vectors is None:
+        if self.searchbase is None:
             return []
-        try:
-            await self.vectors.ensure_fts_index(self.vectors.ROUNDS)
-        except Exception:
-            pass
-        hits = await self.vectors.search_rounds(
-            query=query, vector=qvec, top_k=top_k * _ROUNDS_OVERSAMPLE,
+        hits = await self.searchbase.search(
+            ROUNDS, Query(text=query, top_k=top_k * _ROUNDS_OVERSAMPLE),
         )
         # Group by session_id.
         by_session: dict[str, list[dict]] = {}
-        for row in hits:
-            sid = row.get("session_id")
+        for hit in hits:
+            sid = hit.fields.get("session_id")
             if not sid:
                 continue
             by_session.setdefault(sid, []).append({
-                "index": int(row["idx"]),
-                "role": row.get("role") or "",
-                "score": float(row["_score"]),
+                "index": int(hit.fields["idx"]),
+                "role": hit.fields.get("role") or "",
+                "score": float(hit.score),
             })
 
         out: list[dict] = []
