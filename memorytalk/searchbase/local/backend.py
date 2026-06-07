@@ -44,11 +44,15 @@ class LocalSearchBackend:
         self._index: CollectionIndex | None = index
 
     @classmethod
-    async def create(cls, config) -> "LocalSearchBackend":
-        """Open the store + start the maintenance coroutine. The returned
-        instance is already running — there is no separate ``start``."""
+    async def create(cls, config, *, name: str, collections: dict[str, dict]) -> "LocalSearchBackend":
+        """Open a named instance with a fixed declared schema. ``name``
+        maps to a directory under the data root, so different schema
+        versions live in different directories. The returned instance is
+        already running — there is no separate ``start``."""
         index = await CollectionIndex.create(
-            config.vectors_dir, dim=config.settings.embedding.dim,
+            config.vectors_dir / name,
+            dim=config.settings.embedding.dim,
+            collections=collections,
         )
         self = cls(config, index)
         # TODO(rounds): start the background flush/compaction coroutine

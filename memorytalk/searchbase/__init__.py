@@ -62,13 +62,13 @@ class EmbedderInvalid(SearchError):
 
 @runtime_checkable
 class SearchBackend(Protocol):
-    """Generic search capability.
+    """Generic search capability — a named, fixed-schema index.
 
-    A backend owns a background coroutine (started at construction) that
-    handles ALL of batching, flushing, compaction and fd/EMFILE
-    management internally. None of that is on this surface — callers see
-    only upsert / search / delete and never think about durability
-    mechanics. ``close()`` drains and shuts the coroutine down."""
+    An instance is opened with a fixed declared schema (see
+    ``make_search_backend``); the schema is never migrated in place.
+    Callers see only upsert / search / count / delete and never think
+    about how vectors are stored, batched or flushed. ``close()`` shuts
+    the instance down."""
 
     @property
     def ready(self) -> bool: ...
@@ -91,12 +91,18 @@ class SearchBackend(Protocol):
         ...
 
 
-async def make_search_backend(config) -> SearchBackend:
+async def make_search_backend(
+    config, *, name: str, collections: dict[str, dict],
+) -> SearchBackend:
     """Composition seam — the ONLY place that picks an implementation.
 
-    Async because constructing a backend opens its store and spins up
-    its maintenance coroutine; the returned instance is already running.
-    Today there's just ``local``; a future ``server`` backend gets
-    selected here off config without any business code changing."""
+    ``name`` identifies the instance (local: a directory under the data
+    root); ``collections`` is the fixed schema — ``{collection: {field:
+    type_tag}}`` with type tags ``str|int|float|bool``. searchbase treats
+    these as opaque data; what the fields *mean* is the caller's concern.
+    A future ``server`` backend is selected here off config without any
+    business code changing."""
     from memorytalk.searchbase.local.backend import LocalSearchBackend
-    return await LocalSearchBackend.create(config)
+    return await LocalSearchBackend.create(
+        config, name=name, collections=collections,
+    )

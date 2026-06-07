@@ -16,7 +16,7 @@ from memorytalk.searchbase import Doc, Query, make_search_backend
 async def backend(data_root):
     config = Config(data_root)
     config.ensure_dirs()
-    b = await make_search_backend(config)
+    b = await make_search_backend(config, name="v1", collections={"cards": {}})
     try:
         yield b
     finally:
@@ -46,6 +46,26 @@ async def test_health_exposes_emfile_counters(backend):
     health = await backend.health()
 
     assert "emfile_recoveries" in health.detail
+
+
+async def test_declared_schema_keeps_field_numeric_despite_null_first_row(data_root):
+    # The schema is declared up front, not inferred from the first row.
+    # A null score in the first doc must NOT poison the column to string
+    # (which would break numeric filtering) — it stays int because the
+    # collection declared it int.
+    config = Config(data_root)
+    config.ensure_dirs()
+    b = await make_search_backend(
+        config, name="v1", collections={"items": {"score": "int"}},
+    )
+    try:
+        await b.upsert("items", [
+            Doc(id="a", text="x", fields={"score": None}),
+            Doc(id="b", text="y", fields={"score": 5}),
+        ])
+        assert await b.count("items", {"score": 5}) == 1
+    finally:
+        await b.close()
 
 
 async def test_emfile_recovery_repopulates_collections(backend):

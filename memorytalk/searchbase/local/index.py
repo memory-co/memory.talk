@@ -2,8 +2,14 @@
 
 Domain-agnostic: a "collection" is just a named LanceDB table; a row is
 ``{id, text, vector, **fields}``. No card / round / session vocabulary
-lives here — the schema for a collection is inferred from the first
-row's fields and fixed thereafter.
+lives here.
+
+An index is a NAMED instance with a FIXED schema, declared at
+construction (``collections``: collection name → {field name → type
+tag}). The schema is never mutated in place — changing it means standing
+up a new instance (a new name → a new directory for the local backend)
+and letting the business re-fill it. So there is deliberately no
+inference, no migration, no rebuild logic here.
 
 Reuses the proven LanceDB internals (hybrid RRF search, FTS index
 memoization, EMFILE recovery, version-pruning compaction) generalized to
@@ -29,28 +35,29 @@ _log = logging.getLogger("memorytalk.searchbase.index")
 
 _RESERVED = ("id", "text", "vector")
 
-
-def _arrow_type(value) -> pa.DataType:
-    """Infer a LanceDB column type from a sample field value."""
-    if isinstance(value, bool):
-        return pa.bool_()
-    if isinstance(value, int):
-        return pa.int64()
-    if isinstance(value, float):
-        return pa.float64()
-    return pa.string()
+# Declared field type tags → Arrow types. Unknown tag → KeyError, which
+# is the right fail-fast: a typo in a collection schema is a code bug.
+_TYPE_TAGS = {
+    "str": pa.string(),
+    "int": pa.int64(),
+    "float": pa.float64(),
+    "bool": pa.bool_(),
+}
 
 
 class CollectionIndex:
-    def __init__(self, db, data_dir: Path, dim: int):
+    def __init__(self, db, data_dir: Path, dim: int, declared: dict[str, dict]):
         self.db = db
         self.data_dir = data_dir
         self.dim = dim
+        # collection name → {field name → type tag}, fixed for this instance.
+        self._declared = dict(declared)
         # Per-collection "FTS index confirmed present" memo — avoids a
         # list_indices() round trip on every search once verified.
         self._fts_index_known: set[str] = set()
-        # Collections we've touched — recovery/compaction iterate these.
-        self._collections: set[str] = set()
+        # Collections this instance manages — recovery/compaction iterate
+        # these. Seeded from the declared set at construction.
+        self._collections: set[str] = set(self._declared)
         # EMFILE recovery state.
         self._recovery_lock = asyncio.Lock()
         self.emfile_recoveries: int = 0
@@ -58,14 +65,20 @@ class CollectionIndex:
         self.last_recovery_error: str | None = None
 
     @classmethod
-    async def create(cls, data_dir: Path, dim: int = 384) -> "CollectionIndex":
+    async def create(
+        cls, data_dir: Path, dim: int, collections: dict[str, dict],
+    ) -> "CollectionIndex":
         import lancedb
+        data_dir = Path(data_dir)
+        data_dir.mkdir(parents=True, exist_ok=True)
         db = await lancedb.connect_async(str(data_dir))
-        self = cls(db, Path(data_dir), dim)
-        try:
-            self._collections.update(await self._list_tables())
-        except Exception:
-            pass
+        self = cls(db, data_dir, dim, collections)
+        # Eagerly create every declared collection's table so the schema
+        # exists before the first write and search-before-write works.
+        existing = set(await self._list_tables())
+        for name, fields in collections.items():
+            if name not in existing:
+                await db.create_table(name, schema=self._schema_for(fields))
         return self
 
     async def _list_tables(self) -> list[str]:
@@ -75,33 +88,24 @@ class CollectionIndex:
     async def _exists(self, name: str) -> bool:
         return name in await self._list_tables()
 
-    def _schema_for(self, sample: dict) -> pa.Schema:
-        fields = [
+    def _schema_for(self, fields: dict[str, str]) -> pa.Schema:
+        cols = [
             pa.field("id", pa.string()),
             pa.field("text", pa.string()),
             pa.field("vector", pa.list_(pa.float32(), self.dim)),
         ]
-        for key, value in sample.items():
-            if key in _RESERVED:
+        for name, tag in fields.items():
+            if name in _RESERVED:
                 continue
-            fields.append(pa.field(key, _arrow_type(value)))
-        return pa.schema(fields)
-
-    async def _ensure_table(self, collection: str, sample: dict):
-        if await self._exists(collection):
-            self._collections.add(collection)
-            return await self.db.open_table(collection)
-        table = await self.db.create_table(
-            collection, schema=self._schema_for(sample),
-        )
-        self._collections.add(collection)
-        return table
+            cols.append(pa.field(name, _TYPE_TAGS[tag]))
+        return pa.schema(cols)
 
     # ─── write ───
 
     async def upsert(self, collection: str, rows: list[dict]) -> None:
         """Insert/replace by ``id``. ``rows`` are ``{id, text, vector,
-        **fields}``; ``text`` is segmented here (caller passes raw)."""
+        **fields}``; ``text`` is segmented here (caller passes raw). The
+        table already exists (declared at construction)."""
         if not rows:
             return
         prepared = []
@@ -109,7 +113,7 @@ class CollectionIndex:
             r2 = dict(r)
             r2["text"] = _segment(r.get("text") or "")
             prepared.append(r2)
-        table = await self._ensure_table(collection, prepared[0])
+        table = await self.db.open_table(collection)
         ids = [r["id"] for r in prepared if r.get("id") is not None]
         expr = _in_clause(ids, "id")
         if expr:
@@ -209,10 +213,8 @@ class CollectionIndex:
             if self.emfile_recoveries > gen_before:
                 return
             # Re-list tables so recovery compacts the real fragment pile
-            # even if the known-set went stale/empty (read-only boot, or
-            # a construction-time list_tables() that failed). Without
-            # this the optimize loop below could run over nothing — and
-            # compaction is the step that actually relieves EMFILE.
+            # even if the known-set went stale. Compaction is the step
+            # that actually relieves EMFILE.
             try:
                 self._collections.update(await self._list_tables())
             except Exception:
