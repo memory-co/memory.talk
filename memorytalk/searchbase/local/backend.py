@@ -18,7 +18,19 @@ from memorytalk.searchbase.local.index import CollectionIndex
 
 
 # Lance score/aux columns that are not stored Doc fields.
-_NON_FIELD = ("id", "text", "vector", "_score", "_distance", "_relevance_score")
+_NON_FIELD = (
+    "id", "text", "vector", "_score", "_distance", "_relevance_score",
+    "_base_id", "_chunk",
+)
+
+
+def _split_text(text: str, max_len: int) -> list[str]:
+    """Fixed-size chunks of ``text`` (at most ``max_len`` chars each).
+    Always returns at least one chunk."""
+    text = text or ""
+    if len(text) <= max_len:
+        return [text]
+    return [text[i:i + max_len] for i in range(0, len(text), max_len)]
 
 
 def _sql_literal(value) -> str:
@@ -40,10 +52,12 @@ def _where_from_match(match: dict | None) -> str | None:
 
 
 class LocalSearchBackend:
-    def __init__(self, index: CollectionIndex, embedder, max_text_length: int):
+    def __init__(self, index: CollectionIndex, embedder, max_text_length: int,
+                 auto_split: set[str]):
         self._embedder = embedder
         self._index: CollectionIndex | None = index
         self._max_text_length = max_text_length
+        self._auto_split = auto_split
         self._maint_task: asyncio.Task | None = None
 
     @classmethod
@@ -58,7 +72,10 @@ class LocalSearchBackend:
         index = await CollectionIndex.create(
             Path(data_dir) / name, dim=dim, collections=collections,
         )
-        self = cls(index, embedder, max_text_length)
+        auto_split = {
+            n for n, spec in collections.items() if spec.get("auto_split")
+        }
+        self = cls(index, embedder, max_text_length, auto_split)
         # Own the fd/fragment maintenance: a one-shot startup compaction
         # in the background (never blocks boot). EMFILE recovery is
         # handled inline inside CollectionIndex.search.
@@ -98,20 +115,42 @@ class LocalSearchBackend:
     async def upsert(self, collection: str, docs: list[Doc]) -> None:
         if self._index is None or not docs:
             return
+        if collection in self._auto_split:
+            rows = await self._split_rows(docs)
+        else:
+            rows = await self._plain_rows(docs)
+        await self._index.upsert(collection, rows)
+
+    async def _plain_rows(self, docs: list[Doc]) -> list[dict]:
+        """One row per doc; over-length is rejected (no silent loss)."""
         for d in docs:
             if len(d.text) > self._max_text_length:
                 raise SearchError(
                     f"doc {d.id!r} text length {len(d.text)} exceeds "
                     f"max_text_length {self._max_text_length}"
                 )
-        # Batch-embed the whole list in one call (the embedder chunks
-        # internally for remote API caps) rather than N round trips.
         vecs = await self._embedder.embed([d.text for d in docs])
-        rows = [
+        return [
             {"id": d.id, "text": d.text, "vector": v, **(d.fields or {})}
             for d, v in zip(docs, vecs)
         ]
-        await self._index.upsert(collection, rows)
+
+    async def _split_rows(self, docs: list[Doc]) -> list[dict]:
+        """Split each over-length doc into ``_chunk`` rows that share a
+        ``_base_id`` (= the logical doc id). The chunking is invisible on
+        read — the index collapses it back. ``id`` = ``f"{base}#{i}"``."""
+        plan: list[tuple[Doc, int, str]] = []
+        for d in docs:
+            for i, chunk in enumerate(_split_text(d.text, self._max_text_length)):
+                plan.append((d, i, chunk))
+        vecs = await self._embedder.embed([chunk for _, _, chunk in plan])
+        return [
+            {
+                "id": f"{d.id}#{i}", "_base_id": d.id, "_chunk": i,
+                "text": chunk, "vector": v, **(d.fields or {}),
+            }
+            for (d, i, chunk), v in zip(plan, vecs)
+        ]
 
     async def delete(self, collection: str, ids: list[str]) -> None:
         if self._index is None:

@@ -29,9 +29,17 @@ def cap_text(text: str | None) -> str:
     """Cap text to MAX_TEXT_LENGTH before handing it to searchbase."""
     return (text or "")[:MAX_TEXT_LENGTH]
 
-SCHEMAS: dict[str, dict[str, str]] = {
-    CARDS: {},
-    ROUNDS: {"session_id": "str", "idx": "int", "role": "str"},
+# Each collection: ``{"fields": {field: type_tag}, "auto_split": bool}``.
+# Rounds enable auto_split — a single long conversation turn is chunked
+# across multiple rows by searchbase (invisible on read) instead of being
+# rejected. Cards don't: insights are short, and a rejected card just
+# stays un-indexed (no backfill loop), so reject-and-skip is fine.
+SCHEMAS: dict[str, dict] = {
+    CARDS: {"fields": {}},
+    ROUNDS: {
+        "fields": {"session_id": "str", "idx": "int", "role": "str"},
+        "auto_split": True,
+    },
 }
 
 INSTANCE_NAME = "v1"

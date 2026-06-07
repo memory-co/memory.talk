@@ -26,7 +26,7 @@ async def _make_backend(config, *, collections, max_text_length=100_000):
 async def backend(data_root):
     config = Config(data_root)
     config.ensure_dirs()
-    b = await _make_backend(config, collections={"cards": {}})
+    b = await _make_backend(config, collections={"cards": {"fields": {}}})
     try:
         yield b
     finally:
@@ -55,7 +55,7 @@ async def test_upsert_rejects_text_over_max_length(data_root):
     # rejected (no silent truncation). The business caps text upstream.
     config = Config(data_root)
     config.ensure_dirs()
-    b = await _make_backend(config, collections={"cards": {}}, max_text_length=10)
+    b = await _make_backend(config, collections={"cards": {"fields": {}}}, max_text_length=10)
     try:
         with pytest.raises(SearchError):
             await b.upsert("cards", [Doc(id="c1", text="x" * 11)])
@@ -63,7 +63,6 @@ async def test_upsert_rejects_text_over_max_length(data_root):
         await b.close()
 
 
-@pytest.mark.skip(reason="auto_split not implemented yet — RED for the next step")
 async def test_auto_split_collection_hides_chunking(data_root):
     # A collection declared with auto_split splits over-length text into
     # multiple internal rows, but the chunking is invisible: count is by
@@ -106,7 +105,7 @@ async def test_declared_schema_keeps_field_numeric_despite_null_first_row(data_r
     # collection declared it int.
     config = Config(data_root)
     config.ensure_dirs()
-    b = await _make_backend(config, collections={"items": {"score": "int"}})
+    b = await _make_backend(config, collections={"items": {"fields": {"score": "int"}}})
     try:
         await b.upsert("items", [
             Doc(id="a", text="x", fields={"score": None}),

@@ -31,7 +31,7 @@ from memorytalk.searchbase.local._lance_helpers import (
 
 _log = logging.getLogger("memorytalk.searchbase.index")
 
-_RESERVED = ("id", "text", "vector")
+_RESERVED = ("id", "text", "vector", "_base_id", "_chunk")
 
 # Declared field type tags → Arrow types. Unknown tag → KeyError, which
 # is the right fail-fast: a typo in a collection schema is a code bug.
@@ -43,13 +43,40 @@ _TYPE_TAGS = {
 }
 
 
+def _collapse_chunks(rows: list[dict]) -> list[dict]:
+    """Collapse chunk rows of an auto_split collection back to one row
+    per logical doc: group by ``_base_id``, keep the best-scoring chunk,
+    and present its ``id`` as the logical (base) id. Chunking is thus
+    invisible to the caller."""
+    best: dict[str, dict] = {}
+    for r in rows:
+        base = r.get("_base_id") or r.get("id")
+        score = float(r.get("_score", 0.0))
+        if base not in best or score > float(best[base].get("_score", 0.0)):
+            row = dict(r)
+            row["id"] = base
+            best[base] = row
+    return sorted(
+        best.values(), key=lambda r: float(r.get("_score", 0.0)), reverse=True,
+    )
+
+
 class CollectionIndex:
     def __init__(self, db, data_dir: Path, dim: int, declared: dict[str, dict]):
         self.db = db
         self.data_dir = data_dir
         self.dim = dim
-        # collection name → {field name → type tag}, fixed for this instance.
+        # collection name → spec ``{"fields": {field: tag}, "auto_split": bool}``,
+        # fixed for this instance.
         self._declared = dict(declared)
+        # Collections that chunk over-length docs across multiple rows.
+        # Those rows carry hidden ``_base_id`` + ``_chunk`` columns; the
+        # chunking is invisible on read (search collapses, count uses
+        # chunk 0, delete keys on _base_id).
+        self._auto_split: set[str] = {
+            name for name, spec in self._declared.items()
+            if spec.get("auto_split")
+        }
         # Per-collection "FTS index confirmed present" memo — avoids a
         # list_indices() round trip on every search once verified.
         self._fts_index_known: set[str] = set()
@@ -77,9 +104,9 @@ class CollectionIndex:
         # Eagerly create every declared collection's table so the schema
         # exists before the first write and search-before-write works.
         existing = set(await self._list_tables())
-        for name, fields in collections.items():
+        for name in collections:
             if name not in existing:
-                await db.create_table(name, schema=self._schema_for(fields))
+                await db.create_table(name, schema=self._schema_for(name))
         return self
 
     async def _list_tables(self) -> list[str]:
@@ -89,13 +116,16 @@ class CollectionIndex:
     async def _exists(self, name: str) -> bool:
         return name in await self._list_tables()
 
-    def _schema_for(self, fields: dict[str, str]) -> pa.Schema:
+    def _schema_for(self, collection: str) -> pa.Schema:
         cols = [
             pa.field("id", pa.string()),
             pa.field("text", pa.string()),
             pa.field("vector", pa.list_(pa.float32(), self.dim)),
         ]
-        for name, tag in fields.items():
+        if collection in self._auto_split:
+            cols.append(pa.field("_base_id", pa.string()))
+            cols.append(pa.field("_chunk", pa.int32()))
+        for name, tag in self._declared[collection].get("fields", {}).items():
             if name in _RESERVED:
                 continue
             cols.append(pa.field(name, _TYPE_TAGS[tag]))
@@ -104,9 +134,10 @@ class CollectionIndex:
     # ─── write ───
 
     async def upsert(self, collection: str, rows: list[dict]) -> None:
-        """Insert/replace by ``id``. ``rows`` are ``{id, text, vector,
-        **fields}``; ``text`` is segmented here (caller passes raw). The
-        table already exists (declared at construction)."""
+        """Insert/replace ``rows`` (``{id, text, vector, **fields}``;
+        ``text`` segmented here). For auto_split collections the replace
+        key is ``_base_id`` (a logical doc owns all its chunk rows); for
+        plain collections it's ``id``."""
         if not rows:
             return
         prepared = []
@@ -115,8 +146,12 @@ class CollectionIndex:
             r2["text"] = _segment(r.get("text") or "")
             prepared.append(r2)
         table = await self.db.open_table(collection)
-        ids = [r["id"] for r in prepared if r.get("id") is not None]
-        expr = _in_clause(ids, "id")
+        if collection in self._auto_split:
+            keys = list({r["_base_id"] for r in prepared if r.get("_base_id") is not None})
+            expr = _in_clause(keys, "_base_id")
+        else:
+            keys = [r["id"] for r in prepared if r.get("id") is not None]
+            expr = _in_clause(keys, "id")
         if expr:
             await table.delete(expr)
         await table.add(prepared)
@@ -125,7 +160,10 @@ class CollectionIndex:
         if not ids or not await self._exists(collection):
             return
         table = await self.db.open_table(collection)
-        expr = _in_clause(ids, "id")
+        # ids are logical doc ids; for auto_split they key on _base_id so
+        # all of a doc's chunks are removed.
+        column = "_base_id" if collection in self._auto_split else "id"
+        expr = _in_clause(ids, column)
         if expr:
             await table.delete(expr)
 
@@ -138,6 +176,9 @@ class CollectionIndex:
     async def count(self, collection: str, where: str | None = None) -> int:
         if not await self._exists(collection):
             return 0
+        # Count LOGICAL docs: for auto_split, only chunk 0 (one per doc).
+        if collection in self._auto_split:
+            where = f"({where}) AND _chunk = 0" if where else "_chunk = 0"
         table = await self.db.open_table(collection)
         if where:
             return await table.count_rows(where)
@@ -211,9 +252,12 @@ class CollectionIndex:
         self, collection: str, query: str,
         vector: list[float] | None, top_k: int, where: str | None = None,
     ) -> list[dict]:
-        return await self._search_with_recovery(
+        rows = await self._search_with_recovery(
             collection, query, vector, top_k, where,
         )
+        if collection in self._auto_split:
+            rows = _collapse_chunks(rows)
+        return rows
 
     async def _search_with_recovery(
         self, collection: str, query: str,
