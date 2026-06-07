@@ -92,21 +92,23 @@ class SearchBackend(Protocol):
 
 
 async def make_search_backend(
-    config, *, name: str, collections: dict[str, dict],
-    max_text_length: int = 100_000,
+    *, name: str, data_dir, dim: int, embedder,
+    collections: dict[str, dict], max_text_length: int = 100_000,
 ) -> SearchBackend:
     """Composition seam — the ONLY place that picks an implementation.
 
-    ``name`` identifies the instance (local: a directory under the data
-    root); ``collections`` is the fixed schema — ``{collection: {field:
-    type_tag}}`` with type tags ``str|int|float|bool``. searchbase treats
-    these as opaque data; what the fields *mean* is the caller's concern.
-    ``max_text_length`` caps a Doc's ``text``: over-length writes are
-    rejected (no silent truncation) — the caller caps upstream. A future
-    ``server`` backend is selected here off config without any business
-    code changing."""
+    Takes plain values, never a Config: searchbase has no idea what
+    ``settings.json`` is. ``name`` identifies the instance (local: a
+    sub-directory of ``data_dir``); ``dim`` is the vector width;
+    ``embedder`` is any object with ``embed``/``embed_one``;
+    ``collections`` is the fixed schema — ``{collection: {field:
+    type_tag}}`` with tags ``str|int|float|bool``; ``max_text_length``
+    caps a Doc's ``text`` (over-length writes are rejected, no silent
+    truncation — the caller caps/splits upstream). The settings → args
+    mapping lives in a separate module. A future ``server`` backend gets
+    selected here without any business code changing."""
     from memorytalk.searchbase.local.backend import LocalSearchBackend
     return await LocalSearchBackend.create(
-        config, name=name, collections=collections,
-        max_text_length=max_text_length,
+        name=name, data_dir=data_dir, dim=dim, embedder=embedder,
+        collections=collections, max_text_length=max_text_length,
     )

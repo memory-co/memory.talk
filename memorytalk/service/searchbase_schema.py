@@ -15,9 +15,13 @@ from __future__ import annotations
 CARDS = "cards"
 ROUNDS = "rounds"
 
-# Max text length searchbase will accept per doc. The business caps text
-# to this before writing (searchbase rejects over-length writes rather
-# than silently truncating). 2000 chars was the legacy embed cap.
+# Max text length searchbase will accept per doc (passed in at
+# construction; searchbase itself never reads settings). Over-length
+# writes are rejected. 2000 chars was the legacy embed cap.
+# TODO(setup-sense): detect the embedding endpoint's real max input
+# length during `memory.talk setup` (local: model.max_seq_length;
+# openai/dashscope: known-model table + conservative fallback) and
+# persist it in settings instead of this hardcoded constant.
 MAX_TEXT_LENGTH = 2000
 
 
@@ -37,3 +41,20 @@ def round_doc_id(session_id: str, idx: int) -> str:
     """Stable unique id for a round row (the generic backend keys on a
     single ``id`` column; rounds' natural key is the (session, idx) pair)."""
     return f"{session_id}:{idx}"
+
+
+async def build_search_backend(config):
+    """Map ``config.settings`` → a searchbase instance. This is the ONLY
+    place that reads config for searchbase; searchbase itself takes plain
+    values and is config-agnostic."""
+    from memorytalk.provider.embedding import get_embedder
+    from memorytalk.searchbase import make_search_backend
+
+    return await make_search_backend(
+        name=INSTANCE_NAME,
+        data_dir=config.vectors_dir,
+        dim=config.settings.embedding.dim,
+        embedder=get_embedder(config),
+        collections=SCHEMAS,
+        max_text_length=MAX_TEXT_LENGTH,
+    )

@@ -26,16 +26,13 @@ from memorytalk.provider.embedding import (
 from memorytalk.provider.storage import LocalStorage
 from memorytalk.repository import SQLiteStore
 from memorytalk.repository.sync_checkpoint import SyncCheckpointStore
-from memorytalk.searchbase import make_search_backend
 from memorytalk.service import (
     CardService, EventWriter, IngestService, ReadService,
     RecallService, ReviewService,
 )
 from memorytalk.service.backfill import IndexBackfill
 from memorytalk.service.search import SearchService
-from memorytalk.service.searchbase_schema import (
-    INSTANCE_NAME, MAX_TEXT_LENGTH, SCHEMAS,
-)
+from memorytalk.service.searchbase_schema import build_search_backend
 from memorytalk.service.sync import SyncWatcher
 
 
@@ -60,10 +57,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         # vector-backed endpoints then return 503 ``unavailable``.
         searchbase = None
         try:
-            searchbase = await make_search_backend(
-                config, name=INSTANCE_NAME, collections=SCHEMAS,
-                max_text_length=MAX_TEXT_LENGTH,
-            )
+            searchbase = await build_search_backend(config)
         except Exception:
             _log.exception("searchbase init failed; vector-backed endpoints will 503")
 

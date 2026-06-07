@@ -9,14 +9,24 @@ from __future__ import annotations
 import pytest
 
 from memorytalk.config import Config
+from memorytalk.provider.embedding import get_embedder
 from memorytalk.searchbase import Doc, Query, SearchError, make_search_backend
+
+
+async def _make_backend(config, *, collections, max_text_length=100_000):
+    """Build a backend from plain values (searchbase takes no Config)."""
+    return await make_search_backend(
+        name="v1", data_dir=config.vectors_dir,
+        dim=config.settings.embedding.dim, embedder=get_embedder(config),
+        collections=collections, max_text_length=max_text_length,
+    )
 
 
 @pytest.fixture
 async def backend(data_root):
     config = Config(data_root)
     config.ensure_dirs()
-    b = await make_search_backend(config, name="v1", collections={"cards": {}})
+    b = await _make_backend(config, collections={"cards": {}})
     try:
         yield b
     finally:
@@ -45,9 +55,7 @@ async def test_upsert_rejects_text_over_max_length(data_root):
     # rejected (no silent truncation). The business caps text upstream.
     config = Config(data_root)
     config.ensure_dirs()
-    b = await make_search_backend(
-        config, name="v1", collections={"cards": {}}, max_text_length=10,
-    )
+    b = await _make_backend(config, collections={"cards": {}}, max_text_length=10)
     try:
         with pytest.raises(SearchError):
             await b.upsert("cards", [Doc(id="c1", text="x" * 11)])
@@ -70,9 +78,7 @@ async def test_declared_schema_keeps_field_numeric_despite_null_first_row(data_r
     # collection declared it int.
     config = Config(data_root)
     config.ensure_dirs()
-    b = await make_search_backend(
-        config, name="v1", collections={"items": {"score": "int"}},
-    )
+    b = await _make_backend(config, collections={"items": {"score": "int"}})
     try:
         await b.upsert("items", [
             Doc(id="a", text="x", fields={"score": None}),

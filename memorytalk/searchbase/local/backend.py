@@ -9,11 +9,9 @@ string and every collection flows through the same code path.
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 from memorytalk.searchbase import Doc, Hit, IndexHealth, Query, SearchError
-# NOTE: the embedder still lives under provider/ for now; it moves into
-# searchbase/local/ in the file-relocation step.
-from memorytalk.provider.embedding import get_embedder
 from memorytalk.searchbase.local.index import CollectionIndex
 
 
@@ -40,28 +38,25 @@ def _where_from_match(match: dict | None) -> str | None:
 
 
 class LocalSearchBackend:
-    def __init__(self, config, index: CollectionIndex, max_text_length: int):
-        self._config = config
-        self._embedder = get_embedder(config)
+    def __init__(self, index: CollectionIndex, embedder, max_text_length: int):
+        self._embedder = embedder
         self._index: CollectionIndex | None = index
         self._max_text_length = max_text_length
         self._maint_task: asyncio.Task | None = None
 
     @classmethod
     async def create(
-        cls, config, *, name: str, collections: dict[str, dict],
-        max_text_length: int = 100_000,
+        cls, *, name: str, data_dir, dim: int, embedder,
+        collections: dict[str, dict], max_text_length: int = 100_000,
     ) -> "LocalSearchBackend":
         """Open a named instance with a fixed declared schema. ``name``
-        maps to a directory under the data root, so different schema
+        maps to a sub-directory of ``data_dir``, so different schema
         versions live in different directories. The returned instance is
         already running — fd/compaction maintenance starts here."""
         index = await CollectionIndex.create(
-            config.vectors_dir / name,
-            dim=config.settings.embedding.dim,
-            collections=collections,
+            Path(data_dir) / name, dim=dim, collections=collections,
         )
-        self = cls(config, index, max_text_length)
+        self = cls(index, embedder, max_text_length)
         # Own the fd/fragment maintenance: a one-shot startup compaction
         # in the background (never blocks boot). EMFILE recovery is
         # handled inline inside CollectionIndex.search.
