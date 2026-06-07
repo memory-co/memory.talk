@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from memorytalk.config import Config
-from memorytalk.searchbase import Doc, Query, make_search_backend
+from memorytalk.searchbase import Doc, Query, SearchError, make_search_backend
 
 
 @pytest.fixture
@@ -38,6 +38,21 @@ async def test_count_reflects_durable_docs(backend):
     ])
 
     assert await backend.count("cards") == 2
+
+
+async def test_upsert_rejects_text_over_max_length(data_root):
+    # searchbase declares a max text length; over-length writes are
+    # rejected (no silent truncation). The business caps text upstream.
+    config = Config(data_root)
+    config.ensure_dirs()
+    b = await make_search_backend(
+        config, name="v1", collections={"cards": {}}, max_text_length=10,
+    )
+    try:
+        with pytest.raises(SearchError):
+            await b.upsert("cards", [Doc(id="c1", text="x" * 11)])
+    finally:
+        await b.close()
 
 
 async def test_health_exposes_emfile_counters(backend):

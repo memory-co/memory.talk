@@ -8,7 +8,7 @@ string and every collection flows through the same code path.
 """
 from __future__ import annotations
 
-from memorytalk.searchbase import Doc, Hit, IndexHealth, Query
+from memorytalk.searchbase import Doc, Hit, IndexHealth, Query, SearchError
 # NOTE: the embedder still lives under provider/ for now; it moves into
 # searchbase/local/ in the file-relocation step.
 from memorytalk.provider.embedding import get_embedder
@@ -38,13 +38,17 @@ def _where_from_match(match: dict | None) -> str | None:
 
 
 class LocalSearchBackend:
-    def __init__(self, config, index: CollectionIndex):
+    def __init__(self, config, index: CollectionIndex, max_text_length: int):
         self._config = config
         self._embedder = get_embedder(config)
         self._index: CollectionIndex | None = index
+        self._max_text_length = max_text_length
 
     @classmethod
-    async def create(cls, config, *, name: str, collections: dict[str, dict]) -> "LocalSearchBackend":
+    async def create(
+        cls, config, *, name: str, collections: dict[str, dict],
+        max_text_length: int = 100_000,
+    ) -> "LocalSearchBackend":
         """Open a named instance with a fixed declared schema. ``name``
         maps to a directory under the data root, so different schema
         versions live in different directories. The returned instance is
@@ -54,10 +58,7 @@ class LocalSearchBackend:
             dim=config.settings.embedding.dim,
             collections=collections,
         )
-        self = cls(config, index)
-        # TODO(rounds): start the background flush/compaction coroutine
-        # here once the buffered rounds path lands.
-        return self
+        return cls(config, index, max_text_length)
 
     # ─── lifecycle ───
 
@@ -84,6 +85,12 @@ class LocalSearchBackend:
     async def upsert(self, collection: str, docs: list[Doc]) -> None:
         if self._index is None or not docs:
             return
+        for d in docs:
+            if len(d.text) > self._max_text_length:
+                raise SearchError(
+                    f"doc {d.id!r} text length {len(d.text)} exceeds "
+                    f"max_text_length {self._max_text_length}"
+                )
         # Batch-embed the whole list in one call (the embedder chunks
         # internally for remote API caps) rather than N round trips.
         vecs = await self._embedder.embed([d.text for d in docs])

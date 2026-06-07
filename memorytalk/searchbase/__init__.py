@@ -93,6 +93,7 @@ class SearchBackend(Protocol):
 
 async def make_search_backend(
     config, *, name: str, collections: dict[str, dict],
+    max_text_length: int = 100_000,
 ) -> SearchBackend:
     """Composition seam — the ONLY place that picks an implementation.
 
@@ -100,9 +101,12 @@ async def make_search_backend(
     root); ``collections`` is the fixed schema — ``{collection: {field:
     type_tag}}`` with type tags ``str|int|float|bool``. searchbase treats
     these as opaque data; what the fields *mean* is the caller's concern.
-    A future ``server`` backend is selected here off config without any
-    business code changing."""
+    ``max_text_length`` caps a Doc's ``text``: over-length writes are
+    rejected (no silent truncation) — the caller caps upstream. A future
+    ``server`` backend is selected here off config without any business
+    code changing."""
     from memorytalk.searchbase.local.backend import LocalSearchBackend
     return await LocalSearchBackend.create(
         config, name=name, collections=collections,
+        max_text_length=max_text_length,
     )

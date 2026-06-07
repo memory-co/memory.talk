@@ -15,6 +15,16 @@ from __future__ import annotations
 CARDS = "cards"
 ROUNDS = "rounds"
 
+# Max text length searchbase will accept per doc. The business caps text
+# to this before writing (searchbase rejects over-length writes rather
+# than silently truncating). 2000 chars was the legacy embed cap.
+MAX_TEXT_LENGTH = 2000
+
+
+def cap_text(text: str | None) -> str:
+    """Cap text to MAX_TEXT_LENGTH before handing it to searchbase."""
+    return (text or "")[:MAX_TEXT_LENGTH]
+
 SCHEMAS: dict[str, dict[str, str]] = {
     CARDS: {},
     ROUNDS: {"session_id": "str", "idx": "int", "role": "str"},
