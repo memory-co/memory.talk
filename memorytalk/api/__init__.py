@@ -107,7 +107,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         )
         app.state.backfill.start()
         # Startup compaction is now owned by searchbase (compact_all runs
-        # in the background from make_search_backend), so backfill no
+        # in the background from the backend's create()), so backfill no
         # longer triggers it here.
 
         yield

@@ -46,11 +46,12 @@ def round_doc_id(session_id: str, idx: int) -> str:
 async def build_search_backend(config):
     """Map ``config.settings`` → a searchbase instance. This is the ONLY
     place that reads config for searchbase; searchbase itself takes plain
-    values and is config-agnostic."""
+    values and is config-agnostic. Also the seam where a future
+    local/server choice would be made off config."""
     from memorytalk.provider.embedding import get_embedder
-    from memorytalk.searchbase import make_search_backend
+    from memorytalk.searchbase import LocalSearchBackend
 
-    return await make_search_backend(
+    return await LocalSearchBackend.create(
         name=INSTANCE_NAME,
         data_dir=config.vectors_dir,
         dim=config.settings.embedding.dim,

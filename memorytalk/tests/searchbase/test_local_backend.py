@@ -10,12 +10,12 @@ import pytest
 
 from memorytalk.config import Config
 from memorytalk.provider.embedding import get_embedder
-from memorytalk.searchbase import Doc, Query, SearchError, make_search_backend
+from memorytalk.searchbase import Doc, LocalSearchBackend, Query, SearchError
 
 
 async def _make_backend(config, *, collections, max_text_length=100_000):
     """Build a backend from plain values (searchbase takes no Config)."""
-    return await make_search_backend(
+    return await LocalSearchBackend.create(
         name="v1", data_dir=config.vectors_dir,
         dim=config.settings.embedding.dim, embedder=get_embedder(config),
         collections=collections, max_text_length=max_text_length,
@@ -59,6 +59,34 @@ async def test_upsert_rejects_text_over_max_length(data_root):
     try:
         with pytest.raises(SearchError):
             await b.upsert("cards", [Doc(id="c1", text="x" * 11)])
+    finally:
+        await b.close()
+
+
+@pytest.mark.skip(reason="auto_split not implemented yet — RED for the next step")
+async def test_auto_split_collection_hides_chunking(data_root):
+    # A collection declared with auto_split splits over-length text into
+    # multiple internal rows, but the chunking is invisible: count is by
+    # logical doc, search collapses to one hit, delete removes all chunks.
+    config = Config(data_root)
+    config.ensure_dirs()
+    b = await _make_backend(
+        config,
+        collections={"notes": {"fields": {}, "auto_split": True}},
+        max_text_length=10,
+    )
+    try:
+        # 25 chars at max 10 → 3 internal chunks, but ONE logical doc.
+        await b.upsert("notes", [Doc(id="n1", text="alpha beta gamma delta eps")])
+        assert await b.count("notes") == 1
+
+        hits = await b.search("notes", Query(text="gamma", top_k=5))
+        ids = [h.id for h in hits]
+        assert ids.count("n1") == 1  # collapsed, not three chunk hits
+        assert "n1#0" not in ids     # internal chunk ids never leak out
+
+        await b.delete("notes", ["n1"])
+        assert await b.count("notes") == 0  # all chunks gone
     finally:
         await b.close()
 

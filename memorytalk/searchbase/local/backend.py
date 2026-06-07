@@ -11,7 +11,9 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from memorytalk.searchbase import Doc, Hit, IndexHealth, Query, SearchError
+from memorytalk.searchbase._types import (
+    Doc, Hit, IndexHealth, Query, SearchError,
+)
 from memorytalk.searchbase.local.index import CollectionIndex
 
 
