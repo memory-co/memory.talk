@@ -16,12 +16,11 @@ from memorytalk.searchbase import Doc, Query, make_search_backend
 async def backend(data_root):
     config = Config(data_root)
     config.ensure_dirs()
-    b = make_search_backend(config)
-    await b.start()
+    b = await make_search_backend(config)
     try:
         yield b
     finally:
-        await b.stop()
+        await b.close()
 
 
 async def test_upsert_then_search_returns_doc(backend):

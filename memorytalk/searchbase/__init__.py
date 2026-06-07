@@ -12,7 +12,7 @@ collections of Docs is the service layer's job.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Awaitable, Callable, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 
 @dataclass
@@ -60,32 +60,22 @@ class EmbedderInvalid(SearchError):
     """Boot-time embedder validation failed."""
 
 
-class FlushListener(Protocol):
-    """Business hook for the deferred write path. The backend buffers
-    upserts and flushes them in batches; when a batch lands (or fails)
-    the listener is told which Docs were affected. This is how the
-    domain (e.g. "session X now has N rounds indexed") stays out of the
-    generic backend — the listener interprets ``doc.fields``."""
-
-    async def on_flushed(self, collection: str, docs: list[Doc]) -> None: ...
-    async def on_flush_failed(
-        self, collection: str, docs: list[Doc], error: Exception
-    ) -> None: ...
-
-
 @runtime_checkable
 class SearchBackend(Protocol):
-    # ─── lifecycle ───
-    async def start(self) -> None: ...
-    async def stop(self) -> None: ...
+    """Generic search capability.
+
+    A backend owns a background coroutine (started at construction) that
+    handles ALL of batching, flushing, compaction and fd/EMFILE
+    management internally. None of that is on this surface — callers see
+    only upsert / search / delete and never think about durability
+    mechanics. ``close()`` drains and shuts the coroutine down."""
+
     @property
     def ready(self) -> bool: ...
-    async def compact(self) -> None: ...
-    async def flush(self) -> int: ...
+    async def close(self) -> None: ...
     async def health(self) -> IndexHealth: ...
-    def set_flush_listener(self, listener: FlushListener | None) -> None: ...
 
-    # ─── write (embed / chunk / buffer are all internal) ───
+    # ─── write (embed / chunk / buffer / flush are all internal) ───
     async def upsert(self, collection: str, docs: list[Doc]) -> None: ...
     async def delete(self, collection: str, ids: list[str]) -> None: ...
     async def delete_where(self, collection: str, match: dict) -> None: ...
@@ -94,10 +84,12 @@ class SearchBackend(Protocol):
     async def search(self, collection: str, query: Query) -> list[Hit]: ...
 
 
-def make_search_backend(config) -> SearchBackend:
+async def make_search_backend(config) -> SearchBackend:
     """Composition seam — the ONLY place that picks an implementation.
 
-    Today there's just ``local``. A future ``server`` provider gets
+    Async because constructing a backend opens its store and spins up
+    its maintenance coroutine; the returned instance is already running.
+    Today there's just ``local``; a future ``server`` backend gets
     selected here off config without any business code changing."""
     from memorytalk.searchbase.local.backend import LocalSearchBackend
-    return LocalSearchBackend(config)
+    return await LocalSearchBackend.create(config)

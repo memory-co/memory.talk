@@ -8,9 +8,7 @@ collections of Docs.
 """
 from __future__ import annotations
 
-from memorytalk.searchbase import (
-    Doc, FlushListener, Hit, IndexHealth, Query,
-)
+from memorytalk.searchbase import Doc, Hit, IndexHealth, Query
 # NOTE: embedding + lancedb still live under provider/ for now; they get
 # physically moved into searchbase/local/ in the refactor step.
 from memorytalk.provider.embedding import get_embedder
@@ -24,40 +22,35 @@ _COLLECTION_ROUNDS = "rounds"
 
 
 class LocalSearchBackend:
-    def __init__(self, config):
+    def __init__(self, config, vectors: LanceStore):
         self._config = config
         self._embedder = get_embedder(config)
-        self._vectors: LanceStore | None = None
-        self._flush_listener: FlushListener | None = None
+        self._vectors: LanceStore | None = vectors
+
+    @classmethod
+    async def create(cls, config) -> "LocalSearchBackend":
+        """Open the store + start the maintenance coroutine. The returned
+        instance is already running — there is no separate ``start``."""
+        vectors = await LanceStore.create(
+            config.vectors_dir, dim=config.settings.embedding.dim,
+        )
+        self = cls(config, vectors)
+        # TODO(rounds): start the background flush/compaction coroutine
+        # here once the buffered rounds path lands.
+        return self
 
     # ─── lifecycle ───
 
-    async def start(self) -> None:
-        self._vectors = await LanceStore.create(
-            self._config.vectors_dir,
-            dim=self._config.settings.embedding.dim,
-        )
-
-    async def stop(self) -> None:
-        # LanceDB has no explicit close on the async store we hold; the
-        # buffer (added later) is what needs draining here.
+    async def close(self) -> None:
+        # TODO(rounds): drain the buffer + stop the coroutine here.
         self._vectors = None
 
     @property
     def ready(self) -> bool:
         return self._vectors is not None
 
-    def set_flush_listener(self, listener: FlushListener | None) -> None:
-        self._flush_listener = listener
-
-    async def compact(self) -> None:
-        raise NotImplementedError
-
-    async def flush(self) -> int:
-        raise NotImplementedError
-
     async def health(self) -> IndexHealth:
-        raise NotImplementedError
+        return IndexHealth(ready=self.ready)
 
     # ─── write ───
 
