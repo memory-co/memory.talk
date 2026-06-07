@@ -38,3 +38,25 @@ async def test_count_reflects_durable_docs(backend):
     ])
 
     assert await backend.count("cards") == 2
+
+
+async def test_health_exposes_emfile_counters(backend):
+    # The sync status panel reads these through health().detail; the
+    # backend must surface the index's recovery counters, not drop them.
+    health = await backend.health()
+
+    assert "emfile_recoveries" in health.detail
+
+
+async def test_emfile_recovery_repopulates_collections(backend):
+    # Recovery compacts every known collection. If the known-set is
+    # stale/empty (e.g. a read-only boot whose initial list_tables
+    # failed), recovery must re-list tables so it actually compacts
+    # something instead of looping over nothing.
+    await backend.upsert("cards", [Doc(id="c1", text="x")])
+    index = backend._index
+    index._collections.clear()
+
+    await index._recover_from_emfile()
+
+    assert "cards" in index._collections

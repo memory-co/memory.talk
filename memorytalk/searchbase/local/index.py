@@ -208,6 +208,15 @@ class CollectionIndex:
         async with self._recovery_lock:
             if self.emfile_recoveries > gen_before:
                 return
+            # Re-list tables so recovery compacts the real fragment pile
+            # even if the known-set went stale/empty (read-only boot, or
+            # a construction-time list_tables() that failed). Without
+            # this the optimize loop below could run over nothing — and
+            # compaction is the step that actually relieves EMFILE.
+            try:
+                self._collections.update(await self._list_tables())
+            except Exception:
+                pass  # fall through with whatever we already know
             for collection in list(self._collections):
                 try:
                     await self.optimize(collection)

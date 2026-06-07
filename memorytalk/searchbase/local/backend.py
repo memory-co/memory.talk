@@ -66,17 +66,27 @@ class LocalSearchBackend:
         return self._index is not None
 
     async def health(self) -> IndexHealth:
-        return IndexHealth(ready=self.ready)
+        detail: dict = {}
+        if self._index is not None:
+            detail = {
+                "emfile_recoveries": self._index.emfile_recoveries,
+                "last_emfile_at_iso": self._index.last_emfile_at_iso,
+                "last_recovery_error": self._index.last_recovery_error,
+            }
+        return IndexHealth(ready=self.ready, detail=detail)
 
     # ─── write ───
 
     async def upsert(self, collection: str, docs: list[Doc]) -> None:
         if self._index is None or not docs:
             return
-        rows = []
-        for d in docs:
-            vec = await self._embedder.embed_one(d.text)
-            rows.append({"id": d.id, "text": d.text, "vector": vec, **(d.fields or {})})
+        # Batch-embed the whole list in one call (the embedder chunks
+        # internally for remote API caps) rather than N round trips.
+        vecs = await self._embedder.embed([d.text for d in docs])
+        rows = [
+            {"id": d.id, "text": d.text, "vector": v, **(d.fields or {})}
+            for d, v in zip(docs, vecs)
+        ]
         await self._index.upsert(collection, rows)
 
     async def delete(self, collection: str, ids: list[str]) -> None:
