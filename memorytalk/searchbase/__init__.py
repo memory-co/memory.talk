@@ -83,6 +83,13 @@ class SearchBackend(Protocol):
     # ─── read ───
     async def search(self, collection: str, query: Query) -> list[Hit]: ...
 
+    async def count(self, collection: str, match: dict | None = None) -> int:
+        """Number of durably-indexed docs in ``collection`` whose stored
+        fields match every key in ``match``. Reads real index state (not
+        a guess) — the business uses it to learn indexing progress
+        without searchbase knowing what the fields *mean*."""
+        ...
+
 
 async def make_search_backend(config) -> SearchBackend:
     """Composition seam — the ONLY place that picks an implementation.

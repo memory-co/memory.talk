@@ -29,3 +29,12 @@ async def test_upsert_then_search_returns_doc(backend):
     hits = await backend.search("cards", Query(text="hello", top_k=5))
 
     assert any(h.id == "c1" for h in hits)
+
+
+async def test_count_reflects_durable_docs(backend):
+    await backend.upsert("cards", [
+        Doc(id="c1", text="alpha"),
+        Doc(id="c2", text="beta"),
+    ])
+
+    assert await backend.count("cards") == 2

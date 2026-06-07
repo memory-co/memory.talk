@@ -138,6 +138,19 @@ class LanceStore:
         table = await self.db.open_table(self.ROUNDS)
         await table.delete(f"session_id = '{session_id}'")
 
+    async def count_rows(self, table_name: str, where: str | None = None) -> int:
+        """Durable row count, optionally narrowed by a SQL ``where``.
+
+        Reads real table state — the searchbase layer exposes this so
+        callers can learn how many docs landed without any flush/buffer
+        visibility. Missing table → 0."""
+        if not await self._exists(table_name):
+            return 0
+        table = await self.db.open_table(table_name)
+        if where:
+            return await table.count_rows(where)
+        return await table.count_rows()
+
     # ────────── compaction ──────────
 
     async def optimize(self, table_name: str) -> dict:
