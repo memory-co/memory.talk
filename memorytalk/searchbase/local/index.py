@@ -179,9 +179,19 @@ class CollectionIndex:
             if "text" in cols:
                 self._fts_index_known.add(collection)
                 return
+        # replace=True, NOT False: when the index's files are partially
+        # missing on disk (0.8.x EMFILE-era partial writes),
+        # list_indices() silently OMITS the broken index while its name
+        # still occupies the manifest — the loop above concludes
+        # "absent", and create(replace=False) then hits "Index name
+        # 'text_idx' already exists", turning every search into a 500
+        # with no way to self-heal. replace=True rebuilds the broken
+        # index in place; for a truly-absent index it behaves the same
+        # as replace=False. (1.0.0 upgrade incident; 0.8.1 always used
+        # replace=True. See tests/searchbase/local/fts_self_heal/.)
         await table.create_index(
             "text", config=FTS(base_tokenizer="whitespace", with_position=True),
-            replace=False,
+            replace=True,
         )
         self._fts_index_known.add(collection)
 

@@ -13,6 +13,7 @@
 | [`compaction/`](compaction/) | Maintenance 生命周期 + 周期 compaction + 单跳异常不杀循环 + 错误字段清零 + health 6 字段 |
 | [`emfile_recovery/`](emfile_recovery/) | search 撞 EMFILE 后:counter 推进 + 并发复用一次 recovery + LanceDB 真的重连 + known set 自刷新 |
 | [`file_logging/`](file_logging/) | 三类操作各自落 `maintenance.log` / `query.log` / `index.log`,setup 幂等,propagate=False,互不污染 |
+| [`fts_self_heal/`](fts_self_heal/) | FTS index 盘上残缺(文件丢失但 manifest 占名)时 search 自动重建而不是 500(1.0.0 升级事故回归测试) |
 
 ## 共享 fixture
 
