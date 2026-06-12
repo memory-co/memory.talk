@@ -5,10 +5,11 @@ what each vector collection holds. The id of a card row is its card_id;
 the id of a round row is ``f"{session_id}:{idx}"`` (rounds carry
 session_id/idx/role as fields so they can be filtered and displayed).
 
-``INSTANCE_NAME`` versions the on-disk index. Bump it whenever a schema
-here changes — a new name is a new directory that the (separate) upgrade
-flow re-fills from the SQLite/jsonl source of truth; the old instance
-keeps serving until the switch.
+Schema evolution (column adds, renames) is the
+``memorytalk.migration`` framework's responsibility, NOT a build-time
+concern here. The constants declared in this module describe the
+**current** product schema; the migration framework's job is to bring
+existing on-disk schemas up to match.
 """
 from __future__ import annotations
 
@@ -42,8 +43,6 @@ SCHEMAS: dict[str, dict] = {
     },
 }
 
-INSTANCE_NAME = "v1"
-
 
 def round_doc_id(session_id: str, idx: int) -> str:
     """Stable unique id for a round row (the generic backend keys on a
@@ -60,7 +59,9 @@ async def build_search_backend(config):
     from memorytalk.searchbase import LocalSearchBackend
 
     return await LocalSearchBackend.create(
-        name=INSTANCE_NAME,
+        # name="" (default) → flat layout under data_dir/, matching
+        # 0.8.x. Schema evolution happens in-place via the migration
+        # framework (memorytalk/migration/), not by switching directories.
         data_dir=config.vectors_dir,
         dim=config.settings.embedding.dim,
         embedder=get_embedder(config),

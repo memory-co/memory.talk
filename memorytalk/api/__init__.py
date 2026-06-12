@@ -20,6 +20,7 @@ from memorytalk.config import Config, ConfigValidationError
 
 
 _log = logging.getLogger("memorytalk.api")
+from memorytalk.migration import MigrationRunner
 from memorytalk.provider.embedding import (
     EmbedderValidationError, validate_embedder,
 )
@@ -43,23 +44,66 @@ def create_app(config: Config | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         storage = LocalStorage(config.data_root)
-        db = await SQLiteStore.create(config.db_path, storage)
-        sync_checkpoints = await SyncCheckpointStore.create(config.sync_db_path)
+        # Capture "is this a pre-existing install?" BEFORE we open any
+        # file or directory — opening the SQLite conn creates
+        # memory.db, and the searchbase backend populates vectors/, so
+        # the runner's own heuristic would fire false-positive on a
+        # fresh install if asked later.
+        existing_install = (
+            config.db_path.exists()
+            or (
+                config.vectors_dir.exists()
+                and any(config.vectors_dir.iterdir())
+            )
+        )
+        # Open the raw SQLite connection (no schema yet) so the
+        # migration runner can apply DDL against it before we wrap it
+        # in a SQLiteStore.
+        conn = await SQLiteStore.open_connection(config.db_path)
 
         try:
             await validate_embedder(config)
         except EmbedderValidationError as e:
+            await conn.close()
             _log.exception("embedding startup check failed; aborting boot")
             raise SystemExit(2) from e
 
         # searchbase is optional at boot. If it can't open (missing
         # pyarrow, bad dir perms, ...) we still want read/status to work;
-        # vector-backed endpoints then return 503 ``unavailable``.
+        # vector-backed endpoints then return 503 ``unavailable``. The
+        # migration runner skips the searchbase subsystem in that case
+        # and picks it up on the next boot.
         searchbase = None
         try:
             searchbase = await build_search_backend(config)
         except Exception:
             _log.exception("searchbase init failed; vector-backed endpoints will 503")
+
+        # Bring persistent state up to v1 (creates tables on a fresh
+        # install, runs the 0.8.x → v1 deltas on an upgrade). Aborts
+        # boot on failure — partial schemas would let services start
+        # and corrupt data.
+        runner = MigrationRunner(
+            db_conn=conn,
+            admin=searchbase.admin() if searchbase is not None else None,
+            state_path=config.migrations_state_path,
+            data_root=config.data_root,
+            existing_install=existing_install,
+        )
+        try:
+            await runner.run()
+        except Exception as e:
+            _log.exception("migration failed; aborting boot")
+            await conn.close()
+            if searchbase is not None:
+                try:
+                    await searchbase.close()
+                except Exception:
+                    pass
+            raise SystemExit(3) from e
+
+        db = SQLiteStore(conn, config.db_path, storage)
+        sync_checkpoints = await SyncCheckpointStore.create(config.sync_db_path)
 
         events = EventWriter(db)
         app.state.config = config

@@ -10,15 +10,19 @@ Construction is an async classmethod on the backend class (opening the
 store + starting the maintenance coroutine need ``await``):
 
     backend = await LocalSearchBackend.create(
-        name="v1", data_dir=..., dim=384, embedder=...,
+        data_dir=..., dim=384, embedder=...,
         collections={"cards": {"fields": {}}},
     )
+
+Schema evolution (column adds, renames, etc.) is driven by the
+separate ``memorytalk.migration`` framework via ``backend.admin()``.
 
 The settings → args mapping (and the eventual local/server choice) lives
 in the business layer, not here — searchbase takes plain values and never
 reads a Config.
 """
 from memorytalk.searchbase._types import (
+    AdminBackend,
     Doc,
     EmbedderInvalid,
     Hit,
@@ -38,6 +42,7 @@ __all__ = [
     "SearchError",
     "SearchUnavailable",
     "EmbedderInvalid",
+    "AdminBackend",
     "SearchBackend",
     "LocalSearchBackend",
 ]

@@ -18,7 +18,6 @@ from memorytalk.provider.storage import Storage
 from memorytalk.repository.cards import CardStore
 from memorytalk.repository.recall import RecallStore
 from memorytalk.repository.reviews import ReviewStore
-from memorytalk.repository.schema import init_schema
 from memorytalk.repository.search_log import SearchLogStore
 from memorytalk.repository.sessions import SessionStore
 
@@ -35,16 +34,24 @@ class SQLiteStore:
         self.recall = RecallStore(conn)
 
     @classmethod
-    async def create(cls, db_path: Path, storage: Storage) -> "SQLiteStore":
+    async def open_connection(cls, db_path: Path) -> aiosqlite.Connection:
+        """Open the raw aiosqlite connection + apply the PRAGMAs we
+        always want. Schema setup is NOT done here — that's
+        ``memorytalk.migration``'s job, and it runs against this same
+        connection before the store is wrapped around it (see the
+        lifespan in ``memorytalk.api``). Split out so callers that need
+        to run migrations against the conn (the lifespan) and callers
+        that just need a wrapped store (everything else) share the same
+        open path."""
         db_path = Path(db_path)
         db_path.parent.mkdir(parents=True, exist_ok=True)
         conn = await aiosqlite.connect(str(db_path))
         conn.row_factory = aiosqlite.Row
-        # PRAGMA foreign_keys=ON gates the FOREIGN KEY clauses in our schema.
-        # SQLite default-off; we want referential integrity at the boundary.
+        # PRAGMA foreign_keys=ON gates the FOREIGN KEY clauses in our
+        # schema. SQLite default-off; we want referential integrity at
+        # the boundary.
         await conn.execute("PRAGMA foreign_keys = ON")
-        await init_schema(conn)
-        return cls(conn, db_path, storage)
+        return conn
 
     async def close(self) -> None:
         await self.conn.close()

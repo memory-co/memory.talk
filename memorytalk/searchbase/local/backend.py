@@ -18,8 +18,9 @@ import time
 from pathlib import Path
 
 from memorytalk.searchbase._types import (
-    Doc, Hit, IndexHealth, Query, SearchError,
+    AdminBackend, Doc, Hit, IndexHealth, Query, SearchError,
 )
+from memorytalk.searchbase.local._admin import LocalAdminBackend
 from memorytalk.searchbase.local._logging import setup_file_logging
 from memorytalk.searchbase.local.index import CollectionIndex
 from memorytalk.searchbase.local.maintenance import Maintenance
@@ -53,27 +54,38 @@ class LocalSearchBackend:
 
     @classmethod
     async def create(
-        cls, *, name: str, data_dir, dim: int, embedder,
+        cls, *, data_dir, dim: int, embedder,
         collections: dict[str, dict], max_text_length: int = 100_000,
         compact_interval_seconds: float = _COMPACT_INTERVAL_SECONDS,
         log_dir: Path | str | None = None,
+        name: str = "",
     ) -> "LocalSearchBackend":
-        """Open a named instance with a fixed declared schema. ``name``
-        maps to a sub-directory of ``data_dir``, so different schema
-        versions live in different directories. The returned instance is
-        already running — Maintenance is started here, so periodic
-        compaction + EMFILE recovery are live before the first caller.
+        """Open a backend with a declared schema.
 
-        ``log_dir`` (optional): if provided, searchbase writes per-category
-        log files under it (``maintenance.log`` / ``query.log`` /
-        ``index.log``) — see ``searchbase/local/_logging.py``. When
-        ``None``, the loggers exist but no file handlers are attached
-        (messages go to whatever the global logging config does, which
-        for tests is usually nowhere)."""
+        ``name`` defaults to empty — data lands directly under
+        ``data_dir/`` (matches the 0.8.x flat layout, so a 0.8.x install
+        can be migrated in place by the ``memorytalk.migration`` runner
+        without moving files around). A non-empty name maps to
+        ``data_dir/<name>/``, which used to be the instance-versioning
+        story; left in as an escape hatch but no longer the default.
+
+        The returned instance is already running — Maintenance starts
+        here, so periodic compaction + EMFILE recovery are live before
+        the first caller. Schema evolution (renames, added columns)
+        happens through the separate ``migration`` framework, not via
+        construction parameters.
+
+        ``log_dir`` (optional): if provided, searchbase writes
+        per-category log files under it (``maintenance.log`` /
+        ``query.log`` / ``index.log``) — see
+        ``searchbase/local/_logging.py``."""
         if log_dir is not None:
             setup_file_logging(log_dir)
+        # ``Path("/foo") / "" == Path("/foo")`` so empty-name is the
+        # flat layout.
+        backend_dir = Path(data_dir) / name if name else Path(data_dir)
         index = await CollectionIndex.create(
-            Path(data_dir) / name, dim=dim, collections=collections,
+            backend_dir, dim=dim, collections=collections,
         )
         auto_split = {
             n for n, spec in collections.items() if spec.get("auto_split")
@@ -115,6 +127,13 @@ class LocalSearchBackend:
             self._maintenance.health() if self._maintenance is not None else {}
         )
         return IndexHealth(ready=self.ready, detail=detail)
+
+    def admin(self) -> AdminBackend:
+        """Return the low-level admin port. Used by the migration
+        framework only; business service code never touches this."""
+        if self._index is None:
+            raise RuntimeError("backend is closed; cannot return admin")
+        return LocalAdminBackend(self._index)
 
     # ─── write ───
 

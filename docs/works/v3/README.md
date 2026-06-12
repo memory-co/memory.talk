@@ -30,5 +30,6 @@
 | Read 副作用(read_count + 事件) | [read-side-effects.md](read-side-effects.md) |
 | 向量索引补齐 + EMFILE 恢复 | [index-backfill.md](index-backfill.md) |
 | searchbase 通用搜索底座(SearchBackend 端口 + 命名实例 + auto_split 切块，已实施) | [searchbase-extraction.md](searchbase-extraction.md) |
+| migration 模块(searchbase schema in-place 演化 + 0.8.1 兼容 baseline，已设计未实施) | [migration.md](migration.md) |
 | File-canonical 模式(card/review/session/recall 共用) | [file-canonical-pattern.md](file-canonical-pattern.md) |
 | Explore cwd suppression(hook 模式开关) | [explore-cwd-suppression.md](explore-cwd-suppression.md) |

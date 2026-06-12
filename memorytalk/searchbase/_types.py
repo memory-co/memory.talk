@@ -56,13 +56,62 @@ class EmbedderInvalid(SearchError):
 
 
 @runtime_checkable
+class AdminBackend(Protocol):
+    """Low-level schema operations on a SearchBackend.
+
+    Used by the ``memorytalk.migration`` framework to evolve schemas in
+    place. Deliberately separate from the read/write hot path so the
+    public ``SearchBackend`` stays small and domain-agnostic. Business
+    service code should NEVER reach for ``admin()`` — only the migration
+    runner does.
+    """
+
+    async def list_collections(self) -> list[str]: ...
+    async def list_columns(self, collection: str) -> list[str]: ...
+
+    async def add_column(
+        self,
+        collection: str,
+        column: str,
+        type_: str,
+        *,
+        default: object | None = None,
+        sql_compute: str | None = None,
+    ) -> None:
+        """Add a column. ``sql_compute`` is a SQL expression evaluated
+        per existing row to populate the new column (e.g. for derived
+        ids). ``default`` is a literal value used when ``sql_compute``
+        is None. ``type_`` is one of ``str / int / float / bool``."""
+
+    async def rename_column(
+        self, collection: str, old: str, new: str,
+    ) -> None: ...
+
+    async def drop_column(
+        self, collection: str, column: str,
+    ) -> None: ...
+
+    async def create_collection(
+        self, name: str, schema: dict,
+    ) -> None:
+        """Create a new collection with the given schema spec
+        (same shape as ``CollectionIndex.create``'s ``collections`` arg
+        entry: ``{"fields": {...}, "auto_split": bool}``)."""
+
+    async def drop_collection(self, name: str) -> None: ...
+
+
+@runtime_checkable
 class SearchBackend(Protocol):
     """Generic search capability — a named, fixed-schema index.
 
-    An instance is opened with a fixed declared schema; the schema is
-    never migrated in place. Callers see only upsert / search / count /
-    delete and never think about how vectors are stored, batched or
-    flushed. ``close()`` shuts the instance down."""
+    An instance is opened with a declared schema; in-place schema
+    evolution happens through ``admin()`` driven by the
+    ``memorytalk.migration`` framework, NOT through the hot path here.
+    Callers see only upsert / search / count / delete and never think
+    about how vectors are stored, batched or flushed. ``close()``
+    shuts the instance down.
+    """
 
     @property
     def ready(self) -> bool: ...
@@ -80,4 +129,11 @@ class SearchBackend(Protocol):
     async def count(self, collection: str, match: dict | None = None) -> int:
         """Number of durably-indexed docs in ``collection`` whose stored
         fields match every key in ``match``."""
+        ...
+
+    # ─── admin (migration framework only) ───
+    def admin(self) -> AdminBackend:
+        """Low-level schema admin port. Used by ``memorytalk.migration``
+        to evolve schemas in place; business service code never calls
+        this."""
         ...

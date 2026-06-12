@@ -189,6 +189,15 @@ class Config:
         return self.data_root / "vectors"
 
     @property
+    def migrations_state_path(self) -> Path:
+        """Where the migration runner tracks which (version, subsystem)
+        pairs have been applied. JSON file — see
+        ``memorytalk.migration.state``. Empty / missing on a fresh
+        install or on the first 0.8.x → 0.9 boot; the runner picks the
+        mode from that + a heuristic on ``memory.db`` existence."""
+        return self.data_root / "migrations_state.json"
+
+    @property
     def sessions_dir(self) -> Path:
         return self.data_root / "sessions"
 

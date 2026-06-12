@@ -34,7 +34,6 @@ async def make_backend(
     ``cards`` collection.
     """
     kwargs = dict(
-        name="v1",
         data_dir=config.vectors_dir,
         dim=config.settings.embedding.dim,
         embedder=get_embedder(config),
