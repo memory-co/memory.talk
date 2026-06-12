@@ -1,4 +1,7 @@
-"""MigrationState — JSON file round-trip + edge cases."""
+"""state_persistence — MigrationState round-trip + edge cases.
+
+See ``README.md`` for what's in scope.
+"""
 from __future__ import annotations
 
 import json

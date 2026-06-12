@@ -1,14 +1,11 @@
-"""MigrationRunner — mode selection + ordered application.
+"""runner_modes — MigrationRunner decision tree + crash safety.
 
-These tests build a synthetic ``migrations`` package on disk under
-``tmp_path`` and point the runner at it, so the production v1
-content stays out of the picture. Two stub versions (``v1``, ``v2``),
-each with init/up files for both subsystems, all appending to a
-single shared recorder so call order is observable.
+See ``README.md`` for what's in scope and what isn't.
 """
 from __future__ import annotations
 
 import importlib
+import json
 import sys
 
 import aiosqlite
@@ -19,14 +16,8 @@ import pytest
 
 
 def _install_stub_migrations(root_dir, name: str) -> None:
-    """Create a synthetic migrations package laid out like the real
-    one: ``<name>/v{1,2}/{init,up}_{database,searchbase}.py``. The
-    package's ``__init__`` exposes a list ``recorder`` that each
-    method module appends to when its ``run()`` is awaited."""
     pkg_dir = root_dir / name
     pkg_dir.mkdir()
-    # The shared recorder lives on the root package — every method
-    # module imports it so call order is observable across files.
     (pkg_dir / "__init__.py").write_text("recorder = []\n")
     template = (
         f"from {name} import recorder\n"
@@ -47,8 +38,8 @@ def _install_stub_migrations(root_dir, name: str) -> None:
 
 @pytest.fixture
 def stub_pkg(tmp_path):
-    """Yields ``(pkg_name, recorder)``. The recorder is reset between
-    tests by virtue of the per-test tmp_path + sys.modules cleanup."""
+    """Yields ``(pkg_name, recorder)``. Each method module's ``run()``
+    appends a tag to ``recorder`` so call order is observable."""
     name = "memorytalk_test_migrations_stub"
     _install_stub_migrations(tmp_path, name)
     sys.path.insert(0, str(tmp_path))
@@ -65,7 +56,7 @@ class _FakeAdmin:
     check cares about its identity here."""
 
 
-# ─── tests ─────────────────────────────────────────────────────────
+# ─── mode selection ────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
@@ -97,7 +88,7 @@ async def test_fresh_install_runs_only_init_latest(tmp_path, stub_pkg):
 @pytest.mark.asyncio
 async def test_upgrade_from_zero_runs_all_ups(tmp_path, stub_pkg):
     """No state + pre-existing tables → upgrade_from_zero. Every
-    version's up runs, in order, for every subsystem."""
+    version's up runs in order, for every subsystem."""
     from memorytalk.migration import MigrationRunner
 
     pkg, recorder = stub_pkg
@@ -151,6 +142,9 @@ async def test_catch_up_only_runs_pending(tmp_path, stub_pkg):
     await conn.close()
 
 
+# ─── handle availability ───────────────────────────────────────────
+
+
 @pytest.mark.asyncio
 async def test_missing_admin_skips_searchbase(tmp_path, stub_pkg):
     """admin=None (searchbase backend failed to open) → runner only
@@ -169,6 +163,9 @@ async def test_missing_admin_skips_searchbase(tmp_path, stub_pkg):
     assert summary.mode == "init_latest"
     assert recorder == ["v2/init_database"]
     await conn.close()
+
+
+# ─── crash safety ──────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
@@ -200,12 +197,11 @@ async def test_state_saved_per_migration(tmp_path, stub_pkg, monkeypatch):
     with pytest.raises(RuntimeError):
         await runner.run()
 
-    import json
     body = json.loads(state_path.read_text())
     applied = {(a["version"], a["subsystem"]) for a in body["applied"]}
     assert ("v1", "database") in applied
     assert ("v2", "database") not in applied
-    # Searchbase loop never started — the runner iterates subs serially
-    # and v2/database aborted the run before searchbase began.
+    # Searchbase loop never started — runner iterates subs serially
+    # and v2/database aborted before searchbase began.
     assert ("v1", "searchbase") not in applied
     await conn.close()
