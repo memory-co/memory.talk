@@ -20,10 +20,10 @@ from memorytalk.config import Config, ConfigValidationError
 
 
 _log = logging.getLogger("memorytalk.api")
+from memorytalk.migration import MigrationRunner
 from memorytalk.provider.embedding import (
-    EmbedderValidationError, get_embedder, validate_embedder,
+    EmbedderValidationError, validate_embedder,
 )
-from memorytalk.provider.lancedb import LanceStore
 from memorytalk.provider.storage import LocalStorage
 from memorytalk.repository import SQLiteStore
 from memorytalk.repository.sync_checkpoint import SyncCheckpointStore
@@ -32,8 +32,8 @@ from memorytalk.service import (
     RecallService, ReviewService,
 )
 from memorytalk.service.backfill import IndexBackfill
-from memorytalk.service.index_buffer import IndexWriteBuffer
 from memorytalk.service.search import SearchService
+from memorytalk.service.searchbase_schema import build_search_backend
 from memorytalk.service.sync import SyncWatcher
 
 
@@ -44,50 +44,76 @@ def create_app(config: Config | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         storage = LocalStorage(config.data_root)
-        db = await SQLiteStore.create(config.db_path, storage)
-        sync_checkpoints = await SyncCheckpointStore.create(config.sync_db_path)
-
-        # LanceDB is optional at boot. If it can't open (missing pyarrow,
-        # bad dir perms, ...) we still want read/status to work.
-        vectors: LanceStore | None = None
-        try:
-            vectors = await LanceStore.create(
-                config.vectors_dir, dim=config.settings.embedding.dim,
+        # Capture "is this a pre-existing install?" BEFORE we open any
+        # file or directory — opening the SQLite conn creates
+        # memory.db, and the searchbase backend populates vectors/, so
+        # the runner's own heuristic would fire false-positive on a
+        # fresh install if asked later.
+        existing_install = (
+            config.db_path.exists()
+            or (
+                config.vectors_dir.exists()
+                and any(config.vectors_dir.iterdir())
             )
-        except Exception:
-            _log.exception("lancedb init failed; vector-backed endpoints will 503")
-
-        embedder = get_embedder(config)
+        )
+        # Open the raw SQLite connection (no schema yet) so the
+        # migration runner can apply DDL against it before we wrap it
+        # in a SQLiteStore.
+        conn = await SQLiteStore.open_connection(config.db_path)
 
         try:
             await validate_embedder(config)
         except EmbedderValidationError as e:
+            await conn.close()
             _log.exception("embedding startup check failed; aborting boot")
             raise SystemExit(2) from e
+
+        # searchbase is optional at boot. If it can't open (missing
+        # pyarrow, bad dir perms, ...) we still want read/status to work;
+        # vector-backed endpoints then return 503 ``unavailable``. The
+        # migration runner skips the searchbase subsystem in that case
+        # and picks it up on the next boot.
+        searchbase = None
+        try:
+            searchbase = await build_search_backend(config)
+        except Exception:
+            _log.exception("searchbase init failed; vector-backed endpoints will 503")
+
+        # Bring persistent state up to v1 (creates tables on a fresh
+        # install, runs the 0.8.x → v1 deltas on an upgrade). Aborts
+        # boot on failure — partial schemas would let services start
+        # and corrupt data.
+        runner = MigrationRunner(
+            db_conn=conn,
+            admin=searchbase.admin() if searchbase is not None else None,
+            state_path=config.migrations_state_path,
+            data_root=config.data_root,
+            existing_install=existing_install,
+        )
+        try:
+            await runner.run()
+        except Exception as e:
+            _log.exception("migration failed; aborting boot")
+            await conn.close()
+            if searchbase is not None:
+                try:
+                    await searchbase.close()
+                except Exception:
+                    pass
+            raise SystemExit(3) from e
+
+        db = SQLiteStore(conn, config.db_path, storage)
+        sync_checkpoints = await SyncCheckpointStore.create(config.sync_db_path)
 
         events = EventWriter(db)
         app.state.config = config
         app.state.storage = storage
         app.state.db = db
-        app.state.vectors = vectors
-        app.state.embedder = embedder
+        app.state.searchbase = searchbase
         app.state.events = events
-        # IndexWriteBuffer aggregates LanceDB inserts across sessions so
-        # one ``table.add()`` carries many embedder batches' worth of
-        # rows. Without it the ingest path creates one fragment per
-        # embedder batch (10 with DashScope) → vector search eventually
-        # EMFILEs on fd ceiling. See service/index_buffer.py and
-        # docs/issue #4 §4.3.
-        app.state.index_buffer = IndexWriteBuffer(
-            vectors=vectors, db=db,
-            flush_rows=config.settings.index.lance_flush_rows,
-            flush_interval_seconds=config.settings.index.lance_flush_interval_seconds,
-        )
-        app.state.index_buffer.start()
         app.state.read = ReadService(db=db, events=events)
         app.state.ingest = IngestService(
-            db=db, vectors=vectors, embedder=embedder, events=events,
-            index_buffer=app.state.index_buffer,
+            db=db, search=searchbase, events=events,
         )
         app.state.sync_checkpoints = sync_checkpoints
         app.state.sync = SyncWatcher(
@@ -95,14 +121,14 @@ def create_app(config: Config | None = None) -> FastAPI:
             checkpoints=sync_checkpoints,
         )
         app.state.search = SearchService(
-            config=config, db=db, vectors=vectors, embedder=embedder,
+            config=config, db=db, search=searchbase,
         )
         app.state.cards = CardService(
-            db=db, vectors=vectors, embedder=embedder, events=events,
+            db=db, search=searchbase, events=events,
         )
         app.state.reviews = ReviewService(db=db, events=events)
         app.state.recall = RecallService(
-            config=config, db=db, vectors=vectors, embedder=embedder,
+            config=config, db=db, search=searchbase,
         )
 
         # Spin up the watcher if settings says so. start() returns fast
@@ -121,16 +147,12 @@ def create_app(config: Config | None = None) -> FastAPI:
         # when no embedder / lance is available; loop is cancelled on
         # lifespan shutdown.
         app.state.backfill = IndexBackfill(
-            db=db, vectors=vectors, embedder=embedder,
-            index_buffer=app.state.index_buffer,
+            db=db, search=searchbase,
         )
         app.state.backfill.start()
-        # Guaranteed one-shot compaction on every boot — grinds down the
-        # append-only fragment pile (cause of EMFILE in vector search)
-        # so a restart always makes progress. Side path off the re-embed
-        # loop: gated only on vectors, runs in the background, never
-        # blocks startup. See IndexBackfill.trigger_startup_compaction.
-        app.state.backfill.trigger_startup_compaction()
+        # Startup compaction is now owned by searchbase (compact_all runs
+        # in the background from the backend's create()), so backfill no
+        # longer triggers it here.
 
         yield
 
@@ -144,12 +166,12 @@ def create_app(config: Config | None = None) -> FastAPI:
             await app.state.backfill.stop()
         except Exception:
             pass
-        # Drain in-flight LanceDB writes before tearing down the DB
-        # — otherwise pending vectors are lost on shutdown.
-        try:
-            await app.state.index_buffer.stop()
-        except Exception:
-            pass
+        # Shut down the searchbase instance (stops its maintenance task).
+        if app.state.searchbase is not None:
+            try:
+                await app.state.searchbase.close()
+            except Exception:
+                pass
         await db.close()
         await sync_checkpoints.close()
 

@@ -189,6 +189,15 @@ class Config:
         return self.data_root / "vectors"
 
     @property
+    def migrations_state_path(self) -> Path:
+        """Where the migration runner tracks which (version, subsystem)
+        pairs have been applied. JSON file — see
+        ``memorytalk.migration.state``. Empty / missing on a fresh
+        install or on the first 0.8.x → 0.9 boot; the runner picks the
+        mode from that + a heuristic on ``memory.db`` existence."""
+        return self.data_root / "migrations_state.json"
+
+    @property
     def sessions_dir(self) -> Path:
         return self.data_root / "sessions"
 
@@ -221,6 +230,14 @@ class Config:
         return self.sync_log_dir / "watch.log"
 
     @property
+    def searchbase_log_dir(self) -> Path:
+        """Per-category searchbase logs (maintenance / query / index).
+        See ``searchbase/local/_logging.py`` — three files, daily
+        rotation, 14-day retention. Distinct from ``search_log_dir``
+        (business audit, JSONL) — this one is the backend-side trail."""
+        return self.logs_dir / "searchbase"
+
+    @property
     def pid_path(self) -> Path:
         return self.data_root / "server.pid"
 
@@ -235,7 +252,7 @@ class Config:
         for d in [
             self.data_root, self.vectors_dir, self.sessions_dir,
             self.cards_dir, self.logs_dir, self.search_log_dir,
-            self.sync_log_dir,
+            self.sync_log_dir, self.searchbase_log_dir,
         ]:
             d.mkdir(parents=True, exist_ok=True)
 

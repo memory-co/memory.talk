@@ -1,10 +1,11 @@
-# searchbase 能力模块抽取（提案）
+# searchbase 能力模块
 
-把当前散在 `provider/` + `service/` 里的 embedding + LanceDB + index buffer，收敛成一个**通用搜索底座** `searchbase/`：对外只暴露一个 `SearchBackend` 契约，把 LanceDB / embedding 这类实现藏在契约背后，让未来的服务器版（换向量库 / 换 embedding）能整块替换，而业务代码零改动。
+把原本散在 `provider/` + `service/` 里的 embedding + LanceDB + index buffer，收敛成一个**通用搜索底座** `searchbase/`：对外只暴露一个 `SearchBackend` 端口，把 LanceDB / embedding 藏在端口背后，让未来的服务器版（换向量库 / 换 embedding）能整块替换、业务代码零改动。
 
-关键约束：`searchbase` 是**通用**的——它只认 `collection / document / id`，**不认识** `card` / `round` / `session` 这些 memory.talk 业务概念。业务概念的映射留在 `service/`。
+关键约束：`searchbase` 是**通用**的——只认 `collection / document / id`，**不认识** `card` / `round` / `session` 这些 memory.talk 业务概念。业务映射留在 `service/`。
 
-> **状态：设计提案，未实施。** 代码现状仍是 `provider/lancedb.py`、`provider/embedding.py`、`service/index_buffer.py` 分散 + service 直接 import 具象类。本文是动手前的方案。
+> **状态：已实施。** 整层迁移完成，旧 `LanceStore` / `IndexWriteBuffer` 已删除，485 测试全绿。
+> **怎么用** 见模块内 [`../../../memorytalk/searchbase/README.md`](../../../memorytalk/searchbase/README.md)。本文讲**机制 + 设计决策 + 设计史**。
 
 相关:
 - 向量索引补齐 + EMFILE 恢复: [index-backfill.md](index-backfill.md)
@@ -14,155 +15,137 @@
 
 ## 动机
 
-目标是「后续 memory.talk 变成更高性能的服务器版本时，能方便地把 SQLite / LanceDB 换掉」。
+目标：「后续 memory.talk 变成更高性能的服务器版本时，能方便地把 SQLite / LanceDB 换掉」。
 
-让后端可插拔的**不是**按功能拆模块（cards/sync/search 纵切），而是给底层依赖定义**端口（接口）**，让 service 依赖接口、不依赖实现。当前两个接缝的健康度：
+让后端可插拔的**不是**按功能拆模块（cards/sync/search 纵切），而是给底层依赖定义**端口**、让 service 依赖端口不依赖实现。两个接缝：
 
-- **SQL 侧（SQLite → Postgres）**：已经 80% 可插拔。`service/` 里一句 SQL 都没有，全被 `repository/` 挡住了。
-- **向量侧（LanceDB → Qdrant/pgvector）**：漏成筛子。6 个 service 文件直接 import 具象的 `LanceStore`，还伸手抓它的私有 `_segment`，并调用 `ensure_fts_index`、`.CARDS/.ROUNDS` 这些 lance 专有概念。**这是本次要解决的接缝。**
+- **SQL 侧（SQLite → Postgres）**：本就 80% 可插拔，`service/` 一句 SQL 都没有，全被 `repository/` 挡住。
+- **向量侧（LanceDB → Qdrant/pgvector）**：原本漏成筛子——6 个 service 直接 import 具象 `LanceStore`、抓它的私有 `_segment`、调 `ensure_fts_index`/`.CARDS/.ROUNDS`。**这是本次解决的接缝。**
 
-抽象边界按**能力**划，不按技术划：embedding 和 LanceDB 永远一起出现、共享同一个维度(dim)、同一套生命周期 —— 它们该是**一个**组件。服务器版很可能 embed + search 是一次调用做完，根本拆不开。所以「搜索能力」才是替换单元。
+抽象边界按**能力**划不按技术划：embedding 和 LanceDB 永远一起出现、共享 dim、同一套生命周期 → 该是**一个**组件。服务器版很可能 embed + search 一次调用做完，根本拆不开。所以「搜索能力」才是替换单元。
 
-## 目录结构（和 `service/` 平级）
+## 最终结构
 
 ```
 memorytalk/
-  service/                  ← 业务（改动：依赖从 vectors/embedder 变成 SearchBackend）
-  searchbase/               ← 新增·通用搜索底座
-    __init__.py             ← 对外 interface 的全部（契约 + 类型 + errors + factory）
-    local/                  ← 当前实现（embedding + lancedb）
-      __init__.py
-      backend.py            ← LocalSearchBackend：实现契约，组合下面三个 + glue
-      embedding.py          ← 从 provider/embedding.py 搬来
-      index.py              ← 从 provider/lancedb.py 搬来（_segment 等也进来）
-      buffer.py             ← 从 service/index_buffer.py 搬来
-    server/                 ← 未来的服务器版（现在只搭骨架）
-      __init__.py
-      backend.py            ← ServerSearchBackend：NotImplementedError 占位
+  searchbase/
+    __init__.py            对外导出：契约 + 值类型 + LocalSearchBackend
+    _types.py              Doc/Query/Hit/IndexHealth(均 pydantic) + SearchBackend(Protocol) + errors
+    local/                 local 实现
+      backend.py           LocalSearchBackend：组合 embedder + 索引 + 切块/合并 + 维护协程
+      index.py             CollectionIndex：通用集合存储（schema/CRUD/合并/EMFILE/压缩）
+      _lance_helpers.py    纯 lance 查询/分词 helper（_run_hybrid / _segment / _is_emfile / _in_clause）
+    README.md
+  service/searchbase_schema.py   业务侧：collection schema 声明 + config→实例的 build_search_backend
+  provider/                既不被 searchbase import；只剩 embedding.py(被业务用) + storage.py(文件镜像)
 ```
 
-**测试沿用现有集中结构**，不迁进模块。在 `tests/` 下新增 `tests/searchbase/`：
+注意几个**和最初提案不同**的点：
+- embedding **没搬进 searchbase**。`searchbase` 不 import `provider`，而是构造时**收一个 embedder 对象**（鸭子类型 `embed`/`embed_one`）。`provider/embedding.py` 留在原地被业务用。
+- 没有 `buffer.py`。`IndexWriteBuffer` 被**删除**——写入改成立即落盘（见下）。
+- `index.py` 是**新写的通用 `CollectionIndex`**，不是 `lancedb.py` 原样搬。纯 helper 抽到 `_lance_helpers.py`。
+- 类型不是 dataclass 而是 **pydantic**（与 `schemas/` 一致），放在 `_types.py`（避免和 `__init__` 循环 import）。
+- `server/` **还没建**（deferred）。
 
-```
-tests/
-  searchbase/               ← 新增，和 tests/service、tests/provider 平级
-    __init__.py
-    test_local_backend.py
-    test_buffer.py          ← 从 tests/service/test_index_buffer.py 搬来
-    test_chunking.py        ← 从 tests/provider/test_embedding_chunking.py 搬来
-    test_emfile.py          ← 从 tests/provider/test_emfile_recovery.py 搬来
-```
-
-搬完之后，旧 `provider/` 只剩 `storage.py`（文件镜像）—— 那是另一种能力，**本次不动**（将来可独立成 `storage/`）。
-
-## `searchbase/__init__.py` 对外暴露什么（仅此而已）
-
-```python
-# 契约
-class SearchBackend(Protocol): ...
-# 通用值类型（不知道自己是 card 还是 round；调用方传「文本」，完全不碰向量）
-@dataclass class Doc:    id: str; text: str; fields: dict      # fields 既用于过滤，也随命中返回
-@dataclass class Query:  text: str; top_k: int = 10; filters: dict | None = None
-@dataclass class Hit:    id: str; score: float; fields: dict
-@dataclass class IndexHealth: ...                              # 给 sync status 用
-# errors
-class SearchError(Exception): ...
-class SearchUnavailable(SearchError): ...        # lance 打不开 → 端点返回 503
-class EmbedderInvalid(SearchError): ...          # boot 时校验失败
-# factory（看 config 选 local/server，唯一「知道用的是谁」的地方）
-def make_search_backend(config) -> SearchBackend: ...
-```
-
-`local/`、`server/` 里的东西**一律不 export**。service 能 import 到的只有上面这些。
-
-## 契约 `SearchBackend` 的方法（通用：只认 collection / Doc / id）
+## 契约 `SearchBackend`（`_types.py`，只认 collection / Doc / id）
 
 ```python
 class SearchBackend(Protocol):
-    # 生命周期
-    async def start(self) -> None: ...
-    async def stop(self) -> None: ...            # 把 buffer 排空再关
     @property
     def ready(self) -> bool: ...                 # False → api 返回 503
-    async def compact(self) -> None: ...         # 启动时 compaction（旧 optimize）
-    async def flush(self) -> int: ...            # backfill 重建索引前强制排空
-    async def health(self) -> IndexHealth: ...   # sync status 展示用
-
-    # 写（embed、分块、buffer 全藏在内部）
-    async def upsert(self, collection: str, docs: list[Doc]) -> None: ...
-    async def delete(self, collection: str, ids: list[str]) -> None: ...
-    async def delete_where(self, collection: str, match: dict) -> None: ...
-
-    # 读（ensure_fts_index 在内部惰性执行）
-    async def search(self, collection: str, query: Query) -> list[Hit]: ...
+    async def close(self) -> None: ...           # 停后台维护协程
+    async def health(self) -> IndexHealth: ...   # fd/压缩/EMFILE 可观测性
+    async def upsert(self, collection, docs: list[Doc]) -> None: ...
+    async def delete(self, collection, ids) -> None: ...
+    async def delete_where(self, collection, match: dict) -> None: ...
+    async def search(self, collection, query: Query) -> list[Hit]: ...
+    async def count(self, collection, match=None) -> int: ...
 ```
 
-**被藏起来的 lance-isms**：`_segment`(分块)、`ensure_fts_index`、`CARDS/ROUNDS` 表名常量、`optimize`、buffer 的存在、dim、embedder。调用方传文本、不碰向量 —— 这是可插拔的关键。
+**被藏起来的 lance-isms**：`_segment`(分块)、`ensure_fts_index`、表名常量、`optimize`/compaction、EMFILE 恢复、dim、embedder。调用方传**文本**、不碰向量——这是可插拔的关键。
 
-**为什么没有 `index_cards` / `search_cards`**：`card` / `round` / `session` 是 memory.talk 业务概念，通用底座不该认识。它们退化成调用方传进来的 `collection` 字符串（`"cards"` / `"rounds"`）。
+**为什么没有 `index_cards`/`search_cards`**：`card`/`round`/`session` 是业务概念，通用底座不该认识；它们退化成调用方传入的 `collection` 字符串。
 
-## 业务映射留在 service（业务才知道 card 长什么样）
+## 构造：命名实例 + 固定声明 schema
+
+构造是**异步类工厂**（开库 + 起维护协程都要 await），收**明确值、不读 Config**：
 
 ```python
-# service/cards.py —— 业务负责「card → 通用 Doc」+ 知道集合叫 "cards"
-await self.search.upsert("cards", [Doc(id=card_id, text=req.insight, fields={...})])
-
-# service/sessions.py —— 业务负责「round → 通用 Doc」
-docs = [Doc(id=f"{sid}:{r.index}", text=r.text, fields={"session_id": sid, ...}) for r in rounds]
-await self.search.upsert("rounds", docs)
-
-# 删某 session 的全部 round = 按条件删（不是按 id）
-await self.search.delete_where("rounds", {"session_id": sid})
+backend = await LocalSearchBackend.create(
+    name="v1", data_dir=config.vectors_dir, dim=384, embedder=...,
+    collections={"cards": {"fields": {}},
+                 "rounds": {"fields": {...}, "auto_split": True}},
+    max_text_length=2000,
+)
 ```
 
-集合名常量 `CARDS = "cards"` / `ROUNDS = "rounds"` 放在 **service 侧**（业务的领域词汇），不进 `searchbase`。
+- **实例 = 命名目录 + 固定 schema**。`name` → local 落在 `<data_dir>/<name>/`。
+- schema 是**声明的、不是首行推断的**（避免「首行字段是 null → 列被错判成字符串 → 数值过滤崩」这类坑，对抗审查实测复现过）。
+- config→参数的映射唯一落在 `service/searchbase_schema.build_search_backend(config)`——**唯一**读 `config.settings` 来拼 searchbase 的地方。它也是将来按 config 选 local/server 的接缝。
 
-## 搬迁映射（谁怎么变）
+## 关键行为
 
-| 对象 | 操作 |
+**写入立即落盘（无 buffer）。** `upsert` 整批 embed + 一次 `table.add` = 每 session 一个 fragment（远好于旧的每 10 行一个）。因此 `bump_indexed_count` 紧跟 `upsert` 之后即可、计数准确——不再需要 buffer 的延迟 flush + flush 回调那套。
+
+**`max_text_length` 超长策略（按 collection 走）。**
+- `auto_split=False`（默认，如 cards）：超长 → 抛 `SearchError`，**不静默截断**。（card 超长被拒也安全：card 不进 backfill、不会死循环，卡照建只是不进索引。）
+- `auto_split=True`（如 rounds）：超长 → searchbase **内部切多块**，每块一行、共享隐藏 `_base_id`/`_chunk`，**对外完全不可见**：
+  - `search` 按 `_base_id` 把块**合并成一条** Hit（取最高分）
+  - `count` 只数每 doc 的 `_chunk = 0` → 返回**逻辑 doc 数**
+  - `delete`/`delete_where` 按 `_base_id` 删光一个 doc 的所有块
+
+  → 业务代码一行不用改，眼里永远只有逻辑 doc。rounds 必须切（单轮可能很长，否则超长 round 会让 backfill 死循环）。
+
+**碎片合并 / fd / EMFILE 全在内部、自动。** 实例自带后台维护协程（`close()` 停）：**启动压一次 + 每 `compact_interval_seconds`（默认 1800s）周期压一次**，把 append-only 碎片合并掉；search 万一仍遇 EMFILE 再「压缩+重连+重试一次」兜底。`health().detail` 给数字（`compactions` / `last_compact_*` / `emfile_recoveries` / …），供 `/v3/sync/status`。
+
+## 业务映射（在 `service/`）
+
+```python
+# service/searchbase_schema.py —— 业务的领域词汇 + schema 声明
+CARDS, ROUNDS = "cards", "rounds"
+SCHEMAS = {CARDS: {"fields": {}},
+           ROUNDS: {"fields": {"session_id": "str", "idx": "int", "role": "str"}, "auto_split": True}}
+def round_doc_id(sid, idx): return f"{sid}:{idx}"
+async def build_search_backend(config): ...   # config → LocalSearchBackend.create(...)
+
+# service/cards.py / sessions.py —— 业务负责「业务对象 → 通用 Doc」
+await self.search.upsert(CARDS, [Doc(id=card_id, text=cap_text(insight), fields={})])
+await self.search.upsert(ROUNDS, [Doc(id=round_doc_id(sid, idx), text=cap_text(text),
+                                      fields={"session_id": sid, "idx": idx, "role": role})])
+await self.search.delete_where(ROUNDS, {"session_id": sid})
+```
+
+## 迁移结果（消费方怎么变）
+
+| 对象 | 变化 |
 |---|---|
-| `provider/embedding.py` | → `searchbase/local/embedding.py`（搬） |
-| `provider/lancedb.py` | → `searchbase/local/index.py`（搬，`_segment` 一起） |
-| `service/index_buffer.py` | → `searchbase/local/buffer.py`（搬） |
-| glue（`_segment` + lance_rows 拼装 + optimize） | → 集中进 `searchbase/local/backend.py` |
-| `service/search.py`（业务） | **保留**。`(vectors, embedder)` → 依赖 `SearchBackend`。collection 映射 + merge / tag 过滤 / 整形仍是业务 |
-| `service/recall.py` | 同上 |
-| `service/cards.py` | `embed_one + add_card` → `search.upsert("cards", [Doc(...)])` |
-| `service/sessions.py`(Ingest) | `embed + _segment + buffer.add_rounds` → `search.upsert("rounds", docs)` |
-| `service/backfill.py` | 「哪些 session 要重建」判断作为业务保留。`optimize`→`compact`、`add_rounds`→`upsert`、`delete_session_rounds`→`delete_where`、`flush`→`flush` |
-| `api/__init__.py`（组装根） | 把 `LanceStore.create` + `get_embedder` + `IndexWriteBuffer` 这一坨换成**一行** `make_search_backend(config)`。lifespan 里调 `start/stop/compact`。给各 service 注入 backend |
+| `provider/lancedb.py` | **删除**（纯 helper 进 `searchbase/local/_lance_helpers.py`） |
+| `service/index_buffer.py` | **删除**（写入立即落盘） |
+| `api/__init__.py` | `LanceStore.create`+`get_embedder`+`IndexWriteBuffer` 一坨 → `await build_search_backend(config)`；lifespan 关停调 `searchbase.close()` |
+| `service/cards.py` | `embed_one + add_card` → `upsert(CARDS, …)`；`delete_cards` → `delete` |
+| `service/sessions.py`(Ingest) | `embed + _segment + buffer` → `upsert(ROUNDS, …)`；`bump_indexed_count` 紧跟其后（按 round 数） |
+| `service/search.py` / `recall.py` | `(vectors, embedder)` → 依赖 `SearchBackend`；`search_cards/rounds` → `search(collection, Query)`；qvec 由 backend 内部算 |
+| `service/backfill.py` | 只剩重嵌；compaction 交给 searchbase；`delete_session_rounds`→`delete_where`、`add_rounds`→`upsert` |
+| `api/sync.py` | index 健康字段改读 `searchbase.health().detail` |
 
-**业务 / 能力的分界线**：「collection 映射、query 解析、tag 过滤、card 和 session 命中合并、结果整形」留在 `service/` 是业务。`searchbase/` 只管「embed、建索引、向量检索」，不认识任何业务概念。
+## 和旧实现的行为差异（都是有意简化）
 
-## 组装根 before/after
+1. **rounds 索引变「整 session 全有或全无」**（原来按 chunk 部分成功）。失败→session 降级→backfill 重试，仍收敛，只是失败粒度变粗。
+2. **周期性压缩从 backfill 搬进 searchbase 的维护协程**（启动 + 每 30 分钟），不再是 backfill 的职责；语义不变。
+3. **索引目录变 `<vectors_dir>/v1/`**——老用户原扁平索引成了「上个版本」，由 backfill 重建。
 
-```python
-# before（api/__init__.py，约 40 行在伺候 lance/embedder/buffer）
-vectors = await LanceStore.create(config.vectors_dir, dim=...)
-embedder = get_embedder(config); await validate_embedder(config)
-app.state.index_buffer = IndexWriteBuffer(vectors=..., db=..., ...); app.state.index_buffer.start()
-# 把 vectors, embedder, index_buffer 分发给各 service
+## 设计史（为什么是现在这样）
 
-# after
-search = make_search_backend(config)   # 唯一知道用哪个实现的地方
-await search.start()
-app.state.search = search
-# 各 service 只拿到 search。compact / stop 也都收敛到 search 上
-```
+- **schema 怎么定**：首行推断 → 太脆（null/类型/缺字段都会坑，审查实测复现）→ 改成**构造时声明、不可变**。
+- **超长怎么办**：静默截断（藏数据丢失，否决）→ 业务切分（会散落到业务的 count/去重）→ **searchbase 按 collection 切 + 读取合并**（对业务全隐藏，最干净）。`auto_split` 跟着 schema 走：rounds 开、cards 不开。
+- **谁记 indexed_count**：曾想用 `searchbase.count()` 替代 SQLite 计数；最终发现立即落盘后，业务 `bump_indexed_count(round 数)` 即准，`count()` 不必承重（仅作通用查询）。
+- **buffer / flush**：曾设计 FlushListener 回调解耦 session 计数 → 立即落盘后整套不需要，删除。
+- **searchbase 是否读 Config**：曾 `make_search_backend(config)` 偷读 settings → 改成收明确值、config 映射抽到 `build_search_backend`，searchbase 既不 import Config 也不 import provider。
+- **值类型 dataclass→pydantic**：与 `schemas/` 一致。
+- **类不可见 + 三层工厂**：删 `make_search_backend`，把类型挪 `_types.py` 解循环 import，包顶层直接暴露 `LocalSearchBackend`。
 
-## 待确认的设计点
+## 还没做（deferred）
 
-1. ~~模块名~~ → **已定：`searchbase`**（通用搜索底座，与业务侧 `service/search.py` 区分开）。
-2. **lance 不可用时**：backend 永远返回、用 `ready=False` 让 api 返回 503（废掉 `if vectors is None` 的散落判断）。
-3. **`server/` 本次只搭骨架**（`NotImplementedError`），先把架子立起来。
-4. ~~测试搬迁~~ → **已定：测试沿用现有集中结构**，不进模块。在 `tests/` 下新增 `tests/searchbase/`（和 `tests/service`、`tests/provider` 平级），共用 rootdir 的 `tests/conftest.py`。
-
-## 实施顺序（每步保持测试绿）
-
-1. `searchbase/__init__.py` 定义契约 + 通用类型 + errors（不写实现，先写测试）
-2. 把 embedding / lancedb / buffer **只搬不改**进 `local/`（改 import，测试绿）
-3. 实现 `LocalSearchBackend`，跑通契约测试（glue + collection→lance 表映射集中到这里）
-4. 消费方逐个改成依赖 backend（顺序：search → recall → cards → sessions → backfill），每改一个保绿
-5. 组装根换成 `make_search_backend`
-6. 加 `server/` 骨架
-7. 清扫旧 `_segment`/直接 import 残留（grep 查漏）
+- `searchbase/server/` 骨架（远端命名索引，蓝绿换名同一套抽象）。
+- **setup 自动感知 embedding 最大输入长度**写进 settings（local 读 `model.max_seq_length`；HTTP 查表 + 保守兜底）——现在 `MAX_TEXT_LENGTH=2000` 是写死常量，见 `searchbase_schema.py` 的 `TODO(setup-sense)`。
+- **升级流程**作为独立模块：改 schema = 开新实例 + 业务回填（含 cards 重嵌，当前 backfill 只重嵌 rounds），老实例服务到切换。

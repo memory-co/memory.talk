@@ -45,8 +45,7 @@ async def backfill(app):
     timing is deterministic."""
     return IndexBackfill(
         db=app.state.db,
-        vectors=app.state.vectors,
-        embedder=app.state.embedder,
+        search=app.state.searchbase,
     )
 
 

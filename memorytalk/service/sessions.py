@@ -28,25 +28,18 @@ from __future__ import annotations
 import datetime as _dt
 import logging
 
-from memorytalk.provider.embedding import Embedder
-from memorytalk.provider.lancedb import LanceStore, _segment
 from memorytalk.repository import SQLiteStore
 from memorytalk.schemas import (
     AppendRoundsRequest, AppendRoundsResponse,
     EnsureSessionRequest, EnsureSessionResponse,
     RoundInput,
 )
+from memorytalk.searchbase import Doc, SearchBackend
 from memorytalk.service.events import EventWriter
+from memorytalk.service.searchbase_schema import ROUNDS, cap_text, round_doc_id
 
 
 _log = logging.getLogger("memorytalk.ingest")
-
-# Cap fed into the embedder. Most local sentence-transformer models top
-# out around 512 tokens (~2k chars of English / ~1k chars CJK); the OpenAI
-# v3 embeddings tolerate 8k+ but we truncate the same way to keep ingest
-# cost bounded. FTS stays on the FULL text — only the vector is built
-# from the truncated prefix.
-_EMBED_CHAR_LIMIT = 2000
 
 
 class IngestServiceError(Exception):
@@ -78,28 +71,16 @@ def _flatten_text(blocks) -> str:
     return "\n".join(parts)
 
 
-def _embed_input(text: str) -> str:
-    return text[:_EMBED_CHAR_LIMIT]
-
-
 class IngestService:
     def __init__(
         self,
         db: SQLiteStore,
-        vectors: LanceStore | None,
-        embedder: Embedder | None,
+        search: SearchBackend | None,
         events: EventWriter,
-        index_buffer=None,  # IndexWriteBuffer | None
     ):
         self.db = db
-        self.vectors = vectors
-        self.embedder = embedder
+        self.search = search
         self.events = events
-        # When None, ``_index_vectors`` falls back to direct
-        # ``vectors.add_rounds`` calls — preserving the old behavior
-        # for callers that haven't been wired to a buffer (e.g. some
-        # standalone test setups).
-        self.index_buffer = index_buffer
 
     # ────────── ensure_session ──────────
 
@@ -287,80 +268,47 @@ class IngestService:
     async def _index_vectors(
         self, sid: str, source: str, rows: list[dict],
     ) -> tuple[int, list[int], str | None]:
-        """Embed + write LanceDB for ``rows``. Returns ``(succeeded,
+        """Index ``rows`` into searchbase. Returns ``(succeeded,
         failed_idxs, last_err)``.
 
-        Chunks at ``settings.embedding.batch_size`` so a single bad
-        batch (e.g. DashScope's 10-cap 400) only loses that batch's
-        rounds — earlier batches already flushed stay in LanceDB and
-        their idxs go into ``sessions.indexed_round_count``. The
-        background backfill loop will pick up the failed idxs on a
-        future server start, so even with intermittent endpoint
-        failures we'll converge.
+        All-or-nothing per call: searchbase owns embedding + batching, so
+        we hand it the whole batch as Docs. On failure the session stays
+        degraded (round_count > indexed_round_count) and the background
+        backfill loop retries it on a future pass, so we still converge.
+        ``bump_indexed_count`` runs right after the durable upsert — no
+        deferred flush, so the counter is accurate.
 
-        Caller passes the result onward via ``AppendRoundsResponse``
-        so the sync watcher can surface it.
+        Caller passes the result onward via ``AppendRoundsResponse`` so
+        the sync watcher can surface it.
         """
-        if self.vectors is None or self.embedder is None or not rows:
+        if self.search is None or not rows:
             return (0, [], None)
 
-        # Mirror the embedder's batch_size so a chunk that lands in
-        # ``embedder.embed()`` doesn't get re-chunked there (matches
-        # endpoint cap exactly). Local / dummy embedders have no cap;
-        # default to 100 — large enough to keep round-trip overhead low
-        # and small enough to bound the blast radius of a bad batch.
-        batch_size = getattr(self.embedder, "batch_size", 100)
-        if not isinstance(batch_size, int) or batch_size < 1:
-            batch_size = 100
-
-        succeeded = 0
-        failed_idxs: list[int] = []
-        last_err: str | None = None
         now = _utc_iso()
-
-        for i in range(0, len(rows), batch_size):
-            chunk = rows[i:i + batch_size]
-            chunk_idxs = [r["idx"] for r in chunk]
-            try:
-                texts = [_embed_input(r["text"] or "") for r in chunk]
-                vectors = await self.embedder.embed(texts)
-                lance_rows = [
-                    {
+        idxs = [r["idx"] for r in rows]
+        try:
+            docs = [
+                Doc(
+                    id=round_doc_id(sid, r["idx"]),
+                    text=cap_text(r["text"]),
+                    fields={
                         "session_id": sid,
                         "idx": r["idx"],
                         "role": r["role"] or "",
-                        "text": _segment(r["text"] or ""),
-                        "vector": v,
-                    }
-                    for r, v in zip(chunk, vectors)
-                ]
-                # Route through the buffer when available — aggregates
-                # across embedder batches so LanceDB sees one big
-                # ``table.add()`` instead of many tiny ones, dropping
-                # fragment count + fd pressure. The buffer's flush also
-                # owns ``bump_indexed_count`` so the SQLite counter
-                # tracks LanceDB-landed rows, not just embedded ones.
-                if self.index_buffer is not None:
-                    await self.index_buffer.add_rounds(sid, lance_rows)
-                else:
-                    await self.vectors.add_rounds(lance_rows)
-                    await self.db.sessions.bump_indexed_count(
-                        sid, len(chunk), now,
-                    )
-                succeeded += len(chunk)
-            except Exception as e:
-                _log.exception(
-                    "vector index batch failed sid=%s offset=%d size=%d",
-                    sid, i, len(chunk),
+                    },
                 )
-                failed_idxs.extend(chunk_idxs)
-                last_err = str(e)
-
-        if failed_idxs:
-            await self.db.sessions.set_last_index_error(sid, last_err or "", now)
+                for r in rows
+            ]
+            await self.search.upsert(ROUNDS, docs)
+            await self.db.sessions.bump_indexed_count(sid, len(rows), now)
+            return (len(rows), [], None)
+        except Exception as e:
+            _log.exception(
+                "vector index failed sid=%s rows=%d", sid, len(rows),
+            )
+            await self.db.sessions.set_last_index_error(sid, str(e), now)
             await self.events.session_event(
                 source, sid, "vector_index_failed",
-                error=last_err, affected_indexes=failed_idxs,
+                error=str(e), affected_indexes=idxs,
             )
-
-        return (succeeded, failed_idxs, last_err)
+            return (0, idxs, str(e))

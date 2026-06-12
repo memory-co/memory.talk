@@ -30,8 +30,8 @@ import logging
 
 from memorytalk.adapters import get_adapter
 from memorytalk.config import Config
-from memorytalk.provider.embedding import Embedder
-from memorytalk.provider.lancedb import LanceStore
+from memorytalk.searchbase import Query, SearchBackend
+from memorytalk.service.searchbase_schema import CARDS
 from memorytalk.repository import SQLiteStore
 from memorytalk.util.ids import new_event_id
 
@@ -59,13 +59,11 @@ class RecallService:
         self,
         config: Config,
         db: SQLiteStore,
-        vectors: LanceStore | None,
-        embedder: Embedder | None,
+        search: "SearchBackend | None",
     ):
         self.config = config
         self.db = db
-        self.vectors = vectors
-        self.embedder = embedder
+        self.search = search
 
     # ──────────── hook (write) ────────────
 
@@ -99,39 +97,28 @@ class RecallService:
             raise RecallServiceError(str(e)) from e
         canonical_sid = adapter.mint_session_id(raw_session_id)
 
-        if self.vectors is None:
+        if self.search is None:
             return {
                 "session_id": canonical_sid, "query": prompt,
                 "recalled": [], "skipped_already_recalled": [],
             }
 
-        # Build query vector + ensure FTS index, same as search.
-        qvec: list[float] | None = None
-        if self.embedder is not None:
-            try:
-                qvec = await self.embedder.embed_one(prompt)
-            except Exception:
-                qvec = None
-        try:
-            await self.vectors.ensure_fts_index(self.vectors.CARDS)
-        except Exception:
-            pass
-
+        # searchbase embeds the query + ensures the FTS index internally.
         oversample = max(top_k * _RECALL_OVERSAMPLE, top_k + 5)
-        hits = await self.vectors.search_cards(
-            query=prompt, vector=qvec, top_k=oversample,
+        hits = await self.search.search(
+            CARDS, Query(text=prompt, top_k=oversample),
         )
 
         # Dedup against this session's prior recalls (derived from
         # recall_event JSON via json_each).
-        candidate_ids = [h["card_id"] for h in hits if h.get("card_id")]
+        candidate_ids = [h.id for h in hits]
         already = await self.db.recall.already_recalled(canonical_sid, candidate_ids)
 
         # Walk hits in order; collect top_k new + report ALL already-skipped.
         new_ids: list[str] = []
         skipped_ids: list[str] = []
         for h in hits:
-            cid = h.get("card_id")
+            cid = h.id
             if not cid:
                 continue
             if cid in already:

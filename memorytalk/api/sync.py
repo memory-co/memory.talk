@@ -12,18 +12,22 @@ from fastapi import APIRouter, Query, Request
 router = APIRouter()
 
 
-def _gather_lance_health(state) -> dict:
-    """Collect LanceDB-layer observability for ``index.lance``.
+async def _gather_lance_health(state) -> dict:
+    """Collect vector-layer observability for ``index.lance``.
 
-    Pulls from three sources: the IndexWriteBuffer (write pipeline),
-    IndexBackfill (compaction cadence), and LanceStore (EMFILE
-    recovery count). All fields default to safe zeros / None when the
-    corresponding component is absent so a partially-disabled boot
-    still returns a well-shaped response.
+    Pulls compaction + EMFILE-recovery state from the searchbase
+    instance's ``health().detail``. The write path is now immediate
+    (no IndexWriteBuffer), so the legacy buffer fields report idle.
+    All fields default to safe zeros / None when searchbase is absent
+    so a partially-disabled boot still returns a well-shaped response.
     """
-    buf = getattr(state, "index_buffer", None)
-    backfill = getattr(state, "backfill", None)
-    vectors = getattr(state, "vectors", None)
+    searchbase = getattr(state, "searchbase", None)
+    detail: dict = {}
+    if searchbase is not None:
+        try:
+            detail = (await searchbase.health()).detail
+        except Exception:
+            detail = {}
 
     soft = hard = None
     try:
@@ -35,22 +39,15 @@ def _gather_lance_health(state) -> dict:
         pass
 
     return {
-        "pending_vector_rows": (buf.pending_rows if buf is not None else 0),
-        "last_flush_at": (buf.last_flush_at_iso if buf is not None else None),
-        "last_flush_error": (buf.last_flush_error if buf is not None else None),
-        "flush_count_since_boot": (buf.flush_count if buf is not None else 0),
-        "last_compaction_at": (
-            backfill.last_compact_at_iso if backfill is not None else None
-        ),
-        "last_compaction_error": (
-            backfill.last_compact_error if backfill is not None else None
-        ),
-        "emfile_recoveries_since_boot": (
-            vectors.emfile_recoveries if vectors is not None else 0
-        ),
-        "last_emfile_at": (
-            vectors.last_emfile_at_iso if vectors is not None else None
-        ),
+        # Writes are immediate now — no buffer to drain.
+        "pending_vector_rows": 0,
+        "last_flush_at": None,
+        "last_flush_error": None,
+        "flush_count_since_boot": 0,
+        "last_compaction_at": detail.get("last_compact_at_iso"),
+        "last_compaction_error": detail.get("last_compact_error"),
+        "emfile_recoveries_since_boot": detail.get("emfile_recoveries", 0),
+        "last_emfile_at": detail.get("last_emfile_at_iso"),
         "fd_soft_limit": soft,
         "fd_hard_limit": hard,
     }
@@ -75,7 +72,7 @@ async def get_sync_status(request: Request, limit: int = Query(5, ge=0, le=20)):
     index["last_index_error"] = (
         backfill.last_error if backfill is not None else None
     )
-    index["lance"] = _gather_lance_health(request.app.state)
+    index["lance"] = await _gather_lance_health(request.app.state)
 
     if not config.settings.sync.enabled:
         return {"status": "disabled", "index": index}

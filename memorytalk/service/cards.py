@@ -29,8 +29,8 @@ from __future__ import annotations
 import datetime as _dt
 import logging
 
-from memorytalk.provider.embedding import Embedder
-from memorytalk.provider.lancedb import LanceStore
+from memorytalk.searchbase import Doc, SearchBackend
+from memorytalk.service.searchbase_schema import CARDS, cap_text
 from memorytalk.repository import SQLiteStore
 from memorytalk.schemas import CreateCardRequest
 from memorytalk.service.events import EventWriter
@@ -76,13 +76,11 @@ class CardService:
     def __init__(
         self,
         db: SQLiteStore,
-        vectors: LanceStore | None,
-        embedder: Embedder | None,
+        search: "SearchBackend | None",
         events: EventWriter,
     ):
         self.db = db
-        self.vectors = vectors
-        self.embedder = embedder
+        self.search = search
         self.events = events
 
     async def create(self, req: CreateCardRequest) -> str:
@@ -146,13 +144,14 @@ class CardService:
         if tags:
             await self.db.cards.write_tags_file(card_id, tags)
 
-        # ── 3. LanceDB ───────────────────────────────────────────────────
+        # ── 3. Vector index (searchbase) ─────────────────────────────────
         # Best-effort — like the sessions path, vector failure shouldn't
         # block card creation; a rebuild can fill it in later.
-        if self.vectors is not None and self.embedder is not None:
+        if self.search is not None:
             try:
-                vec = await self.embedder.embed_one(req.insight)
-                await self.vectors.add_card(card_id, req.insight, vec)
+                await self.search.upsert(CARDS, [
+                    Doc(id=card_id, text=cap_text(req.insight), fields={}),
+                ])
             except Exception as e:
                 await self.events.card_event(
                     card_id, "vector_index_failed", error=str(e),
@@ -214,9 +213,9 @@ class CardService:
         await self.db.cards.delete(card_id)
 
         # 3. Vector — best-effort.
-        if self.vectors is not None:
+        if self.search is not None:
             try:
-                await self.vectors.delete_cards([card_id])
+                await self.search.delete(CARDS, [card_id])
             except Exception as e:  # noqa: BLE001
                 _log.warning(
                     "vector delete failed for %s; card_row is None will "

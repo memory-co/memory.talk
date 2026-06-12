@@ -74,15 +74,14 @@ async def test_rounds_jsonl_is_source_of_truth(client, data_root):
 
 
 async def test_lancedb_rounds_table_has_one_row_per_round(app, client):
+    from memorytalk.service.searchbase_schema import ROUNDS
+
     sid = await _ingest_sample(client)
-    vectors = app.state.vectors
-    if vectors is None:
-        pytest.skip("lancedb not available in this environment")
-    table = await vectors._get_or_create_rounds()
-    rows = await table.query().where(f"session_id = '{sid}'").to_list()
-    by_idx = sorted(rows, key=lambda r: r["idx"])
-    assert [r["idx"] for r in by_idx] == [1, 2]
-    assert len(by_idx[0]["vector"]) == app.state.config.settings.embedding.dim
+    searchbase = app.state.searchbase
+    if searchbase is None:
+        pytest.skip("searchbase not available in this environment")
+    # One indexed row per round (id = f"{sid}:{idx}").
+    assert await searchbase.count(ROUNDS, {"session_id": sid}) == 2
 
 
 async def test_appended_round_lands_in_all_three_stores(app, client):
@@ -105,8 +104,7 @@ async def test_appended_round_lands_in_all_three_stores(app, client):
     assert len(rounds) == 3
     assert rounds[-1]["idx"] == 3
 
-    vectors = app.state.vectors
-    if vectors is not None:
-        table = await vectors._get_or_create_rounds()
-        n = len(await table.query().where(f"session_id = '{sid}'").to_list())
-        assert n == 3
+    from memorytalk.service.searchbase_schema import ROUNDS
+    searchbase = app.state.searchbase
+    if searchbase is not None:
+        assert await searchbase.count(ROUNDS, {"session_id": sid}) == 3
