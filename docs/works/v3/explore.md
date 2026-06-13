@@ -106,19 +106,25 @@ explore 的核心产出是一个**清晰的上下文 + 进度视图**：
 explores/<YYYY>/<MM>/<explore_id>/
   explore.json                       ← manifest：divider_at + entrypoint provenance + dir_path
   events.jsonl                       ← created / card_minted / review_filed
+  cards/                             ← explore 抽出的卡（每张卡综合 N 个先验 session）—— explore 级
+    <card_id>.json / index.jsonl     ← 卡本体在全局 cards/；这里是本 explore 产出卡的索引/引用
   sessions/
-    prior/<session_id>/              ← 先验 session：从它抽卡的分析产物
-      notes.md / minted_cards.jsonl / round_excerpts.md / …
-    posterior/<session_id>/          ← 后验 session：用它 review 的分析产物
-      notes.md / filed_reviews.jsonl / …
+    prior/<session_id>/              ← 这条先验 session 喂给抽卡的「素材」：round 摘录 / 笔记（不是卡！）
+    posterior/<session_id>/          ← 这条后验 session 写的 review（review = 该 session 对某卡的判定）
   …                                  ← claude 在此跑驱动会话时产生的工作文件
 ```
 
-### 充分利用目录：per-session 文件，SQLite 只当瘦索引
+### 充分利用目录：明细以文件存，SQLite 只当瘦索引
 
-每个**分析过的 session** 在 `sessions/{prior,posterior}/<session_id>/` 下建一个目录，按它扮演的角色分开存——**先验**目录放「从它抽出哪些卡 + round 摘录 + notes」，**后验**目录放「用它写了哪些 review + notes」。一眼能分清抽卡素材和验卡证据。
+两类东西归属不同，别混：
 
-> 目录归到先验/后验，记的是这条 session 在分析里**实际扮演的角色**（被抽卡 = 先验 / 被拿去 review = 后验），是稳定的历史事实；它和「视图里那个会随 `last_round_update_time` 漂移的实时时间分类」是两回事——绝大多数情况下二者一致，少数漂移了也无妨（君子协定）。
+- **card 属于 explore，不属于 session**：一张卡是把**多个先验 session** 综合出来的洞见，所以放 explore 级的 `cards/`（卡本体仍在全局 `cards/` 罐里，这里只存本 explore 产出哪些卡的索引）。**不要**把卡挂到某个 session 下。
+- **`sessions/prior/<id>/`** 只放从**这一条** session 里摘出来、喂给抽卡的**素材**（round 摘录、随手笔记）——是原料，不是成品卡。
+- **`sessions/posterior/<id>/`** 放这条后验 session 写的 **review**——review 本就是 `(后验 session, card, stance)` 的 per-session 判定，挂在它名下天然合理。
+
+> SQLite 只保留瘦索引（explores 行 + `explore_id` 戳 + `last_round_update_time`）；上面这些明细全部 file-canonical（文件是真相，库是缓存），需要时从文件重建视图。
+>
+> 目录归先验/后验记的是 session **实际扮演的角色**（被抽卡的素材 = 先验 / 写了 review = 后验），稳定的历史事实；和「视图里随 `last_round_update_time` 漂移的实时时间分类」是两回事，绝大多数一致、少数漂了也无妨（君子协定）。
 
 > 好处：**细节不进 SQLite**。SQLite 只保留能驱动查询的**瘦索引**（下表），富文本/明细全部 file-canonical（和 card/session/recall 一脉相承——文件是真相，库是缓存）。需要时从这些文件重建视图。
 
