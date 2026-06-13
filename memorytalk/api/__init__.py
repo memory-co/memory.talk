@@ -32,6 +32,7 @@ from memorytalk.service import (
     RecallService, ReviewService,
 )
 from memorytalk.service.backfill import IndexBackfill
+from memorytalk.service.explores import ExploreService
 from memorytalk.service.search import SearchService
 from memorytalk.service.searchbase_schema import build_search_backend
 from memorytalk.service.sync import SyncWatcher
@@ -139,6 +140,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         app.state.recall = RecallService(
             config=config, db=db, search=searchbase,
         )
+        app.state.explore = ExploreService(db=db, config=config)
 
         # Spin up the watcher if settings says so. start() returns fast
         # now — backfill runs as a background task; uvicorn's "startup
@@ -198,7 +200,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.include_router(sessions_router, prefix="/v3")
 
     # Optional routers — lazy import so missing ones don't break boot.
-    for name in ("sync", "search", "cards", "reviews", "recall"):
+    for name in ("sync", "search", "cards", "reviews", "recall", "explores"):
         try:
             mod = __import__(f"memorytalk.api.{name}", fromlist=["router"])
             app.include_router(mod.router, prefix="/v3")
