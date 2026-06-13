@@ -49,6 +49,8 @@ append_rounds 时:
 
 先验/后验就按这个字段**实时**算（session 长出新 round → 它的时间前移 → 分区可能随之变化）。因为 explore 是君子协定、没有"冻结正确性"要保护，实时反而更简单、也更贴合"工作区是活的"。
 
+**存量回填**：加这列时，在 migration 里**遍历一遍每个 session 的 `rounds.jsonl`** 把 `last_round_update_time` 一次性算出来写好（按上面同一套解析/兜底规则）；之后只在 append 时增量更新。
+
 > 注：旧设计纠结的"冻结快照 vs 实时重算"在君子协定下不再是问题——没有不可纠正的硬门会因为分区漂移而出错。
 
 ## 模型：两层 session，分得很清楚
@@ -142,7 +144,6 @@ explores/<YYYY>/<MM>/<explore_id>/events.jsonl   ← created / card_minted / rev
 
 ## 仍待定
 
-1. **`last_round_update_time` 回填**：存量 session 怎么算这个字段（migration 里遍历 rounds.jsonl 一次性回填，还是懒加载）。
-2. **驱动集排除的边界**：驱动 session 按 `cwd` 前缀落在 `dir_path` 下识别并排除。极少数 session 若 `metadata.cwd` 缺失，默认当作非驱动（即仍参与先验/后验）——确认这个兜底方向。
+1. **驱动集排除的边界**：驱动 session 按 `cwd` 前缀落在 `dir_path` 下识别并排除。极少数 session 若 `metadata.cwd` 缺失，默认当作非驱动（即仍参与先验/后验）——确认这个兜底方向。
 
-> 已定：分割线 = 一个**冻结的 `divider_at`**（入口会话**或**直接给时间，二选一；入口会话只取它创建那刻的时间，之后更新不动线）；先验/后验 = **全局 session 池**按 `divider_at` 切、**减去 explore 目录的驱动 session**，归属实时；旧 explore **不迁移**（复用其 cwd 信号 + recall 压制，改成 per-explore 目录）；时间全 UTC；君子协定**不强制**。
+> 已定：分割线 = 一个**冻结的 `divider_at`**（入口会话**或**直接给时间，二选一；入口会话只取它创建那刻的时间，之后更新不动线）；先验/后验 = **全局 session 池**按 `divider_at` 切、**减去 explore 目录的驱动 session**，归属实时；`last_round_update_time` 存量在 **migration 里遍历 rounds.jsonl 一次性回填**、之后 append 增量更新；旧 explore **不迁移**（复用其 cwd 信号 + recall 压制，改成 per-explore 目录）；时间全 UTC；文件按年/月分目录；君子协定**不强制**。
