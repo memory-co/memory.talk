@@ -43,12 +43,6 @@ async def run(conn: aiosqlite.Connection) -> None:
         await conn.execute(
             "ALTER TABLE sessions ADD COLUMN last_round_id TEXT"
         )
-    if "last_round_update_time" not in sessions_cols:
-        # explore's prior/posterior split keys off this. Backfilled from
-        # rounds.jsonl in step (below) on the upgrade path.
-        await conn.execute(
-            "ALTER TABLE sessions ADD COLUMN last_round_update_time TEXT"
-        )
     if "indexed_round_count" not in sessions_cols:
         await conn.execute(
             "ALTER TABLE sessions ADD COLUMN indexed_round_count "
@@ -82,12 +76,6 @@ async def run(conn: aiosqlite.Connection) -> None:
         await conn.execute(
             "ALTER TABLE cards ADD COLUMN tags TEXT NOT NULL DEFAULT '{}'"
         )
-    if "explore_id" not in cards_cols:
-        await conn.execute("ALTER TABLE cards ADD COLUMN explore_id TEXT")
-
-    reviews_cols = await _cols(conn, "reviews")
-    if reviews_cols and "explore_id" not in reviews_cols:
-        await conn.execute("ALTER TABLE reviews ADD COLUMN explore_id TEXT")
 
     slog_cols = await _cols(conn, "search_log")
     if slog_cols and "mode" not in slog_cols:

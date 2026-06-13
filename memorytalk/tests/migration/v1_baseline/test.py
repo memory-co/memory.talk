@@ -56,17 +56,14 @@ async def test_init_database_creates_all_v1_tables():
     await init_database.run(conn)
     assert await _tables(conn) == {
         "sessions", "cards", "card_stats", "card_source_cards",
-        "reviews", "recall_event", "search_log", "explores",
+        "reviews", "recall_event", "search_log",
     }
     sessions_cols = await _cols(conn, "sessions")
     assert "tags" in sessions_cols
     assert "location" in sessions_cols
     assert "indexed_round_count" in sessions_cols
-    assert "last_round_update_time" in sessions_cols
     cards_cols = await _cols(conn, "cards")
     assert "tags" in cards_cols
-    assert "explore_id" in cards_cols
-    assert "explore_id" in await _cols(conn, "reviews")
     stats_cols = await _cols(conn, "card_stats")
     assert "recall_count" not in stats_cols  # dropped in 0.9
     await conn.close()
