@@ -24,6 +24,7 @@ CARD_PREFIX = "card_"
 SESSION_PREFIX = "sess-"          # canonical (new, 0.7.x)
 SESSION_PREFIX_LEGACY = "sess_"   # accepted on read for older data
 REVIEW_PREFIX = "review_"
+EXPLORE_PREFIX = "explore_"
 SEARCH_PREFIX = "sch_"
 EVENT_PREFIX = "evt_"
 
@@ -46,6 +47,10 @@ def new_card_id() -> str:
 
 def new_review_id() -> str:
     return f"{REVIEW_PREFIX}{ULID()}"
+
+
+def new_explore_id() -> str:
+    return f"{EXPLORE_PREFIX}{ULID()}"
 
 
 def new_search_id() -> str:

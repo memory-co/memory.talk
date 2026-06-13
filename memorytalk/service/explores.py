@@ -8,6 +8,22 @@ the extractor. Nothing here enforces card/review reference constraints.
 """
 from __future__ import annotations
 
+import datetime as _dt
+import json
+
+from memorytalk.util.ids import new_explore_id
+from memorytalk.util.instant import parse_instant
+
+
+class ExploreServiceError(Exception):
+    """4xx-equivalent: bad explore create request."""
+
+
+def _utc_iso() -> str:
+    return _dt.datetime.now(_dt.UTC).isoformat(
+        timespec="seconds",
+    ).replace("+00:00", "Z")
+
 
 def _under(cwd: str | None, dir_path: str) -> bool:
     """True if ``cwd`` is the explore's workspace dir or below it."""
@@ -36,3 +52,61 @@ def partition(
             continue
         (prior if lrut <= divider_at else posterior).append(s)
     return {"prior": prior, "posterior": posterior}
+
+
+class ExploreService:
+    """Create + read explores. The directory is the AI's free workspace;
+    memory.talk writes one explore.json at creation and never again."""
+
+    def __init__(self, db, config):
+        self.db = db
+        self.config = config
+
+    async def create(
+        self,
+        *,
+        entrypoint_session_id: str | None = None,
+        divider_at: str | None = None,
+        note: str | None = None,
+    ) -> str:
+        """Resolve + freeze the divider, mint the workspace dir, write the
+        row + the one-time explore.json. Pass either an entrypoint session
+        (its last_round_update_time becomes the divider, frozen now) or a
+        divider time directly."""
+        if entrypoint_session_id is not None:
+            sess = await self.db.sessions.get(entrypoint_session_id)
+            if sess is None:
+                raise ExploreServiceError(
+                    f"entrypoint session {entrypoint_session_id} not found"
+                )
+            divider_at = sess.get("last_round_update_time")
+        if not divider_at:
+            raise ExploreServiceError(
+                "explore needs an entrypoint_session_id or a divider_at"
+            )
+
+        explore_id = new_explore_id()
+        created_at = _utc_iso()
+        now = parse_instant(created_at)
+        dir_path = (
+            self.config.data_root / "explores"
+            / now.strftime("%Y") / now.strftime("%m") / explore_id
+        )
+        dir_path.mkdir(parents=True, exist_ok=True)
+        (dir_path / "explore.json").write_text(
+            json.dumps({
+                "explore_id": explore_id,
+                "dir_path": str(dir_path),
+                "divider_at": divider_at,
+                "entrypoint_session_id": entrypoint_session_id,
+                "created_at": created_at,
+                "note": note,
+            }, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        await self.db.explores.insert(
+            explore_id, dir_path=str(dir_path), divider_at=divider_at,
+            entrypoint_session_id=entrypoint_session_id,
+            created_at=created_at, note=note,
+        )
+        return explore_id

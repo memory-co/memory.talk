@@ -47,7 +47,8 @@ TABLES: list[str] = [
         insight     TEXT NOT NULL,
         rounds      TEXT NOT NULL DEFAULT '[]',
         tags        TEXT NOT NULL DEFAULT '{}',
-        created_at  TEXT NOT NULL
+        created_at  TEXT NOT NULL,
+        explore_id  TEXT
     )
     """,
     """
@@ -82,7 +83,23 @@ TABLES: list[str] = [
         score       INTEGER NOT NULL,
         comment     TEXT,
         created_at  TEXT NOT NULL,
+        explore_id  TEXT,
         FOREIGN KEY (card_id) REFERENCES cards(card_id)
+    )
+    """,
+
+    # ── explores ─────────────────────────────────────────────────────────
+    # A prior/posterior card-extraction workspace (see explore.md). Thin
+    # index over file-canonical detail; dir_path is the workspace, the
+    # driving sessions (cwd under it) are excluded from the analysed pool.
+    """
+    CREATE TABLE IF NOT EXISTS explores (
+        explore_id            TEXT PRIMARY KEY,
+        dir_path              TEXT NOT NULL,
+        divider_at            TEXT NOT NULL,
+        entrypoint_session_id TEXT,
+        created_at            TEXT NOT NULL,
+        note                  TEXT
     )
     """,
 
@@ -119,6 +136,9 @@ INDEXES: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_sessions_created ON sessions(created_at)",
     "CREATE INDEX IF NOT EXISTS idx_sessions_endpoint ON sessions(source, location)",
     "CREATE INDEX IF NOT EXISTS idx_cards_created ON cards(created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_cards_explore ON cards(explore_id)",
+    "CREATE INDEX IF NOT EXISTS idx_reviews_explore ON reviews(explore_id)",
+    "CREATE INDEX IF NOT EXISTS idx_explores_created ON explores(created_at)",
     "CREATE INDEX IF NOT EXISTS idx_csc_source ON card_source_cards(source_card_id)",
     "CREATE INDEX IF NOT EXISTS idx_reviews_card ON reviews(card_id, created_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_reviews_session ON reviews(session_id)",

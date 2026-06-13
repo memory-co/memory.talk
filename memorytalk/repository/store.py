@@ -16,6 +16,7 @@ import aiosqlite
 
 from memorytalk.provider.storage import Storage
 from memorytalk.repository.cards import CardStore
+from memorytalk.repository.explores import ExploreStore
 from memorytalk.repository.recall import RecallStore
 from memorytalk.repository.reviews import ReviewStore
 from memorytalk.repository.search_log import SearchLogStore
@@ -32,6 +33,7 @@ class SQLiteStore:
         self.reviews = ReviewStore(conn)
         self.search_log = SearchLogStore(conn)
         self.recall = RecallStore(conn)
+        self.explores = ExploreStore(conn)
 
     @classmethod
     async def open_connection(cls, db_path: Path) -> aiosqlite.Connection:

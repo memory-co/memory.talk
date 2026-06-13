@@ -82,6 +82,12 @@ async def run(conn: aiosqlite.Connection) -> None:
         await conn.execute(
             "ALTER TABLE cards ADD COLUMN tags TEXT NOT NULL DEFAULT '{}'"
         )
+    if "explore_id" not in cards_cols:
+        await conn.execute("ALTER TABLE cards ADD COLUMN explore_id TEXT")
+
+    reviews_cols = await _cols(conn, "reviews")
+    if reviews_cols and "explore_id" not in reviews_cols:
+        await conn.execute("ALTER TABLE reviews ADD COLUMN explore_id TEXT")
 
     slog_cols = await _cols(conn, "search_log")
     if slog_cols and "mode" not in slog_cols:
