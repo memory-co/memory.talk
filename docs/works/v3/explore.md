@@ -100,12 +100,17 @@ explore 的核心产出是一个**清晰的上下文 + 进度视图**：
 
 ## 对象模型 + 存储
 
-explore 的目录是一个**自由的工作区**——Claude Code 在里面跑、想写什么写什么，**不是元信息目录**。所以系统**绝不**往里强加结构化 jsonl 让 AI 维护（events / index / per-session reviews 这些一律不要）：AI 不会可靠遵守 schema，工作区会乱成一团。系统只放**一个** `explore.json`（人读的 manifest，权威记录在 SQLite，这份只是镜像）。
+explore 的目录是一个**自由的工作区**——Claude Code 在里面跑、想写什么写什么，**不是元信息目录**。所以系统**绝不**往里强加结构化 jsonl 让 AI 维护（events / index / per-session reviews 这些一律不要）：AI 不会可靠遵守 schema，工作区会乱成一团。
+
+**memory.talk 对这个目录的纪律是「写一次、之后只读」**：
+- 创建那一刻写**一个** `explore.json`，**此后再也不写**（连这份也不更新）——目录完全交给 AI 自由用。
+- 但 memory.talk **会读**这个目录：把 AI 的产出/进展展示给人看（`explore view`）。
+- 权威记录在 SQLite 的 `explores` 行；`explore.json` 只是创建时一次性丢进去的**人读镜像**。
 
 ```
 explores/<YYYY>/<MM>/<explore_id>/      ← 工作区目录（claude 在此跑 = 驱动集，cwd 落此前缀即排除）
-  explore.json                          ← 唯一的系统文件：divider_at + entrypoint + dir_path（SQLite 的镜像）
-  …                                     ← 其余全是 claude 自由产出的工作文件，系统不管它结构
+  explore.json                          ← 创建时写一次，此后系统不再碰：divider_at + entrypoint + dir_path
+  …                                     ← 其余全是 claude 自由产出的工作文件，系统只读不写
 ```
 
 > 按创建年/月分目录（`<YYYY>/<MM>/`，不用 session/card 那种 `<source>/<hash-bucket>`）：explore 无平台归属、量不大，年月排开翻着顺眼。
