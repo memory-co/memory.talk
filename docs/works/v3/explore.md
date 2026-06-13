@@ -158,8 +158,12 @@ ALTER TABLE reviews  ADD COLUMN explore_id TEXT;              -- NULL = freeform
 - **血缘 DAG**：结构不变；`explore_id` 只是 tag，不加边、无环险。君子协定下也不对 `source_cards` 做时间强制。
 - **searchbase**：零新增。卡只 embed insight；explore 按 id 查、不做语义检索。`explore_id` 纯活在 SQLite + JSON 镜像。
 
-## 仍待定
+## 设计已全部敲定
 
-1. **驱动集排除的边界**：驱动 session 按 `cwd` 前缀落在 `dir_path` 下识别并排除。极少数 session 若 `metadata.cwd` 缺失，默认当作非驱动（即仍参与先验/后验）——确认这个兜底方向。
-
-> 已定：分割线 = 一个**冻结的 `divider_at`**（入口会话**或**直接给时间，二选一；入口会话只取它创建那刻的时间，之后更新不动线）；先验/后验 = **全局 session 池**按 `divider_at` 切、**减去 explore 目录的驱动 session**，归属实时；`last_round_update_time` 存量在 **migration 里遍历 rounds.jsonl 一次性回填**、之后 append 增量更新；旧 explore **不迁移**（复用其 cwd 信号 + recall 压制，改成 per-explore 目录）；时间全 UTC；文件按年/月分目录；君子协定**不强制**。
+- **分割线** = 一个**冻结的 `divider_at`**：入口会话**或**直接给时间，二选一；入口会话只取它创建那刻的 `last_round_update_time`，之后更新不动线。
+- **先验/后验** = **全局 session 池**按 `divider_at` 切、**减去 explore 目录的驱动 session**；归属实时（线冻、归属活）。
+- **驱动集** = `metadata.cwd` 落在 explore 目录前缀下的 session（被排除）；**`metadata.cwd` 缺失 → 当作非驱动，仍参与先验/后验分析**。
+- **`last_round_update_time`** 存量在 **migration 里遍历 rounds.jsonl 一次性回填**、之后 append 增量更新；全程带时区 UTC。
+- **存储**：一个目录搞定（`explores/<YYYY>/<MM>/<explore_id>/`，工作区 + canonical 合一）；per-session 明细按 `sessions/{prior,posterior}/<id>/` file-canonical；SQLite 只当瘦索引。
+- **旧 explore 不迁移**（复用其 cwd 信号 + recall 压制，改成 per-explore 目录）。
+- **君子协定**：explore 只摆清先验/后验结构，**不强制**抽卡/review 的引用约束。
