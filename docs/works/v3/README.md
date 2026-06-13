@@ -17,7 +17,7 @@
 |---|---|
 | 论坛动力学(沉浮 + ranking 三轴) | [forum-dynamics.md](forum-dynamics.md) |
 | Card 创建流程(rounds 展开 + source_cards DAG) | [card-creation-flow.md](card-creation-flow.md) |
-| explore 先验/后验抽卡工厂(冻结分区 + 时间防火墙 + spent/confirmed 视图，已设计未实施) | [explore.md](explore.md) |
+| explore 先验/后验抽卡工作区(君子协定 + 焦点会话绑定 + 取代旧 cwd-explore，已设计未实施) | [explore.md](explore.md) |
 | Card 删除流程(级联策略 + 不级联清单) | [card-deletion-flow.md](card-deletion-flow.md) |
 | Recall pipeline(file canonical + dedup + 派生 recall_count) | [recall-pipeline.md](recall-pipeline.md) |
 | Session ID 命名空间(canonical 算法 + raw 转换) | [session-namespace.md](session-namespace.md) |
