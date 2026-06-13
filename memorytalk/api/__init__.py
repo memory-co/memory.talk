@@ -105,6 +105,15 @@ def create_app(config: Config | None = None) -> FastAPI:
         db = SQLiteStore(conn, config.db_path, storage)
         sync_checkpoints = await SyncCheckpointStore.create(config.sync_db_path)
 
+        # Backfill last_round_update_time for pre-upgrade sessions (NULL
+        # rows only → no-op once filled). The SQL migration can't do this
+        # (it has no filesystem handle); explore's prior/posterior split
+        # needs the value on existing data.
+        try:
+            await db.sessions.backfill_last_round_update_time()
+        except Exception:
+            _log.exception("last_round_update_time backfill failed")
+
         events = EventWriter(db)
         app.state.config = config
         app.state.storage = storage

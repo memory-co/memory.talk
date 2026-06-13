@@ -147,6 +147,35 @@ class SessionStore:
             row = await cursor.fetchone()
         return row[0]
 
+    async def backfill_last_round_update_time(self) -> int:
+        """One-shot: fill ``last_round_update_time`` for sessions that
+        don't have it yet (pre-upgrade rows), by reading each one's
+        rounds.jsonl for the temporal max. Idempotent — only touches NULL
+        rows, so re-runs after the first are no-ops. Returns the count
+        filled."""
+        from memorytalk.util.instant import last_round_update_time
+
+        async with self.conn.execute(
+            "SELECT session_id, source, created_at, synced_at FROM sessions "
+            "WHERE last_round_update_time IS NULL"
+        ) as cursor:
+            rows = await cursor.fetchall()
+        filled = 0
+        for session_id, source, created_at, synced_at in rows:
+            rounds = await self.read_rounds_file(source, session_id)
+            lrut = last_round_update_time(
+                [r.get("timestamp") for r in rounds],
+                created_at=created_at, synced_at=synced_at,
+            )
+            await self.conn.execute(
+                "UPDATE sessions SET last_round_update_time = ? WHERE session_id = ?",
+                (lrut, session_id),
+            )
+            filled += 1
+        if filled:
+            await self.conn.commit()
+        return filled
+
     # ─── vector-index tracking ────────────────────────────────────────
     # Backstory: ingest writes rounds to jsonl + SQLite synchronously,
     # then fires-and-forgets the LanceDB vector index. If the embedder
