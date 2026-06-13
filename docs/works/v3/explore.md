@@ -1,6 +1,6 @@
 # explore — 先验/后验抽卡工作区（设计）
 
-一个 **explore** 是一个**抽卡工作区**：你在它的目录里跑 Claude Code 来驱动分析，填一个全局 session 当分割线（anchor），它就把**全局 session 池**切成**先验(prior)**（anchor 及以前——抽卡素材）和**后验(posterior)**（anchor 以后——验卡证据），给你一个**充分、可靠、含先验/后验的探索上下文结构**。注意：explore 自己目录里那些"驱动分析"的 session，**被排除**在先验/后验之外（实验记录本 ≠ 被分析的数据）。
+一个 **explore** 是一个**抽卡工作区**：你在它的目录里跑 Claude Code 来驱动分析，给一条**分割线**（填一个全局入口会话、或直接给一个时间，最终都化成一个冻结的 `divider_at`），它就把**全局 session 池**切成**先验(prior)**（线及以前——抽卡素材）和**后验(posterior)**（线以后——验卡证据），给你一个**充分、可靠、含先验/后验的探索上下文结构**。注意：explore 自己目录里那些"驱动分析"的 session，**被排除**在先验/后验之外（实验记录本 ≠ 被分析的数据）。
 
 > **状态：设计提案，未实施。**
 >
@@ -58,17 +58,20 @@ explore 涉及**两类完全不同的 session**，关键是别混：
 | | 是什么 | 在分析里的角色 |
 |---|---|---|
 | **驱动 session**（explore 自己的） | 你在 explore 目录里跑 Claude Code 做抽卡推理的会话——「实验记录本」 | **被排除**，不是被分析的对象 |
-| **被分析 session**（全局） | 全局 session 池里你真实的工作会话 | 按 anchor 切成**先验 / 后验** |
+| **被分析 session**（全局） | 全局 session 池里你真实的工作会话 | 按 `divider_at` 切成**先验 / 后验** |
 
 - **每个 explore 建一个自己的目录**（`<explore_root>/<explore_id>/`）。你在这目录下跑 claude 驱动分析；凡 `session.metadata.cwd` 落在此目录前缀下的 session = 这个 explore 的**驱动 session**（复用旧 explore 的 cwd 物理信号）。
-- **anchor = 你填入的一个全局 session_id = 分割线**。`divider = anchor 的 last_round_update_time`。
-- **先验 / 后验 = 全局 session 池**，按 divider 切，**再减去本 explore 的驱动 session**：
-  - `prior     = {全局 s ：s ∉ 驱动集 且 last_round_update_time(s) <= divider}`（**含 anchor**）
-  - `posterior = {全局 s ：s ∉ 驱动集 且 last_round_update_time(s) >  divider}`
+- **分割线的来源有两种，最终都化成一个时间 `divider_at`**：
+  - 填一个全局**入口会话** `entrypoint_session_id` → 读它**创建那一刻**的 `last_round_update_time`；
+  - 或直接给一个**时间**。
+- **`divider_at` 在创建时冻结**。传入口会话时只是借它当时的时间算出这条线——**即使这个会话之后又更新，也不动已划定的边界**。
+- **先验 / 后验 = 全局 session 池**，按 `divider_at` 切，**再减去本 explore 的驱动 session**：
+  - `prior     = {全局 s ：s ∉ 驱动集 且 last_round_update_time(s) <= divider_at}`（创建时入口会话正好在线上 → 先验）
+  - `posterior = {全局 s ：s ∉ 驱动集 且 last_round_update_time(s) >  divider_at}`
 
 > 为什么排除驱动 session：你在 explore 里"讨论怎么抽卡"的那些会话，如果也算进先验/后验证据，就污染了实验——把实验记录本从数据里剔掉，先验/后验才干净。
 >
-> 实时算（session 长新 round → 时间前移 → 分区可能变）。君子协定下没有冻结正确性要保护，实时更简单。
+> **线冻结、归属实时**：`divider_at` 创建时定死；其余全局 session 按它们**当前**的 `last_round_update_time` 相对这条冻结线实时归到先验/后验（一个先验 session 后续长出更晚的 round，可能漂到后验侧——君子协定下无妨，不存冻结分区）。
 
 ## card / review 怎么挂到 explore（关联，非强制）
 
@@ -99,12 +102,12 @@ explore 的核心产出是一个**清晰的上下文 + 进度视图**：
 
 ```sql
 CREATE TABLE explores (
-  explore_id        TEXT PRIMARY KEY,    -- explore_<ulid>
-  dir_path          TEXT NOT NULL,       -- explore 的工作区目录；cwd 落此前缀下的 session = 驱动集(被排除)
-  anchor_session_id TEXT NOT NULL,       -- 全局 session_id：分割线
-  divider_at        TEXT NOT NULL,       -- = anchor 的 last_round_update_time，canonical UTC-Z
-  created_at        TEXT NOT NULL,
-  note              TEXT
+  explore_id           TEXT PRIMARY KEY, -- explore_<ulid>
+  dir_path             TEXT NOT NULL,    -- explore 的工作区目录；cwd 落此前缀下的 session = 驱动集(被排除)
+  divider_at           TEXT NOT NULL,    -- 冻结的分割线时间，canonical UTC-Z（本质参数）
+  entrypoint_session_id TEXT,            -- 可空：若用入口会话创建，记下它（仅 provenance）；直接给时间则为 NULL
+  created_at           TEXT NOT NULL,
+  note                 TEXT
 );
 ALTER TABLE sessions ADD COLUMN last_round_update_time TEXT;  -- 派生、append 时更新
 ALTER TABLE cards    ADD COLUMN explore_id TEXT;              -- NULL = freeform
@@ -112,23 +115,23 @@ ALTER TABLE reviews  ADD COLUMN explore_id TEXT;              -- NULL = freeform
 ```
 
 - **驱动集（被排除）的权威依据是 `dir_path`**（按 `session.metadata.cwd` 前缀活算）。
-- 先验/后验**不**冻、也不存——是「全局 session 池 − 驱动集」按各 session 当前 `last_round_update_time` 相对 `divider_at` 的实时函数。manifest 冻的只有 `dir_path` / `anchor_session_id` / `divider_at`。
+- 先验/后验**不**冻、也不存——是「全局 session 池 − 驱动集」按各 session 当前 `last_round_update_time` 相对 `divider_at` 的实时函数。manifest 冻的只有 `dir_path` / `divider_at`（+ provenance `entrypoint_session_id`）。
 
 文件镜像 + 事件（house style，explore 的目录本身就是它的工作区）：
 ```
 <dir_path>/                              ← 工作区目录；这里跑的 claude session = 驱动集(被排除)
-explores/<bucket>/<explore_id>/explore.json   ← manifest（dir_path + anchor + divider）
+explores/<bucket>/<explore_id>/explore.json   ← manifest（dir_path + divider_at + entrypoint provenance）
 explores/<bucket>/<explore_id>/events.jsonl   ← created / card_minted / review_filed
 ```
 
 ## API / CLI 面
 
 - **新对象端点**用复数 `/v3/explores`（旧 `/v3/explore` cwd-feed 由本设计取代、不迁移）：
-  - `POST /v3/explores {anchor_session_id, note?}` → 创建工作区目录、算 divider、写库+文件。
+  - `POST /v3/explores {entrypoint_session_id? | divider_at?, note?}` → 二选一定分割线；创建工作区目录、冻结 `divider_at`、写库+文件。
   - `GET /v3/explores/{eid}` → manifest + 先验/后验堆 + spent/unspent + 每卡 status（实时算）。
   - `GET /v3/explores?limit=` → 列表。
 - **抽卡/验卡复用现有端点**：`card create --explore <eid>` / `review create --explore <eid>` 注入 `explore_id`。一条抽卡路径、一条验卡路径。
-- **CLI** `cli/explore.py`：`explore create <anchor_session_id> [--note]` / `explore view <eid>` / `explore list`。
+- **CLI** `cli/explore.py`：`explore create (<entrypoint_session_id> | --at <time>) [--note]` / `explore view <eid>` / `explore list`。
 
 ## 与旧 explore / recall / DAG / searchbase 关系
 
@@ -140,7 +143,6 @@ explores/<bucket>/<explore_id>/events.jsonl   ← created / card_minted / review
 ## 仍待定
 
 1. **`last_round_update_time` 回填**：存量 session 怎么算这个字段（migration 里遍历 rounds.jsonl 一次性回填，还是懒加载）。
-2. **anchor 数量**：现按**单个** anchor session 当分割线（贴你最初"填入一个 session id"的原话）。要不要支持多 anchor（取最大时间为线）？非必需。
-3. **驱动集排除的边界**：驱动 session 按 `cwd` 前缀落在 `dir_path` 下识别并排除。极少数 session 若 `metadata.cwd` 缺失，默认当作非驱动（即仍参与先验/后验）——确认这个兜底方向。
+2. **驱动集排除的边界**：驱动 session 按 `cwd` 前缀落在 `dir_path` 下识别并排除。极少数 session 若 `metadata.cwd` 缺失，默认当作非驱动（即仍参与先验/后验）——确认这个兜底方向。
 
-> 已定：先验/后验 = **全局 session 池**按 anchor 切、**减去 explore 目录的驱动 session**；旧 explore **不迁移**（复用其 cwd 信号 + recall 压制，改成 per-explore 目录）；时间全 UTC；`last_round_update_time` 实时；君子协定**不强制**。
+> 已定：分割线 = 一个**冻结的 `divider_at`**（入口会话**或**直接给时间，二选一；入口会话只取它创建那刻的时间，之后更新不动线）；先验/后验 = **全局 session 池**按 `divider_at` 切、**减去 explore 目录的驱动 session**，归属实时；旧 explore **不迁移**（复用其 cwd 信号 + recall 压制，改成 per-explore 目录）；时间全 UTC；君子协定**不强制**。
