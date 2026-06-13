@@ -147,6 +147,18 @@ class SessionStore:
             row = await cursor.fetchone()
         return row[0]
 
+    async def list_for_partition(self) -> list[dict]:
+        """Every session's (id, cwd, last_round_update_time) — the minimal
+        fields explore's prior/posterior split needs over the full pool."""
+        async with self.conn.execute(
+            "SELECT session_id, cwd, last_round_update_time FROM sessions"
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [
+            {"session_id": r[0], "cwd": r[1], "last_round_update_time": r[2]}
+            for r in rows
+        ]
+
     async def backfill_last_round_update_time(self) -> int:
         """One-shot: fill ``last_round_update_time`` for sessions that
         don't have it yet (pre-upgrade rows), by reading each one's

@@ -110,3 +110,15 @@ class ExploreService:
             created_at=created_at, note=note,
         )
         return explore_id
+
+    async def get_partition(self, explore_id: str) -> dict[str, list[dict]]:
+        """Live prior/posterior split for an explore: the global session
+        pool against the frozen divider, minus the driving set. Computed
+        fresh each call (line frozen, membership live)."""
+        exp = await self.db.explores.get(explore_id)
+        if exp is None:
+            raise ExploreServiceError(f"explore {explore_id} not found")
+        sessions = await self.db.sessions.list_for_partition()
+        return partition(
+            sessions, divider_at=exp["divider_at"], dir_path=exp["dir_path"],
+        )
