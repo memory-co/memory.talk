@@ -117,11 +117,11 @@ ALTER TABLE reviews  ADD COLUMN explore_id TEXT;              -- NULL = freeform
 - **驱动集（被排除）的权威依据是 `dir_path`**（按 `session.metadata.cwd` 前缀活算）。
 - 先验/后验**不**冻、也不存——是「全局 session 池 − 驱动集」按各 session 当前 `last_round_update_time` 相对 `divider_at` 的实时函数。manifest 冻的只有 `dir_path` / `divider_at`（+ provenance `entrypoint_session_id`）。
 
-文件镜像 + 事件（house style，explore 的目录本身就是它的工作区）：
+文件镜像 + 事件——**按创建年/月分目录**（不用 session/card 那种 `<source>/<hash-bucket>`）：explore **没有平台归属**（codex / claude code 驱动都无所谓），数量也不大，按年月排开后续翻起来更顺眼。
 ```
 <dir_path>/                              ← 工作区目录；这里跑的 claude session = 驱动集(被排除)
-explores/<bucket>/<explore_id>/explore.json   ← manifest（dir_path + divider_at + entrypoint provenance）
-explores/<bucket>/<explore_id>/events.jsonl   ← created / card_minted / review_filed
+explores/<YYYY>/<MM>/<explore_id>/explore.json   ← manifest（dir_path + divider_at + entrypoint provenance）
+explores/<YYYY>/<MM>/<explore_id>/events.jsonl   ← created / card_minted / review_filed
 ```
 
 ## API / CLI 面
