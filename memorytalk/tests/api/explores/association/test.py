@@ -1,4 +1,4 @@
-"""card/review create stamps explore_id when given (advisory link, no gate)."""
+"""association — card/review stamp explore_id (advisory link). See README.md."""
 from __future__ import annotations
 
 import pytest
@@ -14,7 +14,6 @@ async def test_card_create_stamps_explore_id(app, client):
     })
     assert r.status_code == 200, r.text
     card_id = r.json()["card_id"]
-
     async with app.state.db.conn.execute(
         "SELECT explore_id FROM cards WHERE card_id = ?", (card_id,),
     ) as cur:
@@ -23,7 +22,6 @@ async def test_card_create_stamps_explore_id(app, client):
 
 
 async def test_review_create_stamps_explore_id(app, client):
-    # need a card + a session to review against
     r = await client.post("/v3/cards", json={"insight": "claim"})
     card_id = r.json()["card_id"]
     sr = await ingest_session(client, "rev-1", rounds=[
@@ -37,7 +35,6 @@ async def test_review_create_stamps_explore_id(app, client):
     })
     assert rr.status_code == 200, rr.text
     review_id = rr.json()["review_id"]
-
     async with app.state.db.conn.execute(
         "SELECT explore_id FROM reviews WHERE review_id = ?", (review_id,),
     ) as cur:

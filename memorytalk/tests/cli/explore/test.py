@@ -1,8 +1,4 @@
-"""CLI: memory.talk explore {create, view, list} — surface + wiring.
-
-HTTP behavior is covered by tests/api/test_explores.py; this pins the CLI
-surface (help shape, parsing → request wiring).
-"""
+"""explore — CLI surface + request wiring. See README.md."""
 from __future__ import annotations
 
 from click.testing import CliRunner

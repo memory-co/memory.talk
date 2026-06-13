@@ -1,4 +1,4 @@
-"""POST/GET /v3/explores."""
+"""crud — POST/GET /v3/explores. See README.md."""
 from __future__ import annotations
 
 import pytest
