@@ -85,6 +85,7 @@ class ReviewService:
             review_id=review_id, card_id=req.card_id,
             session_id=req.session_id, indexes=req.indexes,
             score=req.score, comment=req.comment, created_at=now,
+            explore_id=req.explore_id,
         )
 
         # ── 2. SQL: card_stats bump ─────────────────────────────────────

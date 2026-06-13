@@ -119,7 +119,8 @@ class CardService:
         now = _utc_iso()
 
         # ── 1. SQL ───────────────────────────────────────────────────────
-        await self.db.cards.insert(card_id, req.insight, expanded_rounds, now, tags=tags)
+        await self.db.cards.insert(card_id, req.insight, expanded_rounds, now,
+                                   tags=tags, explore_id=req.explore_id)
         await self.db.cards.init_stats(card_id, now)
         if req.source_cards:
             await self.db.cards.insert_source_cards(card_id, [

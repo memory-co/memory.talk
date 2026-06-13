@@ -36,6 +36,8 @@ class CreateCardRequest(BaseModel):
     # 0.8.x: optional user-side tags. Validated identically to PATCH
     # /v3/cards/{cid}/tags; any violation rejects the whole create.
     tags: dict[str, str] = Field(default_factory=dict)
+    # Optional explore association (advisory link, not a gate).
+    explore_id: str | None = None
 
 
 class CreateCardResponse(BaseModel):

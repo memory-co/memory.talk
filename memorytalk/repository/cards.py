@@ -101,14 +101,16 @@ class CardStore:
     async def insert(
         self, card_id: str, insight: str, rounds: list[dict],
         created_at: str, tags: dict | None = None,
+        explore_id: str | None = None,
     ) -> None:
         await self.conn.execute(
-            "INSERT INTO cards (card_id, insight, rounds, tags, created_at) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO cards "
+            "(card_id, insight, rounds, tags, created_at, explore_id) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
             (card_id, insight,
              json.dumps(rounds, ensure_ascii=False),
              json.dumps(tags or {}, ensure_ascii=False),
-             created_at),
+             created_at, explore_id),
         )
         await self.conn.commit()
 

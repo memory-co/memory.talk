@@ -18,12 +18,15 @@ class ReviewStore:
         score: int,
         comment: str | None,
         created_at: str,
+        explore_id: str | None = None,
     ) -> None:
         await self.conn.execute(
             "INSERT INTO reviews "
-            "(review_id, card_id, session_id, indexes, score, comment, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (review_id, card_id, session_id, indexes, score, comment, created_at),
+            "(review_id, card_id, session_id, indexes, score, comment, "
+            " created_at, explore_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (review_id, card_id, session_id, indexes, score, comment,
+             created_at, explore_id),
         )
         await self.conn.commit()
 

@@ -17,6 +17,8 @@ class CreateReviewRequest(BaseModel):
     # for parity with the rest of the v3 API.
     score: Literal[-1, 0, 1]
     comment: str | None = None
+    # Optional explore association (advisory link, not a gate).
+    explore_id: str | None = None
     review_id: str | None = None
 
 
