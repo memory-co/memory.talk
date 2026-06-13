@@ -37,6 +37,7 @@ from memorytalk.schemas import (
 from memorytalk.searchbase import Doc, SearchBackend
 from memorytalk.service.events import EventWriter
 from memorytalk.service.searchbase_schema import ROUNDS, cap_text, round_doc_id
+from memorytalk.util.instant import last_round_update_time
 
 
 _log = logging.getLogger("memorytalk.ingest")
@@ -153,6 +154,15 @@ class IngestService:
         # 2. sessions table + meta.json ---------------------------------
         new_total = existing_count + len(new_rounds)
         new_last = new_rounds[-1]["round_id"]
+        # Temporal high-water mark (explore's prior/posterior split keys
+        # off it): max of the new rounds' timestamps and the prior value,
+        # falling back to created_at then the ingest clock.
+        lrut = last_round_update_time(
+            [existing.get("last_round_update_time") if existing else None]
+            + [r.timestamp for r in req.rounds],
+            created_at=(existing.get("created_at") if existing else None) or req.created_at,
+            synced_at=now,
+        )
         if existing is None:
             await self.db.sessions.upsert(
                 session_id=sid, source=req.source,
@@ -160,7 +170,7 @@ class IngestService:
                 cwd=cwd,
                 created_at=req.created_at, synced_at=now,
                 metadata=req.metadata, round_count=new_total,
-                last_round_id=new_last,
+                last_round_id=new_last, last_round_update_time=lrut,
             )
             await self.db.sessions.write_meta(req.source, sid, {
                 "session_id": sid, "source": req.source,
@@ -172,7 +182,9 @@ class IngestService:
                 "round_count": new_total, "synced_at": now,
             })
         else:
-            await self.db.sessions.update_after_append(sid, new_total, new_last, now)
+            await self.db.sessions.update_after_append(
+                sid, new_total, new_last, now, last_round_update_time=lrut,
+            )
             await self._refresh_meta(sid, req, existing, now,
                                      round_count_override=new_total)
 

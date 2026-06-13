@@ -33,6 +33,7 @@ TABLES: list[str] = [
         tags                    TEXT NOT NULL DEFAULT '{}',
         round_count             INTEGER NOT NULL DEFAULT 0,
         last_round_id           TEXT,
+        last_round_update_time  TEXT,
         indexed_round_count     INTEGER NOT NULL DEFAULT 0,
         last_index_error        TEXT,
         last_index_attempted_at TEXT

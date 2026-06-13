@@ -109,17 +109,18 @@ class SessionStore:
         last_round_id: str | None,
         location: str = "",
         location_label: str | None = None,
+        last_round_update_time: str | None = None,
     ) -> None:
         await self.conn.execute(
             "INSERT OR REPLACE INTO sessions "
             "(session_id, source, location, location_label, cwd, "
             " created_at, synced_at, metadata, "
-            " round_count, last_round_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " round_count, last_round_id, last_round_update_time) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (session_id, source, location, location_label, cwd,
              created_at, synced_at,
              json.dumps(metadata, ensure_ascii=False),
-             round_count, last_round_id),
+             round_count, last_round_id, last_round_update_time),
         )
         await self.conn.commit()
 
@@ -132,11 +133,12 @@ class SessionStore:
 
     async def update_after_append(
         self, session_id: str, count: int, last_round_id: str, synced_at: str,
+        last_round_update_time: str | None = None,
     ) -> None:
         await self.conn.execute(
-            "UPDATE sessions SET round_count = ?, last_round_id = ?, synced_at = ? "
-            "WHERE session_id = ?",
-            (count, last_round_id, synced_at, session_id),
+            "UPDATE sessions SET round_count = ?, last_round_id = ?, "
+            "synced_at = ?, last_round_update_time = ? WHERE session_id = ?",
+            (count, last_round_id, synced_at, last_round_update_time, session_id),
         )
         await self.conn.commit()
 
@@ -411,6 +413,7 @@ class SessionStore:
             "tags": json.loads(row["tags"] or "{}") if "tags" in keys else {},
             "round_count": row["round_count"],
             "last_round_id": row["last_round_id"],
+            "last_round_update_time": row["last_round_update_time"] if "last_round_update_time" in keys else None,
             "indexed_round_count": row["indexed_round_count"] if "indexed_round_count" in keys else 0,
             "last_index_error": row["last_index_error"] if "last_index_error" in keys else None,
             "last_index_attempted_at": row["last_index_attempted_at"] if "last_index_attempted_at" in keys else None,
