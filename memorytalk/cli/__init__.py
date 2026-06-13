@@ -30,7 +30,7 @@ def main(no_pager: bool) -> None:
 # noted inline). Missing modules are ignored so an in-flight v3 build
 # still has a usable `--help`.
 _COMMANDS = ("server", "read", "setup", "sync", "search", "card", "review",
-             "recall", "session", "upgrade")
+             "recall", "session", "explore", "upgrade")
 
 for _name in _COMMANDS:
     try:
