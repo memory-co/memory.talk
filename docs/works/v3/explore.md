@@ -4,7 +4,7 @@
 
 > **状态：设计提案，未实施。**
 >
-> **它取代旧的 explore。** 项目现在的 `explore` 是一个 cwd 命名空间（`settings.explore.cwd`）——你在那个目录里跑 Claude Code 抽卡/写 review，期间 recall hook 被压制（见 [explore-cwd-suppression.md](explore-cwd-suppression.md)）。本设计是它的**深化与替代**：从"一个关掉召回的安静 cwd"升级成"绑定会话、带先验/后验上下文的结构化工作区对象"。「抽卡工作区」这个本意不变，命名冲突靠**合并**消解（不改名）。
+> **它取代旧的 explore（旧的不迁移）。** 项目现在的 `explore` 是一个**全局** cwd 命名空间（`settings.explore.cwd`）——你在那个目录里跑 Claude Code 抽卡/写 review，期间 recall hook 被压制（见 [explore-cwd-suppression.md](explore-cwd-suppression.md)）。这个功能基本没被用起来，**旧数据/feed 不迁移**。但它那个核心机制——**靠 `session.metadata.cwd` 物理信号认 session + 在工作区里压制 recall**——被**复用**：新设计从"一个全局 explore 目录"改成"**每个 explore 各自一个目录**"。「抽卡工作区」这个本意不变，命名冲突靠**合并**消解（不改名）。
 
 相关:
 - 旧 explore（cwd 召回压制，本设计取代它）: [explore-cwd-suppression.md](explore-cwd-suppression.md)
@@ -51,16 +51,18 @@ append_rounds 时:
 
 > 注：旧设计纠结的"冻结快照 vs 实时重算"在君子协定下不再是问题——没有不可纠正的硬门会因为分区漂移而出错。
 
-## 模型：绑定焦点会话 + 关联会话集
+## 模型：每个 explore 一个目录，按路径圈关联会话
 
-- **焦点会话(focus)**：explore 绑定**1 个或多个** session——你正在里面抽卡的"当下"。
-- **关联会话集(associated sessions)**：explore 存一个字段，记下它纳入考虑的**所有 session id**（创建时捕获，之后新建的 session 不自动进来——「后面再新的 session 就不进来了」由这个显式集合体现）。
-- **分割线 divider** = 焦点会话们 `last_round_update_time` 的**最大值**（你工作的"现在")。
-- **划分**（在关联集内，实时算）：
-  - `prior = {关联 session : last_round_update_time <= divider}`（**含焦点**——焦点就是你抽卡的素材）
+- **每个 explore 建一个自己的目录**（`<explore_root>/<explore_id>/` 或用户指定路径）。你在这个目录下跑 Claude Code 干活。
+- **关联会话集按路径活算**：凡 `session.metadata.cwd` 落在该 explore 目录前缀下的 session，就是这个 explore 的关联会话（复用旧 explore 的 cwd 物理信号，前缀匹配）。这是 **live 的**——目录下后续新跑的 session 自动进来（在"这个目录"这个范围内），不需要创建时冻结捕获；目录之外的 session 永不进来。
+- **焦点会话(focus) / 分割线 divider**：在关联集里选 1+ 个 session 当焦点，`divider = 焦点们 last_round_update_time 的最大值`（你工作的"现在"）。
+- **先验/后验划分**（在该目录的关联集内，实时按 `last_round_update_time` 算）：
+  - `prior = {关联 session : last_round_update_time <= divider}`（**含焦点**——抽卡的素材）
   - `posterior = {关联 session : last_round_update_time > divider}`
 
-> 多个焦点会话时，divider 取它们的最大时间——焦点整体算作"先验侧的素材"，后验是它们全部之后的 session。（单焦点时退化成你最初说的"这个 session 含及以前=先验"。）
+> 单焦点时退化成你最初说的「这个 session 含及以前 = 先验」。一个 explore 目录 = 一条按时间排开的 session 流，focus 把它切成"用来抽卡的先验"和"用来验卡的后验"。
+>
+> ⚠️ **一处待你确认**：先验是否就是「本目录里更早的 session」（自包含），还是先验应来自目录之外的全局历史、本目录只是跑抽卡会话的工作区？文档暂按**自包含**写（见[待定](#仍待定)）。
 
 ## card / review 怎么挂到 explore（关联，非强制）
 
@@ -91,24 +93,27 @@ explore 的核心产出是一个**清晰的上下文 + 进度视图**：
 
 ```sql
 CREATE TABLE explores (
-  explore_id            TEXT PRIMARY KEY,    -- explore_<ulid>
-  focus_session_ids     TEXT NOT NULL,       -- JSON 数组：绑定的焦点会话
-  associated_session_ids TEXT NOT NULL,      -- JSON 数组：纳入考虑的所有 session（创建时捕获）
-  divider_at            TEXT NOT NULL,       -- 焦点 last_round_update_time 的最大值，canonical UTC-Z
-  created_at            TEXT NOT NULL,
-  note                  TEXT
+  explore_id        TEXT PRIMARY KEY,    -- explore_<ulid>
+  dir_path          TEXT NOT NULL,       -- 该 explore 的目录（关联集的权威依据，前缀匹配 cwd）
+  focus_session_ids TEXT NOT NULL,       -- JSON 数组：选中的焦点会话
+  divider_at        TEXT NOT NULL,       -- 焦点 last_round_update_time 的最大值，canonical UTC-Z
+  created_at        TEXT NOT NULL,
+  note              TEXT
 );
 ALTER TABLE sessions ADD COLUMN last_round_update_time TEXT;  -- 派生、append 时更新
 ALTER TABLE cards    ADD COLUMN explore_id TEXT;              -- NULL = freeform
 ALTER TABLE reviews  ADD COLUMN explore_id TEXT;              -- NULL = freeform
 ```
 
-文件镜像 + 事件（house style）：
+- **关联集的权威依据是 `dir_path`**（按 `metadata.cwd` 前缀活算），不是一份冻结的 id 列表——目录下的 session 是动态的。需要列表时按 `dir_path` 查 / 缓存即可（满足"存关联 session"的诉求，但路径才是源头）。
+- 先验/后验也**不**冻——是关联集 + 各 session 当前 `last_round_update_time` 的实时函数。
+
+文件镜像 + 事件（house style，explore 的目录本身就是它的工作区）：
 ```
-explores/<bucket>/<explore_id>/explore.json   ← manifest（focus + associated + divider）
+<dir_path>/                              ← 工作区目录；这里跑的 claude session 即关联会话
+explores/<bucket>/<explore_id>/explore.json   ← manifest（dir_path + focus + divider）
 explores/<bucket>/<explore_id>/events.jsonl   ← created / card_minted / review_filed
 ```
-先验/后验**不**冻进 manifest——它们是关联集 + 各 session 当前 `last_round_update_time` 的实时函数。manifest 冻的是「关联了哪些 session」「焦点是谁」「divider 在哪」。
 
 ## API / CLI 面
 
@@ -121,14 +126,15 @@ explores/<bucket>/<explore_id>/events.jsonl   ← created / card_minted / review
 
 ## 与旧 explore / recall / DAG / searchbase 关系
 
-- **旧 explore（cwd 召回压制）**：本设计取代它。"在工作区里抽卡时不被自动召回打扰"这个行为应当延续——在某个 explore 上下文里干活时 recall 仍压制。物理 cwd 机制怎么和新 explore 对象合并，见待定。
+- **旧 explore（cwd 召回压制）**：本设计取代它，**旧数据/feed 不迁移**（基本没被用起来）。复用的是它的两个机制：① 按 `session.metadata.cwd` 前缀认 session（现在 per-explore 目录）；② 在 explore 目录里跑 claude 时**压制 recall**（抽卡时让 LLM 清醒地自己决定看什么）。`settings.explore.cwd`（旧的单一全局目录）可废弃或留作 `<explore_root>` 的默认根。
 - **recall**：卡上的 `explore_id` 是惰性元数据，recall 不必读。（可选未来：「只 recall 某 explore 的卡」。）
 - **血缘 DAG**：结构不变；`explore_id` 只是 tag，不加边、无环险。君子协定下也不对 `source_cards` 做时间强制。
 - **searchbase**：零新增。卡只 embed insight；explore 按 id 查、不做语义检索。`explore_id` 纯活在 SQLite + JSON 镜像。
 
 ## 仍待定
 
-1. **多焦点会话的 divider 语义**：当前定为「焦点们 `last_round_update_time` 的最大值，焦点整体归先验侧」。确认这是你要的；还是想要别的（比如焦点会话本身既不算先验也不算后验，单独一档）？
-2. **关联会话集怎么定**：创建时捕获「当时存在的所有 session」当关联集（= 旧的创建时间天花板，现表达成显式列表）？还是只纳入和焦点相关的一部分（比如同 project/cwd）？
-3. **取代旧 explore 的迁移**：旧 `settings.explore.cwd` + 召回压制 + `/v3/explore` feed 怎么过渡到新 explore 对象——cwd 物理隔离机制保留并绑定到 explore 对象，还是另起一套？这块要单独读旧 feed 代码再细化。
-4. **`last_round_update_time` 回填**：给存量 session 怎么算这个字段（migration 里遍历 rounds.jsonl 一次性回填，还是懒加载）。
+1. **先验的来源**（最关键）：先验 = 「本 explore 目录里更早的 session」（自包含，文档现按此写），还是先验应来自**目录之外的全局历史**、本目录只是跑抽卡会话的工作区？这决定整个数据流。
+2. **多焦点会话的 divider 语义**：当前定为「焦点们 `last_round_update_time` 的最大值，焦点整体归先验侧」。确认；还是想让焦点单独一档（既非先验也非后验）？
+3. **`last_round_update_time` 回填**：给存量 session 怎么算（migration 里遍历 rounds.jsonl 一次性回填，还是懒加载）。
+
+> 已定（本轮）：旧 explore **不迁移**；关联集**按路径**（per-explore 目录，cwd 前缀活算）；时间全 UTC；君子协定不强制。
