@@ -62,7 +62,7 @@ explore 涉及**两类完全不同的 session**，关键是别混：
 | **驱动 session**（explore 自己的） | 你在 explore 目录里跑 Claude Code 做抽卡推理的会话——「实验记录本」 | **被排除**，不是被分析的对象 |
 | **被分析 session**（全局） | 全局 session 池里你真实的工作会话 | 按 `divider_at` 切成**先验 / 后验** |
 
-- **每个 explore 建一个自己的目录**（`<explore_root>/<explore_id>/`）。你在这目录下跑 claude 驱动分析；凡 `session.metadata.cwd` 落在此目录前缀下的 session = 这个 explore 的**驱动 session**（复用旧 explore 的 cwd 物理信号）。
+- **每个 explore 建一个自己的目录**（`explores/<YYYY>/<MM>/<explore_id>/`，既是工作区又是 canonical 存储，见[存储](#对象模型--存储)）。你在这目录下跑 claude 驱动分析；凡 `session.metadata.cwd` 落在此目录前缀下的 session = 这个 explore 的**驱动 session**（复用旧 explore 的 cwd 物理信号）。
 - **分割线的来源有两种，最终都化成一个时间 `divider_at`**：
   - 填一个全局**入口会话** `entrypoint_session_id` → 读它**创建那一刻**的 `last_round_update_time`；
   - 或直接给一个**时间**。
@@ -100,31 +100,42 @@ explore 的核心产出是一个**清晰的上下文 + 进度视图**：
 
 ## 对象模型 + 存储
 
-**版本**：新表 + 加列 = minor bump（schema 变更）。
+**一个目录搞定**：explore 的目录**既是工作区、又是 canonical 存储**——就落在 `explores/<YYYY>/<MM>/<explore_id>/`（按创建年/月分，不用 session/card 那种 `<source>/<hash-bucket>`；explore 无平台归属、量不大，年月排开翻着顺眼）。你在这个目录里跑 claude（驱动集，cwd 落此前缀即排除），分析产物也都堆在这个目录里。
+
+```
+explores/<YYYY>/<MM>/<explore_id>/
+  explore.json                    ← manifest：divider_at + entrypoint provenance + dir_path
+  events.jsonl                    ← created / card_minted / review_filed
+  sessions/<session_id>/          ← 每个分析过的 session 一个目录（file-canonical，详见下）
+    notes.md / cards.jsonl / reviews.jsonl / …   ← 该 session 在本 explore 下的分析产物
+  …                               ← claude 在此跑驱动会话时产生的工作文件
+```
+
+### 充分利用目录：per-session 文件，SQLite 只当瘦索引
+
+每个**分析过的 session**（先验或后验）在 `sessions/<session_id>/` 下建一个目录，把它在这个 explore 下的**分析细节以文件存**——比如这条先验 session 抽出了哪些卡、那条后验 session 写了哪些 review、相关 round 摘录、随手记的 notes。
+
+> 好处：**细节不进 SQLite**。SQLite 只保留能驱动查询的**瘦索引**（下表），富文本/明细全部 file-canonical（和 card/session/recall 一脉相承——文件是真相，库是缓存）。需要时从这些文件重建视图。
+
+**SQLite 瘦索引**（新表 + 加列 = minor bump）：
 
 ```sql
 CREATE TABLE explores (
-  explore_id           TEXT PRIMARY KEY, -- explore_<ulid>
-  dir_path             TEXT NOT NULL,    -- explore 的工作区目录；cwd 落此前缀下的 session = 驱动集(被排除)
-  divider_at           TEXT NOT NULL,    -- 冻结的分割线时间，canonical UTC-Z（本质参数）
-  entrypoint_session_id TEXT,            -- 可空：若用入口会话创建，记下它（仅 provenance）；直接给时间则为 NULL
-  created_at           TEXT NOT NULL,
-  note                 TEXT
+  explore_id            TEXT PRIMARY KEY, -- explore_<ulid>
+  dir_path              TEXT NOT NULL,    -- = explores/<YYYY>/<MM>/<explore_id>/；cwd 落此前缀的 session = 驱动集(排除)
+  divider_at            TEXT NOT NULL,    -- 冻结的分割线时间，canonical UTC-Z（本质参数）
+  entrypoint_session_id TEXT,             -- 可空：用入口会话创建则记下(仅 provenance)；直接给时间则 NULL
+  created_at            TEXT NOT NULL,
+  note                  TEXT
 );
 ALTER TABLE sessions ADD COLUMN last_round_update_time TEXT;  -- 派生、append 时更新
 ALTER TABLE cards    ADD COLUMN explore_id TEXT;              -- NULL = freeform
 ALTER TABLE reviews  ADD COLUMN explore_id TEXT;              -- NULL = freeform
 ```
 
-- **驱动集（被排除）的权威依据是 `dir_path`**（按 `session.metadata.cwd` 前缀活算）。
-- 先验/后验**不**冻、也不存——是「全局 session 池 − 驱动集」按各 session 当前 `last_round_update_time` 相对 `divider_at` 的实时函数。manifest 冻的只有 `dir_path` / `divider_at`（+ provenance `entrypoint_session_id`）。
-
-文件镜像 + 事件——**按创建年/月分目录**（不用 session/card 那种 `<source>/<hash-bucket>`）：explore **没有平台归属**（codex / claude code 驱动都无所谓），数量也不大，按年月排开后续翻起来更顺眼。
-```
-<dir_path>/                              ← 工作区目录；这里跑的 claude session = 驱动集(被排除)
-explores/<YYYY>/<MM>/<explore_id>/explore.json   ← manifest（dir_path + divider_at + entrypoint provenance）
-explores/<YYYY>/<MM>/<explore_id>/events.jsonl   ← created / card_minted / review_filed
-```
+- **驱动集**的权威依据是 `dir_path`（按 `session.metadata.cwd` 前缀活算）。
+- 先验/后验**不**冻、也不存——是「全局 session 池 − 驱动集」按各 session 当前 `last_round_update_time` 相对 `divider_at` 的实时函数。
+- card/review 仍是 SQLite 核心对象（沉浮/检索要用），但它们在**某 explore 下的明细**进 `sessions/<session_id>/` 文件；`explore_id` 列只是个瘦关联戳。
 
 ## API / CLI 面
 
@@ -137,7 +148,7 @@ explores/<YYYY>/<MM>/<explore_id>/events.jsonl   ← created / card_minted / rev
 
 ## 与旧 explore / recall / DAG / searchbase 关系
 
-- **旧 explore（cwd 召回压制）**：本设计取代它，**旧数据/feed 不迁移**（基本没被用起来）。复用的是它的两个机制：① 按 `session.metadata.cwd` 前缀认 session（现在 per-explore 目录）；② 在 explore 目录里跑 claude 时**压制 recall**（抽卡时让 LLM 清醒地自己决定看什么）。`settings.explore.cwd`（旧的单一全局目录）可废弃或留作 `<explore_root>` 的默认根。
+- **旧 explore（cwd 召回压制）**：本设计取代它，**旧数据/feed 不迁移**（基本没被用起来）。复用的是它的两个机制：① 按 `session.metadata.cwd` 前缀认 session（现在 per-explore 目录）；② 在 explore 目录里跑 claude 时**压制 recall**（抽卡时让 LLM 清醒地自己决定看什么）。`settings.explore.cwd`（旧的单一全局目录）可废弃或留作 `explores/` 根的默认位置。
 - **recall**：卡上的 `explore_id` 是惰性元数据，recall 不必读。（可选未来：「只 recall 某 explore 的卡」。）
 - **血缘 DAG**：结构不变；`explore_id` 只是 tag，不加边、无环险。君子协定下也不对 `source_cards` 做时间强制。
 - **searchbase**：零新增。卡只 embed insight；explore 按 id 查、不做语义检索。`explore_id` 纯活在 SQLite + JSON 镜像。
