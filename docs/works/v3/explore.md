@@ -104,16 +104,21 @@ explore 的核心产出是一个**清晰的上下文 + 进度视图**：
 
 ```
 explores/<YYYY>/<MM>/<explore_id>/
-  explore.json                    ← manifest：divider_at + entrypoint provenance + dir_path
-  events.jsonl                    ← created / card_minted / review_filed
-  sessions/<session_id>/          ← 每个分析过的 session 一个目录（file-canonical，详见下）
-    notes.md / cards.jsonl / reviews.jsonl / …   ← 该 session 在本 explore 下的分析产物
-  …                               ← claude 在此跑驱动会话时产生的工作文件
+  explore.json                       ← manifest：divider_at + entrypoint provenance + dir_path
+  events.jsonl                       ← created / card_minted / review_filed
+  sessions/
+    prior/<session_id>/              ← 先验 session：从它抽卡的分析产物
+      notes.md / minted_cards.jsonl / round_excerpts.md / …
+    posterior/<session_id>/          ← 后验 session：用它 review 的分析产物
+      notes.md / filed_reviews.jsonl / …
+  …                                  ← claude 在此跑驱动会话时产生的工作文件
 ```
 
 ### 充分利用目录：per-session 文件，SQLite 只当瘦索引
 
-每个**分析过的 session**（先验或后验）在 `sessions/<session_id>/` 下建一个目录，把它在这个 explore 下的**分析细节以文件存**——比如这条先验 session 抽出了哪些卡、那条后验 session 写了哪些 review、相关 round 摘录、随手记的 notes。
+每个**分析过的 session** 在 `sessions/{prior,posterior}/<session_id>/` 下建一个目录，按它扮演的角色分开存——**先验**目录放「从它抽出哪些卡 + round 摘录 + notes」，**后验**目录放「用它写了哪些 review + notes」。一眼能分清抽卡素材和验卡证据。
+
+> 目录归到先验/后验，记的是这条 session 在分析里**实际扮演的角色**（被抽卡 = 先验 / 被拿去 review = 后验），是稳定的历史事实；它和「视图里那个会随 `last_round_update_time` 漂移的实时时间分类」是两回事——绝大多数情况下二者一致，少数漂移了也无妨（君子协定）。
 
 > 好处：**细节不进 SQLite**。SQLite 只保留能驱动查询的**瘦索引**（下表），富文本/明细全部 file-canonical（和 card/session/recall 一脉相承——文件是真相，库是缓存）。需要时从这些文件重建视图。
 
