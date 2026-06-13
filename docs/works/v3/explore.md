@@ -62,7 +62,7 @@ explore 涉及**两类完全不同的 session**，关键是别混：
 | **驱动 session**（explore 自己的） | 你在 explore 目录里跑 Claude Code 做抽卡推理的会话——「实验记录本」 | **被排除**，不是被分析的对象 |
 | **被分析 session**（全局） | 全局 session 池里你真实的工作会话 | 按 `divider_at` 切成**先验 / 后验** |
 
-- **每个 explore 建一个自己的目录**（`explores/<YYYY>/<MM>/<explore_id>/`，既是工作区又是 canonical 存储，见[存储](#对象模型--存储)）。你在这目录下跑 claude 驱动分析；凡 `session.metadata.cwd` 落在此目录前缀下的 session = 这个 explore 的**驱动 session**（复用旧 explore 的 cwd 物理信号）。
+- **每个 explore 建一个自己的目录**（`explores/<YYYY>/<MM>/<explore_id>/`，一个**自由工作区**，系统只放一个 `explore.json`，见[存储](#对象模型--存储)）。你在这目录下跑 claude 驱动分析；凡 `session.metadata.cwd` 落在此目录前缀下的 session = 这个 explore 的**驱动 session**（复用旧 explore 的 cwd 物理信号）。
 - **分割线的来源有两种，最终都化成一个时间 `divider_at`**：
   - 填一个全局**入口会话** `entrypoint_session_id` → 读它**创建那一刻**的 `last_round_update_time`；
   - 或直接给一个**时间**。
@@ -79,7 +79,7 @@ explore 涉及**两类完全不同的 session**，关键是别混：
 
 - `cards.explore_id` / `reviews.explore_id`（可空列，NULL=freeform）：在某个 explore 工作区里抽的卡 / 写的 review 盖上它的戳。**只是关联标记，不触发任何拒绝逻辑。**
 - 约定（君子，不强制）：在 explore 里抽卡**应当**只引先验 session 的 round；review **应当**用后验 session。explore 的视图把"先验/后验"摆清楚来**支持**这个约定，但不阻止你违反。
-- 复用现有写路径：`CreateCardRequest` / `CreateReviewRequest` 加可选 `explore_id`，带了就盖戳 + 往 explore 的 `events.jsonl` 记一条；其余（文件镜像/事件/stats/向量）全不变。
+- 复用现有写路径：`CreateCardRequest` / `CreateReviewRequest` 加可选 `explore_id`，带了就盖个戳；其余（card/review 各自的文件镜像、事件、stats、向量）全不变。explore 不另起 events.jsonl——"这个 explore 抽了哪些卡 / 收了哪些 review"从 SQLite `WHERE explore_id` 查即可。
 
 ## 视图：先验/后验 + 验证进度
 
@@ -100,33 +100,22 @@ explore 的核心产出是一个**清晰的上下文 + 进度视图**：
 
 ## 对象模型 + 存储
 
-**一个目录搞定**：explore 的目录**既是工作区、又是 canonical 存储**——就落在 `explores/<YYYY>/<MM>/<explore_id>/`（按创建年/月分，不用 session/card 那种 `<source>/<hash-bucket>`；explore 无平台归属、量不大，年月排开翻着顺眼）。你在这个目录里跑 claude（驱动集，cwd 落此前缀即排除），分析产物也都堆在这个目录里。
+explore 的目录是一个**自由的工作区**——Claude Code 在里面跑、想写什么写什么，**不是元信息目录**。所以系统**绝不**往里强加结构化 jsonl 让 AI 维护（events / index / per-session reviews 这些一律不要）：AI 不会可靠遵守 schema，工作区会乱成一团。系统只放**一个** `explore.json`（人读的 manifest，权威记录在 SQLite，这份只是镜像）。
 
 ```
-explores/<YYYY>/<MM>/<explore_id>/
-  explore.json                       ← manifest：divider_at + entrypoint provenance + dir_path
-  events.jsonl                       ← created / card_minted / review_filed
-  cards/                             ← explore 抽出的卡（每张卡综合 N 个先验 session）—— explore 级
-    <card_id>.json / index.jsonl     ← 卡本体在全局 cards/；这里是本 explore 产出卡的索引/引用
-  sessions/
-    prior/<session_id>/              ← 这条先验 session 喂给抽卡的「素材」：round 摘录 / 笔记（不是卡！）
-    posterior/<session_id>/          ← 这条后验 session 写的 review（review = 该 session 对某卡的判定）
-  …                                  ← claude 在此跑驱动会话时产生的工作文件
+explores/<YYYY>/<MM>/<explore_id>/      ← 工作区目录（claude 在此跑 = 驱动集，cwd 落此前缀即排除）
+  explore.json                          ← 唯一的系统文件：divider_at + entrypoint + dir_path（SQLite 的镜像）
+  …                                     ← 其余全是 claude 自由产出的工作文件，系统不管它结构
 ```
 
-### 充分利用目录：明细以文件存，SQLite 只当瘦索引
+> 按创建年/月分目录（`<YYYY>/<MM>/`，不用 session/card 那种 `<source>/<hash-bucket>`）：explore 无平台归属、量不大，年月排开翻着顺眼。
 
-两类东西归属不同，别混：
+**card / review 不落在工作区**，走正常路径进各自现成的 canonical 罐：
+- **card** 是把**多个先验 session** 综合出的洞见 → 属于 explore（工厂产出），但卡本体仍存全局 `cards/`（card-creation-flow 那套），只在 SQLite 上盖个 `explore_id` 瘦戳标记"这是哪个 explore 抽的"。**不挂到任何单个 session 下。**
+- **review** = `(后验 session, card, stance)` → 存全局 `reviews/` + `explore_id` 戳。
+- 抽卡/验卡靠 `card create --explore <eid>` / `review create --explore <eid>`，由 **CardService/ReviewService 可靠写**——不是指望 AI 往工作区 dump 文件。
 
-- **card 属于 explore，不属于 session**：一张卡是把**多个先验 session** 综合出来的洞见，所以放 explore 级的 `cards/`（卡本体仍在全局 `cards/` 罐里，这里只存本 explore 产出哪些卡的索引）。**不要**把卡挂到某个 session 下。
-- **`sessions/prior/<id>/`** 只放从**这一条** session 里摘出来、喂给抽卡的**素材**（round 摘录、随手笔记）——是原料，不是成品卡。
-- **`sessions/posterior/<id>/`** 放这条后验 session 写的 **review**——review 本就是 `(后验 session, card, stance)` 的 per-session 判定，挂在它名下天然合理。
-
-> SQLite 只保留瘦索引（explores 行 + `explore_id` 戳 + `last_round_update_time`）；上面这些明细全部 file-canonical（文件是真相，库是缓存），需要时从文件重建视图。
->
-> 目录归先验/后验记的是 session **实际扮演的角色**（被抽卡的素材 = 先验 / 写了 review = 后验），稳定的历史事实；和「视图里随 `last_round_update_time` 漂移的实时时间分类」是两回事，绝大多数一致、少数漂了也无妨（君子协定）。
-
-> 好处：**细节不进 SQLite**。SQLite 只保留能驱动查询的**瘦索引**（下表），富文本/明细全部 file-canonical（和 card/session/recall 一脉相承——文件是真相，库是缓存）。需要时从这些文件重建视图。
+> 所以"细节不进 SQLite"靠的是 **card/review 本来就 file-canonical**（各自的罐 + 瘦 SQLite 索引），explore 只加一个 `explore_id` 戳。视图（先验/后验堆、spent/unspent、每卡判定）全部从 SQLite `cards/reviews WHERE explore_id` 实时算，工作区里不需要任何索引文件。
 
 **SQLite 瘦索引**（新表 + 加列 = minor bump）：
 
@@ -170,6 +159,6 @@ ALTER TABLE reviews  ADD COLUMN explore_id TEXT;              -- NULL = freeform
 - **先验/后验** = **全局 session 池**按 `divider_at` 切、**减去 explore 目录的驱动 session**；归属实时（线冻、归属活）。
 - **驱动集** = `metadata.cwd` 落在 explore 目录前缀下的 session（被排除）；**`metadata.cwd` 缺失 → 当作非驱动，仍参与先验/后验分析**。
 - **`last_round_update_time`** 存量在 **migration 里遍历 rounds.jsonl 一次性回填**、之后 append 增量更新；全程带时区 UTC。
-- **存储**：一个目录搞定（`explores/<YYYY>/<MM>/<explore_id>/`，工作区 + canonical 合一）；per-session 明细按 `sessions/{prior,posterior}/<id>/` file-canonical；SQLite 只当瘦索引。
+- **存储**：explore 目录是**自由工作区**（claude 在此跑），系统只放一个 `explore.json`，**不往里塞结构化 jsonl**；card/review 走正常 API 进各自现成的全局罐 + `explore_id` 瘦戳；视图从 SQLite `WHERE explore_id` 算。
 - **旧 explore 不迁移**（复用其 cwd 信号 + recall 压制，改成 per-explore 目录）。
 - **君子协定**：explore 只摆清先验/后验结构，**不强制**抽卡/review 的引用约束。
