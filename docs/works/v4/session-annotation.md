@@ -32,7 +32,7 @@
 
 - **逐 round**:标注挂在 `(session_id, round_index)` 上,一轮一条(或多条)。
 - **append-only**:标注**只增不改**(跟 card / review / session 一个不变性)。改主意 = 追加新的一条,不覆盖。
-- **可标很多遍(v1 → v2 → …)**:同一轮可以被**重复标注**。第二遍带着更多 session 上下文 / 更多已建的卡回头看,**常常冒出第一遍没有的新感悟**——所以 `pass` 字段记第几遍,越后面的标注往往越深。
+- **可标很多遍(第 1 遍 → 第 2 遍 → …)**:整段对话可以被**反复重读标注**。后一遍带着更多 session 上下文 / 更多已建的卡回头看,**常常冒出前一遍没有的新感悟**——所以**一遍存一个文件**(`annotations/pass-N.jsonl`,§5),越后面的往往越深。
 - **内容是自由的「感悟」**:为什么有这段对话、它在干嘛、我意识到什么。其中**问题用 `#` 就地标出来**(§3)。
 
 > 为什么允许标很多遍:认知是**回看才长出来**的。第一遍读 round 37 可能只觉得「在配 pty」;建了几张卡、读完后面几轮再回看,才意识到「#为什么 pty 会让用户想到 tmux」。append-only 多遍标注把这个**逐步加深**的过程**留痕**,而不是只存一个终态。
@@ -54,7 +54,7 @@
 2. 每个问题走 [card.md §6](card.md#6-写路径每轮对话怎么变成卡--旁白--惊讶--question) 的三岔(embed 问题 → 撞 `cards` / issue 向量库):
    - **新问题(检索 miss)→ 建一张新卡**(`open` 的卡,在等答案)。
    - **老问题(检索 hit)→ 关联**到那张已有卡(annotation ↔ card 连上,顺便给老卡的 salience 加一点:它又被问起了)。
-3. 把 annotation ↔ card 的关联落库(`annotation_questions`),`is_new` 记这条 `#` 是建了新卡还是关联老卡。
+3. 把 annotation ↔ card 的关联**写进这一行的 `questions[]`**(`card_id` + `is_new`:建了新卡还是关联老卡)——**不进 SQLite**(§5)。
 
 **这一步把「判断惊讶」从 AI 手里拿走了**:AI 只管**读 + 自然地标问题**;「这是不是个新问题(= 惊讶)」由**检索**算(miss = 新卡)。这正是 [card.md §6 命门](card.md#6-写路径每轮对话怎么变成卡--旁白--惊讶--question) 最自然的落地——**惊讶 grounding 在检索,而不是 AI 自评**。于是建卡**非常自然**:你认真读、随手标问题,卡就长出来了。
 
@@ -72,44 +72,37 @@
 
 ---
 
-## 5. 存储
+## 5. 存储:跟 round 正文一样,file-canonical、不进 SQLite
 
-沿用 file-canonical:标注是 session 的 sidecar,append-only;SQLite 建索引 + 存 `#` 解析出的卡关联。
+annotation 是**大段自由文本**,量不小——所以**和 `rounds.jsonl`(round 正文)一个处理法**:**落文件、不进 SQLite**(v3 早把 `rounds_index` 表删了,round 正文只活在 `rounds.jsonl`)。一次「重读一遍」= 一个文件,append-only。
 
 ```
-sessions/<bucket>/<session_id>/annotations.jsonl   ← append-only,一行一条标注(canonical)
+sessions/<source>/<sid[0:2]>/<sid>/
+  rounds.jsonl              ← v3:round 正文(canonical · append-only)
+  annotations/
+    pass-1.jsonl            ← 第一遍读这段对话的标注(每行 = 某 round 在这遍的标注)
+    pass-2.jsonl            ← 第二遍重读……新感悟进新文件,旧文件不动
+    …
 ```
+
+一行 = 某 round 在这一遍的标注:
 
 ```json
-{"annotation_id": "anno_01j…", "round_index": 37, "pass": 2,
- "text": "…#为什么 pty 会让用户想到 tmux…",
+{"round_index": 37,
+ "text": "配 pty 时用户突然提了 tmux。#为什么 pty 会让用户想到 tmux\n他其实想要可重连会话。",
  "questions": [{"raw": "为什么 pty 会让用户想到 tmux", "card_id": "card_01j…", "is_new": true}],
- "created_at": "2026-06-15T08:30:00Z"}
+ "created_at": "2026-06-16T08:30:00Z"}
 ```
 
-```sql
-CREATE TABLE annotations (
-  annotation_id TEXT PRIMARY KEY,            -- anno_<ulid>
-  session_id    TEXT NOT NULL,
-  round_index   INTEGER NOT NULL,
-  pass          INTEGER NOT NULL DEFAULT 1,  -- 第几遍标这一轮(v1/v2/…)
-  text          TEXT NOT NULL,               -- 派生副本;canonical 在 annotations.jsonl
-  created_at    TEXT NOT NULL
-);
-CREATE INDEX idx_anno_round ON annotations(session_id, round_index, pass);
--- 标注里 # 出来的问题 ↔ 卡(新建 or 关联)
-CREATE TABLE annotation_questions (
-  annotation_id TEXT NOT NULL,
-  card_id       TEXT NOT NULL,               -- 解析 # 后 match/create 的卡(card.md §6)
-  raw           TEXT NOT NULL,               -- 原始问题文本
-  is_new        INTEGER NOT NULL,            -- 1 = 建了新卡;0 = 关联老卡
-  PRIMARY KEY (annotation_id, card_id)
-);
-CREATE INDEX idx_anno_q_card ON annotation_questions(card_id);
-```
+规则(照搬 round 正文那套不变性):
 
-- **annotation 不进向量库**——它本身不是检索单元;进 `cards` 向量库的是它 `#` 出来的**问题(卡)**。
-- **多遍 = 多行**(同 `(session_id, round_index)` 不同 `pass`),append-only,从不覆盖。
+- **一遍一个文件**:`pass-N.jsonl` = 第 N 遍**重读整段对话**的产物。**最高编号 = 当前可追加;更低的已冻结**(再有新感悟 → 开下一遍)。每个 done 的 pass 文件天然不可变,还能 diff「这遍比上遍多悟到什么」。
+- **可稀疏**:一遍里可能只重标了几个有新感悟的 round——`pass-N.jsonl` 只放这遍真写了的那些行。
+- **append-only**:跟 `rounds.jsonl` 一样,只追加,从不改既有行。
+- **不进 SQLite、也不进向量库**:annotation 本身不是检索单元;进 `cards` 向量库的是它 `#` 出来的**问题(卡)**,卡走正常 card 写路径落 SQLite。
+- **annotation ↔ card 的链就写在那一行的 `questions[]` 里**(`card_id` / `is_new`),**不另起 SQLite 表**。以后若要「按 card 反查是哪些标注提出来的」,跟 v3 从 `rounds.jsonl` 回填 `last_round_update_time` 一个路子——**扫 `annotations/*.jsonl` 派生**即可,不必常驻一张表。
+
+> **命名小注**:文件名写 `pass-N.jsonl` 而不是 `vN.jsonl`——本仓 `v` 已被**迁移框架版本号**和**产品代号 v3/v4** 占了两层意思,annotation 的「第几遍」用 `pass-N` 不容易混。结构跟你说的一样(一遍一个文件),只换了个不撞名的前缀。
 
 ---
 
@@ -117,7 +110,7 @@ CREATE INDEX idx_anno_q_card ON annotation_questions(card_id);
 
 - **card.md**:本篇是 card 写路径的**前端 ergonomics**;「新卡 vs 关联」的判定、卡 / Position / 沉浮全在 card.md,本篇不重复,只负责「从认真读里**自然冒出** `#问题`」。
 - **explore.md**:explore 是**在先验 session 上跑标注**的工作台——你在 explore 目录里逐 round 标注先验会话,`#问题` 建 / 连卡,产物盖 `explore_id` 戳。annotation 就是 explore 里「抽卡」的那个具体动作。
-- **v3 session / round**:annotation 挂在现成的 `session.rounds[index]` 上,**不改 round 本身**(round 仍 append-only);annotation 是**新增 sidecar**,不动 v3 既有结构。
+- **v3 session / round**:annotation 按 `round_index` 指回现成的 `rounds.jsonl`,**不改 round 本身**(round 仍 append-only);annotation 是 session 目录下**新增的 `annotations/` sidecar**(跟 `rounds.jsonl` 并列),不动 v3 既有结构、也不进 SQLite。
 - **v3 tag**:`#问题` 是**类 tag 的就地标记**,但语义不同——v3 `key=value` tag 是死字符串;`#问题` 写入时被**解析成卡 id**(建 / 连),是活的。
 
 ---
