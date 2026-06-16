@@ -173,6 +173,8 @@
 **惊讶幅度**(排序 / 预算用)用**检索距离**(question 到图里最近节点的 cosine)当代理,**也不用 logprob**。logprob 降为可选高保真层,大概率用不上。
 
 > 写路径的上游工作台是 **explore**(先验/后验抽卡工作区,[../v3/explore.md](../v3/explore.md)):在先验 session 上跑这条「旁白→惊讶→question」抽出 v4 卡,用后验 session 回流证据(§7)。explore 的产物从「insight 卡」换成「v4 卡(问题 + 答案)」,工作台机制不变。
+>
+> **这条写路径落地成什么 ergonomics** —— 逐 round 标注(以写代读)+ 标注里 `#问题` 自动建卡 / 关联 —— 见 [session-annotation.md](session-annotation.md)。那篇是本节逻辑的**具体前端**:annotation = 旁白,`#问题` = question,新卡/关联复用本节三岔。
 
 ---
 
