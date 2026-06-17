@@ -22,7 +22,7 @@
 |---|---|---|
 | **v3 card** | 现在线上的卡:一句 `insight` + rounds + source_cards,沉浮靠 review/read/recall 三轴 | **改名 `insight`**,数据保留、只读可搜,不再是抽卡主路径 |
 | **insight** | 上一行改名后的产物,**就是 v3 card** | 慢慢下掉(后续可逐条投影进 v4 图,见 §9) |
-| **v4 card** | 本稿:一张卡 = **一个 Issue(问题)+ 若干 Position(答案候选)**;哪个答案胜出靠 review 顶/踩 + 沉浮竞争;卡连成被治理的问题图 | 新建,**复用腾出来的 `card_` 前缀 + `card` 命令** |
+| **v4 card** | 本稿:一张卡 = **一个 Issue(问题)+ 若干 Position(答案候选)**;哪个答案胜出靠 argument 顶/踩 + 沉浮竞争;卡连成被治理的问题图 | 新建,**复用腾出来的 `card_` 前缀 + `card` 命令** |
 
 > 一句话:**v4 把"陈述卡"升级成"问答卡 + 问题图 + 治理层"。** v3 的卡没死,只是退到 `insight` 这个名字下慢慢退场。
 
@@ -38,7 +38,7 @@
 |---|---|---|---|
 | 1 | **卡是孤立陈述** | 难索引、难关联,还互相矛盾:「用户喜欢简洁」vs「用户有时要详细」谁说了算? | [§2 问答化](#2-第一推card--一个问题--它的若干答案) + [§4 IBIS](#4-第三推问题连成图--这套东西叫-ibis) |
 | 2 | **「对不对」和「现在相不相关」搅在一起** | 一张卡被频繁 recall ≠ 它被验证过;`review_count` 和 `recall_count` 混在一个沉浮公式里 | [§3 两根正交轴](#3-第二推credence--salience校验轴和显著轴是两回事) |
-| 3 | **凭什么信一个答案** | 从一句话抽出的断言,可能只是模型臆测,没有证据链 | [§3 credence ← review 证据](#3-第二推credence--salience校验轴和显著轴是两回事) |
+| 3 | **凭什么信一个答案** | 从一句话抽出的断言,可能只是模型臆测,没有证据链 | [§3 credence ← argument 证据](#3-第二推credence--salience校验轴和显著轴是两回事) |
 | 4 | **卡会过期、会被场景误用** | 去年的「住杭州」、投资立场卡跑去给育儿建议;v3 只有 `age_days` 一个弱信号 | [§5 治理四维](#5-第四推给卡装上治理--时位势变) |
 
 ---
@@ -50,9 +50,9 @@
 为什么这步对:
 
 - **问题是天然的索引**:一个问题就是它那些答案的*适用条件*。检索时拿当前 context 去**撞问题**(而非撞陈述),命中率和精度都更高。
-- **一个问题可以有多个答案在竞争**:哪个答案更好,**不靠创建时拍板**,而是后面用 review 顶/踩 + 沉浮**竞争**出来(§3)。
+- **一个问题可以有多个答案在竞争**:哪个答案更好,**不靠创建时拍板**,而是后面用 argument 顶/踩 + 沉浮**竞争**出来(§3)。
 - **答案文本就内联在 Position 上**:不单独建 Claim 节点、不跨 Position 共享去重——简单优先。(真出现「同一答案挂多个问题」的需求,再提升成共享节点,见 [§12](#12-诚实边界--待定)。)
-- **没答的问题本身有价值**:一张还没有 `accepted` 答案的卡 = 一个**开放回路**(`open = 1`),在等证据。
+- **没答的问题本身有价值**:一张还没有任何答案(Position)的卡,就是个**还在等答案的问题**——它不必被「解决掉」,所以也**不需要 open/closed 这种状态**。
 
 于是一张 v4 卡 = **一个 Issue + 若干 Position**,涉及两种对象 + 一种复用 v3 的信号:
 
@@ -60,11 +60,11 @@
 |---|---|---|
 | **Card ≡ Issue** | 卡的那个**问题**(一张卡 = 一个问题,1:1) | **检索单元 + 图节点**(embed 问题;卡↔卡连边见 §4) |
 | **Position** | 卡底下的**一个候选答案**(答案文本 `claim` 内联在它身上) | **被顶/踩、被沉浮排序的那个东西**——治理 + credence 都挂它身上 |
-| **Review**(复用 v3) | 带 session 证据(`indexes`)的一次**顶/踩**(`score` ±1/0),**target = Position** | 既是「证据」也是「投票」(§3) |
+| **Argument**(= IBIS 论据) | 带 session 证据(`indexes`)的一次**顶/踩**(`stance` = `pro` \| `con`,就俩值),**target = Position**;机制沿用 v3 review | 既是「证据」也是「投票」(§3) |
 
-> **别再把 Position 当成整张卡**(这是上一稿的错):**card = 一个 Issue + 若干 Position**。Position 是**答案候选**,卡是**问题 + 这些候选的集合**。「哪个 Position 是这张卡的答案」不是写死的,是 review + 沉浮**浮**出来的(`accepted` ≈ Stack Overflow 的采纳答案)。
+> **别再把 Position 当成整张卡**(这是上一稿的错):**card = 一个 Issue + 若干 Position**。Position 是**答案候选**,卡是**问题 + 这些候选的集合**。「哪个 Position 是这张卡的答案」不是写死的,是 argument + 沉浮**浮**出来的(`accepted` ≈ Stack Overflow 的采纳答案)。
 >
-> **没有独立的 Argument 对象**:支持/反对一个 Position 的「证据」就是**带 session 证据的 review**——v3 的 review 本来就带 `indexes`(证据)+ `score`(顶/踩),它**就是**那条「证据 + 表态」。所以 Argument 直接并进 Review,不另起对象。
+> **Argument = 带 session 证据的顶/踩**:支持/反对一个 Position 的证据,就是一条 **Argument**(`indexes` 证据 + `stance`,`stance` 只有 `pro`(顶/支持)和 `con`(踩/反对)两个值——**没有中立**)。它**机制上沿用 v3 的 review**(v3 review 也是「证据 + 表态」),只是按 IBIS 把这个对象叫回它的本名 `Argument`。于是三个 IBIS 节点齐活:**Issue(卡)/ Position / Argument**。
 >
 > **跨卡关联只走 `card_links`(§4)**:答案文本内联、不共享,所以没有「共享 claim」那条隐式关联路径;Position 之间也**不直接结网**(图的骨架在卡/问题层)。
 
@@ -76,19 +76,19 @@
 
 | 轴 | 字段 | 问的是 | 谁来推它 | 被什么往下压 |
 |---|---|---|---|---|
-| **校验轴** | `credence`(← `corroborations` / `contradictions`) | 这个答案**对不对**、验过没 | **对这个 Position 的 review 顶/踩**(带 session 证据) | **只有真·反驳**(踩 / contradiction) |
+| **校验轴** | `credence`(← `corroborations` / `contradictions`) | 这个答案**对不对**、验过没 | **对这个 Position 的 argument(顶/踩)**(带 session 证据) | **只有真·反驳**(踩 / contradiction) |
 | **显著轴** | `salience` / `momentum` | 这个答案现在**相不相关** | recall / read(被路过、被看) | **沉默**(主题没再出现) |
 
 **关键:论坛动力学没变,只是从「整张卡」下放到「Position」。** v3 的 review/read/recall + 沉浮那套**原封不动**,只把 target 从 `card_id` 换成 `position_id`:
 
-- `corroborations` / `contradictions` **就是这个 Position 的 `review_up` / `review_down`**(顶 / 踩)。`credence` 是它俩的函数(顶抬、踩压、沉默不动)。
+- `corroborations` / `contradictions` **就是这个 Position 收到的 pro / con argument 数**(顶 / 踩,对应 v3 的 `review_up` / `review_down`)。`credence` 是它俩的函数(顶抬、踩压、沉默不动)。
 - `momentum` 还是那条沉浮公式,只是现在**在一张卡内部给若干 Position 排序**——把最该信、最相关的答案浮上来,`accepted` = 浮上来的那个。
-- 所以「**哪个 Position 更好**」= 用**原有的 session 证据投票机制(review)**对 Position 顶/踩,再让沉浮排序——**不是新发明的机制**。
+- 所以「**哪个 Position 更好**」= 用 **argument(沿用 v3 的 session 证据投票机制)**对 Position 顶/踩,再让沉浮排序——**不是新发明的机制**。
 
 最容易写错、也最关键的一点:**沉默 ≠ 确认**。后续对话**绝大多数**对一个 Position 是沉默的(主题压根没再出现):
 
 - 沉默只让它**沉底**(动 `salience`/`momentum`),**不动它的对错**(`credence` 不变)。
-- 校验**只认**真·顶 / 真·踩(带证据的 review),无关的不算(§6 写路径靠「检索匹配」判定相不相关)。
+- 校验**只认**真·顶 / 真·踩(带证据的 argument),无关的不算(§6 写路径靠「检索匹配」判定相不相关)。
 
 > **对照 v3**:v3 的 review/read/recall 挂在**整张卡**上——一张卡只有一个「立场」,赞踩都算到这一张。v4 把它**下放到 Position**:同一个问题下的**不同答案各自被顶踩、各自沉浮**,于是「这个问题到底哪个答案对」第一次有了**结构**(竞争 + 采纳),而不是糊在一张卡上。
 
@@ -98,7 +98,7 @@
 
 针对墙 1 的后半(关联)。卡已经是「问题 + 多个答案 + 证据」,问题与问题之间显然还互相关联:一个问题是另一个的细化、一个答案会引出新问题……
 
-把这些关联显式化之后会发现:**被 card 的问题独立推出来的东西,学术上早有名字——IBIS(Issue-Based Information System)**。它的节点 Issue / Position 正好对上(它的 Argument 在本设计**并进 Review**,见 §2),问题之间的关系也正好是它那套。直接借本体,不重造轮子。
+把这些关联显式化之后会发现:**被 card 的问题独立推出来的东西,学术上早有名字——IBIS(Issue-Based Information System)**。它的三类节点 Issue / Position / Argument 正好都对上(Argument 沿用 v3 review 的机制,见 §2),问题之间的关系也正好是它那套。直接借本体,不重造轮子。
 
 **什么连什么**:**卡 ↔ 卡**(= `issue ↔ issue`,因 card ≡ issue)是**关联主干**;`position` 之间不直接结网。
 
@@ -110,7 +110,7 @@
 | `replaces` | A 重述并取代 B(**保留历史**,不删 B) | 有向 |
 | `related` | 兜底泛关联 | 无向 |
 
-> IBIS 关系集**不完备**,可按需补 `depends_on` / `part_of`。存储上是**两套抄**:**本体抄 IBIS**(节点 + 边的类型学),**投票 / 采纳那套机制抄 Stack Overflow**(**review 顶/踩 → credence**;`accepted` 采纳 = 浮上来的那个答案)。这些 issue↔issue 的边,落地就是**卡↔卡**的边(`card_links`,§8)。
+> IBIS 关系集**不完备**,可按需补 `depends_on` / `part_of`。存储上是**两套抄**:**本体抄 IBIS**(节点 + 边的类型学),**投票 / 采纳那套机制抄 Stack Overflow**(**argument 顶/踩 → credence**;`accepted` 采纳 = 浮上来的那个答案)。这些 issue↔issue 的边,落地就是**卡↔卡**的边(`card_links`,§8)。
 
 ---
 
@@ -152,22 +152,24 @@
 
 ## 6. 写路径:每轮对话怎么变成卡 —— 旁白 → 惊讶 → question
 
-前面讲卡长什么样、怎么用;这节讲卡**怎么从对话里长出来**。这步本身也是演进出来的:
+前面讲卡长什么样、怎么用;这节讲卡**怎么从对话里长出来**。下面是几种做法的取舍——**这是设计推理(考虑过什么、为什么否掉),不是跑过的版本**;尤其 logprob 那条**从没实现、也没有字段**,只是一条被划掉的岔路:
 
-| 版本 | 做法 | 为什么换掉 |
+| 做法 | 怎么做 | 取舍 |
 |---|---|---|
-| **v0** | 给**每个** round 加一条**旁白**(标「为什么有这段对话」+ 提几个问题) | 绝大多数 round 平淡,每条都标只产生噪声 |
-| **v1** | 只标「**惊讶**」旁白(普通旁白无意义) | 问题转成:怎么判一轮惊不惊讶 |
-| **v2** | 惊讶用 **logprob** 测(带 / 不带用户模型两遍打分,`ℓ_model − ℓ_base`) | Opus 接口给不了 logprob,得挂本地打分器,重 |
-| **v3(当前选定)** | 一条旁白**只要能冒出 question,就近似一个惊讶**——把「检测惊讶」和「产出 question」合成一步,免掉 logprob | —— |
+| 每条旁白都直接变卡 | 每个 round 写旁白,**每条旁白都落成一张卡** | **否**:绝大多数 round 平淡,**每条都变卡 = 噪声**(注意:噪声来自「都变卡」,**不是**来自「都标注」) |
+| 只在「惊讶」的轮才动手 | 跳过平淡的轮,只标 / 只抽惊讶处 | 把问题推成「**怎么判一轮惊不惊讶**」;而且「让 AI 自己挑该读哪轮」恰恰是**走神的入口** |
+| 用 logprob 测惊讶 | 带 / 不带用户模型两遍打分,`ℓ_model − ℓ_base` | **否(从没实现、无字段)**:Opus 接口给不了 logprob,挂本地打分器太重 |
+| **每轮照标,但只有 `#问题` 经检索才建卡**(当前选定) | **每个 round 都写旁白**(以写代读防走神);标注**不直接变卡**,只有其中 `#问题`、且检索判为新问题(miss)才建卡 | **选它**:per-round 标注是 forcing function(**不是噪声**),噪声靠下游「检索过滤」掐掉;惊讶不靠 AI 自判,靠检索 miss。落地见 [session-annotation.md](session-annotation.md) |
+
+> **纠正**:别把账算到「每轮都标」头上——噪声来自**每条标注都变成卡**,不是来自**每轮都标**。当前设计**就是每轮都标**(那正是 [session-annotation.md](session-annotation.md) 的「以写代读」核心),只是把「变不变卡」交给 `#问题` + 检索过滤;所以每轮标注非但不是噪声,反而是**防走神的关键**。
 
 **命门**(否则退化成 confabulation):惊讶**不是**「生成了 question」(LLM 永远能生成 question),而是「**生成的 question 在图里找不到已被自信回答的对应**」。所以拿生成的 question 去 **issue 向量库检索匹配**,按结果分三岔:
 
 | 检索结果 | 判定 | 动作 |
 |---|---|---|
 | **miss**(最近邻距离 > θ) | 真·新问题 | 建**新卡**(新问题),起 why→Q→A 的第一个 Position,`birth_surprise` = 距离 |
-| **hit** 某卡、且它 `accepted` 的答案一致 | 不惊讶 | 对那个 Position **顶一票**(review +1 → `corroborations++`,轻推 credence) |
-| **hit** 某卡、但与它现有答案**冲突** | **矛盾(最高价值)** | 给旧 Position **踩一票**(review −1)+ 在**同一张卡下新建一个竞争 Position** |
+| **hit** 某卡、且它 `accepted` 的答案一致 | 不惊讶 | 对那个 Position 加一条 **pro argument**(→ `corroborations++`,轻推 credence) |
+| **hit** 某卡、但与它现有答案**冲突** | **矛盾(最高价值)** | 给旧 Position 加一条 **con argument** + 在**同一张卡下新建一个竞争 Position** |
 
 **惊讶幅度**(排序 / 预算用)用**检索距离**(question 到图里最近节点的 cosine)当代理,**也不用 logprob**。logprob 降为可选高保真层,大概率用不上。
 
@@ -186,18 +188,17 @@
 ```python
 class Card(BaseModel):                      # = 一个问题(≡ Issue),图节点
     card_id: ID                             # card_<ulid>
-    question: str                           # 检索锚点(embed 它)
-    open: bool = True                       # 还没 accepted 答案 = 开放回路
+    issue: str                              # 问题文本;检索锚点(embed 它)
     created_at: str
     # 卡↔卡的边(§4)单独存 card_links,不内联
 
 class Position(BaseModel):                  # 卡底下的一个答案候选;被顶踩、被沉浮的就是它
     position_id: ID; card_id: ID            # 属于哪张卡
     claim: str                              # 答案文本(内联在 Position,不单独建节点、不共享)
-    # 校验轴(§3)= 这个 Position 的 review 顶/踩
+    # 校验轴(§3)= 这个 Position 的 argument 顶/踩
     credence: float = 0.5
-    corroborations: int = 0                 # = review_up(顶)
-    contradictions: int = 0                 # = review_down(踩)
+    corroborations: int = 0                 # = pro argument 数(顶)
+    contradictions: int = 0                 # = con argument 数(踩)
     accepted: bool = False                  # 沉浮浮上来的那个 = 本卡当前答案
     cited_rounds: list[RoundRef] = []       # [{session_id, index}] 抽这个答案的出处
     # 治理:时 / 位 / 势 / 变(§5)
@@ -211,7 +212,7 @@ class Position(BaseModel):                  # 卡底下的一个答案候选;被
     created_at: str
 ```
 
-`Review`(`target = position_id` + `indexes` + `score`,**复用 v3**)、`CardLink`(卡↔卡边)各自是独立 BaseModel。**答案文本 `claim` 内联在 Position 上(不单独建 Claim 节点);治理只挂 Position;Card 只管问题 + 连边;证据/投票是 Review。**
+`Argument`(`target = position_id` + `indexes` + `stance`(`pro`/`con`);= IBIS 论据,沿用 v3 review 机制)、`CardLink`(卡↔卡边)各自是独立 BaseModel。**答案文本 `claim` 内联在 Position 上(不单独建 Claim 节点);治理只挂 Position;Card 只管问题 + 连边;证据/投票是 Argument。**
 
 ### 读路径
 
@@ -222,10 +223,10 @@ class Position(BaseModel):                  # 卡底下的一个答案候选;被
   位   : context 的 domain/role/authority/layer 不在 scope 内,或命中 exclusions → 挡掉
   势   : 幸存 Position 按 momentum 排序;一张卡通常只取浮在最上面的那个(accepted)
 注入   : 幸存者按 momentum 进 context
-回流   : 用户在后续 round 顶/踩 → 一条 review(带证据)→ 动那个 Position 的 credence/沉浮(= §6 写路径)
+回流   : 用户在后续 round 顶/踩 → 一条 argument(带证据)→ 动那个 Position 的 credence/沉浮(= §6 写路径)
 ```
 
-> **结构**(卡=问题+答案候选)决定能不能连、怎么连;**治理**决定何时有效、何处可用、排多前、怎么变;**review + 沉浮**决定一张卡里哪个答案胜出;**写路径**决定它们怎么从对话长出来。
+> **结构**(卡=问题+答案候选)决定能不能连、怎么连;**治理**决定何时有效、何处可用、排多前、怎么变;**argument + 沉浮**决定一张卡里哪个答案胜出;**写路径**决定它们怎么从对话长出来。
 
 ---
 
@@ -235,24 +236,23 @@ class Position(BaseModel):                  # 卡底下的一个答案候选;被
 
 **不可变核 vs 可变运行态**:
 
-- **不可变核**(create 即冻,canonical 在文件罐):Card 的 `question`、Position 的 `(card_id, claim, cited_rounds, birth_surprise, created_at)`(`claim` = 答案文本)。
-- **可变运行态**(SQLite 实时维护):`credence / corroborations / contradictions / accepted`、整个治理四维、卡的 `open`、`card_links`。SQLite 同时**照抄一份不可变字段**供查询,崩了能从文件罐重建。
+- **不可变核**(create 即冻,canonical 在文件罐):Card 的 `issue`、Position 的 `(card_id, claim, cited_rounds, birth_surprise, created_at)`(`claim` = 答案文本)。
+- **可变运行态**(SQLite 实时维护):`credence / corroborations / contradictions / accepted`、整个治理四维、`card_links`。SQLite 同时**照抄一份不可变字段**供查询,崩了能从文件罐重建。
 
 ```
-cards/<bucket>/<card_id>/card.json            ← canonical:question + created_at(问题不可变)
+cards/<bucket>/<card_id>/card.json            ← canonical:issue + created_at(问题不可变)
 cards/<bucket>/<card_id>/positions/<pid>.json ← canonical:claim(答案文本)+ cited_rounds + birth_surprise(答案核不可变)
-                                                credence/治理/沉浮/边/review = SQLite 派生运行态
+                                                credence/治理/沉浮/边/argument = SQLite 派生运行态
 ```
 
-> Position 的**文件**放在它所属卡的目录下(`cards/<card_id>/positions/`)——一张卡 = 一个问题 + 它的答案们,物理上聚在一起。**review 不进文件罐**(沿用 v3:review 有自己的 canonical),只在 SQLite 里 target 到 `position_id`。
+> Position 的**文件**放在它所属卡的目录下(`cards/<card_id>/positions/`)——一张卡 = 一个问题 + 它的答案们,物理上聚在一起。**argument 不进文件罐**(沿用 v3 review 的存法:有自己的 canonical),只在 SQLite 里 target 到 `position_id`。
 
 **SQLite 派生索引 + 运行态**(v4 卡表是再后面一版迁移,见 §9):
 
 ```sql
 CREATE TABLE cards (                       -- = 一个问题(≡ Issue),图节点
   card_id    TEXT PRIMARY KEY,             -- card_<ulid>(v4 复用 card_ 前缀;v3 已腾给 insight_)
-  question   TEXT NOT NULL,                -- 检索锚点(进向量库)
-  open       INTEGER NOT NULL DEFAULT 1,   -- 还没 accepted 答案 = 开放回路
+  issue      TEXT NOT NULL,                -- 问题文本;检索锚点(进向量库)
   created_at TEXT NOT NULL
 );
 CREATE TABLE positions (                   -- 卡底下的答案候选;被顶踩 + 沉浮的就是它
@@ -260,11 +260,10 @@ CREATE TABLE positions (                   -- 卡底下的答案候选;被顶踩
   card_id        TEXT NOT NULL,            -- 属于哪张卡(问题)
   claim          TEXT NOT NULL,            -- 答案文本(内联,不共享、不单独建表)
   cited_rounds   TEXT NOT NULL DEFAULT '[]',  -- 派生副本;canonical 在 positions/<pid>.json
-  -- 校验轴 = 这个 Position 的 review 顶/踩(§3)
+  -- 校验轴 = 这个 Position 的 argument 顶/踩(§3)
   credence       REAL    NOT NULL DEFAULT 0.5,
-  corroborations INTEGER NOT NULL DEFAULT 0,   -- = review_up(顶)
-  contradictions INTEGER NOT NULL DEFAULT 0,   -- = review_down(踩)
-  review_neutral INTEGER NOT NULL DEFAULT 0,
+  corroborations INTEGER NOT NULL DEFAULT 0,   -- = pro argument 数(顶)
+  contradictions INTEGER NOT NULL DEFAULT 0,   -- = con argument 数(踩)
   read_count     INTEGER NOT NULL DEFAULT 0,   -- 显著轴(recall_count 同 v3 改派生,不存列)
   accepted       INTEGER NOT NULL DEFAULT 0,
   -- 治理:时 / 位 / 势 / 变(§5)
@@ -277,18 +276,18 @@ CREATE TABLE positions (                   -- 卡底下的答案候选;被顶踩
   FOREIGN KEY (card_id) REFERENCES cards(card_id)
 );
 CREATE INDEX idx_pos_card ON positions(card_id);
--- review:复用 v3 review 形状(indexes 证据 + score 顶/踩),只把 target 从 card_id 换成 position_id
-CREATE TABLE reviews (
-  review_id   TEXT PRIMARY KEY,            -- review_<ulid>
-  position_id TEXT NOT NULL,               -- 顶/踩哪个答案(v3 这里是 card_id)
+-- argument(= IBIS 论据):沿用 v3 review 形状(indexes 证据 + stance 顶/踩),只把 target 从 card_id 换成 position_id
+CREATE TABLE arguments (
+  arg_id      TEXT PRIMARY KEY,            -- arg_<ulid>
+  position_id TEXT NOT NULL,               -- 顶/踩哪个答案(v3 review 这里是 card_id)
   session_id  TEXT NOT NULL,
   indexes     TEXT NOT NULL,               -- session 证据(哪几个 round)
-  score       INTEGER NOT NULL,            -- +1 顶 / −1 踩 / 0 中立
+  stance      TEXT NOT NULL,               -- pro(顶/支持)| con(踩/反对);就俩值,无中立
   comment     TEXT,
   created_at  TEXT NOT NULL,
   FOREIGN KEY (position_id) REFERENCES positions(position_id)
 );
-CREATE INDEX idx_reviews_position ON reviews(position_id, created_at DESC);
+CREATE INDEX idx_arguments_position ON arguments(position_id, created_at DESC);
 CREATE TABLE card_links (                  -- 卡↔卡的边(= IBIS issue↔issue,因 card≡issue)
   from_card  TEXT NOT NULL, to_card TEXT NOT NULL,
   type       TEXT NOT NULL,               -- specializes|suggested_by|questions|replaces|related
@@ -297,13 +296,13 @@ CREATE TABLE card_links (                  -- 卡↔卡的边(= IBIS issue↔iss
 );
 ```
 
-> `corroborations` / `contradictions` / `review_neutral` / `read_count` 就是 v3 `card_stats` 那几个计数器**搬到 Position**;`credence` 由顶/踩派生,`momentum` 由沉浮公式派生。**没有 `arguments` 表**——证据就是 `reviews`。
+> `corroborations` / `contradictions` / `read_count` 就是 v3 `card_stats` 那几个计数器**搬到 Position**(v3 的 `review_neutral` 砍掉——argument 无中立);`credence` 由顶/踩派生,`momentum` 由沉浮公式派生。证据/投票落 `arguments` 表(= IBIS 论据,沿用 v3 review 机制)。
 
 **searchbase**(复用 [searchbase 端口](../v3/searchbase-extraction.md),零侵入):
 
 | collection | embed 什么 | 用途 |
 |---|---|---|
-| `cards` | `question` | **检索主单元**(读路径撞问题、写路径 §6 匹配 question 都打它;v3 `cards` collection 已在 §9 改名腾出此名) |
+| `cards` | `issue` | **检索主单元**(读路径撞 issue、写路径 §6 拿生成的 question 来匹配,都打它;v3 `cards` collection 已在 §9 改名腾出此名) |
 | `insights` | `insight`(= v3 `cards` collection 原样 copy,**flat 布局、fields schema 为空**) | insight 仍可搜,见 §9 |
 
 ---
@@ -334,23 +333,23 @@ CREATE TABLE card_links (                  -- 卡↔卡的边(= IBIS issue↔iss
 
 ### 步骤二:v4 card 全新起(复用腾出来的名字)
 
-insight 让出 `card` / `card_` 之后,v4 在干净地基上建:`cards`(问题)/ `positions`(答案 + 内联文本,`pos_`)/ `reviews`(target=position)/ `card_links`,**卡复用 `card_` 前缀 + `card` 命令**。**v4 与 insight 物理隔离**(不同表、不同 collection、不同前缀),互不干扰地共存。
+insight 让出 `card` / `card_` 之后,v4 在干净地基上建:`cards`(问题)/ `positions`(答案 + 内联文本,`pos_`)/ `arguments`(target=position,`arg_`)/ `card_links`,**卡复用 `card_` 前缀 + `card` 命令**。**v4 与 insight 物理隔离**(不同表、不同 collection、不同前缀),互不干扰地共存。
 
 ### 步骤三:慢慢下掉 insight(后话,本稿不强求)
 
 - insight **只读可搜**:老数据继续能 `search` / `read` / 回看,但**新抽卡只写 v4**。
-- 可选**投影**:把每条 insight **投影**进 v4 图——一条 insight →(一张**卡** =「这条洞见在答的问题」+ 一个 **Position** = 洞见本身那个答案,其 `rounds`→`cited_rounds`;老 review 跟着 target 到这个 Position)。投影完的 insight 可 `archived`。
+- 可选**投影**:把每条 insight **投影**进 v4 图——一条 insight →(一张**卡** =「这条洞见在答的问题」+ 一个 **Position** = 洞见本身那个答案,其 `rounds`→`cited_rounds`;v3 的 review 跟着 target 到这个 Position,成为它的 argument)。投影完的 insight 可 `archived`。
 - 投影是渐进、可暂停的;投影策略 / 触发时机另案。
 
 ---
 
 ## 10. API / CLI 面
 
-- **端点**(复数):`/v4/cards`(问题 + 它的 Positions)、`/v4/cards/{id}/positions`、`/v4/positions/{pid}/reviews`(顶/踩)、`/v4/card-links`。读路径 `/v4/recall` 走「撞问题 → 取 Position → 三防火墙 → momentum 排序」。
+- **端点**(复数):`/v4/cards`(问题 + 它的 Positions)、`/v4/cards/{id}/positions`、`/v4/positions/{pid}/arguments`(顶/踩)、`/v4/card-links`。读路径 `/v4/recall` 走「撞问题 → 取 Position → 三防火墙 → momentum 排序」。
 - **CLI**:`memory.talk card`(v4 复用此命令),语义 = 「给一个问题立一个答案」。最小面:
-  - `card create (--card <cid> | --question '<q>') --answer '<答案文本>' [--cite <sid>:<indexes> ...]` → 没给卡就先建卡(新问题);`--answer` 落成这张卡下的一个 Position(答案文本内联在 Position 上)。
+  - `card create (--card <cid> | --issue '<问题文本>') --answer '<答案文本>' [--cite <sid>:<indexes> ...]` → 没给卡就先建卡(新建 issue);`--answer` 落成这张卡下的一个 Position(答案文本内联在 Position 上)。
   - `card view <card_id>` → 问题 + 它所有 Position(各自 credence / 顶踩 / 沉浮 / 治理),`accepted` 高亮。
-  - **顶/踩走 review**:`memory.talk review <position_id> +1 --cite <sid>:<indexes>`(复用 v3 review,target 从 card 变 position)。
+  - **顶/踩走 argument**:`memory.talk argument <position_id> <pro|con> --cite <sid>:<indexes>`(沿用 v3 review 机制,target 从 card 变 position)。
 - **抽卡仍走 explore 工作台**(§6):`card create` 在 explore 目录里跑,产物盖 `explore_id` 戳(沿用 [explore.md](../v3/explore.md) 的关联机制,产物类型换成 v4 卡)。
 - **insight 端点**:`memory.talk insight` / `/v3/insights`(步骤一改名而来),只读 + 搜索为主。
 
@@ -386,7 +385,7 @@ insight 让出 `card` / `card_` 之后,v4 在干净地基上建:`cards`(问题)/
 | validator 过拟合 | 校验器别只学某一类证据 |
 | 结构过拟合 | score 里加 complexity 正则(负自由能那套) |
 | 纯不可变事实硬塞进图 | 纯事实可不进图、直接检索 |
-| 关系 / 顶踩自动标注不可靠 | `card_links.type`、review `score`(顶/踩)的自动标注要有置信度 + 人工兜底 |
+| 关系 / 顶踩自动标注不可靠 | `card_links.type`、argument `stance`(`pro`/`con`)的自动标注要有置信度 + 人工兜底 |
 
 **待定(本稿没敲死的)**:
 
