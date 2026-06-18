@@ -105,12 +105,12 @@
 | 边 type | 含义 | 方向 |
 |---|---|---|
 | `specializes` | A 是 B 的更窄版(子问题,**DAG 非树**) | 有向 |
-| `suggested_by` | A 被某节点引出来(出处 / 因果) | 有向 |
+| `suggested_by` | A 被某节点引出来(出处 / 因果);**对端可为 Position**(答案也能勾出新问题) | 有向 |
 | `questions` | A 质疑 B 的前提 / 框架 | 有向 |
 | `replaces` | A 重述并取代 B(**保留历史**,不删 B) | 有向 |
 | `related` | 兜底泛关联 | 无向 |
 
-> IBIS 关系集**不完备**,可按需补 `depends_on` / `part_of`。存储上是**两套抄**:**本体抄 IBIS**(节点 + 边的类型学),**投票 / 采纳那套机制抄 Stack Overflow**(**argument 顶/踩 → credence**;`accepted` 采纳 = 浮上来的那个答案)。这些 issue↔issue 的边,落地就是**卡↔卡**的边(`card_links`,§8)。
+> IBIS 关系集**不完备**,可按需补 `depends_on` / `part_of`。存储上是**两套抄**:**本体抄 IBIS**(节点 + 边的类型学),**投票 / 采纳那套机制抄 Stack Overflow**(**argument 顶/踩 → credence**;`accepted` 采纳 = 浮上来的那个答案)。这些 issue↔issue 的边落地为 `card_links`(§8):**主体卡 + `target_id`**(非对称 from/to)、**五类型全多值**(同一卡同一类型可多条,如 specializes 多父 → 统一边表、不内联成列)、`target_id` 前缀多态(`suggested_by` 可指 `pos_` Position)。
 
 ---
 
@@ -212,7 +212,7 @@ class Position(BaseModel):                  # 卡底下的一个答案候选;被
     created_at: str
 ```
 
-`Argument`(`target = position_id` + `indexes` + `stance`(`pro`/`con`);= IBIS 论据,沿用 v3 review 机制)、`CardLink`(卡↔卡边)各自是独立 BaseModel。**答案文本 `claim` 内联在 Position 上(不单独建 Claim 节点);治理只挂 Position;Card 只管问题 + 连边;证据/投票是 Argument。**
+`Argument`(`target = position_id` + `indexes` + `stance`(`pro`/`con`);= IBIS 论据,沿用 v3 review 机制)、`CardLink`(主体卡的边:`card_id` + `type` + `target_id`,对端 `card_` 或 `pos_`)各自是独立 BaseModel。**答案文本 `claim` 内联在 Position 上(不单独建 Claim 节点);治理只挂 Position;Card 只管问题 + 连边;证据/投票是 Argument。**
 
 ### 读路径
 
@@ -272,27 +272,28 @@ CREATE TABLE positions (                   -- 卡底下的答案候选;被顶踩
   scope          TEXT NOT NULL DEFAULT '{}',  -- 位:Scope JSON
   momentum       REAL NOT NULL DEFAULT 0.0,
   change_state   TEXT NOT NULL DEFAULT 'active',  -- active|forked|dormant|archived
-  superseded_by  TEXT, forked_from TEXT, birth_surprise REAL,
-  FOREIGN KEY (card_id) REFERENCES cards(card_id)
+  superseded_by  TEXT, forked_from TEXT, birth_surprise REAL
 );
 CREATE INDEX idx_pos_card ON positions(card_id);
 -- argument(= IBIS 论据):沿用 v3 review 形状(indexes 证据 + stance 顶/踩),只把 target 从 card_id 换成 position_id
 CREATE TABLE arguments (
   arg_id      TEXT PRIMARY KEY,            -- arg_<ulid>
-  position_id TEXT NOT NULL,               -- 顶/踩哪个答案(v3 review 这里是 card_id)
+  position_id TEXT NOT NULL,               -- 顶/踩哪个答案
+  card_id     TEXT NOT NULL,               -- 冗余 = positions.card_id;源不可变(答案不换卡)→ 永不漂移,省「这张卡所有 argument」的 join
   session_id  TEXT NOT NULL,
   indexes     TEXT NOT NULL,               -- session 证据(哪几个 round)
   stance      TEXT NOT NULL,               -- pro(顶/支持)| con(踩/反对);就俩值,无中立
   comment     TEXT,
-  created_at  TEXT NOT NULL,
-  FOREIGN KEY (position_id) REFERENCES positions(position_id)
+  created_at  TEXT NOT NULL
 );
 CREATE INDEX idx_arguments_position ON arguments(position_id, created_at DESC);
-CREATE TABLE card_links (                  -- 卡↔卡的边(= IBIS issue↔issue,因 card≡issue)
-  from_card  TEXT NOT NULL, to_card TEXT NOT NULL,
+CREATE INDEX idx_arguments_card     ON arguments(card_id);
+CREATE TABLE card_links (                  -- 主体卡的有向边(= IBIS issue↔issue,因 card≡issue)
+  card_id    TEXT NOT NULL,               -- 主体卡(谁的边),不是对称 from/to
   type       TEXT NOT NULL,               -- specializes|suggested_by|questions|replaces|related
+  target_id  TEXT NOT NULL,               -- 对端:多为 card_…;suggested_by 可为 pos_…(前缀自带类型,免 target_type 列)
   created_at TEXT NOT NULL,
-  PRIMARY KEY (from_card, to_card, type)
+  PRIMARY KEY (card_id, type, target_id)  -- 同一(主体, 类型)下可多条 → 五类型全多值;related 无向 → 写时规范化排序只存一遍
 );
 ```
 
