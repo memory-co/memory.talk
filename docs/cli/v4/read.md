@@ -91,7 +91,7 @@ memory.talk read <id> [--json]
   "position_id": "pos_01jzp3nq",
   "card_id": "card_01jz8k2m",
   "claim": "默认简洁、要点优先",
-  "up_count": 7, "down_count": 1, "neutral_count": 0,
+  "up_count": 7, "down_count": 1, "neutral_count": 0, "review_count": 8,
   "credence": 6,
   "scope": "日常问答;调试场景另说",
   "forked_from_position_id": null,

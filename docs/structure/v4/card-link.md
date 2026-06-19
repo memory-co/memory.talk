@@ -13,6 +13,7 @@
   "card_id": "card_01jz8k2m",
   "type": "specializes",
   "target_id": "card_01jzyyyy",
+  "target_type": "card",
   "created_at": "2026-06-18T15:00:00Z"
 }
 ```
@@ -25,7 +26,8 @@
 |---|---|---|---|
 | `card_id` | string | 是 | **主体卡**(谁的边);`card_<...>` |
 | `type` | string | 是 | 边类型,见 [#类型](#类型) |
-| `target_id` | string | 是 | 对端;多为 `card_<...>`,`suggested_by` 可为 `pos_<...>`(前缀自带类型,免 `target_type` 列) |
+| `target_id` | string | 是 | 对端 id;多为 `card_<...>`,`suggested_by` 可为 `pos_<...>` |
+| `target_type` | string | 自动 | 对端类型:`card` / `position`,从 `target_id` 前缀派生并**单独落列**——「列出所有指向 Position 的边」这类查询直接按它过滤,不必解析前缀 |
 | `created_at` | string | 自动 | ISO 8601 |
 
 ## 类型
@@ -53,14 +55,15 @@
 -- 主体卡的有向边(= IBIS issue↔issue,因 card≡issue)
 CREATE TABLE card_links (
   card_id    TEXT NOT NULL,               -- 主体卡(谁的边),不是对称 from/to
-  type       TEXT NOT NULL,               -- specializes|suggested_by|questions|replaces|related
-  target_id  TEXT NOT NULL,               -- 对端:多为 card_…;suggested_by 可为 pos_…
-  created_at TEXT NOT NULL,
-  PRIMARY KEY (card_id, type, target_id)  -- 同一(主体,类型)下可多条 → 五类型全多值
+  type        TEXT NOT NULL,              -- specializes|suggested_by|questions|replaces|related
+  target_id   TEXT NOT NULL,              -- 对端 id:多为 card_…;suggested_by 可为 pos_…
+  target_type TEXT NOT NULL,              -- 'card' | 'position',从 target_id 前缀派生
+  created_at  TEXT NOT NULL,
+  PRIMARY KEY (card_id, type, target_id)  -- 同一(主体,类型)下可多条;target_type 随 target_id 定,不进 PK
 );
 ```
 
-- **无 FOREIGN KEY**(SQLite 派生索引,容忍悬空)。`target_id` 前缀多态(`card_` / `pos_`),靠前缀判型,不设 `target_type` 列。
+- **无 FOREIGN KEY**(SQLite 派生索引,容忍悬空)。`target_type`(`card` / `position`)从 `target_id` 前缀派生、单独落列——便于按对端类型过滤,免每次解析前缀。
 - 关系数据的 canonical 落点(是否也进文件罐)与图整体是否值得 file-canonical 一并待定,见 [`../../works/v4/card.md`](../../works/v4/card.md) §12。
 
 ## 反查

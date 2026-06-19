@@ -25,11 +25,12 @@ CLI 对应 [`read <id>`](../../cli/v4/read.md)。字段语义见 [`../../structu
   "card_id": "card_01jz8k2m",
   "issue": "用户偏好什么回答风格?",
   "created_at": "2026-06-18T14:30:00Z",
+  "position_count": 1, "link_count": 1,
   "positions": [
     {
       "position_id": "pos_01jzp3nq",
       "claim": "默认简洁、要点优先",
-      "up_count": 7, "down_count": 1, "neutral_count": 0,
+      "up_count": 7, "down_count": 1, "neutral_count": 0, "review_count": 8,
       "credence": 6,
       "scope": "日常问答;调试场景另说",
       "forked_from_position_id": null,
@@ -54,7 +55,7 @@ CLI 对应 [`read <id>`](../../cli/v4/read.md)。字段语义见 [`../../structu
   "position_id": "pos_01jzp3nq",
   "card_id": "card_01jz8k2m",
   "claim": "默认简洁、要点优先",
-  "up_count": 7, "down_count": 1, "neutral_count": 0,
+  "up_count": 7, "down_count": 1, "neutral_count": 0, "review_count": 8,
   "credence": 6,
   "scope": "日常问答;调试场景另说",
   "forked_from_position_id": null,

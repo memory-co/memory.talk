@@ -59,10 +59,10 @@ DDL 详见各对象 md 的「存储」小节。**全部无 FOREIGN KEY**(SQLite 
 
 | 表 | 粒度 | 用途 | 详见 |
 |---|---|---|---|
-| `cards` | 一行一卡 | `issue` + `created_at` | [card.md](card.md) |
-| `positions` | 一行一答案 | `claim` + `up/down/neutral_count` + `scope` + `forked_from_position_id` | [card.md](card.md) |
+| `cards` | 一行一卡 | `issue` + `created_at` + `position_count` / `link_count`(冗余) | [card.md](card.md) |
+| `positions` | 一行一答案 | `claim` + `up/down/neutral_count` + `review_count`(冗余) + `scope` + `forked_from_position_id` | [card.md](card.md) |
 | `reviews` | 一行一表态 | `position_id` / `card_id` / `session_id` / `indexes` / `argument` / `comment` | [review.md](review.md) |
-| `card_links` | (card_id, type, target_id) | card↔card IBIS 边 | [card-link.md](card-link.md) |
+| `card_links` | (card_id, type, target_id) | card↔card IBIS 边(+ `target_type` 派生列) | [card-link.md](card-link.md) |
 | `card_sessions` | (card_id, session_id, position_id) | card↔session 出处 | [card-session.md](card-session.md) |
 
 索引:`idx_pos_card`(positions.card_id)、`idx_reviews_position`(position_id, created_at DESC)、`idx_reviews_card`(card_id)、`idx_card_sessions_session`(session_id)。
@@ -94,7 +94,8 @@ v4 写路径 = **逐 round 旁白(以写代读)**,落在 session 目录的 `anno
 | card embedding(issue) | — | — | `cards` collection |
 | position embedding(claim) | — | — | `positions` collection |
 | position 不可变核(claim) | `positions`(照抄 claim) | `positions/<pid>.json` | — |
-| position 顶踩计数(up/down/neutral) | `positions` | — | — |
+| card 冗余计数(position_count/link_count) | `cards` | — | — |
+| position 顶踩计数(up/down/neutral)+ review_count(冗余) | `positions` | — | — |
 | position 治理(scope / forked_from) | `positions` | — | — |
 | credence / 当下答案 / 相不相关 | **不存(现算)** | — | — |
 | review payload | `reviews` | `reviews.jsonl`(卡目录下,沿用 v3) | — |

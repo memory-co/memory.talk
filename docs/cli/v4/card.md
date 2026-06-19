@@ -7,7 +7,7 @@ memory.talk card
 ├── create --issue '<问题>' [--card_id <id>] [--json]
 ├── position --card <cid> --claim '<答案>' [--source <sid>:<idx> ...] [--scope '<场景>'] [--position_id <id>] [--json]
 ├── review --position <pid> --argument <+1|0|-1> --cite <sid>:<idx> [--comment '<一句话>'] [--review_id <id>] [--json]
-└── link --from <cid> --type <type> --target <id> [--json]   # 卡间 IBIS 边;看边走 read
+└── link --card <cid> --type <type> --target <id> [--json]   # 卡间 IBIS 边;看边走 read
 ```
 
 **读**一张卡(问题 + 它所有答案 + 边 + 出处)走 [`read <card_id>`](read.md);找卡走 [`search`](search.md);hook 召回走 [`recall`](recall.md)。
@@ -124,10 +124,10 @@ memory.talk card review --position pos_01jz0xnq --argument -1 --cite "$SID:3-8" 
 
 ## card link
 
-卡与卡之间的 **IBIS 边**(`card_links`)——问题图的关联主干。`card link` **直接建一条边**:主体 `--from`(`card_<…>`);`--target` 一般是另一张卡,只有 `suggested_by` 允许指向一个答案(`pos_<…>`,「这个答案勾出了那个新问题」)。**看一张卡的边走 [`read <card_id>`](read.md)(返回 out / in 两向)——边不多,不单设 list。** 调 [`POST /v4/cards/{card_id}/links`](../../api/v4/card-links.md);字段语义见 [`../../structure/v4/card-link.md`](../../structure/v4/card-link.md)。
+卡与卡之间的 **IBIS 边**(`card_links`,列是 `card_id`(主体)+ `target_id`,**没有对称的 from/to**)。`card link` **直接建一条边**:主体卡 `--card`(= `card_id`,`card_<…>`);`--target`(= `target_id`)一般是另一张卡,只有 `suggested_by` 允许指向一个答案(`pos_<…>`,「这个答案勾出了那个新问题」)。**看一张卡的边走 [`read <card_id>`](read.md)(返回 out / in 两向)——边不多,不单设 list。** 调 [`POST /v4/cards/{card_id}/links`](../../api/v4/card-links.md);字段语义见 [`../../structure/v4/card-link.md`](../../structure/v4/card-link.md)。
 
 ```bash
-memory.talk card link --from <from_card_id> --type <type> --target <target_id> [--json]
+memory.talk card link --card <card_id> --type <type> --target <target_id> [--json]
 ```
 
 | type | 含义 | 方向 |
@@ -138,12 +138,13 @@ memory.talk card link --from <from_card_id> --type <type> --target <target_id> [
 | `replaces` | from 重述并取代 target(**保留历史**,不删 target) | 有向 |
 | `related` | 兜底泛关联 | 无向 |
 
-- 同一 `(from, type)` 下可挂多条(如 `specializes` 多父)。
-- `related` 无向:写时规范化两端顺序只存一遍(`--from A … --target B` 与 `--from B … --target A` 等价)。
-- **不校验 `target` 是否存在**:SQLite 派生索引,容忍悬挂引用,从不加 FOREIGN KEY。
+- 同一 `(card, type)` 下可挂多条(如 `specializes` 多父)。
+- `--target` 的前缀(`card_` / `pos_`)决定 `target_type`(`card` / `position`),自动落进 `card_links` 表,便于按对端类型过滤。
+- `related` 无向:写时规范化两端顺序只存一遍(`--card A … --target B` 与 `--card B … --target A` 等价)。
+- **不校验 `--target` 是否存在**:SQLite 派生索引,容忍悬挂引用,从不加 FOREIGN KEY。
 - `issue` 层的 `replaces`(问题取代问题)≠ Position 层的 `forked_from_position_id`(答案分叉),别混。
 
-错误:`--from` 卡不存在 / `--type` 不在五类型 / `--target` 前缀错(非 `card_`·`pos_`,或 `pos_` 用在非 `suggested_by`)/ 同边已存在 → 报错 exit 1。
+错误:`--card` 卡不存在 / `--type` 不在五类型 / `--target` 前缀错(非 `card_`·`pos_`,或 `pos_` 用在非 `suggested_by`)/ 同边已存在 → 报错 exit 1。
 
 ## 跟其他命令的边界
 
@@ -152,7 +153,7 @@ memory.talk card link --from <from_card_id> --type <type> --target <target_id> [
 | 建一个新问题(卡) | `card create --issue '<Q>'` |
 | 给问题加一个答案 | `card position --card <cid> --claim '<A>' [--source ...]` |
 | 对某个答案顶 / 踩 / 中立 | `card review --position <pid> --argument <+1\|0\|-1> --cite ...` |
-| 连两张卡(IBIS 边) | `card link --from <cid> --type <type> --target <id>` |
+| 连两张卡(IBIS 边) | `card link --card <cid> --type <type> --target <id>` |
 | **看一张卡 / 它所有答案 / 当下答案** | `read <card_id>`(见 [read.md](read.md)) |
 | 按相关度找卡 | `search <query>` |
 | hook 阶段无意识召回 | `recall --session <sid> --prompt '<p>'` |

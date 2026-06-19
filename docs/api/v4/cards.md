@@ -74,8 +74,8 @@ CLI 对应 [`card create | position`](../../cli/v4/card.md)（读卡走 [`read`]
   "total": 47,
   "returned": 2,
   "cards": [
-    {"card_id": "card_01jz8k2m", "issue": "用户偏好什么回答风格?", "position_count": 3, "created_at": "2026-05-24T09:12:03Z"},
-    {"card_id": "card_01jzp3nq", "issue": "缓存层选 Redis 还是本地?", "position_count": 0, "created_at": "2026-05-25T14:21:00Z"}
+    {"card_id": "card_01jz8k2m", "issue": "用户偏好什么回答风格?", "position_count": 3, "link_count": 2, "created_at": "2026-05-24T09:12:03Z"},
+    {"card_id": "card_01jzp3nq", "issue": "缓存层选 Redis 还是本地?", "position_count": 0, "link_count": 0, "created_at": "2026-05-25T14:21:00Z"}
   ]
 }
 ```
@@ -154,7 +154,7 @@ CLI 对应 [`card create | position`](../../cli/v4/card.md)（读卡走 [`read`]
     {
       "position_id": "pos_01jzp3nq",
       "claim": "偏简洁,先给结论再展开",
-      "up_count": 7, "down_count": 1, "neutral_count": 2,
+      "up_count": 7, "down_count": 1, "neutral_count": 2, "review_count": 10,
       "credence": 6,
       "scope": "技术问答场景;闲聊不一定适用",
       "forked_from_position_id": null,
@@ -164,7 +164,7 @@ CLI 对应 [`card create | position`](../../cli/v4/card.md)（读卡走 [`read`]
     {
       "position_id": "pos_01jzr8xy",
       "claim": "偏详细,默认带背景和权衡",
-      "up_count": 2, "down_count": 0, "neutral_count": 1,
+      "up_count": 2, "down_count": 0, "neutral_count": 1, "review_count": 3,
       "credence": 2,
       "scope": "新人 onboarding 场景",
       "forked_from_position_id": "pos_01jzp3nq",

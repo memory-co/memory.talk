@@ -59,6 +59,15 @@ v4 的核心数据结构 —— 一张卡 = **一个 Card(问题,≡ Issue)+ 它
 
 > 卡↔卡的边(specializes / suggested_by / questions / replaces / related)**不内联**,单独存 `card_links`,见 [card-link.md](card-link.md)。一张**还没有任何 Position** 的 Card 是合法的 —— 它就是个「还在等答案的问题」,不必被「解决掉」,所以也**没有 open/closed 状态**。
 
+### Runtime 计数(SQLite 实时维护,冗余缓存)
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `position_count` | integer | 这张卡有几个 Position(答案);加答案时 +1。`0` = 还在等答案的问题 |
+| `link_count` | integer | 这张卡作为主体(`from`)的 `card_links` 条数;建边时 +1 |
+
+> 都是**冗余计数**——可由 `positions` / `card_links` 表 `COUNT(*)` 重算,缓存在卡上免 join。
+
 ## Position 字段
 
 ### 不可变核(create 即冻,canonical 在文件罐)
@@ -77,6 +86,7 @@ v4 的核心数据结构 —— 一张卡 = **一个 Card(问题,≡ Issue)+ 它
 | `up_count` | integer | 收到的 `argument=+1`(顶 / 支持)review 数。对应 v3 的 `review_up` |
 | `down_count` | integer | 收到的 `argument=−1`(踩 / 反对)review 数。对应 v3 的 `review_down` |
 | `neutral_count` | integer | 收到的 `argument=0`(中立)review 数。对应 v3 的 `review_neutral` |
+| `review_count` | integer | review 总数 = `up_count` + `down_count` + `neutral_count`。**冗余缓存**,免每次求和 |
 
 这是 Position 上**唯一的质量轴**。沉默(没 review)和中立都不进 `up`/`down`,因此不影响 credence。中立堆多了可能触发离线衍生新 Position(机制见 [`../../works/v4/card.md`](../../works/v4/card.md) §3 末)。
 
@@ -113,9 +123,11 @@ cards/<bucket>/<card_id>/
 ```sql
 -- 卡 = 问题(≡ Issue),图节点
 CREATE TABLE cards (
-  card_id    TEXT PRIMARY KEY,             -- card_<ulid>
-  issue      TEXT NOT NULL,                -- 问题文本;检索锚点(进向量库)
-  created_at TEXT NOT NULL
+  card_id        TEXT PRIMARY KEY,         -- card_<ulid>
+  issue          TEXT NOT NULL,            -- 问题文本;检索锚点(进向量库)
+  created_at     TEXT NOT NULL,
+  position_count INTEGER NOT NULL DEFAULT 0,  -- 冗余:本卡 Position 数(加答案时 +1)
+  link_count     INTEGER NOT NULL DEFAULT 0   -- 冗余:本卡作主体的 card_links 数(建边时 +1)
 );
 
 -- Position = 答案候选;被顶踩、按 credence 竞争的就是它
@@ -127,6 +139,7 @@ CREATE TABLE positions (
   up_count       INTEGER NOT NULL DEFAULT 0,   -- = argument=+1 的 review 数(顶)
   down_count     INTEGER NOT NULL DEFAULT 0,   -- = argument=−1 的 review 数(踩)
   neutral_count  INTEGER NOT NULL DEFAULT 0,   -- = argument=0 的中立 review 数
+  review_count   INTEGER NOT NULL DEFAULT 0,   -- 冗余:review 总数 = up+down+neutral
   -- 治理:位 / 变
   created_at     TEXT NOT NULL,
   scope          TEXT NOT NULL DEFAULT '',  -- 位:适用场景描述(自由文本软提示,非门禁)
@@ -137,6 +150,7 @@ CREATE INDEX idx_pos_card ON positions(card_id);
 
 - **无 FOREIGN KEY**:SQLite 是文件罐的派生索引,容忍悬空引用(`positions.card_id`、`forked_from_position_id` 都不加 FK)。这是本仓硬约束。
 - `up_count` / `down_count` / `neutral_count` 就是 v3 `card_stats` 那几个计数器搬到 Position(`neutral_count` = v3 `review_neutral`);v3 的 `read_count` / `recall_count` 这套 engagement 计数 v4 **不再存**(相关性只在召回时算)。
+- `cards.position_count` / `cards.link_count` / `positions.review_count` 是**冗余计数**:分别从 `positions` / `card_links` / 顶踩计数重算得到,写时维护、免 join。
 - 向量侧 embed `cards.issue`(问题级)+ `positions.claim`(答案级)两个 collection,索引在 `vectors/`(LanceDB),见 [filesystem.md](filesystem.md)。
 
 存储分层(file canonical + SQLite index)总体模式见 [`../v3/filesystem.md`](../v3/filesystem.md) 与 [`../../works/v4/card.md`](../../works/v4/card.md) §8。
