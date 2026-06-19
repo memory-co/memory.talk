@@ -1,7 +1,7 @@
 [project]
 name = "memorytalk"
 version = "1.1.0"
-description = "Persistent cross-session memory for AI agents — Talk-Card architecture with forum-dynamics sinking/floating (v3)"
+description = "Persistent cross-session memory for AI agents — v4 question-graph (Issue + Positions + credence) with read-only legacy insight (v4)"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
