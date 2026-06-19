@@ -2,7 +2,7 @@
 
 card↔card 的 **IBIS 边**——嵌在卡下(跟 `positions` 同构:`/v4/cards/{card_id}/...`)。`card_id`(主体卡,边的 from 端)在路径里。
 
-CLI 对应 [`card link`](../../cli/v4/card.md#card-link)(`card link create` / `card link list`)。字段语义详见 [`../../structure/v4/card-link.md`](../../structure/v4/card-link.md)。
+CLI 对应 [`card link`](../../cli/v4/card.md#card-link)(直接建边,无 list——看一张卡的边走 [`read`](read.md))。字段语义详见 [`../../structure/v4/card-link.md`](../../structure/v4/card-link.md)。
 
 > SQLite 表名仍是 `card_links`(只是 API 路径嵌到卡下);Position 之间不直接结网,边只在卡↔卡层。
 
@@ -68,26 +68,4 @@ CLI 对应 [`card link`](../../cli/v4/card.md#card-link)(`card link create` / `c
 
 > IBIS 关系集**不完备**,后续可按需补 `depends_on` / `part_of`——加 `type` 白名单即可,表结构不变。
 
----
-
-## GET /v4/cards/{card_id}/links
-
-列这张卡相关的边:它**指出去的**(本卡为主体)+ **指过来的**(别的卡指本卡)。
-
-### 响应
-
-```json
-{
-  "card_id": "card_01jz8k2m",
-  "out": [{"type": "specializes", "target_id": "card_01jzsub"}],
-  "in":  [{"type": "replaces", "from_card_id": "card_01jzold"}]
-}
-```
-
-- `out` = 主体是本卡的边;`in` = `target_id` 指向本卡的边(反查,`from_card_id` 是那条边的主体)。
-
-### 错误
-
-| 情况 | 状态 |
-|---|---|
-| 路径 `card_id` 不存在 | 404 |
+> **没有单独的「列边」端点**——看一张卡的边(out / in 两向)走 [`POST /v4/read`](read.md) `{id: card_…}`,响应里带 `links`。

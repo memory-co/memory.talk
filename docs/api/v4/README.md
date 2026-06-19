@@ -17,8 +17,7 @@ Cards        POST   /v4/cards                               建卡（只一个 i
              GET    /v4/cards                               列卡（按时间 / 数量）
              POST   /v4/cards/{card_id}/positions           给某卡加一个答案 Position
              GET    /v4/cards/{card_id}/positions           列某卡的所有答案（各带计数 + 现算 credence）
-             POST   /v4/cards/{card_id}/links               给某卡建一条 IBIS 出边
-             GET    /v4/cards/{card_id}/links               列某卡的边（出 + 入）
+             POST   /v4/cards/{card_id}/links               给某卡建一条 IBIS 边（看边走 /v4/read,无单独列边端点）
              POST   /v4/cards/{card_id}/sessions            给某卡记一条出处（card↔session）
              GET    /v4/cards/{card_id}/sessions            列某卡的出处 session
 
@@ -37,7 +36,7 @@ Sessions     GET    /v4/sessions/{session_id}/cards         反查：这个 sess
 - **位（scope）是软提示不是门禁**：`scope` 是一句话自由文本（适用场景，可含「不适用于…」），随答案一起注入交给 LLM 自己判语境；**不机械挡卡，跨界默认放行**。相关性只在召回时由检索现算，不回写成字段。
 - **三类关系都不内联、可 join、无 FOREIGN KEY**：`card_links`（card↔card，IBIS 边）、`card_sessions`（card↔session，出处）、`reviews`（对 Position 的表态）各自独立。`session_id` 是扁平列，可直接 join（SQLite 是派生索引，容忍悬挂引用，从不加外键约束）。
 - **无追踪 token**：所有对外主键都是带前缀的裸 id（`card_<ULID>` / `pos_<ULID>` / `review_<ULID>` / `sess_<ULID>`），不发行中间凭据。前缀 = 类型，服务端零成本判型分发。
-- **HTTP 方法**：**POST + JSON body** 默认；只有读列表 / 静态状态的端点（`GET /v4/cards`、各 `GET /v4/cards/{id}/{positions,links,sessions}`、`GET /v4/sessions/{id}/cards`）用 GET。
+- **HTTP 方法**：**POST + JSON body** 默认；只有读列表 / 静态状态的端点（`GET /v4/cards`、各 `GET /v4/cards/{id}/{positions,sessions}`、`GET /v4/sessions/{id}/cards`）用 GET。
 - **append-only**：Position 只增不改不删——答案变了不覆盖、不归档，而是**新增一个竞争 Position**；旧答案被踩则 credence 现算掉下去、自然不再被注入，但仍在卡里可查。Review 同样 append-only（表态错了再写一条相反 argument）。
 
 ## ID 前缀约定
