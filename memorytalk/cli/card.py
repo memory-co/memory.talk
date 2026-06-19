@@ -252,7 +252,10 @@ def _fmt_search(r: dict) -> str:
 
 
 def _fmt_recall(r: dict) -> str:
-    cards = r["cards"]
+    cards = r.get("cards") or []
+    # No matches → empty string so the hook injects no context.
+    if not cards:
+        return ""
     lines = [f"# recall · {len(cards)} card{'s' if len(cards) != 1 else ''}"]
     for c in cards:
         lines.append(f"### {c['issue']}")

@@ -39,16 +39,23 @@ def test_hook_recalls_and_emits_json(tmp_path, monkeypatch):
     }))
 
     from memorytalk.cli import recall as recall_mod
+    from memorytalk.adapters import get_adapter
     captured = {}
 
     def _fake_api(method, path, cfg, json_body=None, timeout=30.0, params=None):
         assert method == "POST" and path == "/v4/recall"
         captured["body"] = json_body
         return {
-            "session_id": "sess-fake-001",
-            "query": "what was that bug?",
-            "recalled": [{"card_id": "card_001", "insight": "tcp keepalive issue"}],
-            "skipped_already_recalled": [],
+            "session_id": json_body["session_id"],
+            "prompt": "what was that bug?",
+            "cards": [{
+                "card_id": "card_001", "issue": "which keepalive?",
+                "relevance": 1.0,
+                "answer": {"claim": "tcp keepalive issue", "scope": None,
+                           "credence": 1, "up_count": 1, "down_count": 0,
+                           "neutral_count": 0, "position_id": "pos_1"},
+                "alternatives": [],
+            }],
         }
     monkeypatch.setattr(recall_mod, "api", _fake_api)
 
@@ -63,40 +70,43 @@ def test_hook_recalls_and_emits_json(tmp_path, monkeypatch):
     body = _parse_hook_output(result.stdout)
     assert body["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
     ctx = body["hookSpecificOutput"]["additionalContext"]
-    assert "memory.talk read card_001" in ctx
+    assert "card_001" in ctx
     assert "tcp keepalive issue" in ctx
 
-    # The CLI MUST forward source through to the server.
-    assert captured["body"]["source"] == "claude-code"
-    assert captured["body"]["session_id"] == "sess_abc"
+    # The CLI mints the canonical session_id client-side; body carries the
+    # canonical id + prompt (no source — that's only used for minting).
+    canonical = get_adapter("claude-code").mint_session_id("sess_abc")
+    assert captured["body"]["session_id"] == canonical
     assert captured["body"]["prompt"] == "what was that bug?"
 
 
-def test_hook_forwards_location_when_passed(tmp_path, monkeypatch):
-    """``--location`` is optional; when passed it's forwarded so the
-    server picks the right adapter endpoint for multi-endpoint users."""
+def test_hook_mints_canonical_session_id(tmp_path, monkeypatch):
+    """The CLI mints the canonical session_id from --source before POSTing
+    to /v4/recall (the card recall takes a canonical id, not source)."""
     monkeypatch.setenv("MEMORY_TALK_DATA_ROOT", str(tmp_path))
     (tmp_path / "settings.json").write_text(json.dumps({
         "embedding": {"provider": "dummy", "dim": 384},
     }))
 
     from memorytalk.cli import recall as recall_mod
+    from memorytalk.adapters import get_adapter
     captured = {}
 
     def _fake_api(method, path, cfg, json_body=None, timeout=30.0, params=None):
+        captured["path"] = path
         captured["body"] = json_body
-        return {"session_id": "x", "query": "q", "recalled": [], "skipped_already_recalled": []}
+        return {"session_id": json_body["session_id"], "prompt": "p", "cards": []}
     monkeypatch.setattr(recall_mod, "api", _fake_api)
 
     runner = _runner()
     result = runner.invoke(
         recall_mod.recall,
-        ["hook", "--source", "codex", "--location", "/custom/sessions"],
+        ["hook", "--source", "codex"],
         input=json.dumps({"session_id": "s", "prompt": "p"}),
     )
     assert result.exit_code == 0, result.output
-    assert captured["body"]["source"] == "codex"
-    assert captured["body"]["location"] == "/custom/sessions"
+    assert captured["path"] == "/v4/recall"
+    assert captured["body"]["session_id"] == get_adapter("codex").mint_session_id("s")
 
 
 def test_hook_empty_recall_emits_empty_context(tmp_path, monkeypatch):
@@ -106,7 +116,7 @@ def test_hook_empty_recall_emits_empty_context(tmp_path, monkeypatch):
     }))
     from memorytalk.cli import recall as recall_mod
     monkeypatch.setattr(recall_mod, "api", lambda *a, **k: {
-        "session_id": "s", "query": "q", "recalled": [], "skipped_already_recalled": [],
+        "session_id": "s", "prompt": "q", "cards": [],
     })
 
     runner = _runner()
@@ -185,7 +195,7 @@ def test_hook_suppresses_recall_in_explore_cwd(tmp_path, monkeypatch):
     from memorytalk.cli import recall as recall_mod
     def _track(*a, **k):
         called["n"] += 1
-        return {"recalled": [], "skipped_already_recalled": []}
+        return {"session_id": "s", "prompt": "p", "cards": []}
     monkeypatch.setattr(recall_mod, "api", _track)
 
     runner = _runner()
@@ -217,7 +227,7 @@ def test_hook_does_not_suppress_outside_explore_cwd(tmp_path, monkeypatch):
     from memorytalk.cli import recall as recall_mod
     def _track(*a, **k):
         called["n"] += 1
-        return {"recalled": [], "skipped_already_recalled": []}
+        return {"session_id": "s", "prompt": "p", "cards": []}
     monkeypatch.setattr(recall_mod, "api", _track)
 
     runner = _runner()
@@ -252,9 +262,14 @@ def test_recall_hook_positional_mode_without_stdin(tmp_path, monkeypatch):
 
     from memorytalk.cli import recall as recall_mod
     monkeypatch.setattr(recall_mod, "api", lambda *a, **k: {
-        "session_id": "sess-x", "query": "q",
-        "recalled": [{"card_id": "card_1", "insight": "i"}],
-        "skipped_already_recalled": [],
+        "session_id": "sess-x", "prompt": "q",
+        "cards": [{
+            "card_id": "card_1", "issue": "the issue", "relevance": 1.0,
+            "answer": {"claim": "the answer", "scope": None, "credence": 1,
+                       "up_count": 1, "down_count": 0, "neutral_count": 0,
+                       "position_id": "pos_1"},
+            "alternatives": [],
+        }],
     })
 
     runner = _runner()
@@ -263,4 +278,5 @@ def test_recall_hook_positional_mode_without_stdin(tmp_path, monkeypatch):
         ["hook", "--source", "claude-code", "test-session", "what about it"],
     )
     assert result.exit_code == 0, result.output
-    assert "memory.talk read card_1" in result.output
+    assert "card_1" in result.output
+    assert "the answer" in result.output

@@ -1,155 +1,78 @@
-"""CLI: memory.talk card {create, list, tag} — help shape + formatter smoke.
+"""CLI: memory.talk insight {search, view} — read-only old card surface.
 
-HTTP behavior is covered by tests/api/test_cards_list.py +
-tests/api/test_cards_tag.py — this file pins the CLI surface only
-(help text, parsing wiring, formatter output shape).
+Insight is read-only in v4: only search (list/filter via GET /v4/insights)
+and view (POST /v4/read) survive. This pins the CLI surface (help, wiring,
+formatter shape).
 """
 from __future__ import annotations
+import json as _json
+
 import pytest
 
 from click.testing import CliRunner
 
 
-def test_card_group_lists_subcommands():
+def test_insight_group_lists_subcommands():
     from memorytalk.cli import main
     runner = CliRunner()
     r = runner.invoke(main, ["insight", "--help"])
     assert r.exit_code == 0
-    for sub in ("create", "list", "tag", "delete"):
-        assert sub in r.output
+    # Commands listed in click's "Commands:" section, one per line.
+    cmd_lines = [ln.strip().split(" ")[0] for ln in r.output.splitlines()
+                 if ln.startswith("  ") and ln.strip()]
+    assert "search" in cmd_lines
+    assert "view" in cmd_lines
+    # write subcommands are gone
+    for gone in ("create", "delete", "tag", "list"):
+        assert gone not in cmd_lines
 
 
-@pytest.mark.parametrize("sub", ["create", "list", "tag", "delete"])
-def test_card_subcommand_help_succeeds(sub):
+@pytest.mark.parametrize("sub", ["search", "view"])
+def test_insight_subcommand_help_succeeds(sub):
     from memorytalk.cli import main
     runner = CliRunner()
     r = runner.invoke(main, ["insight", sub, "--help"])
     assert r.exit_code == 0, r.output
 
 
-# ────────── card delete ──────────
+# ────────── insight search wiring ──────────
 
-def test_card_delete_yes_flag_skips_confirm(monkeypatch):
-    """``--yes`` MUST short-circuit the pre-fetch (POST /v4/read) and
-    the click.confirm prompt; only HTTP call should be DELETE."""
+def test_insight_search_hits_v4_insights(monkeypatch):
     calls: list[tuple[str, str]] = []
 
     def _fake_api(method, path, cfg, json_body=None, timeout=30.0, params=None):
         calls.append((method, path))
-        if method == "DELETE":
-            return {
-                "card_id": "card_01xx",
-                "inbound_refs_dangling": 1,
-            }
-        raise AssertionError(f"unexpected call: {method} {path}")
+        return {"total": 0, "returned": 0, "cards": []}
 
-    from memorytalk.cli import insight as card_mod
-    monkeypatch.setattr(card_mod, "api", _fake_api)
+    from memorytalk.cli import insight as insight_mod
+    monkeypatch.setattr(insight_mod, "api", _fake_api)
 
     from memorytalk.cli import main
     runner = CliRunner()
-    r = runner.invoke(main, ["insight", "delete", "card_01xx", "--yes"])
+    r = runner.invoke(main, ["insight", "search", "--tag", "project=x", "--json"])
     assert r.exit_code == 0, r.output
-    assert calls == [("DELETE", "/v4/insights/card_01xx")], calls
-    assert "deleted" in r.output
-    assert "1 inbound" in r.output
+    assert calls == [("GET", "/v4/insights")]
 
 
-def test_card_delete_confirm_yes(monkeypatch):
-    """Interactive: pre-fetch shows insight, user answers y, DELETE runs."""
-    def _fake_api(method, path, cfg, json_body=None, timeout=30.0, params=None):
-        if method == "POST" and path == "/v4/read":
-            return {"card": {
-                "card_id": "card_01yy", "insight": "lancedb pick",
-                "created_at": "2026-05-24T09:12:00Z",
-            }}
-        if method == "DELETE":
-            return {"card_id": "card_01yy",
-                    "inbound_refs_dangling": 0}
-        raise AssertionError(f"unexpected: {method} {path}")
+# ────────── insight view wiring ──────────
 
-    from memorytalk.cli import insight as card_mod
-    monkeypatch.setattr(card_mod, "api", _fake_api)
-
-    from memorytalk.cli import main
-    runner = CliRunner()
-    r = runner.invoke(main, ["insight", "delete", "card_01yy"], input="y\n")
-    assert r.exit_code == 0, r.output
-    assert "deleted" in r.output
-
-
-def test_card_delete_confirm_no_aborts(monkeypatch):
-    """Interactive: user answers 'n' → no DELETE call, exit 1."""
-    saw_delete = {"hit": False}
+def test_insight_view_hits_v4_read(monkeypatch):
+    calls: list[tuple[str, str, dict]] = []
 
     def _fake_api(method, path, cfg, json_body=None, timeout=30.0, params=None):
-        if method == "POST" and path == "/v4/read":
-            return {"card": {
-                "card_id": "card_01zz", "insight": "abc",
-                "created_at": "2026-05-24T09:12:00Z",
-            }}
-        if method == "DELETE":
-            saw_delete["hit"] = True
-        raise AssertionError(f"unexpected: {method} {path}")
+        calls.append((method, path, json_body))
+        return {"type": "insight", "read_at": "t",
+                "insight": {"insight_id": "insight_x", "insight": "hi",
+                            "rounds": [], "stats": {}}}
 
-    from memorytalk.cli import insight as card_mod
-    monkeypatch.setattr(card_mod, "api", _fake_api)
+    from memorytalk.cli import insight as insight_mod
+    monkeypatch.setattr(insight_mod, "api", _fake_api)
 
     from memorytalk.cli import main
     runner = CliRunner()
-    r = runner.invoke(main, ["insight", "delete", "card_01zz"], input="n\n")
-    assert r.exit_code != 0
-    assert not saw_delete["hit"], "user said no — DELETE must not have run"
-
-
-def test_card_delete_json_skips_confirm(monkeypatch):
-    """--json implies non-interactive: skip the preview + confirm."""
-    calls: list[tuple[str, str]] = []
-
-    def _fake_api(method, path, cfg, json_body=None, timeout=30.0, params=None):
-        calls.append((method, path))
-        if method == "DELETE":
-            return {"card_id": "card_01jj",
-                    "inbound_refs_dangling": 0}
-        raise AssertionError(f"unexpected: {method} {path}")
-
-    from memorytalk.cli import insight as card_mod
-    monkeypatch.setattr(card_mod, "api", _fake_api)
-
-    from memorytalk.cli import main
-    runner = CliRunner()
-    r = runner.invoke(main, ["insight", "delete", "card_01jj", "--json"])
+    r = runner.invoke(main, ["insight", "view", "insight_x", "--json"])
     assert r.exit_code == 0, r.output
-    assert calls == [("DELETE", "/v4/insights/card_01jj")]
-    import json as _json
-    body = _json.loads(r.stdout.strip())
-    assert body["card_id"] == "card_01jj"
-
-
-# ────────── fmt_insight_delete ──────────
-
-def test_fmt_insight_delete_simple():
-    from memorytalk.cli._format import fmt_insight_delete
-    out = fmt_insight_delete({"card_id": "card_01x", "inbound_refs_dangling": 0})
-    assert "deleted" in out
-    assert "card_01x" in out
-
-
-def test_fmt_insight_delete_with_dangling():
-    from memorytalk.cli._format import fmt_insight_delete
-    out = fmt_insight_delete({"card_id": "card_01y", "inbound_refs_dangling": 2})
-    assert "2 inbound" in out
-    assert "dangling" in out
-
-
-def test_old_card_json_form_is_gone():
-    """0.7.x's bare ``card '<json>'`` was hard-renamed in 0.8.x. The
-    second positional arg should now be interpreted as a subcommand
-    name — `card '{"insight":"..."}'` → unknown subcommand → exit 2."""
-    from memorytalk.cli import main
-    runner = CliRunner()
-    r = runner.invoke(main, ["insight", '{"insight":"x"}'])
-    assert r.exit_code != 0
+    assert calls == [("POST", "/v4/read", {"id": "insight_x"})]
 
 
 # ────────── fmt_insight_list ──────────
@@ -157,17 +80,16 @@ def test_old_card_json_form_is_gone():
 def test_fmt_insight_list_empty():
     from memorytalk.cli._format import fmt_insight_list
     out = fmt_insight_list({"total": 0, "returned": 0, "cards": []})
-    assert "# card list" in out
     assert "0 / 0 results" in out
 
 
-def test_fmt_insight_list_renders_block_per_card():
+def test_fmt_insight_list_renders_block_per_insight():
     from memorytalk.cli._format import fmt_insight_list
     payload = {
         "total": 2, "returned": 2,
         "cards": [
             {
-                "card_id": "card_01abc", "insight": "LanceDB picked",
+                "insight_id": "insight_01abc", "insight": "LanceDB picked",
                 "created_at": "2026-05-24T09:12:00Z",
                 "tags": {"project": "billing", "status": "verified"},
                 "stats": {
@@ -176,7 +98,7 @@ def test_fmt_insight_list_renders_block_per_card():
                 },
             },
             {
-                "card_id": "card_01def", "insight": "no-tag card",
+                "insight_id": "insight_01def", "insight": "no-tag insight",
                 "created_at": "2026-05-23T14:21:00Z",
                 "tags": {},
                 "stats": {
@@ -187,17 +109,12 @@ def test_fmt_insight_list_renders_block_per_card():
         ],
     }
     out = fmt_insight_list(payload, filter_summary="tag=project=billing")
-    # Header echoes filter + counts.
     assert "`filter: tag=project=billing` · 2 / 2 results" in out
-    # One H3 per card.
-    assert out.count("### [CARD]") == 2
-    # Inline stats formatted as documented.
+    assert out.count("### [INSIGHT]") == 2
     assert "↑7 ↓3 · reviews 12 · reads 42 · recalls 18" in out
-    # Insight rendered as a paragraph.
     assert "LanceDB picked" in out
-    # First card has tags inline; second card has no tags segment.
     assert "tags: project=billing status=verified" in out
-    second_block = out.split("card_01def")[1].split("---")[0]
+    second_block = out.split("insight_01def")[1].split("---")[0]
     assert "tags:" not in second_block
 
 
@@ -206,7 +123,7 @@ def test_fmt_insight_list_truncation_hint():
     payload = {
         "total": 50, "returned": 2,
         "cards": [
-            {"card_id": f"card_{i}", "insight": "x",
+            {"insight_id": f"insight_{i}", "insight": "x",
              "created_at": "2026-05-24T09:12:00Z",
              "tags": {}, "stats": {}}
             for i in range(2)
@@ -216,29 +133,14 @@ def test_fmt_insight_list_truncation_hint():
     assert "showing 2 of 50" in out
 
 
-# ────────── fmt_insight_tag ──────────
+# ────────── fmt_read renders insight (read-only) ──────────
 
-def test_fmt_insight_tag_query_empty():
-    from memorytalk.cli._format import fmt_insight_tag
-    out = fmt_insight_tag(
-        {"card_id": "card_x", "tags": {}}, is_query=True,
-    )
-    assert out.strip() == "(no tags)"
-
-
-def test_fmt_insight_tag_query_table():
-    from memorytalk.cli._format import fmt_insight_tag
-    out = fmt_insight_tag(
-        {"card_id": "card_x", "tags": {"a": "1", "b": "2"}}, is_query=True,
-    )
-    assert "# card_x · tags" in out
-    assert "| a | 1 |" in out
-
-
-def test_fmt_insight_tag_set_confirm():
-    from memorytalk.cli._format import fmt_insight_tag
-    out = fmt_insight_tag(
-        {"card_id": "card_x", "tags": {"a": "1"}}, is_query=False,
-    )
-    assert "ok:" in out
-    assert "a=1" in out
+def test_fmt_read_renders_insight():
+    from memorytalk.cli.card import _fmt_read
+    out = _fmt_read({
+        "type": "insight",
+        "insight": {"insight_id": "insight_x", "insight": "the claim",
+                    "rounds": [], "stats": {"read_count": 3}},
+    })
+    assert "insight_x" in out
+    assert "the claim" in out

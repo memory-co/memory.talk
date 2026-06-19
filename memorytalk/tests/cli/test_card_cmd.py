@@ -40,11 +40,11 @@ def _invoke(args, input=None):
 def test_card_group_help():
     r = _invoke(["--help"])
     assert r.exit_code == 0
-    for sub in ("create", "position", "review", "link", "read", "search", "recall"):
+    for sub in ("create", "position", "review", "link"):
         assert sub in r.output
 
 
-@pytest.mark.parametrize("sub", ["create", "position", "review", "link", "read", "search", "recall"])
+@pytest.mark.parametrize("sub", ["create", "position", "review", "link"])
 def test_subcommand_help(sub):
     r = _invoke([sub, "--help"])
     assert r.exit_code == 0
@@ -99,12 +99,6 @@ def test_link_body(captured):
                                     "target_id": "card_b", "target_type": "card"}
     _invoke(["link", "--card", "card_a", "--type", "specializes", "--target", "card_b"])
     assert captured.calls[0][2] == {"card_id": "card_a", "type": "specializes", "target_id": "card_b"}
-
-
-def test_search_body(captured):
-    captured.responses["/v4/search"] = {"query": "db", "total": 0, "returned": 0, "cards": []}
-    _invoke(["search", "db", "-w", "credence > 0", "--limit", "5"])
-    assert captured.calls[0][2] == {"query": "db", "where": "credence > 0", "limit": 5}
 
 
 # ────────── parsing helpers ──────────
