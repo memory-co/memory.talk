@@ -6,7 +6,7 @@
 
 沿用 v3 的 review 机制，只把 **target 从 `card_id` 换成 `position_id`** —— v4 一张卡有多个答案，表态针对的是"哪个答案"而非"整张卡"。`argument≠0` 的 review 就是一条 IBIS Argument（pro/con）；`argument=0` 是中立观察。
 
-CLI 对应 [`review`](../../cli/v4/review.md) 命令。字段语义详见 [`../../structure/v4/review.md`](../../structure/v4/review.md)。
+CLI 对应 [`card review`](../../cli/v4/review.md) 命令。字段语义详见 [`../../structure/v4/review.md`](../../structure/v4/review.md)。
 
 ### 请求体
 

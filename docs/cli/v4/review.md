@@ -1,26 +1,26 @@
-# review
+# card review
 
-对一个**答案(Position)**的"回帖"——表态它对不对,可以**支持(+1)、中立(0)、反对(−1)**,附带某次 session 的证据 rounds 和一句说明。
+对一个**答案(Position)**的"回帖"——表态它对不对,可以**支持(+1)、中立(0)、反对(−1)**,附带某次 session 的证据 rounds 和一句说明。是 `card` 命令组的第三条子命令(create / position / review)。
 
 沿用 v3 的 review 机制,只把对象从整张卡**下放到 Position**:同一个问题下的不同答案各自被顶踩、各自竞争。`argument ≠ 0` 的 review 就是一条 **IBIS Argument**(顶 = pro / 踩 = con);`argument = 0` 是中立观察。
 
 ```bash
-memory.talk review <position_id> <+1|0|-1> --cite <session_id>:<indexes> [--comment '<一句话>'] [--json]
+memory.talk card review <position_id> <+1|0|-1> --cite <session_id>:<indexes> [--comment '<一句话>'] [--json]
 ```
 
 ## 参数
 
 | 参数 | 必填 | 说明 |
 |---|---|---|
-| `<position_id>` | 是 | 被表态的答案,必须是 `pos_<…>`;不存在或前缀错报错。**target 是 Position,不是 card** |
-| `<argument>` | 是 | `+1` 支持(顶) / `0` 中立 / `-1` 反对(踩)。其它值报错 |
+| `<position_id>` | 是 | 位置参数:被表态的答案,必须是 `pos_<…>`;不存在或前缀错报错。**target 是 Position,不是 card** |
+| `<argument>` | 是 | 位置参数:`+1` 支持(顶) / `0` 中立 / `-1` 反对(踩)。其它值报错 |
 | `--cite` | 是 | 证据:`<session_id>:<indexes>`,**单 session**(一次表态来自一次具体对话);indexes 语法同 [card.md](card.md#--source-语法--indexes) |
-| `--comment` | 否 | 一句话归因;`argument=0` 时强烈建议填,服务端不强制。值支持 `@<file>` / `@-`(从文件 / stdin 原样读,专治特殊字符;同 [card.md](card.md#文本字段传文件--stdin)) |
+| `--comment` | 否 | 一句话归因;`argument=0` 时强烈建议填,服务端不强制。值支持 `@<file>` / `@-`(从文件 / stdin 原样读,专治特殊字符;同 [card.md](card.md#文本传文件--stdin)) |
 | `--review_id` | 否 | 不提供则自动生成 `review_<ULID>` |
 
-> **单 session**:跟答案的出处(`card_sessions` 可多 session)不同,一条 review 只挂一个 session——它是"某次对话里对某个答案的一次表态"。
+> **`--cite` vs `card position` 的 `--source`**:都填 `<session_id>:<indexes>`,但语义不同——`--cite` 是这次**表态的证据**(单 session);`--source` 是答案的**出处**(可多 session,落 `card_sessions`)。所以 `card` 写答案用 `--source`、`card review` 表态用 `--cite`。
 >
-> 同一对 `(position_id, session_id)` **可有多条 review**(一次对话里早期反对、深入后转支持),由不同 `indexes` 区分,服务端**不去重**。
+> **单 session**:一条 review 只挂一个 session。同一对 `(position_id, session_id)` **可有多条 review**(早期反对、深入后转支持),由不同 `indexes` 区分,服务端**不去重**。
 
 完整字段语义见 [`../../structure/v4/review.md`](../../structure/v4/review.md)。
 
@@ -72,7 +72,7 @@ ok: created `review_01jzr5kq` · `pos_01jzp3nq` **+1** by `sess_abc` #20-25
 
 ## 中立(argument=0)堆多了 → 可能衍生新 Position
 
-一条中立 = "证据跟这个问题相关,但不站现有任何答案的队"。一张卡积累一批中立,说明现有答案没接住这些证据——可能在为一个**还没说出来的答案**背书。可**离线**(人 / LLM 判)把这堆中立聚类,提一个新 Position(`card position --card <同卡> --answer ...`),再把这些 review 以 `+1` 重挂到新答案上。**不自动**触发。详见 [`../../works/v4/card.md`](../../works/v4/card.md#3-第二推credence--现算的质量分相关性只在召回时算)。
+一条中立 = "证据跟这个问题相关,但不站现有任何答案的队"。一张卡积累一批中立,说明现有答案没接住这些证据——可能在为一个**还没说出来的答案**背书。可**离线**(人 / LLM 判)把这堆中立聚类,提一个新 Position(`card position <同卡> '<新答案>'`),再把这些 review 以 `+1` 重挂到新答案上。**不自动**触发。详见 [`../../works/v4/card.md`](../../works/v4/card.md#3-第二推credence--现算的质量分相关性只在召回时算)。
 
 ## 错误
 
@@ -87,15 +87,15 @@ ok: created `review_01jzr5kq` · `pos_01jzp3nq` **+1** by `sess_abc` #20-25
 
 ## 读取
 
-review **不单独 read** —— 在 [`card view <card_id>`](card.md#card-view) 的每个 Position 块里以顶踩计数体现;raw 列表走 `card view <cid> --json` 或直查 SQLite。
+review **不单独 read** —— 在 [`read <card_id>`](read.md) 的每个 Position 块里以顶踩计数体现,或 [`read <position_id>`](read.md#pos_--单个答案--它的-review) 看某答案的全部 review。
 
-## 跟 card 的边界
+## 跟 card position 的边界
 
-| | `card position` | `review` |
+| | `card position` | `card review` |
 |---|---|---|
 | 角色 | 立一个答案(候选) | 对答案的后续表态 |
 | 时序 | 先 | 后(Position 必须已存在) |
-| session 引用 | 出处 `card_sessions`,可跨多 session | 证据单 session |
+| session 引用 | 出处 `--source`(`card_sessions`,可多 session) | 证据 `--cite`(单 session) |
 | 内容载荷 | `claim`(答案文本) | `argument` + `comment` |
 | 进向量 | 卡的 `issue` 进 | 否 |
 | 增删改 | append-only | append-only(撤销 = 写一条相反 argument 的) |
@@ -104,11 +104,11 @@ review **不单独 read** —— 在 [`card view <card_id>`](card.md#card-view) 
 
 ```bash
 # 又一次验证了某个答案
-memory.talk review pos_01jzp3nq +1 --cite "$SID:20-25" --comment '再次确认,简洁版接住了'
+memory.talk card review pos_01jzp3nq +1 --cite "$SID:20-25" --comment '再次确认,简洁版接住了'
 
 # 某个答案被这次对话证伪
-memory.talk review pos_01jz0xnq -1 --cite "$SID:3-8" --comment '纯简洁漏了调试细节'
+memory.talk card review pos_01jz0xnq -1 --cite "$SID:3-8" --comment '纯简洁漏了调试细节'
 
 # 相关但不站队(中立观察)
-memory.talk review pos_01jzp3nq 0 --cite "$SID:11" --comment '又提到这个问题,但没改变结论'
+memory.talk card review pos_01jzp3nq 0 --cite "$SID:11" --comment '又提到这个问题,但没改变结论'
 ```

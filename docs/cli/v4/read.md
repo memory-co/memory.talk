@@ -8,15 +8,55 @@ memory.talk read <id> [--json]
 
 | 前缀 | 读到的 |
 |---|---|
-| `card_` | 一张卡:**问题 + 它所有答案**(+ IBIS 边 + 出处)——输出同 [`card view`](card.md#card-view) |
+| `card_` | 一张卡:**问题 + 它所有答案**(+ IBIS 边 + 出处) |
 | `pos_` | **单个答案**(Position):`claim` + 顶踩计数 + 现算 credence + scope + 它收到的全部 review |
 | `sess_` | session(沿用 v3 形态) |
 
 调 [`POST /v4/read`](../../api/v4/read.md)。
 
-## `card_` —— 等同 card view
+## `card_` —— 问题 + 它所有答案
 
-`read <card_id>` 与 [`card view <card_id>`](card.md#card-view) **输出完全一致**(问题 + 所有 Position + `links` + `sessions`),不重复;详见那一节。
+读一张卡 = 问题 + 它**所有** Position(各自顶踩计数、现算 credence、scope)+ IBIS 边 + 出处。credence 最高的那个高亮 = 当下答案。
+
+### 输出 — Markdown(默认)
+
+`````markdown
+# card `card_01jz8k2m`
+
+**issue:** 用户偏好什么回答风格?
+
+`created 2026-06-18 14:30` · 3 positions · 2 sessions
+
+---
+
+### ★ [POSITION] `pos_01jzp3nq` · `credence +6 · ↑7 ↓1 ·0`
+
+默认简洁、要点优先
+
+`scope: 日常问答;调试场景另说` · 2026-06-18 14:30
+
+### [POSITION] `pos_01jzr5kq` · `credence +1 · ↑2 ↓1 ·3`
+
+调试场景下要详细、带完整命令
+
+`scope: (none)` · 2026-06-19 09:12
+
+---
+
+**links:** specializes → `card_01jzsub` · related `card_01jzrel`
+**sessions:** `sess_abc` #11-15 · `sess_def` #3,7,12
+`````
+
+#### 约定
+
+- 顶部 `# card <card_id>` + `**issue:**` 整段问题;第三行 metadata(创建时间 · Position 数 · 出处 session 数)。
+- 每个 Position 一个 H3 块:`### [POSITION] \`<pid>\` · \`credence <现算分> · ↑<up> ↓<down> ·<neutral>\``。credence 现算(不是存的);**最高的那个标题前加 `★`** = 当下答案(平手按最近更新),**不是 `accepted` 字段**。
+- 标题下整段 `claim`,再一行 `scope`(空则 `(none)`)+ 时间。
+- 末尾 `**links:**`(IBIS 边)/ `**sessions:**`(出处),无则整段不出。
+
+### 输出 — JSON(`--json`)
+
+跟 [`POST /v4/read`](../../api/v4/read.md) 的 `card_` 响应同形(`issue` + `positions[]` 按 credence 降序 + `links` + `sessions`)。`credence` 是响应里现算的字段,不在存储里。字段语义见 [`../../structure/v4/card.md`](../../structure/v4/card.md)。
 
 ## `pos_` —— 单个答案 + 它的 review
 

@@ -4,7 +4,7 @@
 
 建一条 **card↔card 的有向边**（= IBIS 的 issue↔issue 关联，因 card ≡ issue）。卡↔卡是问题图的**关联主干**；Position 之间不直接结网。
 
-CLI 对应 [`card link`](../../cli/v4/card.md)。字段语义详见 [`../../structure/v4/card-link.md`](../../structure/v4/card-link.md)。
+CLI 对应 [`link`](../../cli/v4/link.md)（`link create` / `link list`)。字段语义详见 [`../../structure/v4/card-link.md`](../../structure/v4/card-link.md)。
 
 ### 请求体
 

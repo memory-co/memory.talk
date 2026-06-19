@@ -4,7 +4,7 @@
 
 读单卡 / 单 Position 走沿用 v3 的 `POST /v3/read`（`card_` / `pos_` 前缀都认）。对答案表态走 [`POST /v4/positions/{pid}/reviews`](reviews.md)。
 
-CLI 对应 [`card create | view`](../../cli/v4/card.md)。字段语义详见 [`../../structure/v4/card.md`](../../structure/v4/card.md)。
+CLI 对应 [`card create | position`](../../cli/v4/card.md)（读卡走 [`read`](../../cli/v4/read.md))。字段语义详见 [`../../structure/v4/card.md`](../../structure/v4/card.md)。
 
 ---
 
@@ -55,7 +55,7 @@ CLI 对应 [`card create | view`](../../cli/v4/card.md)。字段语义详见 [`.
 
 ## GET /v4/cards
 
-列卡元数据（`issue` + 每卡 Position 数 + 创建时间），**不展开 Position**。CLI 入口 [`card view`](../../cli/v4/card.md) 看单卡的全部答案。
+列卡元数据（`issue` + 每卡 Position 数 + 创建时间），**不展开 Position**。CLI:列卡走 [`search ''`](../../cli/v4/search.md)（空 query 按时间列）;看单卡的全部答案走 [`read <card_id>`](../../cli/v4/read.md)。
 
 ### 查询参数
 

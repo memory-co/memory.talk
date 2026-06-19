@@ -104,7 +104,7 @@ memory.talk search "" -w 'neutral_count > 3 AND up_count = 0 AND down_count = 0'
 }
 ```
 
-`top_position` 是当下答案(`position_count=0` 时为 `null`)。看一张卡全部答案走 [`read <card_id>`](read.md) 或 [`card view`](card.md#card-view)。
+`top_position` 是当下答案(`position_count=0` 时为 `null`)。看一张卡全部答案走 [`read <card_id>`](read.md)。
 
 ## 错误
 
