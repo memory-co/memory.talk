@@ -81,7 +81,7 @@ class TestParseErrors:
 
 class TestFieldDomainScoping:
     """Field-applicability rules: a predicate on a card-only field makes
-    sessions vacuously fail, and vice-versa — see docs/cli/v3/search.md
+    sessions vacuously fail, and vice-versa — see docs/cli/v4/search.md
     "字段应用域规则"."""
 
     def test_card_only_field_excludes_sessions(self):

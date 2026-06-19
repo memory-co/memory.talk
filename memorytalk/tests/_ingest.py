@@ -4,7 +4,7 @@ The HTTP API exposes ``ensure`` + ``append`` (cursor-based, append-only).
 Many tests don't care about the cursor — they just want to set up a
 session in the DB and move on. This helper hides the ensure → filter →
 append dance behind a one-call interface that mimics the old whole-
-session ``POST /v3/sessions`` shape: pass in the rounds, the helper
+session ``POST /v4/sessions`` shape: pass in the rounds, the helper
 figures out which ones are new relative to the server's current cursor
 and submits those.
 
@@ -44,7 +44,7 @@ async def ingest_session(
     adapter = cls(location=loc)
     sid = adapter.mint_session_id(session_id)
 
-    r = await client.post("/v3/sessions/ensure", json={
+    r = await client.post("/v4/sessions/ensure", json={
         "session_id": sid, "source": source, "location": loc,
     })
     r.raise_for_status()
@@ -66,7 +66,7 @@ async def ingest_session(
             # be empty and idempotent.
             new_rounds = []
 
-    return await client.post("/v3/sessions/append", json={
+    return await client.post("/v4/sessions/append", json={
         "session_id": sid, "source": source, "location": loc,
         "expected_prev_round_id": server_last,
         "rounds": new_rounds,

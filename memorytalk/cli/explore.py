@@ -45,7 +45,7 @@ def create(entrypoint_session_id, divider_at, note, json_out) -> None:
     if not entrypoint_session_id and not divider_at:
         emit_md_err("give an entrypoint session id or --at <time>")
         sys.exit(1)
-    result = _call("POST", "/v3/explores", json_out, json_body={
+    result = _call("POST", "/v4/explores", json_out, json_body={
         "entrypoint_session_id": entrypoint_session_id,
         "divider_at": divider_at, "note": note,
     })
@@ -64,7 +64,7 @@ def create(entrypoint_session_id, divider_at, note, json_out) -> None:
 @click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON")
 def view(explore_id, json_out) -> None:
     """Show an explore's prior/posterior split."""
-    result = _call("GET", f"/v3/explores/{explore_id}", json_out)
+    result = _call("GET", f"/v4/explores/{explore_id}", json_out)
     if json_out:
         emit_json(result)
     else:
@@ -85,7 +85,7 @@ def view(explore_id, json_out) -> None:
 @click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON")
 def list_(limit, json_out) -> None:
     """List explores, newest first."""
-    result = _call("GET", "/v3/explores", json_out, params={"limit": limit})
+    result = _call("GET", "/v4/explores", json_out, params={"limit": limit})
     if json_out:
         emit_json(result)
     else:

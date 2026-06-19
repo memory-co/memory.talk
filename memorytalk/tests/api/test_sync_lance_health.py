@@ -1,4 +1,4 @@
-"""GET /v3/sync/status — LanceDB health sub-block (issue #4 §6.6).
+"""GET /v4/sync/status — LanceDB health sub-block (issue #4 §6.6).
 
 The existing test_sync.py covers watcher / endpoint / index-completion
 fields. These pin the ``index.lance`` block specifically — the field
@@ -13,7 +13,7 @@ pytestmark = pytest.mark.asyncio
 
 
 async def test_status_includes_lance_health_block(client):
-    r = await client.get("/v3/sync/status")
+    r = await client.get("/v4/sync/status")
     body = r.json()
     assert "index" in body
     lance = body["index"].get("lance")
@@ -56,9 +56,9 @@ async def test_lance_health_emfile_counter_reflects_recoveries(app, client, monk
         return await orig(table, *a, **kw)
 
     monkeypatch.setattr(index_mod, "run_hybrid", flaky)
-    before = (await client.get("/v3/sync/status")).json()["index"]["lance"]
+    before = (await client.get("/v4/sync/status")).json()["index"]["lance"]
     await searchbase.search(ROUNDS, Query(text="", top_k=5))
-    after = (await client.get("/v3/sync/status")).json()["index"]["lance"]
+    after = (await client.get("/v4/sync/status")).json()["index"]["lance"]
     assert after["emfile_recoveries_since_boot"] == before["emfile_recoveries_since_boot"] + 1
     assert after["last_emfile_at"] is not None
 
@@ -66,7 +66,7 @@ async def test_lance_health_emfile_counter_reflects_recoveries(app, client, monk
 async def test_lance_health_fd_limits_populated_on_unix(client):
     """resource.getrlimit is available on Linux + macOS; tests run there.
     Confirm the fields surface non-null integers."""
-    body = (await client.get("/v3/sync/status")).json()
+    body = (await client.get("/v4/sync/status")).json()
     lance = body["index"]["lance"]
     # Both can be RLIM_INFINITY (very large int) but never None on Unix.
     assert isinstance(lance["fd_soft_limit"], int)

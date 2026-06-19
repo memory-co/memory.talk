@@ -1,4 +1,4 @@
-"""POST /v3/recall — hybrid card retrieval with per-session dedup.
+"""POST /v4/recall — hybrid card retrieval with per-session dedup.
 
 0.9.0: caller MUST send ``source`` so the server can compute the
 canonical session_id correctly. ``recall_count`` is now derived from
@@ -23,7 +23,7 @@ async def _ingest(client) -> str:
 
 
 async def _make_card(client, sid: str, insight: str) -> str:
-    r = await client.post("/v3/insights", json={
+    r = await client.post("/v4/insights", json={
         "insight": insight,
         "rounds": [{"session_id": sid, "indexes": "1"}],
     })
@@ -38,7 +38,7 @@ def _canonical(raw_id: str, source: str = "claude-code") -> str:
 async def test_recall_basic_returns_card_with_insight(client):
     sid = await _ingest(client)
     cid = await _make_card(client, sid, "LanceDB is the choice")
-    r = await client.post("/v3/recall", json={
+    r = await client.post("/v4/recall", json={
         "source": "claude-code",
         "session_id": "hook-1",
         "prompt": "LanceDB",
@@ -57,13 +57,13 @@ async def test_recall_dedup_within_same_session(client):
     cid = await _make_card(client, sid, "LanceDB choice")
     hook_sid = "hook-dedup-1"
 
-    r1 = await client.post("/v3/recall", json={
+    r1 = await client.post("/v4/recall", json={
         "source": "claude-code",
         "session_id": hook_sid, "prompt": "LanceDB", "top_k": 5,
     })
     assert cid in [c["card_id"] for c in r1.json()["recalled"]]
 
-    r2 = await client.post("/v3/recall", json={
+    r2 = await client.post("/v4/recall", json={
         "source": "claude-code",
         "session_id": hook_sid, "prompt": "LanceDB", "top_k": 5,
     })
@@ -75,11 +75,11 @@ async def test_recall_dedup_within_same_session(client):
 async def test_recall_dedup_resets_for_new_session(client):
     sid = await _ingest(client)
     cid = await _make_card(client, sid, "lancedb take 2")
-    await client.post("/v3/recall", json={
+    await client.post("/v4/recall", json={
         "source": "claude-code",
         "session_id": "hook-A", "prompt": "lancedb", "top_k": 5,
     })
-    r = await client.post("/v3/recall", json={
+    r = await client.post("/v4/recall", json={
         "source": "claude-code",
         "session_id": "hook-B", "prompt": "lancedb", "top_k": 5,
     })
@@ -98,7 +98,7 @@ async def test_recall_count_derived_from_recall_event(app, client):
     counts0 = await db.recall.recall_counts([cid])
     assert counts0[cid] == 0
 
-    await client.post("/v3/recall", json={
+    await client.post("/v4/recall", json={
         "source": "claude-code",
         "session_id": "hook-count-1", "prompt": "lancedb", "top_k": 5,
     })
@@ -106,7 +106,7 @@ async def test_recall_count_derived_from_recall_event(app, client):
     assert counts1[cid] == 1
 
     # dedup'd repeat (same session) → NOT bumped
-    await client.post("/v3/recall", json={
+    await client.post("/v4/recall", json={
         "source": "claude-code",
         "session_id": "hook-count-1", "prompt": "lancedb", "top_k": 5,
     })
@@ -114,7 +114,7 @@ async def test_recall_count_derived_from_recall_event(app, client):
     assert counts2[cid] == 1
 
     # new session → fresh dedup → bumped
-    await client.post("/v3/recall", json={
+    await client.post("/v4/recall", json={
         "source": "claude-code",
         "session_id": "hook-count-2", "prompt": "lancedb", "top_k": 5,
     })
@@ -125,7 +125,7 @@ async def test_recall_count_derived_from_recall_event(app, client):
 async def test_recall_does_not_touch_search_log(app, client):
     sid = await _ingest(client)
     await _make_card(client, sid, "lancedb x")
-    await client.post("/v3/recall", json={
+    await client.post("/v4/recall", json={
         "source": "claude-code",
         "session_id": "no-audit", "prompt": "lancedb",
     })
@@ -139,10 +139,10 @@ async def test_recall_session_id_canonicalized_via_adapter(client):
     canonicals (different loc_code)."""
     sid = await _ingest(client)
     await _make_card(client, sid, "norm-1")
-    r_cc = await client.post("/v3/recall", json={
+    r_cc = await client.post("/v4/recall", json={
         "source": "claude-code", "session_id": "raw-id", "prompt": "norm",
     })
-    r_codex = await client.post("/v3/recall", json={
+    r_codex = await client.post("/v4/recall", json={
         "source": "codex", "session_id": "raw-id", "prompt": "norm",
     })
     assert r_cc.json()["session_id"] == _canonical("raw-id", "claude-code")
@@ -155,7 +155,7 @@ async def test_recall_session_id_canonicalized_via_adapter(client):
 async def test_recall_session_in_db_not_required(client):
     sid = await _ingest(client)
     await _make_card(client, sid, "exists")
-    r = await client.post("/v3/recall", json={
+    r = await client.post("/v4/recall", json={
         "source": "claude-code",
         "session_id": "totally-new-session-not-in-db",
         "prompt": "exists",
@@ -165,14 +165,14 @@ async def test_recall_session_in_db_not_required(client):
 
 
 async def test_recall_empty_prompt_rejected(client):
-    r = await client.post("/v3/recall", json={
+    r = await client.post("/v4/recall", json={
         "source": "claude-code", "session_id": "x", "prompt": "",
     })
     assert r.status_code == 400
 
 
 async def test_recall_unknown_source_rejected(client):
-    r = await client.post("/v3/recall", json={
+    r = await client.post("/v4/recall", json={
         "source": "definitely-not-an-adapter",
         "session_id": "x", "prompt": "hi",
     })
@@ -180,14 +180,14 @@ async def test_recall_unknown_source_rejected(client):
 
 
 async def test_recall_missing_source_rejected_by_pydantic(client):
-    r = await client.post("/v3/recall", json={
+    r = await client.post("/v4/recall", json={
         "session_id": "x", "prompt": "hi",
     })
     assert r.status_code == 422  # FastAPI request validation
 
 
 async def test_recall_returns_empty_when_no_matches(client):
-    r = await client.post("/v3/recall", json={
+    r = await client.post("/v4/recall", json={
         "source": "claude-code",
         "session_id": "lonely", "prompt": "this-keyword-matches-nothing-zzz",
     })
@@ -200,7 +200,7 @@ async def test_recall_top_k_caps_returned_results(client):
     sid = await _ingest(client)
     for i in range(5):
         await _make_card(client, sid, f"lancedb fact {i}")
-    r = await client.post("/v3/recall", json={
+    r = await client.post("/v4/recall", json={
         "source": "claude-code",
         "session_id": "cap-1", "prompt": "lancedb", "top_k": 2,
     })
@@ -212,7 +212,7 @@ async def test_recall_writes_canonical_file(app, client, tmp_path):
     appears in the per-session dir matching the canonical session_id."""
     sid = await _ingest(client)
     await _make_card(client, sid, "file-canonical-marker")
-    r = await client.post("/v3/recall", json={
+    r = await client.post("/v4/recall", json={
         "source": "claude-code",
         "session_id": "file-test", "prompt": "file-canonical-marker",
     })

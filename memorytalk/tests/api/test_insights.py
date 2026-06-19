@@ -1,4 +1,4 @@
-"""POST /v3/insights — create + validation + persistence."""
+"""POST /v4/insights — create + validation + persistence."""
 from __future__ import annotations
 import pytest
 
@@ -21,7 +21,7 @@ async def _ingest_session(client, sid: str = "src-1") -> str:
 
 async def test_card_create_basic(client):
     sid = await _ingest_session(client)
-    r = await client.post("/v3/insights", json={
+    r = await client.post("/v4/insights", json={
         "insight": "选定 LanceDB 做向量存储",
         "rounds": [{"session_id": sid, "indexes": "1-3"}],
     })
@@ -33,13 +33,13 @@ async def test_card_create_basic(client):
 
 async def test_card_create_read_roundtrip(client):
     sid = await _ingest_session(client)
-    r = await client.post("/v3/insights", json={
+    r = await client.post("/v4/insights", json={
         "insight": "embedded vector db pick",
         "rounds": [{"session_id": sid, "indexes": "2,4"}],
     })
     cid = r.json()["card_id"]
 
-    r = await client.post("/v3/read", json={"id": cid})
+    r = await client.post("/v4/read", json={"id": cid})
     assert r.status_code == 200
     body = r.json()
     assert body["type"] == "card"
@@ -55,7 +55,7 @@ async def test_card_create_read_roundtrip(client):
 
 async def test_card_with_explicit_id(client):
     sid = await _ingest_session(client)
-    r = await client.post("/v3/insights", json={
+    r = await client.post("/v4/insights", json={
         "card_id": "card_explicit_xyz",
         "insight": "explicit id card",
         "rounds": [{"session_id": sid, "indexes": "1"}],
@@ -71,17 +71,17 @@ async def test_card_duplicate_id_returns_409(client):
         "insight": "first",
         "rounds": [{"session_id": sid, "indexes": "1"}],
     }
-    r = await client.post("/v3/insights", json=base)
+    r = await client.post("/v4/insights", json=base)
     assert r.status_code == 200
     base["insight"] = "second attempt"
-    r = await client.post("/v3/insights", json=base)
+    r = await client.post("/v4/insights", json=base)
     assert r.status_code == 409
     assert "already exists" in r.json()["detail"]
 
 
 async def test_card_invalid_card_id_prefix(client):
     sid = await _ingest_session(client)
-    r = await client.post("/v3/insights", json={
+    r = await client.post("/v4/insights", json={
         "card_id": "wrong_prefix_xyz",
         "insight": "x",
         "rounds": [{"session_id": sid, "indexes": "1"}],
@@ -90,7 +90,7 @@ async def test_card_invalid_card_id_prefix(client):
 
 
 async def test_card_invalid_session_id_prefix(client):
-    r = await client.post("/v3/insights", json={
+    r = await client.post("/v4/insights", json={
         "insight": "x",
         "rounds": [{"session_id": "garbage", "indexes": "1"}],
     })
@@ -98,7 +98,7 @@ async def test_card_invalid_session_id_prefix(client):
 
 
 async def test_card_session_not_found(client):
-    r = await client.post("/v3/insights", json={
+    r = await client.post("/v4/insights", json={
         "insight": "x",
         "rounds": [{"session_id": "sess_nonexistent", "indexes": "1"}],
     })
@@ -108,7 +108,7 @@ async def test_card_session_not_found(client):
 
 async def test_card_index_out_of_range(client):
     sid = await _ingest_session(client)  # 5 rounds
-    r = await client.post("/v3/insights", json={
+    r = await client.post("/v4/insights", json={
         "insight": "x",
         "rounds": [{"session_id": sid, "indexes": "10"}],
     })
@@ -118,7 +118,7 @@ async def test_card_index_out_of_range(client):
 
 async def test_card_indexes_must_be_monotonic(client):
     sid = await _ingest_session(client)
-    r = await client.post("/v3/insights", json={
+    r = await client.post("/v4/insights", json={
         "insight": "x",
         "rounds": [{"session_id": sid, "indexes": "3,1"}],
     })
@@ -127,12 +127,12 @@ async def test_card_indexes_must_be_monotonic(client):
 
 async def test_card_source_cards_unknown_relation(client):
     sid = await _ingest_session(client)
-    r1 = await client.post("/v3/insights", json={
+    r1 = await client.post("/v4/insights", json={
         "insight": "parent",
         "rounds": [{"session_id": sid, "indexes": "1"}],
     })
     parent = r1.json()["card_id"]
-    r = await client.post("/v3/insights", json={
+    r = await client.post("/v4/insights", json={
         "insight": "child",
         "rounds": [{"session_id": sid, "indexes": "2"}],
         "source_cards": [{"card_id": parent, "relation": "nonsense"}],
@@ -142,7 +142,7 @@ async def test_card_source_cards_unknown_relation(client):
 
 async def test_card_source_card_not_found_returns_400(client):
     sid = await _ingest_session(client)
-    r = await client.post("/v3/insights", json={
+    r = await client.post("/v4/insights", json={
         "insight": "x",
         "rounds": [{"session_id": sid, "indexes": "1"}],
         "source_cards": [
@@ -155,20 +155,20 @@ async def test_card_source_card_not_found_returns_400(client):
 
 async def test_card_with_source_cards_persists_edges(app, client):
     sid = await _ingest_session(client)
-    rp = await client.post("/v3/insights", json={
+    rp = await client.post("/v4/insights", json={
         "insight": "the old idea",
         "rounds": [{"session_id": sid, "indexes": "1"}],
     })
     parent = rp.json()["card_id"]
 
-    rc = await client.post("/v3/insights", json={
+    rc = await client.post("/v4/insights", json={
         "insight": "the new revised idea",
         "rounds": [{"session_id": sid, "indexes": "2"}],
         "source_cards": [{"card_id": parent, "relation": "supersedes"}],
     })
     child = rc.json()["card_id"]
 
-    r = await client.post("/v3/read", json={"id": child})
+    r = await client.post("/v4/read", json={"id": child})
     body = r.json()
     assert len(body["card"]["source_cards"]) == 1
     assert body["card"]["source_cards"][0]["card_id"] == parent
@@ -177,12 +177,12 @@ async def test_card_with_source_cards_persists_edges(app, client):
 
 async def test_card_writes_to_lancedb_for_search(client):
     sid = await _ingest_session(client)
-    r = await client.post("/v3/insights", json={
+    r = await client.post("/v4/insights", json={
         "insight": "搜索关键词 LanceDB 出现在 insight 里",
         "rounds": [{"session_id": sid, "indexes": "1"}],
     })
     cid = r.json()["card_id"]
-    r = await client.post("/v3/search", json={"query": "LanceDB"})
+    r = await client.post("/v4/search", json={"query": "LanceDB"})
     body = r.json()
     card_results = [it for it in body["results"] if it["type"] == "card"]
     assert any(c["card_id"] == cid for c in card_results)
@@ -191,7 +191,7 @@ async def test_card_writes_to_lancedb_for_search(client):
 async def test_card_empty_rounds_is_allowed(client):
     """A synthetic card with no source-session rounds is valid (it's a
     distillation from other cards, or a top-down assertion)."""
-    r = await client.post("/v3/insights", json={
+    r = await client.post("/v4/insights", json={
         "insight": "Synthetic card with no source rounds",
         "rounds": [],
     })
@@ -199,6 +199,6 @@ async def test_card_empty_rounds_is_allowed(client):
 
 
 async def test_card_missing_insight_returns_400(client):
-    r = await client.post("/v3/insights", json={"insight": "", "rounds": []})
+    r = await client.post("/v4/insights", json={"insight": "", "rounds": []})
     assert r.status_code == 400
     assert "insight" in r.json()["detail"]

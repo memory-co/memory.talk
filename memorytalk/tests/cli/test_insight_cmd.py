@@ -30,7 +30,7 @@ def test_card_subcommand_help_succeeds(sub):
 # ────────── card delete ──────────
 
 def test_card_delete_yes_flag_skips_confirm(monkeypatch):
-    """``--yes`` MUST short-circuit the pre-fetch (POST /v3/read) and
+    """``--yes`` MUST short-circuit the pre-fetch (POST /v4/read) and
     the click.confirm prompt; only HTTP call should be DELETE."""
     calls: list[tuple[str, str]] = []
 
@@ -50,7 +50,7 @@ def test_card_delete_yes_flag_skips_confirm(monkeypatch):
     runner = CliRunner()
     r = runner.invoke(main, ["insight", "delete", "card_01xx", "--yes"])
     assert r.exit_code == 0, r.output
-    assert calls == [("DELETE", "/v3/insights/card_01xx")], calls
+    assert calls == [("DELETE", "/v4/insights/card_01xx")], calls
     assert "deleted" in r.output
     assert "1 inbound" in r.output
 
@@ -58,7 +58,7 @@ def test_card_delete_yes_flag_skips_confirm(monkeypatch):
 def test_card_delete_confirm_yes(monkeypatch):
     """Interactive: pre-fetch shows insight, user answers y, DELETE runs."""
     def _fake_api(method, path, cfg, json_body=None, timeout=30.0, params=None):
-        if method == "POST" and path == "/v3/read":
+        if method == "POST" and path == "/v4/read":
             return {"card": {
                 "card_id": "card_01yy", "insight": "lancedb pick",
                 "created_at": "2026-05-24T09:12:00Z",
@@ -83,7 +83,7 @@ def test_card_delete_confirm_no_aborts(monkeypatch):
     saw_delete = {"hit": False}
 
     def _fake_api(method, path, cfg, json_body=None, timeout=30.0, params=None):
-        if method == "POST" and path == "/v3/read":
+        if method == "POST" and path == "/v4/read":
             return {"card": {
                 "card_id": "card_01zz", "insight": "abc",
                 "created_at": "2026-05-24T09:12:00Z",
@@ -120,7 +120,7 @@ def test_card_delete_json_skips_confirm(monkeypatch):
     runner = CliRunner()
     r = runner.invoke(main, ["insight", "delete", "card_01jj", "--json"])
     assert r.exit_code == 0, r.output
-    assert calls == [("DELETE", "/v3/insights/card_01jj")]
+    assert calls == [("DELETE", "/v4/insights/card_01jj")]
     import json as _json
     body = _json.loads(r.stdout.strip())
     assert body["card_id"] == "card_01jj"

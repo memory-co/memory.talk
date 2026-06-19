@@ -98,7 +98,7 @@ class TestSessionEvents:
 class TestCardEvents:
     async def test_created_event(self, client, data_root):
         sid = await _ingest(client)
-        r = await client.post("/v3/insights", json={
+        r = await client.post("/v4/insights", json={
             "insight": "the claim",
             "rounds": [{"session_id": sid, "indexes": "1-2"}],
         })
@@ -113,7 +113,7 @@ class TestCardEvents:
         """Each *unique* source session referenced by ``rounds[]`` receives
         a single ``card_extracted`` event."""
         sid = await _ingest(client)
-        r = await client.post("/v3/insights", json={
+        r = await client.post("/v4/insights", json={
             "insight": "x", "rounds": [{"session_id": sid, "indexes": "1-2"}],
         })
         cid = r.json()["card_id"]
@@ -131,7 +131,7 @@ class TestCardEvents:
              "content": [{"type": "text", "text": f"round {i}"}]}
             for i in range(1, 6)
         ], sha="sha_long")
-        await client.post("/v3/insights", json={
+        await client.post("/v4/insights", json={
             "insight": "spans two slices of same session",
             "rounds": [
                 {"session_id": sid, "indexes": "1-2"},
@@ -149,12 +149,12 @@ class TestCardEvents:
         """When card B is created with ``source_cards: [{card_id: A, relation: ...}]``,
         card A's events.jsonl gets a ``card_linked`` event."""
         sid = await _ingest(client)
-        r_parent = await client.post("/v3/insights", json={
+        r_parent = await client.post("/v4/insights", json={
             "insight": "parent",
             "rounds": [{"session_id": sid, "indexes": "1"}],
         })
         parent = r_parent.json()["card_id"]
-        r_child = await client.post("/v3/insights", json={
+        r_child = await client.post("/v4/insights", json={
             "insight": "child supersedes parent",
             "rounds": [{"session_id": sid, "indexes": "2"}],
             "source_cards": [{"card_id": parent, "relation": "supersedes"}],
@@ -168,11 +168,11 @@ class TestCardEvents:
 
     async def test_read_event(self, client, data_root):
         sid = await _ingest(client)
-        r = await client.post("/v3/insights", json={
+        r = await client.post("/v4/insights", json={
             "insight": "x", "rounds": [{"session_id": sid, "indexes": "1"}],
         })
         cid = r.json()["card_id"]
-        await client.post("/v3/read", json={"id": cid})
+        await client.post("/v4/read", json={"id": cid})
         events = _card_events(data_root, cid)
         kinds = [e["event"] for e in events]
         assert "read" in kinds

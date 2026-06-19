@@ -1,4 +1,4 @@
-"""DELETE /v3/insights/{card_id} — hard delete contract.
+"""DELETE /v4/insights/{card_id} — hard delete contract.
 
 Covers:
 - happy path: card row gone, vector gone, files gone
@@ -26,7 +26,7 @@ async def _ingest(client) -> str:
 
 
 async def _make_card(client, sid: str, insight: str = "x", *, indexes: str = "1") -> str:
-    r = await client.post("/v3/insights", json={
+    r = await client.post("/v4/insights", json={
         "insight": insight,
         "rounds": [{"session_id": sid, "indexes": indexes}],
     })
@@ -35,7 +35,7 @@ async def _make_card(client, sid: str, insight: str = "x", *, indexes: str = "1"
 
 
 async def test_delete_unknown_card_404(client):
-    r = await client.delete("/v3/insights/card_nope")
+    r = await client.delete("/v4/insights/card_nope")
     assert r.status_code == 404
 
 
@@ -43,14 +43,14 @@ async def test_delete_removes_card_row(app, client):
     sid = await _ingest(client)
     cid = await _make_card(client, sid)
 
-    r = await client.delete(f"/v3/insights/{cid}")
+    r = await client.delete(f"/v4/insights/{cid}")
     assert r.status_code == 200
     body = r.json()
     assert body["card_id"] == cid
     assert body["inbound_refs_dangling"] == 0
 
-    # POST /v3/read on a deleted card → 404
-    rd = await client.post("/v3/read", json={"id": cid})
+    # POST /v4/read on a deleted card → 404
+    rd = await client.post("/v4/read", json={"id": cid})
     assert rd.status_code == 404
 
 
@@ -60,7 +60,7 @@ async def test_delete_surfaces_inbound_refs_dangling_but_does_not_cascade(
     sid = await _ingest(client)
     parent = await _make_card(client, sid, insight="parent")
     # child references parent via source_cards.
-    r = await client.post("/v3/insights", json={
+    r = await client.post("/v4/insights", json={
         "insight": "child of parent",
         "rounds": [{"session_id": sid, "indexes": "2"}],
         "source_cards": [{"card_id": parent, "relation": "derives_from"}],
@@ -68,14 +68,14 @@ async def test_delete_surfaces_inbound_refs_dangling_but_does_not_cascade(
     r.raise_for_status()
     child = r.json()["card_id"]
 
-    r = await client.delete(f"/v3/insights/{parent}")
+    r = await client.delete(f"/v4/insights/{parent}")
     assert r.status_code == 200
     assert r.json()["inbound_refs_dangling"] == 1, (
         "the child's source_cards still points at deleted parent"
     )
 
     # Child must STILL EXIST (not cascade-deleted).
-    rd = await client.post("/v3/read", json={"id": child})
+    rd = await client.post("/v4/read", json={"id": child})
     assert rd.status_code == 200, (
         "deleting a card must not cascade-delete its referencers"
     )
@@ -86,13 +86,13 @@ async def test_delete_removes_vector_so_search_does_not_return_it(app, client):
     cid = await _make_card(client, sid, insight="LanceDB unique-needle marker")
 
     # Sanity: search returns it pre-delete.
-    pre = await client.post("/v3/search", json={"query": "unique-needle"})
+    pre = await client.post("/v4/search", json={"query": "unique-needle"})
     pre_ids = [it.get("card_id") for it in pre.json()["results"] if it["type"] == "card"]
     assert cid in pre_ids
 
-    await client.delete(f"/v3/insights/{cid}")
+    await client.delete(f"/v4/insights/{cid}")
 
-    post = await client.post("/v3/search", json={"query": "unique-needle"})
+    post = await client.post("/v4/search", json={"query": "unique-needle"})
     post_ids = [it.get("card_id") for it in post.json()["results"] if it["type"] == "card"]
     assert cid not in post_ids, "deleted card must not appear in search results"
 
@@ -104,7 +104,7 @@ async def test_delete_does_not_rewrite_recall_event_history(app, client):
     cid = await _make_card(client, sid, insight="recallable")
 
     # Trigger a recall that returns this card.
-    rr = await client.post("/v3/recall", json={
+    rr = await client.post("/v4/recall", json={
         "source": "claude-code",
         "session_id": "del-recall-1",
         "prompt": "recallable",
@@ -113,7 +113,7 @@ async def test_delete_does_not_rewrite_recall_event_history(app, client):
     assert cid in [c["card_id"] for c in rr.json()["recalled"]]
 
     # Delete the card.
-    r = await client.delete(f"/v3/insights/{cid}")
+    r = await client.delete(f"/v4/insights/{cid}")
     assert r.status_code == 200
 
     # recall_event row still has this card_id in returned_ids.
@@ -133,7 +133,7 @@ async def test_delete_removes_file_dir(app, client):
     card_dir = app.state.config.data_root / "insights" / bucket / cid
     assert card_dir.exists(), "sanity: card dir should exist before delete"
 
-    await client.delete(f"/v3/insights/{cid}")
+    await client.delete(f"/v4/insights/{cid}")
 
     assert not card_dir.exists(), "card dir must be rmtree'd after delete"
 
@@ -143,7 +143,7 @@ async def test_delete_is_not_idempotent(app, client):
     no-op because callers should not be calling us twice."""
     sid = await _ingest(client)
     cid = await _make_card(client, sid)
-    r1 = await client.delete(f"/v3/insights/{cid}")
+    r1 = await client.delete(f"/v4/insights/{cid}")
     assert r1.status_code == 200
-    r2 = await client.delete(f"/v3/insights/{cid}")
+    r2 = await client.delete(f"/v4/insights/{cid}")
     assert r2.status_code == 404

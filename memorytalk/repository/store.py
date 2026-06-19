@@ -5,8 +5,8 @@ SQL ops (via aiosqlite). Services access them as::
 
     await db.sessions.write_meta(source, sid, meta)   # file
     await db.sessions.upsert(...)                      # SQL
-    await db.insights.write_doc(card)                 # file
-    await db.insights.insert(...)                      # SQL
+    await db.cards.write_doc(card)                     # file (v4 card)
+    await db.cards.insert(...)                          # SQL
 """
 from __future__ import annotations
 from pathlib import Path

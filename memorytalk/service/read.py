@@ -43,32 +43,30 @@ class ReadService:
         self.db = db
         self.events = events
 
-    async def read_insight(self, card_id: str) -> tuple[Insight, str]:
-        """Return (card, read_at). Bumps read_count + emits a `read` event."""
-        row = await self.db.insights.get(card_id)
+    async def read_insight(self, insight_id: str) -> tuple[Insight, str]:
+        """Return (insight, read_at). Insight is READ-ONLY in v4 — this is a
+        pure read: no read_count bump, no event written."""
+        row = await self.db.insights.get(insight_id)
         if row is None:
-            raise InsightNotFound(f"card {card_id} not found")
+            raise InsightNotFound(f"insight {insight_id} not found")
 
         now = _utc_iso()
-        await self.db.insights.bump_read(card_id, now)
-        await self.events.insight_event(card_id, "read", read_at=now)
-
-        stats_dict = await self.db.insights.get_stats(card_id)
+        stats_dict = await self.db.insights.get_stats(insight_id)
         # Merge in derived recall_count (single source of truth lives in
-        # recall_event; card_stats no longer carries the column).
-        counts = await self.db.recall.recall_counts([card_id])
-        stats_dict["recall_count"] = counts.get(card_id, 0)
-        source_cards = await self.db.insights.list_source_cards(card_id)
+        # recall_event; insight_stats no longer carries the column).
+        counts = await self.db.recall.recall_counts([insight_id])
+        stats_dict["recall_count"] = counts.get(insight_id, 0)
+        source_cards = await self.db.insights.list_source_cards(insight_id)
 
-        card = Insight(
-            card_id=row["card_id"],
+        insight = Insight(
+            insight_id=row["insight_id"],
             insight=row["insight"],
             source_cards=[SourceInsight(**sc) for sc in source_cards],
             rounds=[InsightRound(**r) for r in row["rounds"]],
             stats=InsightStats(**stats_dict),
             created_at=row["created_at"],
         )
-        return card, now
+        return insight, now
 
     async def read_session(self, session_id: str) -> tuple[Session, str]:
         """Return (session, read_at). Sessions are pure reads — no stats touched."""

@@ -1,9 +1,6 @@
-"""Pydantic schemas — request / response shapes for the v3 HTTP API."""
+"""Pydantic schemas — request / response shapes for the v4 HTTP API."""
 from memorytalk.schemas.insight import Insight, InsightStats, SourceInsight, InsightRound
-from memorytalk.schemas.insights import (
-    InsightDeleteResponse, InsightListResponse, InsightMeta, CardRoundRef, InsightTagResponse,
-    CreateInsightRequest, CreateInsightResponse,
-)
+from memorytalk.schemas.insights import InsightListResponse, InsightMeta
 from memorytalk.schemas.read import ReadRequest, ReadResponse
 from memorytalk.schemas.recall import (
     RecallEventOut,
@@ -32,9 +29,7 @@ from memorytalk.schemas.sync import (
 
 __all__ = [
     "Insight", "InsightStats", "SourceInsight", "InsightRound",
-    "InsightDeleteResponse", "InsightListResponse", "InsightMeta", "CardRoundRef",
-    "InsightTagResponse",
-    "CreateInsightRequest", "CreateInsightResponse",
+    "InsightListResponse", "InsightMeta",
     "ReadRequest", "ReadResponse",
     "RecalledCard", "RecallRequest", "RecallResponse",
     "RecallEventOut", "RecallListResponse", "RecallReadResponse", "RecallSessionSummary",

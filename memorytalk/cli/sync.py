@@ -24,7 +24,7 @@ def sync(json_out: bool, limit: int) -> None:
     """Show backend sync status."""
     cfg = Config()
     try:
-        result = api("GET", "/v3/sync/status", cfg, params={"limit": str(limit)})
+        result = api("GET", "/v4/sync/status", cfg, params={"limit": str(limit)})
     except ApiError as e:
         if json_out:
             emit_json_err(e.payload)

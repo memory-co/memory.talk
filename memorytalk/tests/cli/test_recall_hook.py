@@ -31,7 +31,7 @@ def _runner() -> CliRunner:
 
 
 def test_hook_recalls_and_emits_json(tmp_path, monkeypatch):
-    """Happy path: stdin payload → POST /v3/recall → wrap response in
+    """Happy path: stdin payload → POST /v4/recall → wrap response in
     hookSpecificOutput."""
     monkeypatch.setenv("MEMORY_TALK_DATA_ROOT", str(tmp_path))
     (tmp_path / "settings.json").write_text(json.dumps({
@@ -42,7 +42,7 @@ def test_hook_recalls_and_emits_json(tmp_path, monkeypatch):
     captured = {}
 
     def _fake_api(method, path, cfg, json_body=None, timeout=30.0, params=None):
-        assert method == "POST" and path == "/v3/recall"
+        assert method == "POST" and path == "/v4/recall"
         captured["body"] = json_body
         return {
             "session_id": "sess-fake-001",

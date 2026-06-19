@@ -1,10 +1,15 @@
-"""CLI: search <query> [--where DSL] [--top-k N] [--json]."""
+"""CLI: search <query> [--where DSL] [--limit N] [--json] → POST /v4/search.
+
+v4 card search: collide on issue, return each card's current answer; the
+optional ``--where`` DSL filters over that current answer.
+"""
 from __future__ import annotations
 import sys
 
 import click
 
-from memorytalk.cli._format import fmt_error, fmt_search
+from memorytalk.cli._format import fmt_error
+from memorytalk.cli.card import _fmt_search as fmt_search
 from memorytalk.cli._http import ApiError, api, extract_error_message
 from memorytalk.cli._render import (
     emit_json, emit_json_err, emit_md_err, emit_md_paged,
@@ -15,43 +20,18 @@ from memorytalk.config import Config
 @click.command("search")
 @click.argument("query", required=False, default="")
 @click.option("--where", "-w", "where", type=str, default=None,
-              help="DSL filter (see docs/cli/v3/search.md#DSL)")
-@click.option("--top-k", "top_k", type=int, default=None,
-              help="Total result cap (default = settings.search.default_top_k)")
-@click.option("--recall", "recall_mode", is_flag=True, default=False,
-              help="Debug lens: rank like `recall` (cards-only, raw RRF, "
-                   "no ranking_formula). Combine with --session to also "
-                   "preview that session's recall_log dedup. Read-only — "
-                   "does NOT bump recall_count or write recall_log.")
-@click.option("--session", "session_id", type=str, default=None,
-              help="Session id for recall-mode dedup (only meaningful "
-                   "with --recall).")
+              help="DSL filter over each card's current answer")
+@click.option("--limit", "limit", type=int, default=20, show_default=True,
+              help="Max cards to return")
 @click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON")
-def search(
-    query: str, where: str | None, top_k: int | None,
-    recall_mode: bool, session_id: str | None, json_out: bool,
-) -> None:
-    """Hybrid FTS + vector search across cards and sessions."""
+def search(query: str, where: str | None, limit: int, json_out: bool) -> None:
+    """Find cards by issue/claim relevance (+ optional where DSL)."""
     cfg = Config()
-    body: dict = {"query": query or ""}
+    body: dict = {"query": query or "", "limit": limit}
     if where:
         body["where"] = where
-    if top_k is not None:
-        body["top_k"] = top_k
-    if recall_mode:
-        body["recall_mode"] = True
-    if session_id:
-        if not recall_mode:
-            # --session without --recall is a probable mistake; flag it
-            # rather than silently dropping the field.
-            emit_md_err(fmt_error(
-                "--session only takes effect with --recall (it scopes "
-                "the recall-log dedup preview)"
-            ))
-            sys.exit(1)
-        body["recall_session_id"] = session_id
     try:
-        result = api("POST", "/v3/search", cfg, json_body=body)
+        result = api("POST", "/v4/search", cfg, json_body=body)
     except ApiError as e:
         if json_out:
             emit_json_err(e.payload)
@@ -68,9 +48,4 @@ def search(
     if json_out:
         emit_json(result)
     else:
-        # Long result blocks (cards + per-session hit fences + ctx
-        # windows) routinely exceed a terminal page; route through the
-        # same less-style pager that ``read`` uses. Subprocess / pipe /
-        # ``--no-pager`` / ``--json`` fall back to plain output — see
-        # emit_md_paged docstring.
         emit_md_paged(fmt_search(result))

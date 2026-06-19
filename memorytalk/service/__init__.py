@@ -1,6 +1,6 @@
 """Service layer — orchestrates repository + provider; one class per noun."""
 from memorytalk.service.insights import (
-    InsightConflict, InsightNotFound, InsightService, InsightServiceError,
+    InsightConflict, InsightNotFound, InsightServiceError,
 )
 from memorytalk.service.events import EventWriter
 from memorytalk.service.read import (
@@ -14,6 +14,6 @@ __all__ = [
     "EventWriter",
     "ReadService", "ReadServiceError", "InsightNotFound", "SessionNotFound",
     "IngestService", "IngestServiceError",
-    "InsightService", "InsightServiceError", "InsightConflict",
+    "InsightServiceError", "InsightConflict",
     "RecallService", "RecallServiceError",
 ]

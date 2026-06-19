@@ -101,7 +101,7 @@ async def _seed_081_lancedb(vectors_dir: Path, dim: int = 384) -> None:
 async def test_081_data_root_boots_cleanly_and_serves_status(
     tmp_path, monkeypatch,
 ):
-    """Seed a 0.8.1-shaped data_root, boot the app, hit /v3/status —
+    """Seed a 0.8.1-shaped data_root, boot the app, hit /v4/status —
     no crash, no SystemExit, v1 schema in place after the lifespan."""
     (tmp_path / "settings.json").write_text(json.dumps(_SETTINGS_JSON))
     await _seed_081_sqlite(tmp_path / "memory.db")
@@ -124,7 +124,7 @@ async def test_081_data_root_boots_cleanly_and_serves_status(
         async with httpx.AsyncClient(
             transport=transport, base_url="http://t",
         ) as client:
-            resp = await client.get("/v3/status")
+            resp = await client.get("/v4/status")
             assert resp.status_code == 200
 
         state_path = tmp_path / "migrations_state.json"

@@ -7,7 +7,7 @@ pytestmark = pytest.mark.asyncio
 
 
 async def test_card_create_stamps_explore_id(app, client):
-    r = await client.post("/v3/insights", json={
+    r = await client.post("/v4/insights", json={
         "insight": "lancedb is embedded", "explore_id": "explore_E1",
     })
     assert r.status_code == 200, r.text

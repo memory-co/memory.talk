@@ -6,12 +6,11 @@ from pydantic import BaseModel, Field
 
 
 class SourceInsight(BaseModel):
-    """One ``source_cards[]`` entry on a card.
+    """One ``source_cards[]`` entry on an insight.
 
-    ``relation`` tags the kind of link. Created at card-write time and
-    immutable thereafter; new relations can be added by writing new cards.
+    ``relation`` tags the kind of link. Immutable lineage from the v3 era.
     """
-    card_id: str
+    insight_id: str
     relation: Literal["derives_from", "supersedes"]
 
 
@@ -46,8 +45,8 @@ class InsightStats(BaseModel):
 
 
 class Insight(BaseModel):
-    """The shape ``POST /v3/read`` returns for a card id."""
-    card_id: str
+    """The shape ``POST /v4/read`` returns for an ``insight_`` id (read-only)."""
+    insight_id: str
     insight: str
     source_cards: list[SourceInsight] = Field(default_factory=list)
     rounds: list[InsightRound] = Field(default_factory=list)

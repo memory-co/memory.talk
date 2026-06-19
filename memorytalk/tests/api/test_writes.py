@@ -25,21 +25,21 @@ async def test_full_pipeline_ingest_card_search_read(client):
     sid = r.json()["session_id"]
 
     # ── 2. extract a card from rounds 2-3 ────────────────────────────
-    r = await client.post("/v3/insights", json={
+    r = await client.post("/v4/insights", json={
         "insight": "选定 LanceDB 做向量存储",
         "rounds": [{"session_id": sid, "indexes": "2-3"}],
     })
     cid = r.json()["card_id"]
 
     # ── 3. search hits both the card and the session ─────────────────
-    r = await client.post("/v3/search", json={"query": "LanceDB"})
+    r = await client.post("/v4/search", json={"query": "LanceDB"})
     body = r.json()
     types = [it["type"] for it in body["results"]]
     assert "card" in types
     assert "session" in types
 
     # ── 4. read the card → stats + rounds ────────────────────────────
-    r = await client.post("/v3/read", json={"id": cid})
+    r = await client.post("/v4/read", json={"id": cid})
     c = r.json()["card"]
     assert c["stats"]["read_count"] == 1
     # The card's rounds were expanded from the source session.

@@ -1,4 +1,4 @@
-"""GET /v3/recall/sessions + GET /v3/recall/sessions/{sid} — list/read.
+"""GET /v4/recall/sessions + GET /v4/recall/sessions/{sid} — list/read.
 
 New 0.9.0 endpoints backing ``memory.talk recall list`` and
 ``memory.talk recall read``. Both are pure SQLite reads over
@@ -23,7 +23,7 @@ async def _ingest(client) -> str:
 
 
 async def _make_card(client, sid: str, insight: str) -> str:
-    r = await client.post("/v3/insights", json={
+    r = await client.post("/v4/insights", json={
         "insight": insight,
         "rounds": [{"session_id": sid, "indexes": "1"}],
     })
@@ -36,7 +36,7 @@ def _canonical(raw: str, source: str = "claude-code") -> str:
 
 
 async def test_list_empty_when_no_recalls(client):
-    r = await client.get("/v3/recall/sessions")
+    r = await client.get("/v4/recall/sessions")
     assert r.status_code == 200
     assert r.json() == {"sessions": []}
 
@@ -47,17 +47,17 @@ async def test_list_returns_sessions_with_aggregates(client):
     await _make_card(client, sid, "lancedb fact two")
 
     # Two hook calls in session A, one in session B.
-    await client.post("/v3/recall", json={
+    await client.post("/v4/recall", json={
         "source": "claude-code", "session_id": "sess-A", "prompt": "lancedb",
     })
-    await client.post("/v3/recall", json={
+    await client.post("/v4/recall", json={
         "source": "claude-code", "session_id": "sess-A", "prompt": "more",
     })
-    await client.post("/v3/recall", json={
+    await client.post("/v4/recall", json={
         "source": "claude-code", "session_id": "sess-B", "prompt": "lancedb",
     })
 
-    r = await client.get("/v3/recall/sessions")
+    r = await client.get("/v4/recall/sessions")
     assert r.status_code == 200
     sessions = r.json()["sessions"]
     by_sid = {s["session_id"]: s for s in sessions}
@@ -75,17 +75,17 @@ async def test_read_returns_events_in_order(client):
     cid1 = await _make_card(client, sid, "alpha alpha")
     cid2 = await _make_card(client, sid, "alpha beta")
 
-    await client.post("/v3/recall", json={
+    await client.post("/v4/recall", json={
         "source": "claude-code", "session_id": "sess-read",
         "prompt": "first prompt", "top_k": 1,
     })
-    await client.post("/v3/recall", json={
+    await client.post("/v4/recall", json={
         "source": "claude-code", "session_id": "sess-read",
         "prompt": "second prompt", "top_k": 5,
     })
 
     canonical = _canonical("sess-read")
-    r = await client.get(f"/v3/recall/sessions/{canonical}")
+    r = await client.get(f"/v4/recall/sessions/{canonical}")
     assert r.status_code == 200
     body = r.json()
     assert body["session_id"] == canonical
@@ -109,13 +109,13 @@ async def test_read_reverse_flips_order(client):
     sid = await _ingest(client)
     await _make_card(client, sid, "lone match")
     for p in ("alpha", "beta", "gamma"):
-        await client.post("/v3/recall", json={
+        await client.post("/v4/recall", json={
             "source": "claude-code", "session_id": "sess-rev",
             "prompt": p,
         })
     canonical = _canonical("sess-rev")
     r = await client.get(
-        f"/v3/recall/sessions/{canonical}?reverse=true",
+        f"/v4/recall/sessions/{canonical}?reverse=true",
     )
     body = r.json()
     prompts = [ev["prompt"] for ev in body["events"]]
@@ -123,7 +123,7 @@ async def test_read_reverse_flips_order(client):
 
 
 async def test_read_missing_session_returns_empty_events(client):
-    r = await client.get("/v3/recall/sessions/sess-never-existed")
+    r = await client.get("/v4/recall/sessions/sess-never-existed")
     assert r.status_code == 200
     assert r.json() == {
         "session_id": "sess-never-existed",

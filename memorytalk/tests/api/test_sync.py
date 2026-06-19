@@ -1,4 +1,4 @@
-"""GET /v3/sync/status + lifespan auto-start driven by settings.
+"""GET /v4/sync/status + lifespan auto-start driven by settings.
 
 Sync no longer has a CLI/HTTP control plane — ``settings.sync.enabled``
 is the switch and the lifespan reads it on every server (re)start.
@@ -99,9 +99,9 @@ async def sync_client_with_claude(sync_data_root, fake_claude_root):
 
 
 async def _wait_for_phase(client: httpx.AsyncClient, target: str, *, timeout=5.0):
-    """Poll /v3/sync/status until ``phase == target``, then return body."""
+    """Poll /v4/sync/status until ``phase == target``, then return body."""
     for _ in range(int(timeout / 0.05)):
-        r = await client.get("/v3/sync/status")
+        r = await client.get("/v4/sync/status")
         body = r.json()
         if body.get("phase") == target:
             return body
@@ -113,7 +113,7 @@ async def _wait_for_phase(client: httpx.AsyncClient, target: str, *, timeout=5.0
 
 async def test_status_disabled_when_settings_off(client):
     """Default fixture has sync.enabled=False — status reports `disabled`."""
-    r = await client.get("/v3/sync/status")
+    r = await client.get("/v4/sync/status")
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "disabled"
@@ -126,8 +126,8 @@ async def test_status_disabled_when_settings_off(client):
 
 async def test_start_and_stop_routes_are_gone(client):
     """The old control plane no longer exists."""
-    assert (await client.post("/v3/sync/start")).status_code in (404, 405)
-    assert (await client.post("/v3/sync/stop")).status_code in (404, 405)
+    assert (await client.post("/v4/sync/start")).status_code in (404, 405)
+    assert (await client.post("/v4/sync/stop")).status_code in (404, 405)
 
 
 # ────────── enabled / backfill / live watch ──────────
@@ -139,7 +139,7 @@ async def test_lifespan_auto_starts_watcher_and_backfills(sync_client_with_claud
     body = await _wait_for_phase(sync_client_with_claude, "watching")
     assert body["status"] == "running"
     assert "claude-code" in body["adapters"]
-    r = await sync_client_with_claude.get("/v3/status")
+    r = await sync_client_with_claude.get("/v4/status")
     assert r.json()["sessions_total"] == 1
 
 
@@ -157,7 +157,7 @@ async def test_watcher_logs_lifecycle_and_events(sync_client_with_claude, fake_c
         f.write(json.dumps(_msg("u9", "a1", "user", "another round")) + "\n")
     for _ in range(20):
         await asyncio.sleep(0.2)
-        r = await sync_client_with_claude.post("/v3/read", json={"id": sid})
+        r = await sync_client_with_claude.post("/v4/read", json={"id": sid})
         if len(r.json()["session"]["rounds"]) == 3:
             break
 
@@ -178,7 +178,7 @@ async def test_watcher_picks_up_appended_round(sync_client_with_claude, fake_cla
     _, session_file, sid = fake_claude_root
     await _wait_for_phase(sync_client_with_claude, "watching")
 
-    r = await sync_client_with_claude.post("/v3/read", json={"id": sid})
+    r = await sync_client_with_claude.post("/v4/read", json={"id": sid})
     assert len(r.json()["session"]["rounds"]) == 2
 
     with session_file.open("a") as f:
@@ -186,24 +186,24 @@ async def test_watcher_picks_up_appended_round(sync_client_with_claude, fake_cla
 
     for _ in range(20):
         await asyncio.sleep(0.2)
-        r = await sync_client_with_claude.post("/v3/read", json={"id": sid})
+        r = await sync_client_with_claude.post("/v4/read", json={"id": sid})
         if len(r.json()["session"]["rounds"]) == 3:
             break
     assert len(r.json()["session"]["rounds"]) == 3
-    r = await sync_client_with_claude.get("/v3/sync/status")
+    r = await sync_client_with_claude.get("/v4/sync/status")
     assert r.json()["totals"]["appended"] >= 1
 
 
-# ────────── /v3/status field ──────────
+# ────────── /v4/status field ──────────
 
 async def test_v3_status_sync_enabled_reflects_settings(sync_client_with_claude):
-    assert (await sync_client_with_claude.get("/v3/status")).json()["sync_enabled"] is True
+    assert (await sync_client_with_claude.get("/v4/status")).json()["sync_enabled"] is True
 
 
 # ────────── per-endpoint visibility (0.7.x) ──────────
 
 async def test_status_surfaces_endpoint_breakdown(sync_client_with_claude):
-    """``GET /v3/sync/status`` carries per-endpoint counters and an
+    """``GET /v4/sync/status`` carries per-endpoint counters and an
     endpoints list, so the CLI / consumers can render a one-row-per-source
     view without re-aggregating client-side."""
     body = await _wait_for_phase(sync_client_with_claude, "watching")
@@ -310,8 +310,8 @@ async def test_per_session_backfill_error_does_not_abort(sync_data_root, fake_cl
             body = await _wait_for_phase(ac, "watching")
             assert body["status"] == "running"
             # claude-code adapter should still have ingested its session
-            assert (await ac.get("/v3/status")).json()["sessions_total"] == 1
+            assert (await ac.get("/v4/status")).json()["sessions_total"] == 1
             # The poison adapter's error should show up in recent.
-            r = await ac.get("/v3/sync/status", params={"limit": 20})
+            r = await ac.get("/v4/sync/status", params={"limit": 20})
             errs = [e for e in r.json()["recent"] if e.get("event") == "error"]
             assert any("boom" in (e.get("error") or "") for e in errs), errs

@@ -41,7 +41,7 @@ def _server_responsive(cfg: Config) -> bool:
     have recycled it to an unrelated process after a crash/reboot. A
     successful ``/v3/status`` call proves it really is memory.talk."""
     try:
-        api("GET", "/v3/status", cfg, timeout=1.0)
+        api("GET", "/v4/status", cfg, timeout=1.0)
         return True
     except Exception:
         return False
@@ -236,7 +236,7 @@ def server_restart(json_out: bool) -> None:
 def server_status(json_out: bool) -> None:
     cfg = Config()
     try:
-        payload = api("GET", "/v3/status", cfg)
+        payload = api("GET", "/v4/status", cfg)
     except (ApiError, Exception):
         # Anything that prevents us from reaching the server → not_running
         payload = {

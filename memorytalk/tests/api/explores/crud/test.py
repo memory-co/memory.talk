@@ -1,4 +1,4 @@
-"""crud — POST/GET /v3/explores. See README.md."""
+"""crud — POST/GET /v4/explores. See README.md."""
 from __future__ import annotations
 
 import pytest
@@ -20,7 +20,7 @@ async def _seed_prior_and_posterior(client):
 async def test_post_explores_freezes_divider_and_reports_counts(app, client):
     await _seed_prior_and_posterior(client)
 
-    r = await client.post("/v3/explores", json={"divider_at": "2026-05-15T00:00:00Z"})
+    r = await client.post("/v4/explores", json={"divider_at": "2026-05-15T00:00:00Z"})
 
     assert r.status_code == 200, r.text
     body = r.json()
@@ -33,9 +33,9 @@ async def test_post_explores_freezes_divider_and_reports_counts(app, client):
 async def test_get_explore_returns_partition(app, client):
     await _seed_prior_and_posterior(client)
     eid = (await client.post(
-        "/v3/explores", json={"divider_at": "2026-05-15T00:00:00Z"})).json()["explore_id"]
+        "/v4/explores", json={"divider_at": "2026-05-15T00:00:00Z"})).json()["explore_id"]
 
-    r = await client.get(f"/v3/explores/{eid}")
+    r = await client.get(f"/v4/explores/{eid}")
 
     assert r.status_code == 200, r.text
     body = r.json()

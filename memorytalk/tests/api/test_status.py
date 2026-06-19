@@ -1,11 +1,11 @@
-"""GET /v3/status + CLI module-import smoke."""
+"""GET /v4/status + CLI module-import smoke."""
 from __future__ import annotations
 import pytest
 
 
 @pytest.mark.asyncio
 async def test_status_running(client):
-    r = await client.get("/v3/status")
+    r = await client.get("/v4/status")
     assert r.status_code == 200
     body = r.json()
     assert body["status"] == "running"

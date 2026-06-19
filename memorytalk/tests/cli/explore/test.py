@@ -30,5 +30,5 @@ def test_explore_create_posts_entrypoint(monkeypatch):
 
     assert r.exit_code == 0, r.output
     assert calls[0][0] == "POST"
-    assert calls[0][1] == "/v3/explores"
+    assert calls[0][1] == "/v4/explores"
     assert calls[0][2]["entrypoint_session_id"] == "sess-x"

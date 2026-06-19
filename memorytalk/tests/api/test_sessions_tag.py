@@ -1,4 +1,4 @@
-"""PATCH /v3/sessions/{sid}/tags — kv tag set / unset / query.
+"""PATCH /v4/sessions/{sid}/tags — kv tag set / unset / query.
 
 Covers PATCH semantics (unrelated keys preserved), all the validation
 constraints (key regex, value length, total count, set ∩ unset), the
@@ -27,7 +27,7 @@ async def _seed(client, sid: str = "t-1") -> str:
 
 async def test_empty_patch_returns_current_tags(client):
     sid = await _seed(client)
-    r = await client.patch(f"/v3/sessions/{sid}/tags", json={})
+    r = await client.patch(f"/v4/sessions/{sid}/tags", json={})
     assert r.status_code == 200
     assert r.json() == {"session_id": sid, "tags": {}}
 
@@ -35,7 +35,7 @@ async def test_empty_patch_returns_current_tags(client):
 async def test_set_creates_tags(client):
     sid = await _seed(client)
     r = await client.patch(
-        f"/v3/sessions/{sid}/tags",
+        f"/v4/sessions/{sid}/tags",
         json={"set": {"project": "billing", "status": "wip"}},
     )
     assert r.status_code == 200
@@ -46,12 +46,12 @@ async def test_patch_preserves_unrelated_keys(client):
     """PATCH semantics: keys not in set/unset are not touched."""
     sid = await _seed(client)
     await client.patch(
-        f"/v3/sessions/{sid}/tags",
+        f"/v4/sessions/{sid}/tags",
         json={"set": {"project": "billing", "status": "wip", "owner": "alice"}},
     )
     # Now only update `status`; `project` and `owner` must remain.
     r = await client.patch(
-        f"/v3/sessions/{sid}/tags",
+        f"/v4/sessions/{sid}/tags",
         json={"set": {"status": "done"}},
     )
     assert r.json()["tags"] == {
@@ -62,11 +62,11 @@ async def test_patch_preserves_unrelated_keys(client):
 async def test_unset_removes_specified_keys(client):
     sid = await _seed(client)
     await client.patch(
-        f"/v3/sessions/{sid}/tags",
+        f"/v4/sessions/{sid}/tags",
         json={"set": {"a": "1", "b": "2", "c": "3"}},
     )
     r = await client.patch(
-        f"/v3/sessions/{sid}/tags",
+        f"/v4/sessions/{sid}/tags",
         json={"unset": ["b"]},
     )
     assert r.json()["tags"] == {"a": "1", "c": "3"}
@@ -74,18 +74,18 @@ async def test_unset_removes_specified_keys(client):
 
 async def test_unset_missing_key_is_noop(client):
     sid = await _seed(client)
-    await client.patch(f"/v3/sessions/{sid}/tags", json={"set": {"a": "1"}})
-    r = await client.patch(f"/v3/sessions/{sid}/tags", json={"unset": ["nope"]})
+    await client.patch(f"/v4/sessions/{sid}/tags", json={"set": {"a": "1"}})
+    r = await client.patch(f"/v4/sessions/{sid}/tags", json={"unset": ["nope"]})
     assert r.status_code == 200
     assert r.json()["tags"] == {"a": "1"}
 
 
 async def test_set_and_unset_in_one_call(client):
     sid = await _seed(client)
-    await client.patch(f"/v3/sessions/{sid}/tags",
+    await client.patch(f"/v4/sessions/{sid}/tags",
                        json={"set": {"old": "x", "keep": "y"}})
     r = await client.patch(
-        f"/v3/sessions/{sid}/tags",
+        f"/v4/sessions/{sid}/tags",
         json={"set": {"new": "z"}, "unset": ["old"]},
     )
     assert r.json()["tags"] == {"keep": "y", "new": "z"}
@@ -96,7 +96,7 @@ async def test_set_and_unset_in_one_call(client):
 async def test_invalid_key_rejected(client):
     sid = await _seed(client)
     r = await client.patch(
-        f"/v3/sessions/{sid}/tags",
+        f"/v4/sessions/{sid}/tags",
         json={"set": {"1bad": "x"}},
     )
     assert r.status_code == 400
@@ -107,7 +107,7 @@ async def test_value_too_long_rejected(client):
     sid = await _seed(client)
     big = "x" * (MAX_VALUE_LEN + 1)
     r = await client.patch(
-        f"/v3/sessions/{sid}/tags",
+        f"/v4/sessions/{sid}/tags",
         json={"set": {"k": big}},
     )
     assert r.status_code == 400
@@ -117,7 +117,7 @@ async def test_too_many_tags_rejected(client):
     sid = await _seed(client)
     payload = {f"k{i}": "v" for i in range(MAX_TAGS_PER_OBJECT + 1)}
     r = await client.patch(
-        f"/v3/sessions/{sid}/tags",
+        f"/v4/sessions/{sid}/tags",
         json={"set": payload},
     )
     assert r.status_code == 400
@@ -126,7 +126,7 @@ async def test_too_many_tags_rejected(client):
 async def test_set_and_unset_same_key_rejected(client):
     sid = await _seed(client)
     r = await client.patch(
-        f"/v3/sessions/{sid}/tags",
+        f"/v4/sessions/{sid}/tags",
         json={"set": {"k": "v"}, "unset": ["k"]},
     )
     assert r.status_code == 400
@@ -136,14 +136,14 @@ async def test_validation_does_not_partially_apply(client):
     """If one key in `set` is bad, the whole PATCH must roll back —
     other (valid) keys in the same payload must NOT land."""
     sid = await _seed(client)
-    await client.patch(f"/v3/sessions/{sid}/tags",
+    await client.patch(f"/v4/sessions/{sid}/tags",
                        json={"set": {"existing": "x"}})
     r = await client.patch(
-        f"/v3/sessions/{sid}/tags",
+        f"/v4/sessions/{sid}/tags",
         json={"set": {"valid": "y", "1bad": "z"}},
     )
     assert r.status_code == 400
-    cur = (await client.patch(f"/v3/sessions/{sid}/tags", json={})).json()
+    cur = (await client.patch(f"/v4/sessions/{sid}/tags", json={})).json()
     assert cur["tags"] == {"existing": "x"}, "valid key must not have landed"
 
 
@@ -151,7 +151,7 @@ async def test_validation_does_not_partially_apply(client):
 
 async def test_404_on_missing_session(client):
     r = await client.patch(
-        "/v3/sessions/sess-deadbeef-nope/tags",
+        "/v4/sessions/sess-deadbeef-nope/tags",
         json={"set": {"x": "y"}},
     )
     assert r.status_code == 404
@@ -170,7 +170,7 @@ async def test_patch_mirrors_tags_to_meta_json(client, app):
     the same persistence tier as ``metadata`` / ``round_count``."""
     sid = await _seed(client)
     await client.patch(
-        f"/v3/sessions/{sid}/tags",
+        f"/v4/sessions/{sid}/tags",
         json={"set": {"project": "billing", "status": "wip"}},
     )
     meta = await _read_meta(app, "claude-code", sid)
@@ -192,7 +192,7 @@ async def test_append_after_patch_preserves_tags(client, app):
     stale on every append."""
     sid = await _seed(client)
     await client.patch(
-        f"/v3/sessions/{sid}/tags",
+        f"/v4/sessions/{sid}/tags",
         json={"set": {"project": "billing"}},
     )
     # Ingest more rounds — same upstream id, second append.

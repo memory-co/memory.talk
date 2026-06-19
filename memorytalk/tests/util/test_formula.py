@@ -29,7 +29,7 @@ class TestCompile:
 
     def test_missing_var_defaults_to_zero(self):
         # Sessions don't have card-stat fields — the formula should still
-        # evaluate with those treated as 0 (docs/cli/v3/search.md guarantee).
+        # evaluate with those treated as 0 (docs/cli/v4/search.md guarantee).
         f = compile_formula("relevance + review_up + read_count")
         assert f({"relevance": 0.5}) == pytest.approx(0.5)
 

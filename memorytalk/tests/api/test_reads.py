@@ -1,4 +1,4 @@
-"""POST /v3/read — card + session paths via API.
+"""POST /v4/read — card + session paths via API.
 
 Mirrors v2's ``api/test_reads.py``: bad prefix → 400, missing → 404,
 happy-path returns the expected schema. Adds v3-specific assertions:
@@ -29,7 +29,7 @@ async def _ingest(client, sid: str = "abc-123", sha: str = "sha1", rounds=None) 
 
 async def _seed_card(app) -> str:
     """Insert a minimal card directly through the repo (faster than going via
-    POST /v3/insights; we just want a card_id to read back)."""
+    POST /v4/insights; we just want a card_id to read back)."""
     db = app.state.db
     now = _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     await db.insights.insert("card_seed", "seeded insight", [
@@ -47,7 +47,7 @@ async def _seed_card(app) -> str:
 class TestReadSession:
     async def test_returns_full_session(self, client):
         sid = await _ingest(client)
-        r = await client.post("/v3/read", json={"id": sid})
+        r = await client.post("/v4/read", json={"id": sid})
         assert r.status_code == 200
         body = r.json()
         assert body["type"] == "session"
@@ -59,7 +59,7 @@ class TestReadSession:
 
     async def test_session_not_found_404(self, client):
         # Gap fill: v2 had this; missing in original v3 test_ingest_and_read.
-        r = await client.post("/v3/read", json={"id": "sess_does_not_exist"})
+        r = await client.post("/v4/read", json={"id": "sess_does_not_exist"})
         assert r.status_code == 404
         assert "not found" in r.json()["detail"]
 
@@ -72,7 +72,7 @@ class TestReadSession:
         # *nothing* gets mutated. Read three times and confirm the
         # only side effect we can see (no events.jsonl entries) holds.
         for _ in range(3):
-            await client.post("/v3/read", json={"id": sid})
+            await client.post("/v4/read", json={"id": sid})
         # sessions/<source>/<bucket>/<sid>/events.jsonl should only contain
         # the `imported` event from ingest, nothing read-related.
         raw = sid[len("sess_"):]
@@ -92,7 +92,7 @@ class TestReadSession:
 class TestReadCard:
     async def test_returns_full_card(self, app, client):
         cid = await _seed_card(app)
-        r = await client.post("/v3/read", json={"id": cid})
+        r = await client.post("/v4/read", json={"id": cid})
         assert r.status_code == 200
         body = r.json()
         assert body["type"] == "card"
@@ -107,13 +107,13 @@ class TestReadCard:
     async def test_read_bumps_read_count(self, app, client):
         cid = await _seed_card(app)
         for _ in range(4):
-            r = await client.post("/v3/read", json={"id": cid})
+            r = await client.post("/v4/read", json={"id": cid})
             assert r.status_code == 200
         body = r.json()
         assert body["card"]["stats"]["read_count"] == 4
 
     async def test_card_not_found_404(self, client):
-        r = await client.post("/v3/read", json={"id": "card_doesnotexist"})
+        r = await client.post("/v4/read", json={"id": "card_doesnotexist"})
         assert r.status_code == 404
 
 
@@ -121,11 +121,11 @@ class TestReadCard:
 
 class TestPrefix:
     async def test_bad_prefix_400(self, client):
-        r = await client.post("/v3/read", json={"id": "garbage_xyz"})
+        r = await client.post("/v4/read", json={"id": "garbage_xyz"})
         assert r.status_code == 400
         assert "invalid id prefix" in r.json()["detail"]
 
     async def test_missing_id_field(self, client):
         # Pydantic validation error → 422.
-        r = await client.post("/v3/read", json={})
+        r = await client.post("/v4/read", json={})
         assert r.status_code == 422

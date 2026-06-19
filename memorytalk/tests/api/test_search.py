@@ -1,4 +1,4 @@
-"""POST /v3/search — unified ranking, DSL filtering, audit, edge cases."""
+"""POST /v4/search — unified ranking, DSL filtering, audit, edge cases."""
 from __future__ import annotations
 import datetime as _dt
 import json
@@ -65,7 +65,7 @@ class TestCore:
         ])
         await _seed_card(app, card_id="card_lance", insight="LanceDB is embedded vector db")
 
-        r = await client.post("/v3/search", json={"query": "LanceDB"})
+        r = await client.post("/v4/search", json={"query": "LanceDB"})
         assert r.status_code == 200
         body = r.json()
         assert body["query"] == "LanceDB"
@@ -76,7 +76,7 @@ class TestCore:
 
     async def test_highlights_keywords_in_card_insight(self, app, client):
         await _seed_card(app, card_id="card_hl", insight="LanceDB is good for embeddings")
-        r = await client.post("/v3/search", json={"query": "LanceDB"})
+        r = await client.post("/v4/search", json={"query": "LanceDB"})
         card = next(it for it in r.json()["results"] if it["type"] == "card")
         assert "**LanceDB**" in card["insight"]
 
@@ -87,7 +87,7 @@ class TestCore:
             _round("r2", "assistant", "I recommend LanceDB"),
             _round("r3", "human", "ok lets use LanceDB then"),
         ])
-        r = await client.post("/v3/search", json={"query": "LanceDB"})
+        r = await client.post("/v4/search", json={"query": "LanceDB"})
         session = next(it for it in r.json()["results"] if it["type"] == "session")
         assert session["hit_count"] >= 1
         hit = session["hits"][0]
@@ -107,7 +107,7 @@ class TestCore:
             _round("r3", "human", "tell me more about lancedb"),
             _round("r4", "assistant", "lancedb is embedded"),
         ])
-        r = await client.post("/v3/search", json={"query": "lancedb"})
+        r = await client.post("/v4/search", json={"query": "lancedb"})
         sessions = [it for it in r.json()["results"] if it["type"] == "session"]
         assert len(sessions) == 1
         s = sessions[0]
@@ -117,12 +117,12 @@ class TestCore:
     async def test_assigns_rank_1_based(self, app, client):
         await _ingest(client, "rank-1", "sha1", [_round("r1", "human", "rankme")])
         await _seed_card(app, card_id="card_rank", insight="rankme too")
-        r = await client.post("/v3/search", json={"query": "rankme"})
+        r = await client.post("/v4/search", json={"query": "rankme"})
         ranks = [it["rank"] for it in r.json()["results"]]
         assert ranks == list(range(1, len(ranks) + 1))
 
     async def test_empty_results_for_unrelated_query(self, client):
-        r = await client.post("/v3/search", json={"query": "completely-unrelated-zzz"})
+        r = await client.post("/v4/search", json={"query": "completely-unrelated-zzz"})
         body = r.json()
         assert body["count"] == 0
         assert body["results"] == []
@@ -135,7 +135,7 @@ class TestDSL:
         await _ingest(client, "filter-1", "sha1", [_round("r1", "human", "anything about lancedb")])
         await _seed_card(app, card_id="card_new", insight="lancedb fresh card")
         await _seed_card(app, card_id="card_reviewed", insight="lancedb reviewed", up=2)
-        r = await client.post("/v3/search", json={
+        r = await client.post("/v4/search", json={
             "query": "lancedb",
             "where": "review_count = 0",
         })
@@ -149,7 +149,7 @@ class TestDSL:
     async def test_source_narrows_to_sessions(self, app, client):
         await _ingest(client, "src-1", "sha1", [_round("r1", "human", "lancedb here")])
         await _seed_card(app, card_id="card_x", insight="lancedb extra")
-        r = await client.post("/v3/search", json={
+        r = await client.post("/v4/search", json={
             "query": "lancedb",
             "where": "source = \"claude-code\"",
         })
@@ -159,7 +159,7 @@ class TestDSL:
     async def test_type_filter(self, app, client):
         await _ingest(client, "type-1", "sha1", [_round("r1", "human", "lancedb t")])
         await _seed_card(app, card_id="card_t", insight="lancedb t")
-        r = await client.post("/v3/search", json={
+        r = await client.post("/v4/search", json={
             "query": "lancedb",
             "where": "type = \"card\"",
         })
@@ -170,7 +170,7 @@ class TestDSL:
         still surface matching cards. v2 had ``test_search_empty_query_returns_metadata_filtered``."""
         await _seed_card(app, card_id="card_a", insight="a")
         await _seed_card(app, card_id="card_b", insight="b", up=3)
-        r = await client.post("/v3/search", json={
+        r = await client.post("/v4/search", json={
             "query": "",
             "where": "review_count = 0",
         })
@@ -182,7 +182,7 @@ class TestDSL:
         assert "card_b" not in ids
 
     async def test_bad_dsl_returns_400(self, client):
-        r = await client.post("/v3/search", json={
+        r = await client.post("/v4/search", json={
             "query": "x", "where": "no_such_field = 1",
         })
         assert r.status_code == 400
@@ -194,14 +194,14 @@ class TestDSL:
 class TestAudit:
     async def test_writes_search_log_sqlite(self, app, client):
         await _ingest(client, "log-1", "sha1", [_round("r1", "human", "log topic")])
-        await client.post("/v3/search", json={"query": "log topic"})
+        await client.post("/v4/search", json={"query": "log topic"})
         n = await app.state.db.search_log.count()
         assert n == 1
 
     async def test_writes_search_log_jsonl_mirror(self, app, client):
         """Gap fill: docs say SearchLog also lands in ``logs/search/<UTC>.jsonl``."""
         await _ingest(client, "log-2", "sha1", [_round("r1", "human", "audit topic")])
-        await client.post("/v3/search", json={"query": "audit topic"})
+        await client.post("/v4/search", json={"query": "audit topic"})
 
         search_log_dir = app.state.config.search_log_dir
         files = list(search_log_dir.glob("*.jsonl"))
@@ -247,7 +247,7 @@ class TestPureRelevanceDefault:
         assert svc._score(strong, kind="card") > svc._score(weak_but_read, kind="card")
 
     async def test_response_carries_mode_search(self, client):
-        r = await client.post("/v3/search", json={"query": "anything"})
+        r = await client.post("/v4/search", json={"query": "anything"})
         body = r.json()
         assert body["mode"] == "search"
         assert body["session_id"] is None
@@ -265,7 +265,7 @@ class TestRecallMode:
             app, card_id="card_01RECA", insight="alpha topic card",
         )
         r = await client.post(
-            "/v3/search",
+            "/v4/search",
             json={"query": "alpha topic", "recall_mode": True, "top_k": 10},
         )
         body = r.json()
@@ -293,7 +293,7 @@ class TestRecallMode:
         # Normal search would prefer A (10 * 5 reads). Recall mode
         # must prefer B (pure relevance).
         r = await client.post(
-            "/v3/search",
+            "/v4/search",
             json={"query": "distinctword", "recall_mode": True, "top_k": 5},
         )
         ranks = [it.get("card_id") for it in r.json()["results"] if it["type"] == "card"]
@@ -322,7 +322,7 @@ class TestRecallMode:
             returned_card_ids=["card_01DD_A"],
             skipped_card_ids=[],
         )
-        r = await client.post("/v3/search", json={
+        r = await client.post("/v4/search", json={
             "query": "alpha", "recall_mode": True,
             "recall_session_id": "sess-xyz", "top_k": 10,
         })
@@ -338,7 +338,7 @@ class TestRecallMode:
             app, card_id="card_01NB_X", insight="no-bump query",
         )
         counts_before = await app.state.db.recall.recall_counts(["card_01NB_X"])
-        await client.post("/v3/search", json={
+        await client.post("/v4/search", json={
             "query": "no-bump", "recall_mode": True,
             "recall_session_id": "sess-some", "top_k": 10,
         })
@@ -353,7 +353,7 @@ class TestRecallMode:
         await _seed_card(
             app, card_id="card_01NL_X", insight="no-log content",
         )
-        await client.post("/v3/search", json={
+        await client.post("/v4/search", json={
             "query": "no-log", "recall_mode": True,
             "recall_session_id": "sess-none", "top_k": 10,
         })
@@ -368,7 +368,7 @@ class TestRecallMode:
 class TestAuditMode:
     async def test_search_log_mode_search_for_normal_query(self, app, client):
         await _seed_card(app, card_id="card_01LM_S", insight="mode search row")
-        await client.post("/v3/search", json={"query": "mode search"})
+        await client.post("/v4/search", json={"query": "mode search"})
         async with app.state.db.conn.execute(
             "SELECT mode FROM search_log ORDER BY created_at DESC LIMIT 1"
         ) as cur:
@@ -377,7 +377,7 @@ class TestAuditMode:
 
     async def test_search_log_mode_recall_for_recall_query(self, app, client):
         await _seed_card(app, card_id="card_01LM_R", insight="mode recall row")
-        await client.post("/v3/search", json={
+        await client.post("/v4/search", json={
             "query": "mode recall", "recall_mode": True,
         })
         async with app.state.db.conn.execute(

@@ -28,8 +28,7 @@ from memorytalk.provider.storage import LocalStorage
 from memorytalk.repository import SQLiteStore
 from memorytalk.repository.sync_checkpoint import SyncCheckpointStore
 from memorytalk.service import (
-    InsightService, EventWriter, IngestService, ReadService,
-    RecallService,
+    EventWriter, IngestService, ReadService, RecallService,
 )
 from memorytalk.service.backfill import IndexBackfill
 from memorytalk.service.cards import CardService
@@ -137,14 +136,13 @@ def create_app(config: Config | None = None) -> FastAPI:
         app.state.search = SearchService(
             config=config, db=db, search=searchbase,
         )
-        app.state.insights = InsightService(
-            db=db, search=searchbase, events=events,
-        )
+        # insight is read-only — no write service; GET /v4/insights reads
+        # db.insights directly, view goes through ReadService.read_insight.
         app.state.recall = RecallService(
             config=config, db=db, search=searchbase,
         )
         app.state.explore = ExploreService(db=db, config=config)
-        # v4 card subsystem (governed question graph) — coexists with v3.
+        # v4 card subsystem (governed question graph) — the product.
         app.state.cards = CardService(db=db, search=searchbase, events=events)
         app.state.v4read = V4ReadService(db=db)
         app.state.v4search = V4SearchService(db=db, search=searchbase)

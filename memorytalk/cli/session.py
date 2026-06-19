@@ -118,7 +118,7 @@ def list_(
     params.append(("limit", str(limit)))
 
     try:
-        result = api("GET", "/v3/sessions", cfg, params=params)
+        result = api("GET", "/v4/sessions", cfg, params=params)
     except ApiError as e:
         _emit_err(json_out, extract_error_message(e.payload))
         sys.exit(1)
@@ -160,7 +160,7 @@ def tag(session_id: str, kv_args: tuple[str, ...], json_out: bool) -> None:
     body = {"set": set_, "unset": unset}
     try:
         result = api(
-            "PATCH", f"/v3/sessions/{session_id}/tags",
+            "PATCH", f"/v4/sessions/{session_id}/tags",
             cfg, json_body=body,
         )
     except ApiError as e:

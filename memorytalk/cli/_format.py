@@ -820,7 +820,7 @@ def fmt_insight_list(payload: dict, filter_summary: str = "") -> str:
     lines.append("")
 
     for c in cards:
-        cid = c.get("card_id") or "?"
+        cid = c.get("insight_id") or c.get("card_id") or "?"
         stats = c.get("stats") or {}
         stats_str = (
             f"↑{stats.get('review_up', 0)} ↓{stats.get('review_down', 0)} · "
@@ -830,7 +830,7 @@ def fmt_insight_list(payload: dict, filter_summary: str = "") -> str:
         )
         lines.append("---")
         lines.append("")
-        lines.append(f"### [CARD] `{cid}` · `{stats_str}`")
+        lines.append(f"### [INSIGHT] `{cid}` · `{stats_str}`")
         lines.append("")
         lines.append(c.get("insight") or "")
         lines.append("")

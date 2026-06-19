@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from memorytalk.config import Config
-from memorytalk.migrations.v4 import init_database as v4_init
+from memorytalk.migrations.v3 import init_database as v4_init
 from memorytalk.provider.storage import LocalStorage
 from memorytalk.repository.store import SQLiteStore
 from memorytalk.service.cards import CardService

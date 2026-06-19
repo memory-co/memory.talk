@@ -2,14 +2,17 @@
 
 A v4 card = one Issue (question) + several Positions (candidate answers)
 competing by computed credence, connected by IBIS edges. Write commands:
-``create`` / ``position`` / ``review`` / ``link``. Read commands (kept as
-subcommands so the v3 top-level ``read``/``search``/``recall`` stay intact):
-``read`` / ``search`` / ``recall``. All hit the ``/v4`` API.
+``create`` / ``position`` / ``review`` / ``link``. All hit the ``/v4`` API.
 
-Param style: every write flag is named (``--xx``); ``read``/``search`` take
-a positional (bare id / query). Text flags (``--issue``/``--claim``/
-``--scope``/``--comment``/``--prompt``) accept ``@<file>`` / ``@-`` (stdin)
-so content with quotes/newlines bypasses shell+JSON escaping.
+Reading a card is done through the top-level ``memory.talk read`` (it
+prefix-dispatches card_/pos_/insight_/sess-); search/recall are the
+top-level ``memory.talk search`` / ``memory.talk recall``. Those commands
+reuse the ``_fmt_read`` / ``_fmt_search`` / ``_fmt_recall`` formatters
+defined at the bottom of this module.
+
+Param style: every write flag is named (``--xx``). Text flags
+(``--issue``/``--claim``/``--scope``/``--comment``) accept ``@<file>`` /
+``@-`` (stdin) so content with quotes/newlines bypasses shell+JSON escaping.
 """
 from __future__ import annotations
 import sys
@@ -160,42 +163,11 @@ def link(card_ref, type_, target, json_out) -> None:
     _run(json_out, "POST", f"/v4/cards/{card_ref}/links", body, _fmt_link)
 
 
-# ────────── card read ──────────
-
-@card.command("read")
-@click.argument("id")
-@click.option("--json", "json_out", is_flag=True, default=False)
-def read(id: str, json_out: bool) -> None:
-    """Read a card / position / session by id (prefix-dispatched)."""
-    _run(json_out, "POST", "/v4/read", {"id": id}, _fmt_read)
-
-
-# ────────── card search ──────────
-
-@card.command("search")
-@click.argument("query", default="")
-@click.option("--where", "-w", default=None, help="DSL filter over the current answer")
-@click.option("--limit", type=int, default=20, show_default=True)
-@click.option("--json", "json_out", is_flag=True, default=False)
-def search(query: str, where: str | None, limit: int, json_out: bool) -> None:
-    """Find cards by issue/claim relevance (+ optional where DSL)."""
-    body = {"query": query, "where": where, "limit": limit}
-    _run(json_out, "POST", "/v4/search", body, _fmt_search)
-
-
-# ────────── card recall ──────────
-
-@card.command("recall")
-@click.option("--session", "session_id", required=True)
-@click.option("--prompt", required=True, help="Recall prompt (@file/@- ok)")
-@click.option("--json", "json_out", is_flag=True, default=False)
-def recall(session_id: str, prompt: str, json_out: bool) -> None:
-    """Unconscious recall: collide on issue → inject current answer + scope."""
-    body = {"session_id": session_id, "prompt": _read_text_arg(prompt)}
-    _run(json_out, "POST", "/v4/recall", body, _fmt_recall)
-
-
 # ────────── markdown formatters ──────────
+#
+# read / search / recall are NOT card subcommands — they are the top-level
+# ``memory.talk {read,search,recall}`` commands (cli/read.py, cli/search.py,
+# cli/recall.py), which import the formatters below.
 
 def _fmt_create(r: dict) -> str:
     return f"✓ card created · `{r['card_id']}`"
@@ -249,8 +221,19 @@ def _fmt_read(r: dict) -> str:
             lines.append(f"- {rv['argument']:+d} `{rv['session_id']}` ({rv['indexes']})"
                          + (f" — {rv['comment']}" if rv.get("comment") else ""))
         return "\n".join(lines)
+    if t == "insight":
+        c = r["insight"]
+        iid = c.get("insight_id") or c.get("card_id")
+        lines = [f"# insight · `{iid}` (read-only)", c.get("insight", "")]
+        st = c.get("stats") or {}
+        if st:
+            lines.append(
+                f"_reads {st.get('read_count', 0)} · recalls "
+                f"{st.get('recall_count', 0)}_"
+            )
+        return "\n".join(lines)
     if t == "session":
-        return f"# session · `{r['session']['session_id']}` (v3 form)"
+        return f"# session · `{r['session']['session_id']}`"
     return "（empty）"
 
 
