@@ -32,7 +32,7 @@ import logging
 from memorytalk.searchbase import Doc, SearchBackend
 from memorytalk.service.searchbase_schema import INSIGHTS, cap_text
 from memorytalk.repository import SQLiteStore
-from memorytalk.schemas import CreateCardRequest
+from memorytalk.schemas import CreateInsightRequest
 from memorytalk.service.events import EventWriter
 from memorytalk.util.ids import (
     CARD_PREFIX, SESSION_PREFIX, SESSION_PREFIX_LEGACY, new_card_id,
@@ -83,7 +83,7 @@ class CardService:
         self.search = search
         self.events = events
 
-    async def create(self, req: CreateCardRequest) -> str:
+    async def create(self, req: CreateInsightRequest) -> str:
         """Validate + persist; return the card_id (auto-gen'd or supplied)."""
         if not req.insight or not req.insight.strip():
             raise CardServiceError("insight required")

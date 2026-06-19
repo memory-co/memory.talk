@@ -31,7 +31,7 @@ from memorytalk.searchbase import Query, SearchBackend
 from memorytalk.service.searchbase_schema import INSIGHTS, ROUNDS
 from memorytalk.repository import SQLiteStore
 from memorytalk.schemas import (
-    CardResult, CardStats, SearchResponse, SessionHit, SessionResult,
+    CardResult, InsightStats, SearchResponse, SessionHit, SessionResult,
 )
 from memorytalk.util import dsl as dsl_mod
 from memorytalk.util.formula import FormulaError, compile_formula
@@ -325,7 +325,7 @@ class SearchService:
             card_id=cand["card_id"],
             insight=highlight_keywords(cand["insight"], query),
             created_at=cand["created_at"],
-            stats=CardStats(**cand["stats"]),
+            stats=InsightStats(**cand["stats"]),
         )
 
     async def _build_session_result(

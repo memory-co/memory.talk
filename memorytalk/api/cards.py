@@ -12,8 +12,8 @@ import datetime as _dt
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from memorytalk.schemas import (
-    CardDeleteResponse, CardListResponse, CardMeta, CardTagResponse,
-    CreateCardRequest, CreateCardResponse,
+    InsightDeleteResponse, InsightListResponse, InsightMeta, InsightTagResponse,
+    CreateInsightRequest, CreateInsightResponse,
     TagPatchRequest,
 )
 from memorytalk.service import CardConflict, CardServiceError
@@ -25,8 +25,8 @@ from memorytalk.util.tags import TagValidationError, apply_patch
 router = APIRouter()
 
 
-@router.post("/cards", response_model=CreateCardResponse)
-async def post_cards(payload: CreateCardRequest, request: Request) -> CreateCardResponse:
+@router.post("/cards", response_model=CreateInsightResponse)
+async def post_cards(payload: CreateInsightRequest, request: Request) -> CreateInsightResponse:
     svc = request.app.state.cards
     if svc is None:
         raise HTTPException(status_code=503, detail="cards service unavailable")
@@ -36,7 +36,7 @@ async def post_cards(payload: CreateCardRequest, request: Request) -> CreateCard
         raise HTTPException(status_code=409, detail=str(e))
     except CardServiceError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return CreateCardResponse(card_id=card_id)
+    return CreateInsightResponse(card_id=card_id)
 
 
 # ─── 0.8.x: list + tag maintenance ──────────────────────────────────
@@ -68,7 +68,7 @@ def _parse_tag_filters(raw: list[str]):
     return preds
 
 
-@router.get("/cards", response_model=CardListResponse)
+@router.get("/cards", response_model=InsightListResponse)
 async def get_cards(
     request: Request,
     tag: list[str] = Query(default_factory=list),
@@ -105,7 +105,7 @@ async def get_cards(
             else:
                 r["stats"]["recall_count"] = counts.get(r["card_id"], 0)
     cards = [
-        CardMeta(
+        InsightMeta(
             card_id=r["card_id"],
             insight=r["insight"],
             created_at=r["created_at"],
@@ -114,10 +114,10 @@ async def get_cards(
         )
         for r in rows
     ]
-    return CardListResponse(total=total, returned=len(cards), cards=cards)
+    return InsightListResponse(total=total, returned=len(cards), cards=cards)
 
 
-@router.patch("/cards/{card_id}/tags", response_model=CardTagResponse)
+@router.patch("/cards/{card_id}/tags", response_model=InsightTagResponse)
 async def patch_card_tags(
     card_id: str, payload: TagPatchRequest, request: Request,
 ):
@@ -142,11 +142,11 @@ async def patch_card_tags(
             raise HTTPException(
                 status_code=404, detail=f"card {card_id!r} not found",
             )
-    return CardTagResponse(card_id=card_id, tags=merged)
+    return InsightTagResponse(card_id=card_id, tags=merged)
 
 
-@router.delete("/cards/{card_id}", response_model=CardDeleteResponse)
-async def delete_card(card_id: str, request: Request) -> CardDeleteResponse:
+@router.delete("/cards/{card_id}", response_model=InsightDeleteResponse)
+async def delete_card(card_id: str, request: Request) -> InsightDeleteResponse:
     """Hard-delete a card: SQLite row + reviews + outbound source_cards
     + vector embedding + per-card filesystem dir.
 
@@ -163,4 +163,4 @@ async def delete_card(card_id: str, request: Request) -> CardDeleteResponse:
         result = await svc.delete(card_id)
     except CardNotFound as e:
         raise HTTPException(status_code=404, detail=str(e))
-    return CardDeleteResponse(**result)
+    return InsightDeleteResponse(**result)

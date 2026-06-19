@@ -4,7 +4,7 @@ from typing import Literal, Union
 
 from pydantic import BaseModel, Field
 
-from memorytalk.schemas.card import Card
+from memorytalk.schemas.insight import Insight
 from memorytalk.schemas.session import Session
 
 
@@ -15,7 +15,7 @@ class ReadRequest(BaseModel):
 class _ReadCardResponse(BaseModel):
     type: Literal["card"] = "card"
     read_at: str
-    card: Card
+    card: Insight
 
 
 class _ReadSessionResponse(BaseModel):

@@ -1,11 +1,11 @@
-"""Card + CardStats + SourceCard + CardRound."""
+"""Insight + InsightStats + SourceInsight + InsightRound."""
 from __future__ import annotations
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
 
-class SourceCard(BaseModel):
+class SourceInsight(BaseModel):
     """One ``source_cards[]`` entry on a card.
 
     ``relation`` tags the kind of link. Created at card-write time and
@@ -15,7 +15,7 @@ class SourceCard(BaseModel):
     relation: Literal["derives_from", "supersedes"]
 
 
-class CardRound(BaseModel):
+class InsightRound(BaseModel):
     """A round as embedded inside a card (post-expansion).
 
     Different from ``schemas.session.Round``: only the bits needed to
@@ -29,7 +29,7 @@ class CardRound(BaseModel):
     index: int
 
 
-class CardStats(BaseModel):
+class InsightStats(BaseModel):
     """Runtime forum-dynamics signals.
 
     Bucketed by intent: ``review_*`` are *real discussion* (active
@@ -45,11 +45,11 @@ class CardStats(BaseModel):
     recall_count: int = 0
 
 
-class Card(BaseModel):
+class Insight(BaseModel):
     """The shape ``POST /v3/read`` returns for a card id."""
     card_id: str
     insight: str
-    source_cards: list[SourceCard] = Field(default_factory=list)
-    rounds: list[CardRound] = Field(default_factory=list)
-    stats: CardStats = Field(default_factory=CardStats)
+    source_cards: list[SourceInsight] = Field(default_factory=list)
+    rounds: list[InsightRound] = Field(default_factory=list)
+    stats: InsightStats = Field(default_factory=InsightStats)
     created_at: str

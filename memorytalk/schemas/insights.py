@@ -4,8 +4,8 @@ These shapes are the **write-side** counterpart to ``schemas.card.Card``:
 
 - ``CardRoundRef`` is a *reference* to rounds in a source session
   (``{session_id, indexes}``). The server expands it into the stored
-  ``CardRound[]`` shape using the source session's actual rounds.
-- ``CreateCardRequest`` accepts these references + an immutable insight +
+  ``InsightRound[]`` shape using the source session's actual rounds.
+- ``CreateInsightRequest`` accepts these references + an immutable insight +
   optional ``source_cards`` (card-to-card edges).
 """
 from __future__ import annotations
@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from memorytalk.schemas.card import CardStats, SourceCard
+from memorytalk.schemas.insight import InsightStats, SourceInsight
 
 
 class CardRoundRef(BaseModel):
@@ -26,10 +26,10 @@ class CardRoundRef(BaseModel):
     indexes: str
 
 
-class CreateCardRequest(BaseModel):
+class CreateInsightRequest(BaseModel):
     insight: str
     rounds: list[CardRoundRef] = Field(default_factory=list)
-    source_cards: list[SourceCard] = Field(default_factory=list)
+    source_cards: list[SourceInsight] = Field(default_factory=list)
     # Optional pre-supplied id; auto-generated when missing. Must start
     # with the card prefix — checked in the service.
     card_id: str | None = None
@@ -40,14 +40,14 @@ class CreateCardRequest(BaseModel):
     explore_id: str | None = None
 
 
-class CreateCardResponse(BaseModel):
+class CreateInsightResponse(BaseModel):
     status: Literal["ok"] = "ok"
     card_id: str
 
 
 # ─── 0.8.x: list ───────────────────────────────────────────────────
 
-class CardMeta(BaseModel):
+class InsightMeta(BaseModel):
     """One row in ``GET /v3/cards``.
 
     Carries the same fields as ``Card`` payload-side **plus** stats
@@ -58,16 +58,16 @@ class CardMeta(BaseModel):
     insight: str
     created_at: str
     tags: dict[str, str] = Field(default_factory=dict)
-    stats: CardStats = Field(default_factory=CardStats)
+    stats: InsightStats = Field(default_factory=InsightStats)
 
 
-class CardListResponse(BaseModel):
+class InsightListResponse(BaseModel):
     total: int
     returned: int
-    cards: list[CardMeta] = Field(default_factory=list)
+    cards: list[InsightMeta] = Field(default_factory=list)
 
 
-class CardDeleteResponse(BaseModel):
+class InsightDeleteResponse(BaseModel):
     """Response for ``DELETE /v3/cards/{card_id}``.
 
     ``inbound_refs_dangling`` gives the caller enough information to
@@ -81,7 +81,7 @@ class CardDeleteResponse(BaseModel):
     inbound_refs_dangling: int = 0
 
 
-class CardTagResponse(BaseModel):
+class InsightTagResponse(BaseModel):
     """Response of ``PATCH /v3/cards/{cid}/tags`` — full post-merge
     tag dict. Mirrors :class:`TagResponse` in shape; we keep them as
     siblings rather than a shared class because the id field name

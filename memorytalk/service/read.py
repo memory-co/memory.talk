@@ -1,10 +1,10 @@
 """ReadService — prefix-dispatched read of card or session.
 
 The CLI / API layer parses the id prefix and calls one of:
-- ``read_card(card_id)`` → full Card with stats, source_cards, reviews, rounds
+- ``read_card(card_id)`` → full Insight with stats, source_cards, reviews, rounds
 - ``read_session(session_id)`` → full Session with rounds (read from jsonl)
 
-Card reads have a side effect: ``card.stats.read_count`` is bumped by one
+Insight reads have a side effect: ``card.stats.read_count`` is bumped by one
 and a ``read_at`` event is appended to the card's events.jsonl. Session
 reads are pure (sessions don't participate in forum dynamics).
 
@@ -17,7 +17,7 @@ import datetime as _dt
 
 from memorytalk.repository import SQLiteStore
 from memorytalk.schemas import (
-    Card, CardRound, CardStats, ContentBlock, Round, Session, SourceCard,
+    Insight, InsightRound, InsightStats, ContentBlock, Round, Session, SourceInsight,
 )
 # CardNotFound is owned by service.cards (the card service is the canonical
 # place for card lifecycle errors); re-exported here for callers that
@@ -43,7 +43,7 @@ class ReadService:
         self.db = db
         self.events = events
 
-    async def read_card(self, card_id: str) -> tuple[Card, str]:
+    async def read_card(self, card_id: str) -> tuple[Insight, str]:
         """Return (card, read_at). Bumps read_count + emits a `read` event."""
         row = await self.db.insights.get(card_id)
         if row is None:
@@ -60,12 +60,12 @@ class ReadService:
         stats_dict["recall_count"] = counts.get(card_id, 0)
         source_cards = await self.db.insights.list_source_cards(card_id)
 
-        card = Card(
+        card = Insight(
             card_id=row["card_id"],
             insight=row["insight"],
-            source_cards=[SourceCard(**sc) for sc in source_cards],
-            rounds=[CardRound(**r) for r in row["rounds"]],
-            stats=CardStats(**stats_dict),
+            source_cards=[SourceInsight(**sc) for sc in source_cards],
+            rounds=[InsightRound(**r) for r in row["rounds"]],
+            stats=InsightStats(**stats_dict),
             created_at=row["created_at"],
         )
         return card, now

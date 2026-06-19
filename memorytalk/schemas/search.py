@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from memorytalk.schemas.card import CardStats
+from memorytalk.schemas.insight import InsightStats
 
 
 class SearchRequest(BaseModel):
@@ -49,7 +49,7 @@ class CardResult(BaseModel):
     insight: str
     # ISO 8601 UTC timestamp of card creation. Mirror of cards.created_at.
     created_at: str
-    stats: CardStats = Field(default_factory=CardStats)
+    stats: InsightStats = Field(default_factory=InsightStats)
 
 
 class SessionResult(BaseModel):
