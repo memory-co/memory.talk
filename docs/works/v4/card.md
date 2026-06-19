@@ -242,9 +242,11 @@ cards/<bucket>/<card_id>/positions/<pid>.json ← canonical:claim(答案文本,�
 
 ```sql
 CREATE TABLE cards (                       -- = 一个问题(≡ Issue),图节点
-  card_id    TEXT PRIMARY KEY,             -- card_<ulid>(v4 复用 card_ 前缀;v3 已腾给 insight_)
-  issue      TEXT NOT NULL,                -- 问题文本;检索锚点(进向量库)
-  created_at TEXT NOT NULL
+  card_id        TEXT PRIMARY KEY,         -- card_<ulid>(v4 复用 card_ 前缀;v3 已腾给 insight_)
+  issue          TEXT NOT NULL,            -- 问题文本;检索锚点(进向量库)
+  created_at     TEXT NOT NULL,
+  position_count INTEGER NOT NULL DEFAULT 0,  -- 冗余:本卡 Position 数(加答案时 +1)
+  link_count     INTEGER NOT NULL DEFAULT 0   -- 冗余:本卡作主体的 card_links 数(建边时 +1)
 );
 CREATE TABLE positions (                   -- 卡底下的答案候选;被顶踩、按 credence 竞争的就是它
   position_id    TEXT PRIMARY KEY,         -- pos_<ulid>
@@ -254,6 +256,7 @@ CREATE TABLE positions (                   -- 卡底下的答案候选;被顶踩
   up_count       INTEGER NOT NULL DEFAULT 0,   -- = argument=+1 的 review 数(顶)
   down_count     INTEGER NOT NULL DEFAULT 0,   -- = argument=−1 的 review 数(踩)
   neutral_count  INTEGER NOT NULL DEFAULT 0,   -- = argument=0 的中立 review 数(堆多了→衍生新 Position)
+  review_count   INTEGER NOT NULL DEFAULT 0,   -- 冗余:review 总数 = up+down+neutral
   -- 治理:位 / 变(§5)
   created_at     TEXT NOT NULL,
   scope          TEXT NOT NULL DEFAULT '',  -- 位:适用场景描述(自由文本软提示,非门禁)
