@@ -1,14 +1,14 @@
 # v3 card → insight 迁移(腾名)
 
-> **状态:设计提案,未实施。** v4 复用 `card` / `cards` / `reviews` 这些名字(命令、SQLite 表、LanceDB collection、文件罐、`card_` id 前缀)。所以现有 v3 那套卡**改名 `insight`** 把名字腾出来。落成迁移框架的一版(机制见 [`../v3/migration.md`](../v3/migration.md)),首启动 catch-up 原地升级。**迁移的数据 / schema 变换全部写在 `migrations/` 内**;v3 应用代码在同一个 plan 里同步指向新名字(见 §五)。
+> **状态:已实施(最终态)。** v4 复用 `card` / `cards` / `reviews` 这些名字(命令、SQLite 表、LanceDB collection、文件罐、`card_` id 前缀)。现有 v3 那套卡**改名 `insight`** 把名字腾出来,并且**彻底重写 id 前缀 `card_ → insight_`**——不再是两段式。落成迁移框架的一版(机制见 [`../v3/migration.md`](../v3/migration.md)),首启动 catch-up 原地升级。**迁移的数据 / schema 变换全部写在 `migrations/` 内**;应用代码同步指向新名字(见 §五)。
 
-> **迁移版本号 ≠ 产品代号**:当前 schema 在迁移 `v2`(explore),所以这次改名是迁移 **`v3`**;v4 建新卡表是迁移 **`v4`**。
+> **迁移版本号 ≠ 产品代号**:产品是 “v4”,但 schema 演进做成**单个迁移 `v3`**——改名 + id 重写 + DROP reviews + 建 5 张 v4 卡表 + 建 `cards`/`positions` collection,全在一版里完成。`discover_versions()` → `[v1, v2, v3]`。
 
-## 关键取舍(已定)
+## 关键取舍(已定/已实现)
 
-- **`reviews` 直接 DROP,不改名**:v3 的 review 数据从没真正用起来——不迁移、不留 `insight_reviews`。DROP 掉就把 `reviews` 名字腾给 v4(v4 的表态落在 Position 上)。v3 的 review 功能(`service/reviews.py` / `api/reviews.py` / `cli/review.py` + `CardStore` 的 review 方法 + `card_stats` 的 review 计数写路径)一并退役。
-- **`card_` id 前缀保留(两段式)**:insight 行继续带 `card_<ulid>` id,**这一版不重写 id 前缀**。靠 `/v3` vs `/v4` 路由命名空间区分(`parse_id` 只在各自 router 内解析,**没有全局「解析任意 id」路径**),所以 insight 的 `card_` 和 v4 新卡的 `card_` 不冲突。彻底改成 `insight_` 前缀留作后续可选迁移(「慢慢下掉」),本稿不做。
-- **collection 改名用目录级 rename,不重灌**:见 §三(`AdminBackend` 没有 `copy_rows`,但目录 rename 零成本)。
+- **`reviews` 直接 DROP,不改名**:v3 的 review 数据从没真正用起来——不迁移、不留 `insight_reviews`。DROP 掉就把 `reviews` 名字腾给 v4(v4 的表态落在 Position 上)。v3 的 review 功能(`service/reviews.py` / `api/reviews.py` / `cli/review.py` + review 方法 + `card_stats` 的 review 计数写路径)一并退役。
+- **id 前缀彻底改成 `insight_`(单一 `/v4`)**:迁移把 insight 行的 id **值**从 `card_<ulid>` 重写成 `insight_<ulid>`(SQLite 三表 + `recall_event` JSON + 文件罐叶目录 + LanceDB 行 id,保 vector 不重灌)。SQLite **列名**仍叫 `card_id`(只改值),但 API/CLI/schema **表面统一用 `insight_id`**。全局只有一个 `/v4` 前缀:`POST /v4/read` 按 id 前缀分派(`card_`→卡 / `pos_`→Position / `insight_`→只读旧卡 / `sess-`→会话),`parse_id` 是全局唯一解析路径。
+- **collection 改名用目录级 rename + 行 id 重写,不重灌**:见 §三(`AdminBackend` 的 `rename_collection` + 逐行重写 id,保留原 vector)。
 
 ## 一、改什么(全清单)
 
@@ -17,10 +17,10 @@
 | SQLite 表 | `cards` / `card_stats` / `card_source_cards` | `insights` / `insight_stats` / `insight_source_cards`(RENAME) |
 | SQLite 表 | `reviews` | **DROP**(未用;不留 `insight_reviews`) |
 | LanceDB collection | `cards` | `insights`(目录级 rename,§三) |
-| 文件罐 | `cards/<bucket>/...` | `insights/<bucket>/...`(顶层目录 move;per-card 目录名仍 `card_<ulid>`,id 不变) |
-| id 前缀 | `card_<ulid>` | **不变**(两段式,保留 `card_`) |
-| CLI | `memory.talk card` | `memory.talk insight`(只读 + 搜索) |
-| API | `/v3/cards` | `/v3/insights` |
+| 文件罐 | `cards/<bucket>/...` | `insights/<bucket>/...`(顶层目录 move + 叶目录 `card_<ulid>`→`insight_<ulid>`) |
+| id 前缀(值) | `card_<ulid>` | **`insight_<ulid>`**(迁移重写值;列名仍 `card_id`,表面用 `insight_id`) |
+| CLI | `memory.talk card` | `memory.talk insight`(只读:`search` + `view`) |
+| API | `/v3/cards` | `GET /v4/insights`(列/搜) + `POST /v4/read {id: insight_…}`(查看) |
 | 代码符号 | `repository/cards.py` `CardStore` 等 | `repository/insights.py` `InsightStore` 等(§五) |
 
 ## 二、SQLite(`migrations/v3/up_database.py`)
@@ -80,9 +80,9 @@ await admin.rename_collection('cards', 'insights')   # 腾出 cards 给 v4(embed
 
 ## 七、改完之后
 
-- **insight 只读可搜**:`memory.talk insight` / `/v3/insights`,老数据继续能 search / read。
-- **`card` / `cards` / `reviews` / `cards` collection / `cards/` 目录全腾空**给 v4(下一版迁移 `v4` 建 v4 表,见 [card.md §9 步骤二](card.md#9-与-v3--insight-的共存与迁移))。
-- **物理隔离共存**:v4 与 insight 不同表 / collection / 目录;id 前缀暂时都 `card_`,靠 `/v3`·`/v4` 路由区分。
-- 后续可选:把 insight 投影进 v4 图(card.md §9 步骤三);以及把 insight 的 `card_` id 彻底改成 `insight_`(两段式的第二段)。
+- **insight 只读可搜**:`memory.talk insight search` / `view`、`GET /v4/insights` + `POST /v4/read {id: insight_…}`,老数据继续能 search / read,**没有写路径**。
+- **`card` / `cards` / `reviews` / `cards` collection / `cards/` 目录腾空后立即被 v4 复用**——同一个迁移 `v3` 在改名 + DROP 之后就地建好 5 张 v4 卡表 + `cards`/`positions` collection。
+- **物理隔离共存**:v4 与 insight 不同表 / collection / 目录;id 前缀**已彻底区分**(`card_` vs `insight_`),单一 `/v4` 前缀 + `parse_id` 全局分派,不再靠 `/v3`·`/v4` 路由命名空间。
+- **已落地**:insight 投影进 v4 图属可选增强,本次未做(insight 保持独立只读子系统);id 前缀重写(两段式的第二段)**已并入本迁移完成**。
 
 > 相关:迁移框架 [migration.md](../v3/migration.md)、v3 卡结构 [`../../structure/v3/talk-card.md`](../../structure/v3/talk-card.md)、改名后命令 [`../../cli/v4/insight.md`](../../cli/v4/insight.md)。
