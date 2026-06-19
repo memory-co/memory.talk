@@ -4,8 +4,8 @@
 
 ```
 memory.talk insight
-├── search <query> [--where '<DSL>'] [--limit N] [--json]   # 搜老洞见卡
-└── view <insight_id> [--json]                              # 读一条老洞见卡
+├── search --query '<q>' [--where '<DSL>'] [--limit N] [--json]   # 搜老洞见卡
+└── view --id <insight_id> [--json]                              # 读一条老洞见卡
 ```
 
 走 v3 改名后的端点 `/v3/insights`(见 [`../../works/v4/card.md`](../../works/v4/card.md#9-与-v3--insight-的共存与迁移))。数据结构沿用 v3 talk-card(`insight` / `rounds` / `stats` / `reviews`),只是前缀 `card_` → `insight_`。
@@ -17,7 +17,7 @@ memory.talk insight
 跟 v3 `search` 同款(撞 `insight` 文本、沉浮排序、DSL 用 v3 字段 `review_up` / `read_count` / `recall_count` 等),只是范围限定在 insight 集合。
 
 ```bash
-memory.talk insight search "向量库选型" --limit 10
+memory.talk insight search --query '向量库选型' --limit 10
 ```
 
 DSL 字段沿用 v3(老数据仍带那套 stats),详见 [`../v3/search.md`](../v3/search.md)。
@@ -25,7 +25,7 @@ DSL 字段沿用 v3(老数据仍带那套 stats),详见 [`../v3/search.md`](../v
 ## insight view
 
 ```bash
-memory.talk insight view insight_01jz8k2m
+memory.talk insight view --id insight_01jz8k2m
 ```
 
 输出沿用 v3 卡的读取形态(`insight` 文本 + 展开的 rounds + stats + reviews),见 [`../v3/read.md`](../v3/read.md) / [`../../structure/v3/talk-card.md`](../../structure/v3/talk-card.md)。

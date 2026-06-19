@@ -3,15 +3,15 @@
 无意识召回:hook 阶段拿当前 prompt 去**撞问题图**,把命中卡的当下答案极简注入 LLM context。沿用 v3 recall 的"无意识、极简"姿态,只是从"撞陈述"变成"撞问题 → 取答案"。
 
 ```bash
-memory.talk recall <session_id> <prompt> [--json]
+memory.talk recall --session <session_id> --prompt '<prompt>' [--json]
 ```
 
 ## 参数
 
 | 参数 | 必填 | 说明 |
 |---|---|---|
-| `<session_id>` | 是 | 当前所在 session(`sess_<…>`),用于同 session 去重 |
-| `<prompt>` | 是 | 当前 context / 用户 prompt 文本,作召回 query |
+| `--session` | 是 | 当前所在 session(`sess_<…>`),用于同 session 去重 |
+| `--prompt` | 是 | 当前 context / 用户 prompt 文本,作召回 query。值支持 `@<file>` / `@-` |
 
 ## 召回流程
 
@@ -76,8 +76,8 @@ memory.talk recall <session_id> <prompt> [--json]
 | 情况 | 行为 |
 |---|---|
 | server 未运行 | `error: cannot reach server`,exit 1 |
-| `session_id` 前缀错 | `error: invalid session_id prefix`,exit 1 |
-| `prompt` 为空 | `error: prompt required`,exit 1 |
+| `--session` 前缀错 | `error: invalid session_id prefix`,exit 1 |
+| `--prompt` 为空 | `error: --prompt required`,exit 1 |
 
 ## 跟 search 的边界
 

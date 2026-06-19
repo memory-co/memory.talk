@@ -4,8 +4,8 @@
 
 ```
 memory.talk card link
-├── create <from_card_id> <type> <target_id> [--json]    # 建一条有向边
-└── list <card_id> [--json]                              # 列一张卡的边(出 + 入)
+├── create --from <from_card_id> --type <type> --target <target_id> [--json]   # 建一条有向边
+└── list --card <card_id> [--json]                                             # 列一张卡的边(出 + 入)
 ```
 
 调 [`POST /v4/cards/{card_id}/links`](../../api/v4/card-links.md)。字段语义见 [`../../structure/v4/card-link.md`](../../structure/v4/card-link.md)。
@@ -15,7 +15,7 @@ memory.talk card link
 ## card link create
 
 ```bash
-memory.talk card link create <from_card_id> <type> <target_id> [--json]
+memory.talk card link create --from <from_card_id> --type <type> --target <target_id> [--json]
 ```
 
 ### type 取值
@@ -29,7 +29,7 @@ memory.talk card link create <from_card_id> <type> <target_id> [--json]
 | `related` | 兜底泛关联 | 无向 |
 
 - 同一 `(from_card_id, type)` 下可挂多条(如 `specializes` 多父)。
-- `related` 无向:写时规范化两端顺序,只存一遍(`card link create A related B` 与 `B related A` 等价、不重复落)。
+- `related` 无向:写时规范化两端顺序,只存一遍(`card link create --from A --type related --target B` 与 `--from B ... --target A` 等价、不重复落)。
 - **不校验 `target_id` 是否存在**:SQLite 是派生索引,容忍悬挂引用,从不加 FOREIGN KEY(target 可能后到 / 已删,图层照样成立)。
 
 ### 输出
@@ -47,7 +47,7 @@ ok: `card_01jz8k2m` —specializes→ `card_01jzsub`
 列一张卡相关的所有边——它**指出去的**(本卡为主体)和**指过来的**(别的卡指本卡)。
 
 ```bash
-memory.talk card link list <card_id> [--json]
+memory.talk card link list --card <card_id> [--json]
 ```
 
 ### 输出 — Markdown

@@ -5,15 +5,15 @@
 沿用 v3 的 review 机制,只把对象从整张卡**下放到 Position**:同一个问题下的不同答案各自被顶踩、各自竞争。`argument ≠ 0` 的 review 就是一条 **IBIS Argument**(顶 = pro / 踩 = con);`argument = 0` 是中立观察。
 
 ```bash
-memory.talk card review <position_id> <+1|0|-1> --cite <session_id>:<indexes> [--comment '<一句话>'] [--json]
+memory.talk card review --position <position_id> --vote <+1|0|-1> --cite <session_id>:<indexes> [--comment '<一句话>'] [--json]
 ```
 
 ## 参数
 
 | 参数 | 必填 | 说明 |
 |---|---|---|
-| `<position_id>` | 是 | 位置参数:被表态的答案,必须是 `pos_<…>`;不存在或前缀错报错。**target 是 Position,不是 card** |
-| `<argument>` | 是 | 位置参数:`+1` 支持(顶) / `0` 中立 / `-1` 反对(踩)。其它值报错 |
+| `--position` | 是 | 被表态的答案,必须是 `pos_<…>`;不存在或前缀错报错。**target 是 Position,不是 card** |
+| `--vote` | 是 | `+1` 支持(顶) / `0` 中立 / `-1` 反对(踩)。落成 review 的 `argument`;其它值报错 |
 | `--cite` | 是 | 证据:`<session_id>:<indexes>`,**单 session**(一次表态来自一次具体对话);indexes 语法同 [card.md](card.md#--source-语法--indexes) |
 | `--comment` | 否 | 一句话归因;`argument=0` 时强烈建议填,服务端不强制。值支持 `@<file>` / `@-`(从文件 / stdin 原样读,专治特殊字符;同 [card.md](card.md#文本传文件--stdin)) |
 | `--review_id` | 否 | 不提供则自动生成 `review_<ULID>` |
@@ -104,11 +104,11 @@ review **不单独 read** —— 在 [`read <card_id>`](read.md) 的每个 Posit
 
 ```bash
 # 又一次验证了某个答案
-memory.talk card review pos_01jzp3nq +1 --cite "$SID:20-25" --comment '再次确认,简洁版接住了'
+memory.talk card review --position pos_01jzp3nq --vote +1 --cite "$SID:20-25" --comment '再次确认,简洁版接住了'
 
 # 某个答案被这次对话证伪
-memory.talk card review pos_01jz0xnq -1 --cite "$SID:3-8" --comment '纯简洁漏了调试细节'
+memory.talk card review --position pos_01jz0xnq --vote -1 --cite "$SID:3-8" --comment '纯简洁漏了调试细节'
 
 # 相关但不站队(中立观察)
-memory.talk card review pos_01jzp3nq 0 --cite "$SID:11" --comment '又提到这个问题,但没改变结论'
+memory.talk card review --position pos_01jzp3nq --vote 0 --cite "$SID:11" --comment '又提到这个问题,但没改变结论'
 ```
