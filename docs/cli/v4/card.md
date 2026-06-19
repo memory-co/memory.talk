@@ -37,6 +37,8 @@ memory.talk card create \
 | `--scope` | 否 | 一句话**适用场景**描述(`scope`,软提示,非门禁;负边界如「别用于育儿」直接写进这句) |
 | `--card_id` / `--position_id` | 否 | 显式指定 id;不提供则自动生成 `card_<ULID>` / `pos_<ULID>` |
 
+> **文本字段(`--issue` / `--answer` / `--scope`)的值都支持 `@<file>` / `@-`**:从文件 / stdin **原样**读入,专治内容里的引号、换行、`$`、反引号等特殊字符(见 [#文本字段:传文件--stdin](#文本字段传文件--stdin))。
+
 详细字段语义见 [`../../structure/v4/card.md`](../../structure/v4/card.md)。
 
 ### `--issue` vs `--card`(必须二选一)
@@ -56,6 +58,26 @@ memory.talk card create \
 | 列表 | `sess_abc:3,7,12` | 离散 index 列表 |
 
 约束(不满足整次拒绝):**严格单调递增**(`15-11` / `12,7,3` 报错);**越界 / session 不存在** 报错。多个 `--cite` 各落一条 `card_sessions`(`position_id` 指向新建的这个答案)。
+
+### 文本字段:传文件 / stdin
+
+`--issue` / `--answer` / `--scope` 的值有三种传法,后两种**不经 shell / JSON 转义**,专门用于文本带引号、换行、`$`、反引号等特殊字符的情况:
+
+| 写法 | 含义 |
+|---|---|
+| `--answer '<文本>'` | 行内字面值(默认) |
+| `--answer @<path>` | 从文件读,**内容逐字节原样用**(不解析、不去空白) |
+| `--answer @-` | 从 **stdin** 读(`@-` 整条命令只能出现一次) |
+
+```bash
+# 答案带特殊字符 → 写进文件再传,一个字符都不丢
+memory.talk card create --issue '提交信息怎么写?' --answer @answer.md --cite sess_abc:11-15
+
+# 或从 stdin 喂(剪贴板 / heredoc)
+pbpaste | memory.talk card create --card card_01jz8k2m --answer @-
+```
+
+> 值本身就以 `@` 开头时,改用 `@<file>` / `@-` 传(文件内容原样读入,不会被再解释成路径)。
 
 ### 输出 — Markdown(默认)
 

@@ -15,7 +15,7 @@ memory.talk review <position_id> <+1|0|-1> --cite <session_id>:<indexes> [--comm
 | `<position_id>` | 是 | 被表态的答案,必须是 `pos_<…>`;不存在或前缀错报错。**target 是 Position,不是 card** |
 | `<argument>` | 是 | `+1` 支持(顶) / `0` 中立 / `-1` 反对(踩)。其它值报错 |
 | `--cite` | 是 | 证据:`<session_id>:<indexes>`,**单 session**(一次表态来自一次具体对话);indexes 语法同 [card.md](card.md#--cite-语法--indexes) |
-| `--comment` | 否 | 一句话归因;`argument=0` 时强烈建议填,服务端不强制 |
+| `--comment` | 否 | 一句话归因;`argument=0` 时强烈建议填,服务端不强制。值支持 `@<file>` / `@-`(从文件 / stdin 原样读,专治特殊字符;同 [card.md](card.md#文本字段传文件--stdin)) |
 | `--review_id` | 否 | 不提供则自动生成 `review_<ULID>` |
 
 > **单 session**:跟答案的出处(`card_sessions` 可多 session)不同,一条 review 只挂一个 session——它是"某次对话里对某个答案的一次表态"。
