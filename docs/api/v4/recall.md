@@ -48,7 +48,7 @@ CLI 对应 [`recall`](../../cli/v4/recall.md)。读路径全貌见 [`../../works
         "position_id": "pos_01jzp3nq",
         "claim": "偏简洁,先给结论再展开",
         "scope": "技术问答场景;闲聊不一定适用",
-        "credence": 6.0,
+        "credence": 6,
         "up_count": 7, "down_count": 1, "neutral_count": 2
       }
     }

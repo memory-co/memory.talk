@@ -24,7 +24,7 @@ v4 的核心数据结构 —— 一张卡 = **一个 Card(问题,≡ Issue)+ 它
       "up_count": 7,
       "down_count": 1,
       "neutral_count": 2,
-      "credence": 0.78,
+      "credence": 6,
       "scope": "日常技术问答场景;面向有经验的用户。复杂决策题不适用——那种要展开。",
       "forked_from_position_id": null,
       "created_at": "2026-06-18T14:30:00Z"
@@ -36,7 +36,7 @@ v4 的核心数据结构 —— 一张卡 = **一个 Card(问题,≡ Issue)+ 它
       "up_count": 1,
       "down_count": 0,
       "neutral_count": 0,
-      "credence": 0.62,
+      "credence": 1,
       "scope": "",
       "forked_from_position_id": "pos_01jzr5kq",
       "created_at": "2026-06-19T09:02:00Z"
@@ -45,7 +45,7 @@ v4 的核心数据结构 —— 一张卡 = **一个 Card(问题,≡ Issue)+ 它
 }
 ```
 
-> `credence` 是**现算字段**(`f(up_count, down_count)`),read 响应里给出方便消费;它**不落库**(SQLite / 文件罐都没有这一列)。「当下用哪个答案」= credence 最高的 active Position(此例 `pos_01jzr5kq`),无 `accepted` 标志。
+> `credence` 是**现算字段**(`f(up_count, down_count)`),read 响应里给出方便消费;它**不落库**(SQLite / 文件罐都没有这一列)。「当下用哪个答案」= credence 最高的 Position(此例 `pos_01jzr5kq`),无 `accepted` 标志。
 
 ## Card 字段
 
@@ -92,7 +92,7 @@ v4 的核心数据结构 —— 一张卡 = **一个 Card(问题,≡ Issue)+ 它
 | 量 | 怎么算 | 说明 |
 |---|---|---|
 | `credence` | `f(up_count, down_count)` | 校验分:`up−down`,或带样本量的 Wilson 下界(10顶0踩 > 1顶0踩)。具体公式见 [`../../works/v4/card.md`](../../works/v4/card.md) §12 待定 |
-| 「当下答案」 | 召回时取 credence 最高的 active Position | 没有 `accepted` 字段;平手用最近更新(最后一条 review `created_at`)tiebreak |
+| 「当下答案」 | 召回时取 credence 最高的 Position | 没有 `accepted` 字段;平手用最近更新(最后一条 review `created_at`)tiebreak |
 
 ## 存储
 
@@ -153,4 +153,4 @@ CREATE INDEX idx_pos_card ON positions(card_id);
 | card 间关联 | `source_cards`(内联,创建即冻) | `card_links` 独立表(card↔card) |
 | 出处 | `rounds[].session_id` 内联 | `card_sessions` 独立表(card↔session) |
 | 翻新 | 新建 card,`source_cards` 挂 `supersedes` | 同卡内新增竞争 Position(`forked_from_position_id` 记血缘) |
-| 当前胜者 | 沉浮排序算 | credence 现算最高的 active Position(无 `accepted`) |
+| 当前胜者 | 沉浮排序算 | credence 现算最高的 Position(无 `accepted`) |

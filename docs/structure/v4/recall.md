@@ -29,7 +29,7 @@
       "answer": {
         "position_id": "pos_01jzr5kq",
         "claim": "简洁优先 —— 默认给结论,展开按需",
-        "credence": 0.78,
+        "credence": 6,
         "up_count": 7,
         "down_count": 1,
         "neutral_count": 2,
@@ -39,7 +39,7 @@
         {
           "position_id": "pos_01jzp3nq",
           "claim": "看场景 —— 简单题简洁,决策题详细",
-          "credence": 0.62,
+          "credence": 1,
           "scope": ""
         }
       ]
@@ -64,7 +64,7 @@
 | `card_id` | string | `card_<...>` |
 | `issue` | string | 问题文本(就是被撞中的检索锚点) |
 | `relevance` | float | 检索相关性(向量 + FTS),**召回时现算**,不落库 |
-| `answer` | Position | credence 最高的 active Position(= 当下答案);卡下无 Position 时为 `null` |
+| `answer` | Position | credence 最高的 Position(= 当下答案);卡下无 Position 时为 `null` |
 | `alternatives` | Position[] | 其余竞争答案,按 credence 倒序;可空数组。注入时通常只用 `answer`,`alternatives` 供需要全局视角时取用 |
 
 ### Position(召回视图)

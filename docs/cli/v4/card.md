@@ -6,7 +6,7 @@ v4 卡的**写入**入口。一张卡 = 一个问题(Issue)+ 若干答案(Positi
 memory.talk card
 ├── create --issue '<问题>' [--card_id <id>] [--json]
 ├── position --card <cid> --answer '<答案>' [--source <sid>:<idx> ...] [--scope '<场景>'] [--position_id <id>] [--json]
-├── review --position <pid> --vote <+1|0|-1> --cite <sid>:<idx> [--comment '<一句话>'] [--review_id <id>] [--json]
+├── review --position <pid> --argument <+1|0|-1> --cite <sid>:<idx> [--comment '<一句话>'] [--review_id <id>] [--json]
 └── link create --from <cid> --type <type> --target <id>  |  link list --card <cid>  [--json]
 ```
 
@@ -87,13 +87,13 @@ pbpaste | memory.talk card position --card card_01jz8k2m --answer @-
 对一个**答案(Position)**的"回帖"——表态它对不对:**支持(+1)、中立(0)、反对(−1)**,附带某次 session 的证据 rounds 和一句说明。沿用 v3 review,只把 target 从整张卡**下放到 Position**;`argument ≠ 0` 的 review 就是一条 **IBIS Argument**(顶 = pro / 踩 = con)。
 
 ```bash
-memory.talk card review --position <position_id> --vote <+1|0|-1> --cite <session_id>:<indexes> [--comment '<一句话>'] [--review_id <id>] [--json]
+memory.talk card review --position <position_id> --argument <+1|0|-1> --cite <session_id>:<indexes> [--comment '<一句话>'] [--review_id <id>] [--json]
 ```
 
 | 参数 | 必填 | 说明 |
 |---|---|---|
 | `--position` | 是 | 被表态的答案,必须是 `pos_<…>`。**target 是 Position,不是 card** |
-| `--vote` | 是 | `+1` 支持(顶) / `0` 中立 / `-1` 反对(踩)。落成 review 的 `argument`;其它值报错 |
+| `--argument` | 是 | `+1` 支持(顶) / `0` 中立 / `-1` 反对(踩)。就是 review 的 `argument` 字段;其它值报错 |
 | `--cite` | 是 | 证据:`<session_id>:<indexes>`,**单 session**(一次表态来自一次具体对话);indexes 语法同 [#--source-语法--indexes](#--source-语法--indexes) |
 | `--comment` | 否 | 一句话归因;`argument=0` 时强烈建议填。值支持 `@<file>` / `@-`(见 [#文本传文件--stdin](#文本传文件--stdin)) |
 | `--review_id` | 否 | 不提供则自动生成 `review_<ULID>` |
@@ -109,7 +109,7 @@ memory.talk card review --position <position_id> --vote <+1|0|-1> --cite <sessio
 - **不写 credence**——credence 读 / 排序时按 `up − down`(或 Wilson)现算,没有要 bump 的列。
 - 落 `reviews` 表(`position_id` + 冗余 `card_id` + `session_id` + `indexes` + `argument` + `comment`),沿用 v3 review 的 canonical;review **不进向量索引**。
 
-### 中立(`--vote 0`)堆多了 → 可能衍生新 Position
+### 中立(`--argument 0`)堆多了 → 可能衍生新 Position
 
 一批中立 = 证据相关但不站现有任何答案的队,可能在为一个**还没说出来的答案**背书。可**离线**(人 / LLM 判)把它们聚类、`card position` 提一个新答案、再把这些 review 以 `+1` 重挂过去。**不自动**触发,见 [`../../works/v4/card.md`](../../works/v4/card.md#3-第二推credence--现算的质量分相关性只在召回时算)。
 
@@ -118,8 +118,8 @@ memory.talk card review --position <position_id> --vote <+1|0|-1> --cite <sessio
 review **不单独 read**——在 [`read <card_id>`](read.md) 的每个 Position 块以计数体现,或 [`read <position_id>`](read.md#pos_--单个答案--它的-review) 看某答案的全部 review。
 
 ```bash
-memory.talk card review --position pos_01jzp3nq --vote +1 --cite "$SID:20-25" --comment '再次确认,简洁版接住了'
-memory.talk card review --position pos_01jz0xnq --vote -1 --cite "$SID:3-8"  --comment '纯简洁漏了调试细节'
+memory.talk card review --position pos_01jzp3nq --argument +1 --cite "$SID:20-25" --comment '再次确认,简洁版接住了'
+memory.talk card review --position pos_01jz0xnq --argument -1 --cite "$SID:3-8"  --comment '纯简洁漏了调试细节'
 ```
 
 ## card link
@@ -169,10 +169,10 @@ memory.talk card link list --card <card_id> [--json]
 |---|---|
 | 建一个新问题(卡) | `card create --issue '<Q>'` |
 | 给问题加一个答案 | `card position --card <cid> --answer '<A>' [--source ...]` |
-| 对某个答案顶 / 踩 / 中立 | `card review --position <pid> --vote <+1\|0\|-1> --cite ...` |
+| 对某个答案顶 / 踩 / 中立 | `card review --position <pid> --argument <+1\|0\|-1> --cite ...` |
 | 连两张卡(IBIS 边) | `card link create --from <cid> --type <type> --target <id>` |
 | **看一张卡 / 它所有答案 / 当下答案** | `read <card_id>`(见 [read.md](read.md)) |
 | 按相关度找卡 | `search <query>` |
 | hook 阶段无意识召回 | `recall --session <sid> --prompt '<p>'` |
 
-> **改主意 ≠ 改卡**:答案错了不改 `claim`,而是 `card position --card <同一卡> --answer '<新答案>'` 加一个新答案 + `card review --position <旧pid> --vote -1` 踩旧的;credence 现算会把新答案抬上来,旧答案留作认知史。
+> **改主意 ≠ 改卡**:答案错了不改 `claim`,而是 `card position --card <同一卡> --answer '<新答案>'` 加一个新答案 + `card review --position <旧pid> --argument -1` 踩旧的;credence 现算会把新答案抬上来,旧答案留作认知史。

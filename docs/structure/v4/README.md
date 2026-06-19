@@ -82,7 +82,7 @@ v4 把一批可派生的量留成**读时现算**、不落列:
 | 量 | 怎么来 |
 |---|---|
 | `credence`(校验分) | `f(up_count, down_count)`,排序时算 |
-| 「当下答案」 | 召回时取 credence 最高的 active Position(无 `accepted` 字段) |
+| 「当下答案」 | 召回时取 credence 最高的 Position(无 `accepted` 字段) |
 | 「相不相关」 | 召回那一刻向量 + FTS 现算 |
 
 为什么这样切(删 momentum / 时间维 / accepted / credence 列)见 [`../../works/v4/card.md`](../../works/v4/card.md) §3 / §5 / §12。
