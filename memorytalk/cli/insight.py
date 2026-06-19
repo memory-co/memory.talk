@@ -1,18 +1,22 @@
-"""CLI: memory.talk card {create, list, tag, delete} — card write + maintenance.
+"""CLI: memory.talk insight {create, list, tag, delete} — insight write + maintenance.
+
+This is the v3 ``card`` surface, renamed to ``insight`` (the ``card`` name
+is now owned by the v4 question-graph subsystem). Object ids keep their
+``card_`` prefix.
 
 Subcommands:
 
-  create  write a new immutable card (was the bare ``card '<json>'`` form
+  create  write a new immutable insight (was the bare ``card '<json>'`` form
           in 0.7.x; hard-renamed in 0.8.x because the top level now hosts
           list / tag too)
-  list    multi-filter listing (tag / created_at) — no source/cwd: cards
+  list    multi-filter listing (tag / created_at) — no source/cwd: insights
           aren't from a source the way sessions are
-  tag     query / set / unset kv tags on one card
-  delete  hard-delete a card (SQLite row + reviews + vector + files)
+  tag     query / set / unset kv tags on one insight
+  delete  hard-delete an insight (SQLite row + vector + files)
 
 The HTTP-call shape is identical to ``cli/session.py`` — both go through
 the same ``api()`` helper and share fmt_/parse_ helpers. See
-``docs/cli/v3/card.md`` for the user-facing contract.
+``docs/cli/v4/insight.md`` for the user-facing contract.
 """
 from __future__ import annotations
 import json
@@ -21,7 +25,7 @@ import sys
 import click
 
 from memorytalk.cli._format import (
-    fmt_card_created, fmt_card_delete, fmt_card_list, fmt_card_tag, fmt_error,
+    fmt_insight_created, fmt_insight_delete, fmt_insight_list, fmt_insight_tag, fmt_error,
 )
 from memorytalk.cli._http import ApiError, api, extract_error_message
 from memorytalk.cli._render import emit_json, emit_json_err, emit_md, emit_md_err
@@ -32,14 +36,14 @@ from memorytalk.config import Config
 from memorytalk.util.tags import TagValidationError, parse_kv_args
 
 
-@click.group("card")
-def card() -> None:
-    """Card write + maintenance: create / list / tag / delete."""
+@click.group("insight")
+def insight() -> None:
+    """Insight write + maintenance: create / list / tag / delete."""
 
 
 # ────────── card create ──────────
 
-@card.command("create")
+@insight.command("create")
 @click.argument("payload", type=str)
 @click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON")
 def create(payload: str, json_out: bool) -> None:
@@ -52,7 +56,7 @@ def create(payload: str, json_out: bool) -> None:
         sys.exit(1)
 
     try:
-        result = api("POST", "/v3/cards", cfg, json_body=body)
+        result = api("POST", "/v3/insights", cfg, json_body=body)
     except ApiError as e:
         if json_out:
             emit_json_err(e.payload)
@@ -66,12 +70,12 @@ def create(payload: str, json_out: bool) -> None:
     if json_out:
         emit_json(result)
     else:
-        emit_md(fmt_card_created(result))
+        emit_md(fmt_insight_created(result))
 
 
 # ────────── card list ──────────
 
-@card.command("list")
+@insight.command("list")
 @click.option("--tag", "tags", multiple=True,
               help="K=V (eq), K!=V (ne, NULL excluded), K=V1,V2 (in), "
                    "K (present), !K (absent); repeatable, AND")
@@ -106,7 +110,7 @@ def list_(
     params.append(("limit", str(limit)))
 
     try:
-        result = api("GET", "/v3/cards", cfg, params=params)
+        result = api("GET", "/v3/insights", cfg, params=params)
     except ApiError as e:
         _emit_err(json_out, extract_error_message(e.payload))
         sys.exit(1)
@@ -118,12 +122,12 @@ def list_(
     if json_out:
         emit_json(result)
     else:
-        emit_md(fmt_card_list(result, filter_summary))
+        emit_md(fmt_insight_list(result, filter_summary))
 
 
 # ────────── card tag ──────────
 
-@card.command("tag")
+@insight.command("tag")
 @click.argument("card_id")
 @click.argument("kv_args", nargs=-1)
 @click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON")
@@ -143,7 +147,7 @@ def tag(card_id: str, kv_args: tuple[str, ...], json_out: bool) -> None:
     body = {"set": set_, "unset": unset}
     try:
         result = api(
-            "PATCH", f"/v3/cards/{card_id}/tags",
+            "PATCH", f"/v3/insights/{card_id}/tags",
             cfg, json_body=body,
         )
     except ApiError as e:
@@ -157,12 +161,12 @@ def tag(card_id: str, kv_args: tuple[str, ...], json_out: bool) -> None:
         emit_json(result)
     else:
         is_query = not (set_ or unset)
-        emit_md(fmt_card_tag(result, is_query=is_query))
+        emit_md(fmt_insight_tag(result, is_query=is_query))
 
 
 # ────────── card delete ──────────
 
-@card.command("delete")
+@insight.command("delete")
 @click.argument("card_id")
 @click.option("--yes", "-y", is_flag=True, default=False,
               help="Skip the interactive confirmation prompt.")
@@ -203,7 +207,7 @@ def delete(card_id: str, yes: bool, json_out: bool) -> None:
             sys.exit(1)
 
     try:
-        result = api("DELETE", f"/v3/cards/{card_id}", cfg)
+        result = api("DELETE", f"/v3/insights/{card_id}", cfg)
     except ApiError as e:
         if json_out:
             emit_json_err(e.payload)
@@ -217,7 +221,7 @@ def delete(card_id: str, yes: bool, json_out: bool) -> None:
     if json_out:
         emit_json(result)
     else:
-        emit_md(fmt_card_delete(result))
+        emit_md(fmt_insight_delete(result))
 
 
 # ────────── helpers ──────────
