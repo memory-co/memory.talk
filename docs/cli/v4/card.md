@@ -5,7 +5,7 @@ v4 卡的**写入**入口。一张卡 = 一个问题(Issue)+ 若干答案(Positi
 ```
 memory.talk card
 ├── create --issue '<问题>' [--card_id <id>] [--json]
-├── position --card <cid> --answer '<答案>' [--source <sid>:<idx> ...] [--scope '<场景>'] [--position_id <id>] [--json]
+├── position --card <cid> --claim '<答案>' [--source <sid>:<idx> ...] [--scope '<场景>'] [--position_id <id>] [--json]
 ├── review --position <pid> --argument <+1|0|-1> --cite <sid>:<idx> [--comment '<一句话>'] [--review_id <id>] [--json]
 └── link create --from <cid> --type <type> --target <id>  |  link list --card <cid>  [--json]
 ```
@@ -34,14 +34,14 @@ memory.talk card create --issue '<问题文本>' [--card_id <id>] [--json]
 给一张**已存在的卡**加一个答案候选(Position)。同一个问题下可以有多个答案,各自被顶踩、按现算 credence 竞争。
 
 ```bash
-memory.talk card position --card <card_id> --answer '<答案文本>' \
+memory.talk card position --card <card_id> --claim '<答案文本>' \
     [--source <session_id>:<indexes> ...] [--scope '<场景>'] [--position_id <id>] [--json]
 ```
 
 | 参数 | 必填 | 说明 |
 |---|---|---|
 | `--card` | 是 | 给哪张卡(`card_<…>`)加答案;卡必须**已存在** |
-| `--answer` | 是 | 答案文本(`claim`,内联在 Position 上,不单独建节点、不共享)。值支持 `@<file>` / `@-` |
+| `--claim` | 是 | 答案文本(`claim`,内联在 Position 上,不单独建节点、不共享)。值支持 `@<file>` / `@-` |
 | `--source` | 否,可多次 | 出处:`<session_id>:<indexes>`,每个落一条 `card_sessions`。支持多 session(多次 `--source`) |
 | `--scope` | 否 | **这个答案(Position)的**适用场景描述(`scope` 是 **Position 字段**,软提示、非门禁;负边界如「别用于育儿」写进这句)。值支持 `@<file>` / `@-` |
 | `--position_id` | 否 | 显式指定 id;不提供则自动生成 `pos_<ULID>` |
@@ -61,26 +61,26 @@ memory.talk card position --card <card_id> --answer '<答案文本>' \
 
 ### 文本传文件 / stdin
 
-文本类 flag 的值——`--issue`(create)、`--answer` / `--scope`(position)、`--comment`(review)——都有三种传法,后两种**不经 shell / JSON 转义**,专门用于内容带引号、换行、`$`、反引号等特殊字符的情况:
+文本类 flag 的值——`--issue`(create)、`--claim` / `--scope`(position)、`--comment`(review)——都有三种传法,后两种**不经 shell / JSON 转义**,专门用于内容带引号、换行、`$`、反引号等特殊字符的情况:
 
 | 写法 | 含义 |
 |---|---|
-| `--answer '<文本>'` | 行内字面值(默认) |
-| `--answer @<path>` | 从文件读,**内容逐字节原样用**(不解析、不去空白) |
-| `--answer @-` | 从 **stdin** 读(`@-` 整条命令只能出现一次) |
+| `--claim '<文本>'` | 行内字面值(默认) |
+| `--claim @<path>` | 从文件读,**内容逐字节原样用**(不解析、不去空白) |
+| `--claim @-` | 从 **stdin** 读(`@-` 整条命令只能出现一次) |
 
 ```bash
 # 答案带特殊字符 → 写进文件再传,一个字符都不丢
-memory.talk card position --card card_01jz8k2m --answer @answer.md --source sess_abc:11-15
+memory.talk card position --card card_01jz8k2m --claim @answer.md --source sess_abc:11-15
 # 或从 stdin 喂
-pbpaste | memory.talk card position --card card_01jz8k2m --answer @-
+pbpaste | memory.talk card position --card card_01jz8k2m --claim @-
 ```
 
 > 文本本身就以 `@` 开头时,改用 `@<file>` / `@-` 传(文件内容原样读入,不会被再解释成路径)。
 
 ### 输出 / 副作用 / 错误
 
-输出 `{"status":"ok","card_id":…,"position_id":"pos_…"}`(`position_id` 就是以后 `card review` 的对象)。副作用:落一个 Position(`claim` 内联,`up/down/neutral_count` 初始化 0,`scope` 默认 `''`;**不算 credence**,读时现算)+ 每个 `--source` 落一条 `card_sessions` + `positions/<pid>.json`(`claim` 不可变);**不动卡上其它 Position**(append-only)。错误:`--card` 卡不存在 / `--answer` 空 / `--source` 越界·非单调 / `--position_id` 前缀错·已存在 → 报错 exit 1。
+输出 `{"status":"ok","card_id":…,"position_id":"pos_…"}`(`position_id` 就是以后 `card review` 的对象)。副作用:落一个 Position(`claim` 内联,`up/down/neutral_count` 初始化 0,`scope` 默认 `''`;**不算 credence**,读时现算)+ 每个 `--source` 落一条 `card_sessions` + `positions/<pid>.json`(`claim` 不可变);**不动卡上其它 Position**(append-only)。错误:`--card` 卡不存在 / `--claim` 空 / `--source` 越界·非单调 / `--position_id` 前缀错·已存在 → 报错 exit 1。
 
 ## card review
 
@@ -168,11 +168,11 @@ memory.talk card link list --card <card_id> [--json]
 | 想做的事 | 用哪条 |
 |---|---|
 | 建一个新问题(卡) | `card create --issue '<Q>'` |
-| 给问题加一个答案 | `card position --card <cid> --answer '<A>' [--source ...]` |
+| 给问题加一个答案 | `card position --card <cid> --claim '<A>' [--source ...]` |
 | 对某个答案顶 / 踩 / 中立 | `card review --position <pid> --argument <+1\|0\|-1> --cite ...` |
 | 连两张卡(IBIS 边) | `card link create --from <cid> --type <type> --target <id>` |
 | **看一张卡 / 它所有答案 / 当下答案** | `read <card_id>`(见 [read.md](read.md)) |
 | 按相关度找卡 | `search <query>` |
 | hook 阶段无意识召回 | `recall --session <sid> --prompt '<p>'` |
 
-> **改主意 ≠ 改卡**:答案错了不改 `claim`,而是 `card position --card <同一卡> --answer '<新答案>'` 加一个新答案 + `card review --position <旧pid> --argument -1` 踩旧的;credence 现算会把新答案抬上来,旧答案留作认知史。
+> **改主意 ≠ 改卡**:答案错了不改 `claim`,而是 `card position --card <同一卡> --claim '<新答案>'` 加一个新答案 + `card review --position <旧pid> --argument -1` 踩旧的;credence 现算会把新答案抬上来,旧答案留作认知史。
