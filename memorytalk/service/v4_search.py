@@ -28,7 +28,7 @@ class V4SearchService:
         rows = await self.db.positions.list_for_card(card_id)
         out = []
         for r in rows:
-            reviews = await self.db.v4reviews.list_for_position(r["position_id"])
+            reviews = await self.db.reviews.list_for_position(r["position_id"])
             out.append(with_credence(r, reviews[0]["created_at"] if reviews else None))
         out.sort(key=sort_key, reverse=True)
         return out
@@ -43,7 +43,7 @@ class V4SearchService:
         return positions[0]   # highest credence (already sorted)
 
     async def _card_view(self, card_id: str, relevance: float | None, matched_id: str | None) -> dict | None:
-        card = await self.db.v4cards.get(card_id)
+        card = await self.db.cards.get(card_id)
         if card is None:
             return None
         positions = await self._injected_positions(card_id)
@@ -86,7 +86,7 @@ class V4SearchService:
             cand = [(cid, m["relevance"], m["position_id"]) for cid, m in ranked]
         else:
             # empty query (or no searchbase) → newest-first listing, DSL only
-            _, rows = await self.db.v4cards.list_cards(limit=max(limit * 5, 100))
+            _, rows = await self.db.cards.list_cards(limit=max(limit * 5, 100))
             cand = [(r["card_id"], None, None) for r in rows]
 
         # ── build views + DSL filter ──

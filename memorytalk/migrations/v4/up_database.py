@@ -9,9 +9,9 @@ These names were freed by migration ``v3`` (v3 card → insight rename +
 """
 from __future__ import annotations
 
-from memorytalk.repository.v4.schema import create_v4_schema
+from memorytalk.repository.card_schema import create_card_schema
 
 
 async def run(conn, *, data_root=None) -> None:
     """v3 → v4. Idempotent (CREATE TABLE IF NOT EXISTS)."""
-    await create_v4_schema(conn)
+    await create_card_schema(conn)

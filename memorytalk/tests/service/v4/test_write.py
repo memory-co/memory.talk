@@ -13,9 +13,9 @@ from memorytalk.service.cards import CardConflict, CardNotFound, CardServiceErro
 async def test_create_card_mints_id_and_persists(cardsvc):
     cid = await cardsvc.svc.create_card(CreateCardRequest(issue="Which db?"))
     assert cid.startswith("card_")
-    row = await cardsvc.db.v4cards.get(cid)
+    row = await cardsvc.db.cards.get(cid)
     assert row["issue"] == "Which db?" and row["position_count"] == 0
-    assert (await cardsvc.db.v4cards.read_doc(cid))["issue"] == "Which db?"
+    assert (await cardsvc.db.cards.read_doc(cid))["issue"] == "Which db?"
 
 
 async def test_create_card_rejects_empty_issue(cardsvc):
@@ -36,7 +36,7 @@ async def test_add_position_bumps_count_and_links_source(cardsvc):
         source=SourceRef(session_id=cardsvc.session, indexes="1-3"),
     ))
     assert pid.startswith("pos_")
-    assert (await cardsvc.db.v4cards.get(cid))["position_count"] == 1
+    assert (await cardsvc.db.cards.get(cid))["position_count"] == 1
     prow = await cardsvc.db.positions.get(pid)
     assert prow["claim"] == "SQLite" and prow["scope"] == "single-node only"
     sessions = await cardsvc.db.card_sessions.list_for_card(cid)
@@ -79,7 +79,7 @@ async def test_link_idempotent_and_bumps_once(cardsvc):
     b = await cardsvc.svc.create_card(CreateCardRequest(issue="qb"))
     await cardsvc.svc.link(a, CreateLinkRequest(card_id=a, type="specializes", target_id=b))
     await cardsvc.svc.link(a, CreateLinkRequest(card_id=a, type="specializes", target_id=b))
-    assert (await cardsvc.db.v4cards.get(a))["link_count"] == 1   # bumped once
+    assert (await cardsvc.db.cards.get(a))["link_count"] == 1   # bumped once
     out = await cardsvc.db.card_links.list_out(a)
     assert len(out) == 1 and out[0]["target_type"] == "card"
 

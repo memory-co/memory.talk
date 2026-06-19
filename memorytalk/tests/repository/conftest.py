@@ -14,7 +14,7 @@ import pytest
 from memorytalk.config import Config
 from memorytalk.provider.storage import LocalStorage
 from memorytalk.repository.store import SQLiteStore
-from memorytalk.repository.v4.schema import create_v4_schema
+from memorytalk.repository.card_schema import create_card_schema
 
 
 @pytest.fixture
@@ -22,7 +22,7 @@ async def v4db(data_root):
     config = Config(data_root)
     config.ensure_dirs()
     conn = await SQLiteStore.open_connection(config.db_path)  # sets row_factory=Row
-    await create_v4_schema(conn)
+    await create_card_schema(conn)
     storage = LocalStorage(config.data_root)
     try:
         yield SimpleNamespace(conn=conn, storage=storage)

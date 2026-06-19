@@ -70,7 +70,7 @@ V4_INDEXES: list[str] = [
 ]
 
 
-async def create_v4_schema(conn: aiosqlite.Connection) -> None:
+async def create_card_schema(conn: aiosqlite.Connection) -> None:
     """Create all v4 tables + indexes (idempotent)."""
     for stmt in V4_TABLES:
         await conn.execute(stmt)

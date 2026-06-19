@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from memorytalk.repository.v4.sessions import CardSessionStore
+from memorytalk.repository.card_sessions import CardSessionStore
 
 
 @pytest.fixture

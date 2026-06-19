@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from memorytalk.repository.v4.links import CardLinkStore
+from memorytalk.repository.card_links import CardLinkStore
 
 
 @pytest.fixture

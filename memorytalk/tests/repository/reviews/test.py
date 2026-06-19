@@ -1,14 +1,14 @@
-"""reviews -- V4ReviewStore insert / list_for_position / count. See README.md."""
+"""reviews -- ReviewStore insert / list_for_position / count. See README.md."""
 from __future__ import annotations
 
 import pytest
 
-from memorytalk.repository.v4.reviews import V4ReviewStore
+from memorytalk.repository.reviews import ReviewStore
 
 
 @pytest.fixture
 def reviews(v4db):
-    return V4ReviewStore(v4db.conn)
+    return ReviewStore(v4db.conn)
 
 
 async def test_insert_then_list(reviews):

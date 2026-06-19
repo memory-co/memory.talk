@@ -89,12 +89,12 @@ class CardService:
         card_id = req.card_id or new_card_id()
         if not card_id.startswith(CARD_PREFIX):
             raise CardServiceError("invalid card_id prefix")
-        if req.card_id and await self.db.v4cards.exists(card_id):
+        if req.card_id and await self.db.cards.exists(card_id):
             raise CardConflict(f"card_id {card_id} already exists")
 
         now = _utc_iso()
-        await self.db.v4cards.insert(card_id, req.issue, now)
-        await self.db.v4cards.write_doc({
+        await self.db.cards.insert(card_id, req.issue, now)
+        await self.db.cards.write_doc({
             "card_id": card_id, "issue": req.issue, "created_at": now,
         })
         await self._index(V4_CARDS, card_id, req.issue, {}, card_id)
@@ -106,7 +106,7 @@ class CardService:
     # ────────── add position (claim) ──────────
 
     async def add_position(self, card_id: str, req: CreatePositionRequest) -> str:
-        if not await self.db.v4cards.exists(card_id):
+        if not await self.db.cards.exists(card_id):
             raise CardNotFound(f"card {card_id} not found")
         if not req.claim or not req.claim.strip():
             raise CardServiceError("claim required")
@@ -135,7 +135,7 @@ class CardService:
             "position_id": position_id, "card_id": card_id,
             "claim": req.claim, "created_at": now,
         })
-        await self.db.v4cards.bump_position_count(card_id)
+        await self.db.cards.bump_position_count(card_id)
         if req.source is not None:
             await self.db.card_sessions.insert(
                 card_id, req.source.session_id, position_id, req.source.indexes, now,
@@ -162,12 +162,12 @@ class CardService:
         await self._require_session(req.session_id, req.indexes)
 
         review_id = req.review_id or new_review_id()
-        if await self.db.v4reviews.exists(review_id):
+        if await self.db.reviews.exists(review_id):
             raise CardConflict(f"review_id {review_id} already exists")
 
         card_id = pos["card_id"]
         now = _utc_iso()
-        await self.db.v4reviews.insert(
+        await self.db.reviews.insert(
             review_id, position_id, card_id, req.session_id, req.indexes,
             req.argument, req.comment, now,
         )
@@ -184,7 +184,7 @@ class CardService:
     # ────────── link (IBIS edge) ──────────
 
     async def link(self, card_id: str, req: CreateLinkRequest) -> dict:
-        if not await self.db.v4cards.exists(card_id):
+        if not await self.db.cards.exists(card_id):
             raise CardNotFound(f"card {card_id} not found")
         if req.type not in _LINK_TYPES:
             raise CardServiceError(f"unknown link type: {req.type}")
@@ -208,7 +208,7 @@ class CardService:
         now = _utc_iso()
         await self.db.card_links.insert(subject, req.type, tgt, now)
         if not already:
-            await self.db.v4cards.bump_link_count(subject)
+            await self.db.cards.bump_link_count(subject)
             await self.events.card_event(
                 subject, "card_linked", type=req.type, target_id=tgt,
             )
@@ -224,7 +224,7 @@ class CardService:
         self, card_id: str, session_id: str, position_id: str = "",
         indexes: str = "[]",
     ) -> dict:
-        if not await self.db.v4cards.exists(card_id):
+        if not await self.db.cards.exists(card_id):
             raise CardNotFound(f"card {card_id} not found")
         if not _is_session_id(session_id):
             raise CardServiceError("invalid session_id prefix")

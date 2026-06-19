@@ -39,7 +39,7 @@ class V4RecallService:
         rows = await self.db.positions.list_for_card(card_id)
         injected = []
         for r in rows:
-            reviews = await self.db.v4reviews.list_for_position(r["position_id"])
+            reviews = await self.db.reviews.list_for_position(r["position_id"])
             injected.append(with_credence(r, reviews[0]["created_at"] if reviews else None))
         injected.sort(key=sort_key, reverse=True)
         if not injected:
@@ -70,7 +70,7 @@ class V4RecallService:
                 continue
             if len(cards) >= top_k:
                 continue
-            card = await self.db.v4cards.get(cid)
+            card = await self.db.cards.get(cid)
             if card is None:
                 continue
             answer, alternatives = await self._answer_and_alts(cid)

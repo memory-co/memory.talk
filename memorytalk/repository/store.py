@@ -19,11 +19,11 @@ from memorytalk.repository.explores import ExploreStore
 from memorytalk.repository.recall import RecallStore
 from memorytalk.repository.search_log import SearchLogStore
 from memorytalk.repository.sessions import SessionStore
-from memorytalk.repository.v4.cards import V4CardStore
-from memorytalk.repository.v4.positions import PositionStore
-from memorytalk.repository.v4.reviews import V4ReviewStore
-from memorytalk.repository.v4.links import CardLinkStore
-from memorytalk.repository.v4.sessions import CardSessionStore
+from memorytalk.repository.cards import CardStore
+from memorytalk.repository.positions import PositionStore
+from memorytalk.repository.reviews import ReviewStore
+from memorytalk.repository.card_links import CardLinkStore
+from memorytalk.repository.card_sessions import CardSessionStore
 
 
 class SQLiteStore:
@@ -38,9 +38,9 @@ class SQLiteStore:
         self.explores = ExploreStore(conn)
         # v4 card subsystem (governed question graph). Coexists with the
         # v3 ``insights`` stores; separate tables, no FK between them.
-        self.v4cards = V4CardStore(conn, storage)
+        self.cards = CardStore(conn, storage)
         self.positions = PositionStore(conn, storage)
-        self.v4reviews = V4ReviewStore(conn)
+        self.reviews = ReviewStore(conn)
         self.card_links = CardLinkStore(conn)
         self.card_sessions = CardSessionStore(conn)
 

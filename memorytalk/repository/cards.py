@@ -1,4 +1,4 @@
-"""V4CardStore -- card (==Issue) persistence: file canonical + SQLite index.
+"""CardStore -- card (==Issue) persistence: file canonical + SQLite index.
 
 File layout::
 
@@ -17,7 +17,7 @@ import aiosqlite
 from memorytalk.provider.storage import Storage
 
 
-class V4CardStore:
+class CardStore:
     PREFIX = "cards"
 
     def __init__(self, conn: aiosqlite.Connection, storage: Storage):

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from memorytalk.repository.v4.positions import PositionStore
+from memorytalk.repository.positions import PositionStore
 
 
 @pytest.fixture

@@ -1,14 +1,14 @@
-"""cards -- V4CardStore row + file round-trip, counter bumps, list. See README.md."""
+"""cards -- CardStore row + file round-trip, counter bumps, list. See README.md."""
 from __future__ import annotations
 
 import pytest
 
-from memorytalk.repository.v4.cards import V4CardStore
+from memorytalk.repository.cards import CardStore
 
 
 @pytest.fixture
 def cards(v4db):
-    return V4CardStore(v4db.conn, v4db.storage)
+    return CardStore(v4db.conn, v4db.storage)
 
 
 async def test_insert_then_get(cards):

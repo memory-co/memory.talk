@@ -49,7 +49,7 @@ async def get_cards(
     until_iso = _parse_iso(until, field="until")
     if since_iso and until_iso and since_iso > until_iso:
         raise HTTPException(status_code=400, detail="'since' must be <= 'until'")
-    total, rows = await db.v4cards.list_cards(since=since_iso, until=until_iso, limit=limit)
+    total, rows = await db.cards.list_cards(since=since_iso, until=until_iso, limit=limit)
     return {"total": total, "returned": len(rows), "cards": rows}
 
 
@@ -66,13 +66,13 @@ async def post_position(card_id: str, payload: CreatePositionRequest, request: R
 @router.get("/cards/{card_id}/positions")
 async def get_positions(card_id: str, request: Request):
     db = request.app.state.db
-    card = await db.v4cards.get(card_id)
+    card = await db.cards.get(card_id)
     if card is None:
         raise HTTPException(status_code=404, detail=f"card {card_id} not found")
     rows = await db.positions.list_for_card(card_id)
     injected = []
     for r in rows:
-        reviews = await db.v4reviews.list_for_position(r["position_id"])
+        reviews = await db.reviews.list_for_position(r["position_id"])
         injected.append(with_credence(r, reviews[0]["created_at"] if reviews else None))
     injected.sort(key=sort_key, reverse=True)
     return {"card_id": card_id, "issue": card["issue"], "positions": injected}
@@ -105,6 +105,6 @@ async def post_card_session(card_id: str, payload: CreateCardSessionRequest, req
 @router.get("/cards/{card_id}/sessions")
 async def get_card_sessions(card_id: str, request: Request):
     db = request.app.state.db
-    if not await db.v4cards.exists(card_id):
+    if not await db.cards.exists(card_id):
         raise HTTPException(status_code=404, detail=f"card {card_id} not found")
     return {"card_id": card_id, "sessions": await db.card_sessions.list_for_card(card_id)}

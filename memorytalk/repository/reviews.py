@@ -1,4 +1,4 @@
-"""V4ReviewStore -- stances on a Position (argument in {-1,0,1}).
+"""ReviewStore -- stances on a Position (argument in {-1,0,1}).
 
 SQLite-only here; the file mirror (reviews appended under the card dir)
 is wired in the service plan alongside the annotation write path.
@@ -10,7 +10,7 @@ from __future__ import annotations
 import aiosqlite
 
 
-class V4ReviewStore:
+class ReviewStore:
     def __init__(self, conn: aiosqlite.Connection):
         self.conn = conn
 

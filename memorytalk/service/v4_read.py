@@ -17,7 +17,7 @@ class V4ReadService:
         self.db = db
 
     async def _last_reviewed_at(self, position_id: str) -> str | None:
-        reviews = await self.db.v4reviews.list_for_position(position_id)  # DESC
+        reviews = await self.db.reviews.list_for_position(position_id)  # DESC
         return reviews[0]["created_at"] if reviews else None
 
     async def _injected_positions(self, card_id: str) -> list[dict]:
@@ -30,7 +30,7 @@ class V4ReadService:
         return injected
 
     async def read_card(self, card_id: str) -> dict | None:
-        card = await self.db.v4cards.get(card_id)
+        card = await self.db.cards.get(card_id)
         if card is None:
             return None
         positions = await self._injected_positions(card_id)
@@ -52,5 +52,5 @@ class V4ReadService:
         if row is None:
             return None
         injected = with_credence(row, await self._last_reviewed_at(position_id))
-        reviews = await self.db.v4reviews.list_for_position(position_id)   # DESC
+        reviews = await self.db.reviews.list_for_position(position_id)   # DESC
         return {**injected, "reviews": reviews}
