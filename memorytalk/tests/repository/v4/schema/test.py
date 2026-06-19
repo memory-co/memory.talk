@@ -30,3 +30,14 @@ async def test_positions_has_counts_and_governance(v4db):
 async def test_card_links_has_target_type(v4db):
     cols = await _columns(v4db.conn, "card_links")
     assert {"card_id", "type", "target_id", "target_type"} <= cols
+
+
+async def test_reviews_columns(v4db):
+    cols = await _columns(v4db.conn, "reviews")
+    assert {"review_id", "position_id", "card_id", "session_id",
+            "indexes", "argument", "comment", "created_at"} == cols
+
+
+async def test_card_sessions_columns(v4db):
+    cols = await _columns(v4db.conn, "card_sessions")
+    assert {"card_id", "session_id", "position_id", "indexes", "created_at"} == cols

@@ -35,6 +35,7 @@ V4_TABLES: list[str] = [
     """CREATE TABLE IF NOT EXISTS reviews (
         review_id   TEXT PRIMARY KEY,
         position_id TEXT NOT NULL,
+        card_id     TEXT NOT NULL,
         session_id  TEXT NOT NULL,
         indexes     TEXT NOT NULL,
         argument    INTEGER NOT NULL,
@@ -52,10 +53,10 @@ V4_TABLES: list[str] = [
     """CREATE TABLE IF NOT EXISTS card_sessions (
         card_id     TEXT NOT NULL,
         session_id  TEXT NOT NULL,
-        position_id TEXT,
-        indexes     TEXT NOT NULL,
+        position_id TEXT NOT NULL DEFAULT '',
+        indexes     TEXT NOT NULL DEFAULT '[]',
         created_at  TEXT NOT NULL,
-        PRIMARY KEY (card_id, session_id, indexes)
+        PRIMARY KEY (card_id, session_id, position_id)
     )""",
 ]
 
@@ -63,6 +64,7 @@ V4_INDEXES: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_v4_cards_created ON cards(created_at)",
     "CREATE INDEX IF NOT EXISTS idx_v4_positions_card ON positions(card_id)",
     "CREATE INDEX IF NOT EXISTS idx_v4_reviews_position ON reviews(position_id, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_v4_reviews_card ON reviews(card_id)",
     "CREATE INDEX IF NOT EXISTS idx_v4_links_target ON card_links(target_id)",
     "CREATE INDEX IF NOT EXISTS idx_v4_csess_session ON card_sessions(session_id)",
 ]
