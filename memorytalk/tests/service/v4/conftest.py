@@ -17,6 +17,8 @@ from memorytalk.provider.storage import LocalStorage
 from memorytalk.repository.store import SQLiteStore
 from memorytalk.service.cards import CardService
 from memorytalk.service.events import EventWriter
+from memorytalk.service.v4_read import V4ReadService
+from memorytalk.service.v4_search import V4SearchService
 
 SEEDED_SESSION = "sess-test0001"
 
@@ -34,7 +36,11 @@ async def cardsvc(data_root):
         "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z", {}, 5, "r5",
     )
     svc = CardService(db=db, search=None, events=EventWriter(db))
+    read = V4ReadService(db)
+    search = V4SearchService(db, None)   # no backend → empty-query/DSL path
     try:
-        yield SimpleNamespace(svc=svc, db=db, session=SEEDED_SESSION)
+        yield SimpleNamespace(
+            svc=svc, db=db, session=SEEDED_SESSION, read=read, search=search,
+        )
     finally:
         await conn.close()
