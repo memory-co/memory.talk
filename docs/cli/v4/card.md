@@ -13,15 +13,6 @@ memory.talk card
 
 > `card` 是 group 命令,不带子命令调用直接打印 help。设计推理见 [`../../works/v4/card.md`](../../works/v4/card.md)。
 
-## 设计原则
-
-1. **建问题 vs 加答案,同一条命令**。给不给 `--card` 决定是**新建一个问题**(`--issue`)还是**给已有问题补一个候选答案**(`--card`)。两者落地都是"在某张卡下加一个 Position",差别只在卡是新建还是复用。
-2. **答案 append-only,问题也不可改**。`issue`(问题文本)和 `claim`(答案文本)一旦创建**不可改**。改主意不是改卡,而是**新增一个竞争 Position + 踩旧的**(见 [README §五](README.md#五典型工作流))。
-3. **不存 credence / accepted**。卡只存原始计数(`up/down/neutral_count`),`credence` 是 `view` 时现算的校验分;"当下答案"= credence 最高的那个,**没有 `accepted` 字段、没有 open/closed 状态**。
-4. **出处独立成关系**。`--cite` 不写进 Position,而是落一条 `card_sessions`(card↔session,支持多 session),记"哪个 session 的哪几轮旁白启发了这个答案"。
-
----
-
 ## card create
 
 在一张卡下创建一个候选答案(Position);没给 `--card` 时先建一张新卡(新问题)。

@@ -81,10 +81,10 @@ CREATE INDEX idx_reviews_card     ON reviews(card_id);
 
 review **没有独立读取入口** —— 没有 `GET /v4/reviews/{id}`。想看某答案 / 某卡的 review,走 `read`(响应里按 `created_at` 倒序带出)。
 
-## 设计取舍
+## 不变性
 
-- **不允许撤销 review**:append-only。表态错了就**再写一条相反 `argument` 的 review**(comment 说明原因),让旧 review 也算进历史,后续把它压下去 —— 跟「credence 现算、不存状态」配套。
-- **`argument=0` 还要单独存**:中立是「证据相关、但不站现有任何答案的队」的信号;堆多了可能在为一个还没说出来的答案背书(→ 衍生新 Position)。它不动 credence,但保留了这条独立信号。
+- **不允许撤销 review**:append-only。表态错了就**再写一条相反 `argument` 的 review**(comment 说明原因)。
+- **`argument=0`(中立)单独计数**:不动 credence(不进 `up`/`down`);中立堆积可离线衍生出新 Position(机制见 [`../../works/v4/card.md`](../../works/v4/card.md) §3 末)。
 
 ## 跟 v3 review 的差异
 

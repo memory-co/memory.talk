@@ -77,15 +77,15 @@ v4 的卡子系统遵守**三条不变性**:
 
 ## 「现算」而非「存储」的几个量
 
-v4 刻意把一批本可派生的量留成**读时现算**,不落列,以免冗余 / 漂移:
+v4 把一批可派生的量留成**读时现算**、不落列:
 
-| 量 | 怎么来 | 为什么不存 |
-|---|---|---|
-| `credence`(校验分) | `f(up_count, down_count)`,排序时算 | 纯派生于两个计数,存了多一层会漂 |
-| 「当下答案」(accepted) | 召回时取 credence 最高的 active Position | 钉一个胜者违背 IBIS(Issue 长期竞争) |
-| 「相不相关」(salience) | 召回那一刻向量 + FTS 现算 | 回写会让"被频繁 recall"污染"被验证过" |
+| 量 | 怎么来 |
+|---|---|
+| `credence`(校验分) | `f(up_count, down_count)`,排序时算 |
+| 「当下答案」 | 召回时取 credence 最高的 active Position(无 `accepted` 字段) |
+| 「相不相关」 | 召回那一刻向量 + FTS 现算 |
 
-具体推理(为什么删 momentum / 时间维 / accepted / credence 列)见 [`../../works/v4/card.md`](../../works/v4/card.md) §3 / §5 / §12。
+为什么这样切(删 momentum / 时间维 / accepted / credence 列)见 [`../../works/v4/card.md`](../../works/v4/card.md) §3 / §5 / §12。
 
 ## 与 v3 / insight 的关系
 

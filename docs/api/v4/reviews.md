@@ -76,7 +76,7 @@ CLI 对应 [`review`](../../cli/v4/review.md) 命令。字段语义详见 [`../.
 
 review **没有独立读取入口** —— 不存在 `GET /v4/.../reviews/{id}`。想看某 Position 的表态走 `POST /v3/read {id: "pos_xxx"}`（沿用 v3 read，按前缀判型），响应里带这个 Position 的 reviews（按 `created_at` 倒序）。
 
-### 设计取舍
+### 不变性
 
-- **没有"撤销 review"**：review append-only。表态错了的纠正方式是**再写一条相反 `argument` 的 review**（comment 说明原因）——旧 review 也算进历史，后续把它压下去。
-- **`argument=0` 为什么单独存**：中立 = "证据相关、但不站现有任何答案的队"。它不动 credence，但算 engagement；一张卡攒了一批中立，说明现有答案没接住这些证据，可能在为一个**还没说出来的答案**背书 → 离线启发式聚类、提一个新 Position（见 [`../../works/v4/card.md`](../../works/v4/card.md) §3 末）。
+- **没有"撤销 review"**：review append-only。表态错了就**再写一条相反 `argument` 的 review**(comment 说明原因)。
+- **`argument=0`(中立)单独计数**:不动 credence(不进 `up`/`down`);中立堆积可离线衍生出新 Position(机制见 [`../../works/v4/card.md`](../../works/v4/card.md) §3 末)。

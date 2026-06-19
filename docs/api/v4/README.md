@@ -59,7 +59,7 @@ Card-Sessions POST  /v4/card-sessions                       记一条出处（ca
 | 409 | 写入冲突（显式传的 id 已存在） | `{"error": "<id> already exists"}` |
 | 500 | 内部错误（如 embedding provider 调用失败） | `{"error": "<message>"}` |
 
-**v4 没有"对象过期"概念**：本稿不建模时间，卡 / Position 一律按"现在还活着"处理；一个过期答案只能靠后续被踩把现算 credence 压下去（设计上的妥协，见 [`../../works/v4/card.md`](../../works/v4/card.md) §5 / §12）。
+**v4 没有"对象过期"概念**：不建模时间，卡 / Position 一律按"现在还活着"处理（过期如何处理见 [`../../works/v4/card.md`](../../works/v4/card.md) §5 / §12）。
 
 ## 跟 v3 的差异
 

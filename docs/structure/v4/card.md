@@ -78,7 +78,7 @@ v4 的核心数据结构 —— 一张卡 = **一个 Card(问题,≡ Issue)+ 它
 | `down_count` | integer | 收到的 `argument=−1`(踩 / 反对)review 数。对应 v3 的 `review_down` |
 | `neutral_count` | integer | 收到的 `argument=0`(中立)review 数。对应 v3 的 `review_neutral` |
 
-这是 Position 上**唯一的质量轴**。沉默(没 review)和中立都不进 `up`/`down`,因此不影响 credence。中立堆多了可能在为「还没说出来的答案」背书,见 [`../../works/v4/card.md`](../../works/v4/card.md) §3 末。
+这是 Position 上**唯一的质量轴**。沉默(没 review)和中立都不进 `up`/`down`,因此不影响 credence。中立堆多了可能触发离线衍生新 Position(机制见 [`../../works/v4/card.md`](../../works/v4/card.md) §3 末)。
 
 ### 治理(runtime,SQLite 实时维护)
 
@@ -93,8 +93,6 @@ v4 的核心数据结构 —— 一张卡 = **一个 Card(问题,≡ Issue)+ 它
 |---|---|---|
 | `credence` | `f(up_count, down_count)` | 校验分:`up−down`,或带样本量的 Wilson 下界(10顶0踩 > 1顶0踩)。具体公式见 [`../../works/v4/card.md`](../../works/v4/card.md) §12 待定 |
 | 「当下答案」 | 召回时取 credence 最高的 active Position | 没有 `accepted` 字段;平手用最近更新(最后一条 review `created_at`)tiebreak |
-
-> **为什么 credence 不存列**:它是两个计数的纯函数,和 `accepted` / `momentum` 同性质(派生)。存了会多一层、会漂;排序时拿 `up_count`/`down_count` 现算即可。详见 [`../../works/v4/card.md`](../../works/v4/card.md) §3。
 
 ## 存储
 

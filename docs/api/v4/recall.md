@@ -63,7 +63,7 @@ CLI 对应 [`recall`](../../cli/v4/recall.md)。读路径全貌见 [`../../works
 ### 副作用
 
 - 记同 session 去重(沿用 v3 recall_log)。
-- **不回写任何 Position 字段**：recall / read 不进存储——"被频繁召回 ≠ 被验证过",相关性是检索的产物,不污染校验信号(这是 v4 删掉"势/momentum"的核心理由,见设计 §3)。
+- **不回写任何 Position 字段**：recall / read 不进存储,相关性只在召回时由检索现算(理由见 [`../../works/v4/card.md`](../../works/v4/card.md) §3)。
 
 ### 错误
 
