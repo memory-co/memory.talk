@@ -53,7 +53,7 @@
 1. **解析**出所有 `#…` 问题(`#` 起头、到行尾;行内多个用 `#{…}`)——于是「这条标注里有几个问题」是**自动数出来的**,不靠 AI 自己报。
 2. 每个问题走 [card.md §6](card.md#6-写路径每轮对话怎么变成卡--旁白--惊讶--question) 的三岔(embed 问题 → 撞 `cards` / issue 向量库):
    - **新问题(检索 miss)→ 建一张新卡**(还没有答案、在等答案)。
-   - **老问题(检索 hit)→ 关联**到那张已有卡(annotation ↔ card 连上;**不动老卡任何分数**——相关性只在召回时算,见 [card.md §3](card.md#3-第二推credence--唯一存储的质量轴相关性只在召回时算))。
+   - **老问题(检索 hit)→ 关联**到那张已有卡(annotation ↔ card 连上;**不动老卡任何分数**——相关性只在召回时算,见 [card.md §3](card.md#3-第二推credence--现算的质量分相关性只在召回时算))。
    - 两种情况都**记一条 `card_sessions`**(`card_id` + `session_id` + 这条 round 的 `index`):这就是「这个 session 的这条旁白**启发/碰到**了这张卡」的出处记录([card.md §8](card.md))。
 3. 把 annotation ↔ card 的关联**写进这一行的 `questions[]`**(`card_id` + `is_new`:建了新卡还是关联老卡)——这是 **canonical**(file,§5);SQLite 里的 `card_sessions` 表(card.md §8)就是**从这些 `questions[]` 派生出来的可 join 索引**(card↔session,反查「这个 session 启发了哪些卡」)。
 
@@ -67,7 +67,7 @@
 
 - **第一遍**:`#为什么 pty 会让用户想到 tmux` → 建一张**还没答案的卡**。
 - **后面的轮 / 后面的遍**:标注里写出「他其实要的是可重连会话」——这是对那张卡的一个**答案**,落成它底下的一个 **Position**(答案文本内联在 Position 上),卡从「只有问题」变成「有候选答案」。
-- 再有别的证据 顶/踩 这个 Position(review),按 `credence` 排序——回到 [card.md §3](card.md#3-第二推credence--唯一存储的质量轴相关性只在召回时算) 的校验机制。
+- 再有别的证据 顶/踩 这个 Position(review),按 `credence`(现算)排序——回到 [card.md §3](card.md#3-第二推credence--现算的质量分相关性只在召回时算) 的校验机制。
 
 所以一条龙都长在「逐 round 标注」这个自然动作上:**标注提问 → 建卡(只有问题)+ 记 `card_sessions` 出处;标注/后续答它 → Position;证据顶踩 → credence**。
 
