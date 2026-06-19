@@ -29,7 +29,10 @@ async def test_v3_up_renames_and_drops(tmp_path):
     await v3_up.run(conn, data_root=tmp_path)
     t = await _tables(conn)
     assert {"insights", "insight_stats", "insight_source_cards"} <= t
-    assert "cards" not in t and "reviews" not in t and "card_stats" not in t
+    # old v3 card stat tables are gone (renamed to insight*); the bare
+    # ``cards`` / ``reviews`` names now belong to the new v4 card tables.
+    assert "card_stats" not in t and "card_source_cards" not in t
+    assert {"cards", "reviews"} <= t   # v4 tables created on the freed names
     # id VALUE rewritten card_x → insight_x (column name stays card_id).
     async with conn.execute("SELECT insight FROM insights WHERE card_id='insight_x'") as c:
         assert (await c.fetchone())[0] == "hi"
@@ -97,11 +100,28 @@ async def test_v3_up_moves_file_dir(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_v3_init_fresh_has_insight_tables_no_reviews():
+async def test_v3_init_fresh_has_insight_and_card_tables():
+    """v3 is the full v3→v4 transition: a fresh install has the read-only
+    insight tables AND the 5 new v4 card tables (cards / positions /
+    reviews / card_links / card_sessions)."""
     conn = await aiosqlite.connect(":memory:")
     await v3_init.run(conn, data_root=None)
     t = await _tables(conn)
     assert {"insights", "insight_stats", "insight_source_cards", "sessions",
             "explores", "recall_event", "search_log"} <= t
-    assert "reviews" not in t and "cards" not in t
+    assert {"cards", "positions", "reviews", "card_links", "card_sessions"} <= t
+    await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_v3_up_creates_v4_card_tables_on_renamed_insight():
+    """The same v3 upgrade that renames card→insight also creates the 5
+    new v4 card tables (re-using the freed ``cards`` / ``reviews`` names)."""
+    conn = await aiosqlite.connect(":memory:")
+    await v1_init.run(conn, data_root=None)
+    await v2_up.run(conn, data_root=None)
+    await v3_up.run(conn, data_root=None)
+    t = await _tables(conn)
+    assert {"cards", "positions", "reviews", "card_links", "card_sessions"} <= t
+    assert {"insights", "insight_stats"} <= t   # renamed insight tables coexist
     await conn.close()

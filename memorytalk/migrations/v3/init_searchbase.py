@@ -1,7 +1,18 @@
-"""v3 fresh-install: searchbase (LanceDB) snapshot.
+"""v3 fresh-install: searchbase (LanceDB) snapshot AS OF v4.
 
-Identical to v2 — the v3 rename (cards → insight) added no LanceDB
-collections and no embedding changes (it's SQLite-only). Re-use v2's
-snapshot so there's nothing to keep in sync.
+= the v2 collections (insights / rounds — the v3 rename added no new
+LanceDB collections, it's a SQLite-side rename) PLUS the two new v4
+collections ``cards`` (issue embedding) and ``positions`` (claim
+embedding). Delegates to v2's snapshot then layers the v4 collections on
+top so the two never drift.
 """
-from memorytalk.migrations.v2.init_searchbase import run  # noqa: F401  (re-export)
+from __future__ import annotations
+
+from memorytalk.migrations.v2 import init_searchbase as v2_init
+from memorytalk.service.searchbase_schema import SCHEMAS, V4_CARDS, V4_POSITIONS
+
+
+async def run(admin, *, data_root=None) -> None:
+    await v2_init.run(admin, data_root=data_root)
+    await admin.create_collection(V4_CARDS, SCHEMAS[V4_CARDS])
+    await admin.create_collection(V4_POSITIONS, SCHEMAS[V4_POSITIONS])

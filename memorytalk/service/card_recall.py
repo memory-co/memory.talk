@@ -16,8 +16,8 @@ import logging
 from memorytalk.repository import SQLiteStore
 from memorytalk.searchbase import SearchBackend
 from memorytalk.service.cards import CardServiceError
-from memorytalk.service.v4_credence import sort_key, with_credence
-from memorytalk.service.v4_retrieval import retrieve
+from memorytalk.service.credence import sort_key, with_credence
+from memorytalk.service.card_retrieval import retrieve
 from memorytalk.util.ids import (
     SESSION_PREFIX, SESSION_PREFIX_LEGACY, new_event_id,
 )

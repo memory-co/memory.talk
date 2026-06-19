@@ -17,8 +17,8 @@ from memorytalk.provider.storage import LocalStorage
 from memorytalk.repository.store import SQLiteStore
 from memorytalk.service.cards import CardService
 from memorytalk.service.events import EventWriter
-from memorytalk.service.v4_read import V4ReadService
-from memorytalk.service.v4_search import V4SearchService
+from memorytalk.service.card_read import V4ReadService
+from memorytalk.service.card_search import V4SearchService
 
 SEEDED_SESSION = "sess-test0001"
 

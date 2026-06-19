@@ -1,8 +1,8 @@
 """v4 schemas -- models + defaults. See README.md."""
 from __future__ import annotations
 
-from memorytalk.schemas.v4.card import Card, Position, CardLink, CardSession
-from memorytalk.schemas.v4.requests import (
+from memorytalk.schemas.card import Card, Position, CardLink, CardSession
+from memorytalk.schemas.card_requests import (
     CreateCardRequest, CreatePositionRequest, CreateReviewRequest, CreateLinkRequest,
 )
 

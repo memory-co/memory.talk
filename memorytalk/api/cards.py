@@ -5,14 +5,14 @@ import datetime as _dt
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from memorytalk.api.v4._common import http_from_service_error, require
-from memorytalk.schemas.v4.requests import (
+from memorytalk.api._card_common import http_from_service_error, require
+from memorytalk.schemas.card_requests import (
     CreateCardRequest, CreateCardResponse, CreateCardSessionRequest,
     CreateCardSessionResponse, CreateLinkRequest, CreateLinkResponse,
     CreatePositionRequest, CreatePositionResponse,
 )
 from memorytalk.service.cards import CardServiceError
-from memorytalk.service.v4_credence import sort_key, with_credence
+from memorytalk.service.credence import sort_key, with_credence
 
 router = APIRouter()
 

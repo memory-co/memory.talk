@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from memorytalk.schemas.v4.requests import (
+from memorytalk.schemas.card_requests import (
     CreateCardRequest, CreatePositionRequest, CreateReviewRequest,
 )
 
@@ -43,7 +43,7 @@ async def test_read_position_attaches_reviews(cardsvc):
 
 
 async def test_read_card_includes_links_both_directions(cardsvc):
-    from memorytalk.schemas.v4.requests import CreateLinkRequest
+    from memorytalk.schemas.card_requests import CreateLinkRequest
     a = await cardsvc.svc.create_card(CreateCardRequest(issue="qa", card_id="card_a00001"))
     b = await cardsvc.svc.create_card(CreateCardRequest(issue="qb", card_id="card_b00002"))
     await cardsvc.svc.link(a, CreateLinkRequest(card_id=a, type="specializes", target_id=b))

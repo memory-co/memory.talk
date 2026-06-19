@@ -1,19 +1,27 @@
-"""v3 upgrade: rename the cards LanceDB collection → insights, then
-rewrite its row ids ``card_<ulid>`` → ``insight_<ulid>``.
+"""v3 upgrade: searchbase (LanceDB) side of the v3 → v4 transition.
 
-The id rewrite preserves the existing vectors (NO re-embed): we read
-every row out of the (already-renamed) ``insights`` table, drop it,
-recreate it, and reinsert the rows with rewritten ids. Zero rows → no-op.
-Idempotent: rows already carrying ``insight_`` are left untouched.
+  1. Rename the old ``cards`` collection → ``insights`` and rewrite its row
+     ids ``card_<ulid>`` → ``insight_<ulid>``. The id rewrite preserves the
+     existing vectors (NO re-embed): read every row out of the
+     (already-renamed) ``insights`` table, drop it, recreate it, reinsert
+     with rewritten ids. Zero rows → no-op. Idempotent.
+  2. Create the two new v4 collections ``cards`` (issue embedding) and
+     ``positions`` (claim embedding). The ``cards`` name was just freed by
+     step 1, so it runs after the rename has vacated it. ``create_collection``
+     no-ops if it already exists.
 """
 from __future__ import annotations
 
 from memorytalk.searchbase import AdminBackend
+from memorytalk.service.searchbase_schema import SCHEMAS, V4_CARDS, V4_POSITIONS
 
 
 async def run(admin: AdminBackend, *, data_root=None) -> None:
     await admin.rename_collection("cards", "insights")  # idempotent
     await _rewrite_insight_ids(admin)
+    # New v4 collections (cards / positions). Idempotent.
+    await admin.create_collection(V4_CARDS, SCHEMAS[V4_CARDS])
+    await admin.create_collection(V4_POSITIONS, SCHEMAS[V4_POSITIONS])
 
 
 async def _rewrite_insight_ids(admin: AdminBackend) -> None:

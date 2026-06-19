@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pytest
 
-from memorytalk.schemas.v4.requests import (
+from memorytalk.schemas.card_requests import (
     CreateCardRequest, CreateLinkRequest, CreatePositionRequest,
     CreateReviewRequest, SourceRef,
 )

@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
-from memorytalk.api.v4._common import http_from_service_error, require
-from memorytalk.schemas.v4.requests import CreateReviewRequest, CreateReviewResponse
+from memorytalk.api._card_common import http_from_service_error, require
+from memorytalk.schemas.card_requests import CreateReviewRequest, CreateReviewResponse
 from memorytalk.service.cards import CardServiceError
 
 router = APIRouter()

@@ -9,7 +9,7 @@ dispatches ``sess_`` ids to the v3 read service — this service owns only
 from __future__ import annotations
 
 from memorytalk.repository import SQLiteStore
-from memorytalk.service.v4_credence import sort_key, with_credence
+from memorytalk.service.credence import sort_key, with_credence
 
 
 class V4ReadService:

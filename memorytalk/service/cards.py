@@ -14,7 +14,7 @@ Persistence per write (mirrors InsightService ordering):
 Append-only: a Position is never mutated or deleted — a changed answer is
 a NEW competing Position (``forked_from_position_id`` records lineage).
 Reviews are append-only too. credence is computed at read time, never
-stored (see ``v4_credence``).
+stored (see ``credence``).
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ import datetime as _dt
 import logging
 
 from memorytalk.repository import SQLiteStore
-from memorytalk.schemas.v4.requests import (
+from memorytalk.schemas.card_requests import (
     CreateCardRequest, CreateLinkRequest, CreatePositionRequest,
     CreateReviewRequest,
 )

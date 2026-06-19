@@ -1,20 +1,26 @@
-"""v3 upgrade: rename card subsystem → insight + drop unused reviews.
+"""v3 upgrade: the full v3 → v4 SQLite transition in one version.
 
-Renames the 3 card tables, drops the (unused) reviews table + its indexes,
-renames indexes, moves the file-canonical dir cards/ → insights/, AND
-rewrites the id VALUES ``card_<ulid>`` → ``insight_<ulid>`` (the ``card_``
-prefix is now owned by the v4 question-graph subsystem; insight ids carry
-their own ``insight_`` prefix). All transform logic lives here
-(migrations/), per the migration design.
+  1. Drop the (unused) v3 reviews table + indexes — frees the ``reviews``
+     name for the new v4 stance table.
+  2. Rename the 3 v3 card tables → insight* (read-only old card).
+  3. Rewrite the id VALUES ``card_<ulid>`` → ``insight_<ulid>`` — the
+     ``card_`` prefix is now owned by the v4 question-graph; insight ids
+     carry their own ``insight_`` prefix. Column NAMES stay ``card_id`` /
+     ``source_card_id``; only the VALUES change. Surface is ``insight_id``.
+  4. Move the file-canonical dir ``cards/`` → ``insights/`` and rename each
+     leaf ``card_<ulid>`` → ``insight_<ulid>``.
+  5. CREATE the 5 v4 card tables (cards / positions / reviews / card_links
+     / card_sessions) via the repository's single-source-of-truth schema.
 
-Column NAMES stay ``card_id`` / ``source_card_id`` — only the VALUES are
-rewritten; the API/CLI/schema surface presents them as ``insight_id``.
+All transform logic lives here (migrations/), per the migration design.
 """
 from __future__ import annotations
 
 from pathlib import Path
 
 import aiosqlite
+
+from memorytalk.repository.card_schema import create_card_schema
 
 
 async def _tables(conn) -> set[str]:
@@ -63,6 +69,11 @@ async def run(conn: aiosqlite.Connection, *, data_root: Path | None = None) -> N
         if old.exists() and not new.exists():
             old.rename(new)
         _rewrite_file_dirs(new)
+    # 6. Create the 5 v4 card tables. The ``cards`` / ``reviews`` names were
+    # just freed by the rename + drop above. Idempotent (CREATE IF NOT
+    # EXISTS), no FOREIGN KEY (repo rule).
+    await create_card_schema(conn)
+    await conn.commit()
 
 
 async def _rewrite_ids(conn) -> None:

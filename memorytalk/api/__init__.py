@@ -37,9 +37,9 @@ from memorytalk.service.explores import ExploreService
 from memorytalk.service.search import SearchService
 from memorytalk.service.searchbase_schema import build_search_backend
 from memorytalk.service.sync import SyncWatcher
-from memorytalk.service.v4_read import V4ReadService
-from memorytalk.service.v4_recall import V4RecallService
-from memorytalk.service.v4_search import V4SearchService
+from memorytalk.service.card_read import V4ReadService
+from memorytalk.service.card_recall import V4RecallService
+from memorytalk.service.card_search import V4SearchService
 
 
 def create_app(config: Config | None = None) -> FastAPI:
@@ -194,31 +194,31 @@ def create_app(config: Config | None = None) -> FastAPI:
         await db.close()
         await sync_checkpoints.close()
 
-    app = FastAPI(title="memory.talk v3", lifespan=lifespan)
+    app = FastAPI(title="memory.talk v4", lifespan=lifespan)
     app.state.config = config
 
-    # Mount the v3 routers. Each module exports a ``router``; missing
-    # modules are silently skipped so partial-build environments still
-    # come up (useful during incremental implementation).
+    # Single /v4 API surface. The v4 card subsystem is the product; the
+    # old v3 card lives on as read-only "insight". Infra routers (status /
+    # sessions / sync / explores / recall-history) mount here too. Each
+    # module exports a ``router``; missing modules are silently skipped so
+    # partial-build environments still come up.
+    from memorytalk.api.read import router as read_router        # card/pos/insight/session dispatch
+    app.include_router(read_router, prefix="/v4")
     from memorytalk.api.status import router as status_router
-    app.include_router(status_router, prefix="/v3")
-    from memorytalk.api.read import router as read_router
-    app.include_router(read_router, prefix="/v3")
-    from memorytalk.api.sessions import router as sessions_router
-    app.include_router(sessions_router, prefix="/v3")
+    app.include_router(status_router, prefix="/v4")
+    from memorytalk.api.sessions import router as sessions_router  # infra session crud
+    app.include_router(sessions_router, prefix="/v4")
 
     # Optional routers — lazy import so missing ones don't break boot.
-    for name in ("sync", "search", "insights", "recall", "explores"):
+    #   insights  → read-only old card (GET /v4/insights)
+    #   search    → v4 card search; recall → v4 card recall (+ history GETs)
+    #   cards / positions / card_sessions → v4 card write + reverse lookup
+    for name in (
+        "sync", "explores", "insights", "search", "recall",
+        "cards", "positions", "card_sessions",
+    ):
         try:
             mod = __import__(f"memorytalk.api.{name}", fromlist=["router"])
-            app.include_router(mod.router, prefix="/v3")
-        except ImportError:
-            pass
-
-    # v4 card subsystem routers, mounted under /v4.
-    for name in ("cards", "positions", "sessions", "read", "search", "recall"):
-        try:
-            mod = __import__(f"memorytalk.api.v4.{name}", fromlist=["router"])
             app.include_router(mod.router, prefix="/v4")
         except ImportError:
             pass

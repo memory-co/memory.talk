@@ -1,11 +1,13 @@
-"""v3 fresh-install: SQLite schema snapshot.
+"""v3 fresh-install: full SQLite schema snapshot AS OF v4.
 
-This is what a brand-new ``memory.db`` looks like at v3. The runner
-calls :func:`run` on the empty database when there is no prior
-install detected. This is the v2 schema with the card subsystem renamed
-to insight and the reviews table omitted.
+This is what a brand-new ``memory.db`` looks like at this version (the
+product is "v4"; this is migration version ``v3``). It is the v2 schema
+with the old card subsystem renamed to read-only ``insight`` (reviews
+table omitted), PLUS the 5 new v4 card tables (cards / positions /
+reviews / card_links / card_sessions) layered on via the repository's
+single-source-of-truth schema so the two never drift.
 
-The DDL is split into :data:`TABLES` and :data:`INDEXES` so the
+The insight DDL is split into :data:`TABLES` and :data:`INDEXES` so the
 upgrade path (``up_database``) can sequence them around additive
 ALTERs — an index over a column added by ALTER would fail if it ran
 before the ALTER.
@@ -13,6 +15,8 @@ before the ALTER.
 from __future__ import annotations
 
 import aiosqlite
+
+from memorytalk.repository.card_schema import create_card_schema
 
 # ``TABLES`` is run first so every v3 table exists; ``INDEXES`` runs after.
 # Ordering inside ``TABLES`` preserves FK declarations
@@ -132,4 +136,7 @@ async def run(conn: aiosqlite.Connection, *, data_root=None) -> None:
         await conn.execute(stmt)
     for stmt in INDEXES:
         await conn.execute(stmt)
+    await conn.commit()
+    # + the 5 v4 card tables (single source of truth in repository/).
+    await create_card_schema(conn)
     await conn.commit()
