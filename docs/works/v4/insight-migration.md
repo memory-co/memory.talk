@@ -34,19 +34,17 @@ ALTER TABLE card_source_cards  RENAME TO insight_source_cards;
 
 整个事务成功才提交;任一步失败回滚(见 [migration.md 失败语义](../v3/migration.md))。
 
-## 三、LanceDB collection:不是「改名」是「拷贝」
+## 三、LanceDB collection:create + 从文件罐重灌 + drop
 
-`AdminBackend` **没有** `rename_collection`(只有 `create` / `drop` / `copy_rows` / `add·rename·drop_column`,见 [migration.md](../v3/migration.md))。所以 `cards`→`insights`(`migrations/v3/up_searchbase.py`):
+`AdminBackend` **既没有 `rename_collection` 也没有 `copy_rows`**(实际接口只有 `create` / `drop` / `add·rename·drop_column` + 数据面 `upsert` / `delete` / `search` / `count`,见 [migration.md](../v3/migration.md))——**没有行级拷贝,也没有「读出整张 collection」的接口**。所以 `cards`→`insights` 只能**重灌**(`migrations/v3/up_searchbase.py` 建空 collection + 一次 backfill 灌数据):
 
 ```
-create_collection('insights')      # 跟 cards 同 schema(flat 布局,只 embed 一列文本 + vector)
-copy_rows('cards' → 'insights')    # 行原样搬;若同时做 id 重写(§四),在这步把 id 列改掉
-drop_collection('cards')           # 最后删旧的,腾出 cards collection 名给 v4(embed issue)
+create_collection('insights', SCHEMAS['cards'])   # 同 schema(flat 布局,embed 一列文本 + vector)
+# 从文件罐重灌:遍历 insights/<bucket>/*/card.json → 取 insight 文本 → embed → upsert 进 insights
+drop_collection('cards')                          # 删旧的,腾出 cards collection 名给 v4(embed issue)
 ```
 
-`cards` collection 是 flat 布局、fields schema 空、只 embed `insight` 文本——原样搬即可。
-
-> **更稳的替代:[index-backfill](../v3/index-backfill.md) 从文件罐重灌**。改完 SQLite + 文件罐后,直接对 `insights` collection 跑一次 backfill 从 `insights/<bucket>/*.json` 重建向量,免去 copy_rows 里手工改 id,顺带能换 embedding 维度。代价是重算 embedding(慢、要调 provider)。
+走 [index-backfill](../v3/index-backfill.md) 的路子重灌(现有 backfill 只覆盖 rounds,**需要补一个 insight collection 的重灌入口**)。代价是**重算 embedding**(要调 provider,慢);好处是干净、天然幂等(失败重跑 = 重灌)。**没有「行原样搬」的捷径**——这是实施时核对 API 后确认的现实。
 
 ## 四、id 前缀重写(`card_<ulid>` → `insight_<ulid>`)——最重的一段
 
@@ -59,7 +57,7 @@ drop_collection('cards')           # 最后删旧的,腾出 cards collection 名
 | `recall_event.{returned_ids, skipped_ids}` | **JSON 数组**(events.jsonl) | 数组里每个 id 改 |
 | `search_log.response_json` | **JSON blob**(嵌完整响应,内含 card id) | blob 内所有 card id 改 |
 | `recall_log(session_id, card_id)` | 去重表 | `card_id` 列改 |
-| LanceDB `insights` 行的 id 列 | collection 行 | copy 时改,或 backfill 时自然带新 id |
+| LanceDB `insights` 行的 id 列 | collection 行 | backfill 重灌时自然带新 id(无 copy_rows) |
 | **文件罐 bucket** | 目录名 | bucket = `card_id[5:7]`(跳过 `card_` 前缀);前缀变 `insight_` 后 bucket = `insight_id[8:10]`,**目录要按新 bucket 重排** |
 
 做法:遍历每张卡建 `old card_<ulid>` → `new insight_<ulid>` 映射(ulid 不变、只换前缀),再扫上表每处替换。

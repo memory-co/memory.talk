@@ -253,13 +253,9 @@ class AdminBackend(Protocol):
     ) -> None: ...
 
     async def drop_collection(self, name: str) -> None: ...
-
-    async def copy_rows(
-        self, src: str, dst: str,
-        *, transform: Callable[[dict], dict] | None = None,
-        where: str | None = None,
-    ) -> int: ...
 ```
+
+> **没有 `copy_rows` / 批量行拷贝,也没有「读出整张 collection」的接口**(数据面只有 `upsert` / `delete` / `search` / `count`)。所以 collection 之间搬数据**只能从文件罐重灌**(re-embed,见 [index-backfill](index-backfill.md))——没有行级拷贝这条路。
 
 `SearchBackend` 端口加一个 `admin() -> AdminBackend` 方法返回。
 
