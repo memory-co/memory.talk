@@ -1,9 +1,11 @@
 """PositionStore -- answer candidate persistence: file canonical + SQLite.
 
-File: cards/<bucket>/<card_id>/positions/<position_id>.json (canonical:
-claim + created_at + scope + forked_from_position_id). SQLite mirrors it
-plus the up/down/neutral/review counters. credence is NOT stored --
-computed by the service. No FOREIGN KEY on card_id / forked_from.
+File: cards/<bucket>/<card_id>/positions/<position_id>.json
+(canonical immutable core: claim + created_at only; scope and
+forked_from_position_id are mutable runtime state in SQLite, not part
+of the write-once file). SQLite mirrors claim + created_at plus the
+up/down/neutral/review counters + scope + forked_from_position_id.
+credence is NOT stored -- computed by the service. No FOREIGN KEY.
 """
 from __future__ import annotations
 

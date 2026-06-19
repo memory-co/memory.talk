@@ -120,10 +120,13 @@ V4_TABLES: list[str] = [
         scope                   TEXT NOT NULL DEFAULT '',
         forked_from_position_id TEXT
     )""",
-    # Review = a stance on a Position. argument in {-1,0,1}.
+    # Review = a stance on a Position. argument in {-1,0,1}. card_id is a
+    # redundant cache (= positions.card_id; never drifts) so "all reviews for
+    # this card" needs no join (works §8 / structure review.md).
     """CREATE TABLE IF NOT EXISTS reviews (
         review_id   TEXT PRIMARY KEY,
         position_id TEXT NOT NULL,
+        card_id     TEXT NOT NULL,
         session_id  TEXT NOT NULL,
         indexes     TEXT NOT NULL,
         argument    INTEGER NOT NULL,
@@ -140,14 +143,17 @@ V4_TABLES: list[str] = [
         created_at  TEXT NOT NULL,
         PRIMARY KEY (card_id, type, target_id)
     )""",
-    # card↔session provenance (multi-session). No own id; composite PK.
+    # card↔session provenance (multi-session). No own id. position_id ''
+    # = card-level association. PK (card_id, session_id, position_id): one
+    # session can inspire a card and several of its positions (works §8 /
+    # structure card-session.md).
     """CREATE TABLE IF NOT EXISTS card_sessions (
         card_id     TEXT NOT NULL,
         session_id  TEXT NOT NULL,
-        position_id TEXT,
-        indexes     TEXT NOT NULL,
+        position_id TEXT NOT NULL DEFAULT '',
+        indexes     TEXT NOT NULL DEFAULT '[]',
         created_at  TEXT NOT NULL,
-        PRIMARY KEY (card_id, session_id, indexes)
+        PRIMARY KEY (card_id, session_id, position_id)
     )""",
 ]
 
@@ -155,6 +161,7 @@ V4_INDEXES: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_v4_cards_created ON cards(created_at)",
     "CREATE INDEX IF NOT EXISTS idx_v4_positions_card ON positions(card_id)",
     "CREATE INDEX IF NOT EXISTS idx_v4_reviews_position ON reviews(position_id, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_v4_reviews_card ON reviews(card_id)",
     "CREATE INDEX IF NOT EXISTS idx_v4_links_target ON card_links(target_id)",
     "CREATE INDEX IF NOT EXISTS idx_v4_csess_session ON card_sessions(session_id)",
 ]
@@ -246,6 +253,17 @@ async def test_positions_has_counts_and_governance(v4db):
 async def test_card_links_has_target_type(v4db):
     cols = await _columns(v4db.conn, "card_links")
     assert {"card_id", "type", "target_id", "target_type"} <= cols
+
+
+async def test_reviews_columns(v4db):
+    cols = await _columns(v4db.conn, "reviews")
+    assert {"review_id", "position_id", "card_id", "session_id",
+            "indexes", "argument", "comment", "created_at"} == cols
+
+
+async def test_card_sessions_columns(v4db):
+    cols = await _columns(v4db.conn, "card_sessions")
+    assert {"card_id", "session_id", "position_id", "indexes", "created_at"} == cols
 ```
 
 - [ ] **Step 4: Write the scenario README**
@@ -490,7 +508,7 @@ class CardLink(BaseModel):
 class CardSession(BaseModel):
     card_id: str
     session_id: str
-    position_id: str | None = None
+    position_id: str = ""        # "" = card-level association
     indexes: str
     created_at: str
 
@@ -906,10 +924,12 @@ Expected: FAIL with `ModuleNotFoundError: memorytalk.repository.v4.positions`.
 ```python
 """PositionStore — answer candidate persistence: file canonical + SQLite.
 
-File: cards/<bucket>/<card_id>/positions/<position_id>.json (canonical:
-claim + created_at + scope + forked_from_position_id). SQLite mirrors it
-plus the up/down/neutral/review counters. credence is NOT stored —
-computed by the service. No FOREIGN KEY on card_id / forked_from.
+File: cards/<bucket>/<card_id>/positions/<position_id>.json
+(canonical immutable core: claim + created_at only; scope and
+forked_from_position_id are mutable runtime state in SQLite, not part
+of the write-once file). SQLite mirrors claim + created_at plus the
+up/down/neutral/review counters + scope + forked_from_position_id.
+credence is NOT stored -- computed by the service. No FOREIGN KEY.
 """
 from __future__ import annotations
 
@@ -1052,24 +1072,26 @@ def reviews(v4db):
 
 
 async def test_insert_then_list(reviews):
+    # insert args: review_id, position_id, card_id, session_id, indexes, argument, comment, created_at
     await reviews.insert(
-        "review_1", "pos_1", "sess-a", "1-3", 1, "validated", "2026-06-01T00:00:00Z")
+        "review_1", "pos_1", "card_1", "sess-a", "1-3", 1, "validated", "2026-06-01T00:00:00Z")
     await reviews.insert(
-        "review_2", "pos_1", "sess-b", "4-5", -1, None, "2026-06-02T00:00:00Z")
+        "review_2", "pos_1", "card_1", "sess-b", "4-5", -1, None, "2026-06-02T00:00:00Z")
     rows = await reviews.list_for_position("pos_1")
     assert [r["review_id"] for r in rows] == ["review_2", "review_1"]  # newest first
     assert rows[0]["argument"] == -1
+    assert rows[0]["card_id"] == "card_1"
 
 
 async def test_list_scoped_to_position(reviews):
-    await reviews.insert("review_1", "pos_1", "sess-a", "1", 1, None, "t")
-    await reviews.insert("review_2", "pos_2", "sess-a", "1", 1, None, "t")
+    await reviews.insert("review_1", "pos_1", "card_1", "sess-a", "1", 1, None, "t")
+    await reviews.insert("review_2", "pos_2", "card_1", "sess-a", "1", 1, None, "t")
     assert len(await reviews.list_for_position("pos_1")) == 1
 
 
 async def test_exists_and_count(reviews):
     assert await reviews.exists("review_1") is False
-    await reviews.insert("review_1", "pos_1", "sess-a", "1", 0, None, "t")
+    await reviews.insert("review_1", "pos_1", "card_1", "sess-a", "1", 0, None, "t")
     assert await reviews.exists("review_1") is True
     assert await reviews.count() == 1
 ```
@@ -1098,14 +1120,16 @@ class V4ReviewStore:
         self.conn = conn
 
     async def insert(
-        self, review_id: str, position_id: str, session_id: str, indexes: str,
-        argument: int, comment: str | None, created_at: str,
+        self, review_id: str, position_id: str, card_id: str, session_id: str,
+        indexes: str, argument: int, comment: str | None, created_at: str,
     ) -> None:
+        # card_id is the redundant cache (= positions.card_id); the service
+        # backfills it from position_id before calling.
         await self.conn.execute(
             "INSERT INTO reviews "
-            "(review_id, position_id, session_id, indexes, argument, comment, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (review_id, position_id, session_id, indexes, argument, comment, created_at),
+            "(review_id, position_id, card_id, session_id, indexes, argument, comment, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (review_id, position_id, card_id, session_id, indexes, argument, comment, created_at),
         )
         await self.conn.commit()
 
@@ -1328,6 +1352,7 @@ def sessions(v4db):
 
 
 async def test_insert_then_list_for_card(sessions):
+    # insert args: card_id, session_id, position_id, indexes, created_at
     await sessions.insert("card_1", "sess-a", "pos_1", "11-15", "t")
     rows = await sessions.list_for_card("card_1")
     assert rows[0]["session_id"] == "sess-a"
@@ -1336,21 +1361,28 @@ async def test_insert_then_list_for_card(sessions):
 
 
 async def test_multi_session_per_card(sessions):
-    await sessions.insert("card_1", "sess-a", None, "1-3", "t")
-    await sessions.insert("card_1", "sess-b", None, "4-5", "t")
+    await sessions.insert("card_1", "sess-a", "", "1-3", "t")   # "" = card-level
+    await sessions.insert("card_1", "sess-b", "", "4-5", "t")
+    assert len(await sessions.list_for_card("card_1")) == 2
+
+
+async def test_same_card_session_different_position(sessions):
+    # PK includes position_id → same card+session, two positions = 2 rows
+    await sessions.insert("card_1", "sess-a", "pos_1", "1-3", "t")
+    await sessions.insert("card_1", "sess-a", "pos_2", "4-5", "t")
     assert len(await sessions.list_for_card("card_1")) == 2
 
 
 async def test_reverse_list_cards_for_session(sessions):
-    await sessions.insert("card_1", "sess-a", None, "1-3", "t")
-    await sessions.insert("card_2", "sess-a", None, "7-9", "t")
+    await sessions.insert("card_1", "sess-a", "", "1-3", "t")
+    await sessions.insert("card_2", "sess-a", "", "7-9", "t")
     cards = await sessions.list_cards_for_session("sess-a")
     assert {c["card_id"] for c in cards} == {"card_1", "card_2"}
 
 
 async def test_insert_idempotent_on_pk(sessions):
-    await sessions.insert("card_1", "sess-a", None, "1-3", "t")
-    await sessions.insert("card_1", "sess-a", None, "1-3", "t2")
+    await sessions.insert("card_1", "sess-a", "", "1-3", "t")
+    await sessions.insert("card_1", "sess-a", "", "1-3", "t2")  # same (card,session,position)
     assert len(await sessions.list_for_card("card_1")) == 1
 ```
 
@@ -1379,9 +1411,12 @@ class CardSessionStore:
         self.conn = conn
 
     async def insert(
-        self, card_id: str, session_id: str, position_id: str | None,
+        self, card_id: str, session_id: str, position_id: str,
         indexes: str, created_at: str,
     ) -> None:
+        # position_id "" = card-level association. PK is
+        # (card_id, session_id, position_id); INSERT OR IGNORE makes re-insert
+        # of the same triple idempotent.
         await self.conn.execute(
             "INSERT OR IGNORE INTO card_sessions "
             "(card_id, session_id, position_id, indexes, created_at) "
@@ -1419,8 +1454,9 @@ Expected: 4 PASS.
 
 ## 这个场景在测什么
 card↔session 出处:insert + list_for_card(带 position_id / indexes);
-一卡多 session;反查 list_cards_for_session(session → 哪些卡);同
-(card_id, session_id, indexes) 重复插入幂等。
+一卡多 session;同一卡+session 下不同 position 是两行(PK 含 position_id);
+反查 list_cards_for_session(session → 哪些卡);同
+(card_id, session_id, position_id) 重复插入幂等。
 
 ## 不在这测什么
 - 旁白 annotation 写路径 / questions[] 解析 → service plan

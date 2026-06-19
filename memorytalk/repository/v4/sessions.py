@@ -16,8 +16,8 @@ class CardSessionStore:
         self.conn = conn
 
     async def insert(
-        self, card_id: str, session_id: str, position_id: str = "",
-        indexes: str = "[]", created_at: str = "",
+        self, card_id: str, session_id: str, position_id: str,
+        indexes: str, created_at: str,
     ) -> None:
         await self.conn.execute(
             "INSERT OR IGNORE INTO card_sessions "
