@@ -21,6 +21,7 @@ from ulid import ULID
 
 
 CARD_PREFIX = "card_"
+POSITION_PREFIX = "pos_"
 SESSION_PREFIX = "sess-"          # canonical (new, 0.7.x)
 SESSION_PREFIX_LEGACY = "sess_"   # accepted on read for older data
 REVIEW_PREFIX = "review_"
@@ -31,6 +32,7 @@ EVENT_PREFIX = "evt_"
 
 class IdKind(str, Enum):
     CARD = "card"
+    POSITION = "position"
     SESSION = "session"
     REVIEW = "review"
     SEARCH = "search"
@@ -43,6 +45,10 @@ class InvalidIdError(ValueError):
 
 def new_card_id() -> str:
     return f"{CARD_PREFIX}{ULID()}"
+
+
+def new_position_id() -> str:
+    return f"{POSITION_PREFIX}{ULID()}"
 
 
 def new_review_id() -> str:
@@ -65,6 +71,7 @@ def parse_id(id_str: str) -> tuple[IdKind, str]:
     """Parse a prefixed id into (kind, raw). Raises ``InvalidIdError`` on unknown prefix."""
     for prefix, kind in (
         (CARD_PREFIX, IdKind.CARD),
+        (POSITION_PREFIX, IdKind.POSITION),
         (SESSION_PREFIX, IdKind.SESSION),
         (SESSION_PREFIX_LEGACY, IdKind.SESSION),
         (REVIEW_PREFIX, IdKind.REVIEW),
