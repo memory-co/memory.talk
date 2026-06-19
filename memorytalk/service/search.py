@@ -28,7 +28,7 @@ from pathlib import Path
 
 from memorytalk.config import Config
 from memorytalk.searchbase import Query, SearchBackend
-from memorytalk.service.searchbase_schema import CARDS, ROUNDS
+from memorytalk.service.searchbase_schema import INSIGHTS, ROUNDS
 from memorytalk.repository import SQLiteStore
 from memorytalk.schemas import (
     CardResult, CardStats, SearchResponse, SessionHit, SessionResult,
@@ -219,7 +219,7 @@ class SearchService:
         if self.searchbase is None:
             return []
         hits = await self.searchbase.search(
-            CARDS, Query(text=query, top_k=top_k * _CARD_OVERSAMPLE),
+            INSIGHTS, Query(text=query, top_k=top_k * _CARD_OVERSAMPLE),
         )
         out: list[dict] = []
         for hit in hits:

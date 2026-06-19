@@ -30,7 +30,7 @@ import datetime as _dt
 import logging
 
 from memorytalk.searchbase import Doc, SearchBackend
-from memorytalk.service.searchbase_schema import CARDS, cap_text
+from memorytalk.service.searchbase_schema import INSIGHTS, cap_text
 from memorytalk.repository import SQLiteStore
 from memorytalk.schemas import CreateCardRequest
 from memorytalk.service.events import EventWriter
@@ -150,7 +150,7 @@ class CardService:
         # block card creation; a rebuild can fill it in later.
         if self.search is not None:
             try:
-                await self.search.upsert(CARDS, [
+                await self.search.upsert(INSIGHTS, [
                     Doc(id=card_id, text=cap_text(req.insight), fields={}),
                 ])
             except Exception as e:
@@ -212,7 +212,7 @@ class CardService:
         # 3. Vector — best-effort.
         if self.search is not None:
             try:
-                await self.search.delete(CARDS, [card_id])
+                await self.search.delete(INSIGHTS, [card_id])
             except Exception as e:  # noqa: BLE001
                 _log.warning(
                     "vector delete failed for %s; card_row is None will "

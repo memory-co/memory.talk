@@ -13,7 +13,7 @@ existing on-disk schemas up to match.
 """
 from __future__ import annotations
 
-CARDS = "cards"
+INSIGHTS = "insights"
 ROUNDS = "rounds"
 
 # Max text length searchbase will accept per doc (passed in at
@@ -36,7 +36,7 @@ def cap_text(text: str | None) -> str:
 # rejected. Cards don't: insights are short, and a rejected card just
 # stays un-indexed (no backfill loop), so reject-and-skip is fine.
 SCHEMAS: dict[str, dict] = {
-    CARDS: {"fields": {}},
+    INSIGHTS: {"fields": {}},
     ROUNDS: {
         "fields": {"session_id": "str", "idx": "int", "role": "str"},
         "auto_split": True,
