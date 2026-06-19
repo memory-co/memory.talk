@@ -32,6 +32,9 @@ class V4CardStore:
     def _doc_key(self, card_id: str) -> str:
         return f"{self.PREFIX}/{self._bucket(card_id)}/{card_id}/card.json"
 
+    def _events_key(self, card_id: str) -> str:
+        return f"{self.PREFIX}/{self._bucket(card_id)}/{card_id}/events.jsonl"
+
     # -- file layer --
     async def write_doc(self, card: dict) -> None:
         await self.storage.write_text(
@@ -42,6 +45,12 @@ class V4CardStore:
     async def read_doc(self, card_id: str) -> dict | None:
         text = await self.storage.read_text(self._doc_key(card_id))
         return json.loads(text) if text else None
+
+    async def append_event(self, card_id: str, event: dict) -> None:
+        await self.storage.append_text(
+            self._events_key(card_id),
+            json.dumps(event, ensure_ascii=False) + "\n",
+        )
 
     # -- cards table --
     async def insert(self, card_id: str, issue: str, created_at: str) -> None:
