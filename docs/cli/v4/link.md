@@ -8,7 +8,7 @@ memory.talk card link
 └── list <card_id> [--json]                              # 列一张卡的边(出 + 入)
 ```
 
-调 [`POST /v4/card-links`](../../api/v4/card-links.md)。字段语义见 [`../../structure/v4/card-link.md`](../../structure/v4/card-link.md)。
+调 [`POST /v4/cards/{card_id}/links`](../../api/v4/card-links.md)。字段语义见 [`../../structure/v4/card-link.md`](../../structure/v4/card-link.md)。
 
 > 边连的是**卡(问题)**:主体是 `from_card_id`(`card_<…>`)。`target_id` 一般是另一张卡(`card_<…>`);只有 `suggested_by` 允许指向一个答案(`pos_<…>`)——「这个答案勾出了那个新问题」。
 

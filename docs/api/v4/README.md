@@ -17,13 +17,14 @@ Cards        POST   /v4/cards                               建卡（只一个 i
              GET    /v4/cards                               列卡（按时间 / 数量）
              POST   /v4/cards/{card_id}/positions           给某卡加一个答案 Position
              GET    /v4/cards/{card_id}/positions           列某卡的所有答案（各带计数 + 现算 credence）
+             POST   /v4/cards/{card_id}/links               给某卡建一条 IBIS 出边
+             GET    /v4/cards/{card_id}/links               列某卡的边（出 + 入）
+             POST   /v4/cards/{card_id}/sessions            给某卡记一条出处（card↔session）
+             GET    /v4/cards/{card_id}/sessions            列某卡的出处 session
 
 Reviews      POST   /v4/positions/{position_id}/reviews     对某个 Position 表态（argument ±1/0）
 
-Card-Links   POST   /v4/card-links                          建一条 card↔card 的 IBIS 边
-
-Card-Sessions POST  /v4/card-sessions                       记一条出处（card↔session）
-             GET    /v4/card-sessions?session_id=<sid>      反查「这个 session 启发了哪些卡 / 答案」
+Sessions     GET    /v4/sessions/{session_id}/cards         反查：这个 session 启发了哪些卡 / 答案
 ```
 
 > [`POST /v4/read`](read.md) 按 id 前缀判型（`card_` 整卡 / `pos_` 单答案 / `sess_` session）；session 内容沿用 v3 形态。检索走 [`POST /v4/search`](search.md)（撞问题、无沉浮、DSL 换计数字段）。
@@ -36,7 +37,7 @@ Card-Sessions POST  /v4/card-sessions                       记一条出处（ca
 - **位（scope）是软提示不是门禁**：`scope` 是一句话自由文本（适用场景，可含「不适用于…」），随答案一起注入交给 LLM 自己判语境；**不机械挡卡，跨界默认放行**。相关性只在召回时由检索现算，不回写成字段。
 - **三类关系都不内联、可 join、无 FOREIGN KEY**：`card_links`（card↔card，IBIS 边）、`card_sessions`（card↔session，出处）、`reviews`（对 Position 的表态）各自独立。`session_id` 是扁平列，可直接 join（SQLite 是派生索引，容忍悬挂引用，从不加外键约束）。
 - **无追踪 token**：所有对外主键都是带前缀的裸 id（`card_<ULID>` / `pos_<ULID>` / `review_<ULID>` / `sess_<ULID>`），不发行中间凭据。前缀 = 类型，服务端零成本判型分发。
-- **HTTP 方法**：**POST + JSON body** 默认；只有读静态状态的端点（`GET /v4/cards`、`GET /v4/cards/{id}/positions`、`GET /v4/card-sessions`）用 GET。
+- **HTTP 方法**：**POST + JSON body** 默认；只有读列表 / 静态状态的端点（`GET /v4/cards`、各 `GET /v4/cards/{id}/{positions,links,sessions}`、`GET /v4/sessions/{id}/cards`）用 GET。
 - **append-only**：Position 只增不改不删——答案变了不覆盖、不归档，而是**新增一个竞争 Position**；旧答案被踩则 credence 现算掉下去、自然不再被注入，但仍在卡里可查。Review 同样 append-only（表态错了再写一条相反 argument）。
 
 ## ID 前缀约定

@@ -26,7 +26,7 @@ CLI 对应 [`card create | position`](../../cli/v4/card.md)（读卡走 [`read`]
 | `issue` | 是 | 问题文本，也是 embedding 锚点（检索撞的就是它） |
 | `card_id` | 否 | 不提供则自动生成 `card_<ULID>`；传入必须是 `card_<...>` 形态 |
 
-> 一张卡 = 一个问题（1:1）。`issue` 创建即冻（不可变核）。卡↔卡的边不在这里建，走 [`POST /v4/card-links`](card-links.md)。
+> 一张卡 = 一个问题（1:1）。`issue` 创建即冻（不可变核）。卡↔卡的边不在这里建，走 [`POST /v4/cards/{card_id}/links`](card-links.md)。
 
 ### 响应
 
