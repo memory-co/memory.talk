@@ -32,10 +32,14 @@ from memorytalk.service import (
     RecallService,
 )
 from memorytalk.service.backfill import IndexBackfill
+from memorytalk.service.cards import CardService
 from memorytalk.service.explores import ExploreService
 from memorytalk.service.search import SearchService
 from memorytalk.service.searchbase_schema import build_search_backend
 from memorytalk.service.sync import SyncWatcher
+from memorytalk.service.v4_read import V4ReadService
+from memorytalk.service.v4_recall import V4RecallService
+from memorytalk.service.v4_search import V4SearchService
 
 
 def create_app(config: Config | None = None) -> FastAPI:
@@ -140,6 +144,11 @@ def create_app(config: Config | None = None) -> FastAPI:
             config=config, db=db, search=searchbase,
         )
         app.state.explore = ExploreService(db=db, config=config)
+        # v4 card subsystem (governed question graph) — coexists with v3.
+        app.state.cards = CardService(db=db, search=searchbase, events=events)
+        app.state.v4read = V4ReadService(db=db)
+        app.state.v4search = V4SearchService(db=db, search=searchbase)
+        app.state.v4recall = V4RecallService(db=db, search=searchbase)
 
         # Spin up the watcher if settings says so. start() returns fast
         # now — backfill runs as a background task; uvicorn's "startup
@@ -203,6 +212,14 @@ def create_app(config: Config | None = None) -> FastAPI:
         try:
             mod = __import__(f"memorytalk.api.{name}", fromlist=["router"])
             app.include_router(mod.router, prefix="/v3")
+        except ImportError:
+            pass
+
+    # v4 card subsystem routers, mounted under /v4.
+    for name in ("cards", "positions", "sessions", "read", "search", "recall"):
+        try:
+            mod = __import__(f"memorytalk.api.v4.{name}", fromlist=["router"])
+            app.include_router(mod.router, prefix="/v4")
         except ImportError:
             pass
 

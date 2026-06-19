@@ -65,3 +65,28 @@ class CreateLinkResponse(BaseModel):
     type: str
     target_id: str
     target_type: str
+
+
+class CreateCardSessionRequest(BaseModel):
+    session_id: str
+    position_id: str = ""          # "" = card-level association
+    indexes: str = "[]"
+
+
+class CreateCardSessionResponse(BaseModel):
+    status: Literal["ok"] = "ok"
+    card_id: str
+    session_id: str
+    position_id: str
+
+
+class V4SearchRequest(BaseModel):
+    query: str = ""
+    where: str | None = None
+    limit: int = 20
+
+
+class V4RecallRequest(BaseModel):
+    session_id: str
+    prompt: str
+    top_k: int = 5
