@@ -100,6 +100,11 @@ class AdminBackend(Protocol):
 
     async def drop_collection(self, name: str) -> None: ...
 
+    async def rename_collection(self, old: str, new: str) -> None:
+        """Rename a collection (data preserved). Idempotent: no-op if
+        ``old`` is absent or ``new`` already exists."""
+        ...
+
 
 @runtime_checkable
 class SearchBackend(Protocol):

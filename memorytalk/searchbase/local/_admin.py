@@ -136,3 +136,34 @@ class LocalAdminBackend(AdminBackend):
         self._index._declared.pop(name, None)
         self._index._auto_split.discard(name)
         self._index._fts_index_known.discard(name)
+
+    async def rename_collection(self, old: str, new: str) -> None:
+        """Rename a collection (data preserved). Idempotent: no-op if
+        ``old`` is absent or ``new`` already exists."""
+        tables = await self._index._list_tables()
+        if old not in tables or new in tables:
+            return
+        try:
+            await self._index.db.rename_table(old, new)
+        except (AttributeError, NotImplementedError):
+            import os
+            import lancedb
+            try:
+                await self._index.db.close()
+            except Exception:
+                pass
+            os.rename(
+                self._index.data_dir / f"{old}.lance",
+                self._index.data_dir / f"{new}.lance",
+            )
+            self._index.db = await lancedb.connect_async(str(self._index.data_dir))
+        # Mirror the bookkeeping that create/drop_collection maintain.
+        self._index._collections.discard(old)
+        self._index._collections.add(new)
+        spec = self._index._declared.pop(old, None)
+        if spec is not None:
+            self._index._declared[new] = spec
+        if old in self._index._auto_split:
+            self._index._auto_split.discard(old)
+            self._index._auto_split.add(new)
+        self._index._fts_index_known.discard(old)
