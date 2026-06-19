@@ -2,7 +2,7 @@
 
 ## POST /v4/search
 
-有意识检索:拿 query 撞**问题(`issue`)**——`cards` 向量库 + FTS 混合召回,返回匹配的卡,每张带它**当下用的答案**(现算 credence 最高的 Position)。可选 `where` DSL 按计数 / 时间过滤。
+有意识检索:拿 query 撞**问题 + 答案**(`issue` + `claim`,`cards` + `positions` 向量库 + FTS)混合召回,返回匹配的卡,每张带它**最相关 / 当下的答案**(claim 命中则取该答案,否则取现算 credence 最高的 Position)。可选 `where` DSL 按计数 / 时间过滤。
 
 跟 [`POST /v4/recall`](recall.md) 的区别:recall 是 hook 阶段无意识注入(极简);search 是 agent 主动检索(带 query + DSL + 排序)。
 
@@ -20,7 +20,7 @@ CLI 对应 [`search <query> [--where DSL]`](../../cli/v4/search.md)。
 
 | 字段 | 必填 | 说明 |
 |---|---|---|
-| `query` | 是(可空串) | 撞 `issue` 的检索词。空串 = 不做相关性、纯靠 `where` 过滤 |
+| `query` | 是(可空串) | 撞 `issue` / `claim` 的检索词。空串 = 不做相关性、纯靠 `where` 过滤 |
 | `where` | 否 | DSL 过滤(见下),作用在卡的当下答案的计数 / 卡的元数据上 |
 | `limit` | 否,默认 `20`,上限 `200` | 返回多少张卡 |
 

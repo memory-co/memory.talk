@@ -16,7 +16,7 @@ memory.talk recall --session <session_id> --prompt '<prompt>' [--json]
 ## 召回流程
 
 ```
-召回   : prompt → embed → 撞卡的 issue(向量 + FTS)→ 取命中卡底下的 Position
+召回   : prompt → embed → 撞 issue + claim(向量 + FTS)→ 命中的 Position(争议卡里贴 context 的那侧排上来)
          (相不相关就在这一步由检索算清,不读任何存储字段)
 排序   : 命中卡的 Position 按现算校验分(up − down / Wilson)排序,平手用最近更新
          (最后一条 review 时间)tiebreak;一张卡通常只取最高的那个 = 当下答案

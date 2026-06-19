@@ -137,7 +137,7 @@ CREATE INDEX idx_pos_card ON positions(card_id);
 
 - **无 FOREIGN KEY**:SQLite 是文件罐的派生索引,容忍悬空引用(`positions.card_id`、`forked_from_position_id` 都不加 FK)。这是本仓硬约束。
 - `up_count` / `down_count` / `neutral_count` 就是 v3 `card_stats` 那几个计数器搬到 Position(`neutral_count` = v3 `review_neutral`);v3 的 `read_count` / `recall_count` 这套 engagement 计数 v4 **不再存**(相关性只在召回时算)。
-- 向量侧只 embed `cards.issue`,索引在 `vectors/`(LanceDB),见 [filesystem.md](filesystem.md)。
+- 向量侧 embed `cards.issue`(问题级)+ `positions.claim`(答案级)两个 collection,索引在 `vectors/`(LanceDB),见 [filesystem.md](filesystem.md)。
 
 存储分层(file canonical + SQLite index)总体模式见 [`../v3/filesystem.md`](../v3/filesystem.md) 与 [`../../works/v4/card.md`](../../works/v4/card.md) §8。
 

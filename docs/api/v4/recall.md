@@ -2,7 +2,7 @@
 
 ## POST /v4/recall
 
-hook 阶段的**无意识召回**：拿当前 context 撞**问题**（issue 向量库 + FTS），取命中卡底下的 Position，按**现算校验分**排序，连各自的 `scope` 软提示注入 LLM context。
+hook 阶段的**无意识召回**：拿当前 context 撞**问题 + 答案**（`issue` + `claim` 两个向量库 + FTS），命中的 Position 按**检索相关性 + 现算校验分**排序（相关性选「哪一侧」、credence 选验证最好的），连各自的 `scope` 软提示注入 LLM context。争议卡里跟当前 context 最贴的那侧答案自然排上来。
 
 跟 v3 recall 的关键差别：v4 召回到的是**答案候选(Position)**而非整卡，而且**位(scope)不再是门禁**——不机械挡卡，跨界默认放行，让 LLM 看着 scope 自己判语境。
 
@@ -20,12 +20,12 @@ CLI 对应 [`recall`](../../cli/v4/recall.md)。读路径全貌见 [`../../works
 | 字段 | 必填 | 说明 |
 |---|---|---|
 | `session_id` | 是 | 当前 session（同 session 内去重，沿用 v3 recall 行为） |
-| `prompt` | 是 | 当前 context / prompt 文本，embed 后去撞 `cards` collection 的 `issue` |
+| `prompt` | 是 | 当前 context / prompt 文本，embed 后去撞 `cards`(`issue`)+ `positions`(`claim`)两个 collection |
 
 ### 流程（服务端）
 
 ```
-召回   : prompt → embed → 撞卡的问题(向量 + FTS)→ 取命中卡底下的 Position
+召回   : prompt → embed → 撞 issue + claim(向量 + FTS)→ 命中的 Position(贴 context 的那侧排上来)
          (相不相关就在这一步由检索算清,不读任何存储字段)
 排序   : 命中的 Position 按现算校验分(up−down / Wilson)排序;平手用最近一条 review 时间 tiebreak
          一张卡通常只取最高的那个(当下答案,非「采纳」状态)

@@ -1,6 +1,6 @@
 # search
 
-有意识检索:拿 query 撞**问题(`issue`)**,返回匹配的卡,每张带它**当下用的答案**(现算 credence 最高的 Position)。
+有意识检索:拿 query 撞**问题 + 答案**(`issue` + `claim`),返回匹配的卡,每张带它**最相关 / 当下的答案**(claim 命中取该答案,否则取现算 credence 最高的)。
 
 ```bash
 memory.talk search <query> [--where '<DSL>'] [--limit N] [--json]
@@ -12,7 +12,7 @@ memory.talk search <query> [--where '<DSL>'] [--limit N] [--json]
 
 | 参数 | 必填 | 说明 |
 |---|---|---|
-| `<query>` | 是(可空串 `""`) | 撞 `issue` 的检索词;空串 = 纯按 `--where` 过滤 |
+| `<query>` | 是(可空串 `""`) | 撞 `issue` / `claim` 的检索词;空串 = 纯按 `--where` 过滤 |
 | `--where` | 否 | DSL 过滤(见下) |
 | `--limit` | 否,默认 `20`,上限 `200` | 返回多少张卡 |
 
