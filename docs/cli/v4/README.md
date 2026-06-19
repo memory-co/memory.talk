@@ -127,9 +127,7 @@ memory.talk card review --position pos_OLD --vote -1 --cite sess_xyz:4-9 --comme
 
 | 命令 | 文档 |
 |---|---|
-| `card`(create / position / review) | [card.md](card.md) |
-| ↳ `card review`(细节) | [review.md](review.md) |
-| ↳ `card link`(create / list) | [link.md](link.md) |
+| `card`(create / position / review / link) | [card.md](card.md) |
 | `read` | [read.md](read.md) |
 | `search` | [search.md](search.md) |
 | `recall` | [recall.md](recall.md) |

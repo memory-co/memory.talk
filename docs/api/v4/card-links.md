@@ -2,7 +2,7 @@
 
 card↔card 的 **IBIS 边**——嵌在卡下(跟 `positions` 同构:`/v4/cards/{card_id}/...`)。`card_id`(主体卡,边的 from 端)在路径里。
 
-CLI 对应 [`card link`](../../cli/v4/link.md)(`card link create` / `card link list`)。字段语义详见 [`../../structure/v4/card-link.md`](../../structure/v4/card-link.md)。
+CLI 对应 [`card link`](../../cli/v4/card.md#card-link)(`card link create` / `card link list`)。字段语义详见 [`../../structure/v4/card-link.md`](../../structure/v4/card-link.md)。
 
 > SQLite 表名仍是 `card_links`(只是 API 路径嵌到卡下);Position 之间不直接结网,边只在卡↔卡层。
 

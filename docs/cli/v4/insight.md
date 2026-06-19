@@ -10,7 +10,7 @@ memory.talk insight
 
 走 v3 改名后的端点 `/v3/insights`(见 [`../../works/v4/card.md`](../../works/v4/card.md#9-与-v3--insight-的共存与迁移))。数据结构沿用 v3 talk-card(`insight` / `rounds` / `stats` / `reviews`),只是前缀 `card_` → `insight_`。
 
-> **只读**:`insight` 没有 create / review 子命令——老数据冻结。要继续往问题图里沉淀,用 [`card`](card.md) / [`review`](review.md)。老洞见可逐条**投影**进 v4 图(一条 insight → 一张卡 + 一个 Position),投影策略见 works §9 步骤三。
+> **只读**:`insight` 没有 create / review 子命令——老数据冻结。要继续往问题图里沉淀,用 [`card`](card.md)(create / position / review / link)。老洞见可逐条**投影**进 v4 图(一条 insight → 一张卡 + 一个 Position),投影策略见 works §9 步骤三。
 
 ## insight search
 
