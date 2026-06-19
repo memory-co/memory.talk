@@ -10,18 +10,13 @@ CLI 对应 [`card create | view`](../../cli/v4/card.md)。字段语义详见 [`.
 
 ## POST /v4/cards
 
-创建一张卡（一个 `issue`）。可选地在同一次请求里带上**第一个答案** Position 和它的出处。自动计算 `issue` 的 embedding 并写向量库。
+创建一张卡（一个 `issue`）。**只建问题，不带答案**——答案（Position）走 [`POST /v4/cards/{card_id}/positions`](#post-v4cardscard_idpositions)。一张没有任何 Position 的卡是合法的（还在等答案的问题）。自动计算 `issue` 的 embedding 并写向量库。
 
 ### 请求体
 
 ```json
 {
   "issue": "用户偏好什么回答风格?",
-  "position": {
-    "claim": "偏简洁,先给结论再展开",
-    "scope": "技术问答场景;闲聊不一定适用",
-    "cite": {"session_id": "sess_abc123", "indexes": "11-15"}
-  },
   "card_id": "card_01jz8k2m"
 }
 ```
@@ -29,10 +24,6 @@ CLI 对应 [`card create | view`](../../cli/v4/card.md)。字段语义详见 [`.
 | 字段 | 必填 | 说明 |
 |---|---|---|
 | `issue` | 是 | 问题文本，也是 embedding 锚点（检索撞的就是它） |
-| `position` | 否 | 首个答案。不传 = 建一张**还没答案的卡**（一个还在等答案的问题，合法） |
-| `position.claim` | `position` 在时必填 | 答案文本，内联在 Position 上（不单独建节点、不共享） |
-| `position.scope` | 否 | 一句话适用场景（软提示，非门禁；负边界「不适用于…」也写进来）。默认 `""` |
-| `position.cite` | 否 | 出处 `{session_id, indexes}`——落成一条 `card_sessions`。`indexes` 语法见下 |
 | `card_id` | 否 | 不提供则自动生成 `card_<ULID>`；传入必须是 `card_<...>` 形态 |
 
 > 一张卡 = 一个问题（1:1）。`issue` 创建即冻（不可变核）。卡↔卡的边不在这里建，走 [`POST /v4/card-links`](card-links.md)。
@@ -40,28 +31,22 @@ CLI 对应 [`card create | view`](../../cli/v4/card.md)。字段语义详见 [`.
 ### 响应
 
 ```json
-{"status": "ok", "card_id": "card_01jz8k2m", "position_id": "pos_01jzp3nq"}
+{"status": "ok", "card_id": "card_01jz8k2m"}
 ```
 
-不带 `position` 时 `position_id` 为 `null`。返回的 id 都是带前缀裸 id，可直接喂给后续端点。
+返回的 `card_id` 是带前缀裸 id，可直接喂给后续端点（加答案、连边）。
 
 ### 副作用
 
 - 校验 `issue` 非空 → 失败整条不落库。
 - 自动计算 `issue` 的 embedding，写向量库（`cards` collection）。
-- 若带 `position`：落一个 Position（`claim` 内联，`up_count=down_count=neutral_count=0`，`scope` 如给），`position_id` = `pos_<ULID>`。
-- 若带 `position.cite`：校验 `session_id` 存在 + `indexes` 不越界，落一条 `card_sessions`（`card_id` + `session_id` + `position_id` + `indexes`）。
-- 落盘 `cards/<bucket>/<card_id>/card.json`（canonical：`issue` + `created_at`）；Position 落 `cards/<bucket>/<card_id>/positions/<pid>.json`（canonical：`claim`）。
+- 落盘 `cards/<bucket>/<card_id>/card.json`（canonical：`issue` + `created_at`）。
 
 ### 错误
 
 | 情况 | 状态 / 消息 |
 |---|---|
 | `issue` 为空 / 非字符串 | 400, `issue required` |
-| `position.claim` 缺失（带了 `position`） | 400, `position.claim required` |
-| `position.cite.session_id` 前缀错 | 400, `invalid session_id prefix` |
-| `position.cite.session_id` 不存在 | 400, `session <sid> not found` |
-| `position.cite.indexes` 非单调 / 越界 | 400, `indexes must be monotonically increasing` / `index N out of range for session <sid>` |
 | 显式传入 `card_id` 前缀错 | 400, `invalid card_id prefix` |
 | 显式传入 `card_id` 已存在 | 409, `card_id already exists` |
 | embedding provider 调用失败 | 500, `embedding failed: <details>` |
@@ -117,7 +102,7 @@ CLI 对应 [`card create | view`](../../cli/v4/card.md)。字段语义详见 [`.
 {
   "claim": "偏详细,默认带背景和权衡",
   "scope": "新人 onboarding 场景",
-  "cite": {"session_id": "sess_def456", "indexes": "3,7,12"},
+  "source": {"session_id": "sess_def456", "indexes": "3,7,12"},
   "forked_from_position_id": "pos_01jzp3nq"
 }
 ```
@@ -126,7 +111,7 @@ CLI 对应 [`card create | view`](../../cli/v4/card.md)。字段语义详见 [`.
 |---|---|---|
 | `claim` | 是 | 答案文本（内联） |
 | `scope` | 否 | 一句话适用场景软提示，默认 `""` |
-| `cite` | 否 | 出处 `{session_id, indexes}` → 落一条 `card_sessions` |
+| `source` | 否 | 出处 `{session_id, indexes}` → 落一条 `card_sessions` |
 | `forked_from_position_id` | 否 | 信念分叉血缘：本答案从哪个旧 Position 分出来（`pos_<...>`，保认知史；见 [`../../structure/v4/card.md`](../../structure/v4/card.md)） |
 | `position_id` | 否 | 不提供则自动生成 `pos_<ULID>` |
 
@@ -140,7 +125,7 @@ CLI 对应 [`card create | view`](../../cli/v4/card.md)。字段语义详见 [`.
 
 - 校验 `card_id` 存在、`claim` 非空、`forked_from_position_id`（如给）存在且 `pos_` 前缀 → 任一失败整条不落库。
 - 落一个 Position（计数全 0），canonical 写 `positions/<pid>.json`。
-- 若带 `cite`：落一条 `card_sessions`。
+- 若带 `source`：落一条 `card_sessions`。
 - **不动其它 Position**：append-only，新增不覆盖；"哪个答案当下用"由召回时现算 credence 决定，不在这里改任何状态位。
 
 ### 错误
@@ -149,7 +134,7 @@ CLI 对应 [`card create | view`](../../cli/v4/card.md)。字段语义详见 [`.
 |---|---|
 | `card_id` 不存在 | 404, `card <cid> not found` |
 | `claim` 为空 | 400, `claim required` |
-| `cite.session_id` 不存在 / `indexes` 越界 | 400, 同 `POST /v4/cards` |
+| `source.session_id` 前缀错 / 不存在 / `indexes` 越界 | 400, `invalid session_id prefix` / `session <sid> not found` / `index N out of range for session <sid>` |
 | `forked_from_position_id` 前缀错 / 不存在 | 400, `invalid forked_from_position_id prefix` / `position <pid> not found` |
 | 显式 `position_id` 已存在 | 409, `position_id already exists` |
 

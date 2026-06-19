@@ -2,7 +2,7 @@
 
 **card↔session 出处**关系：哪个 session（的哪几条旁白 round）**启发 / 生出**了这张卡或某个答案。和 [`card_links`](card-links.md)（card↔card）平行——`card_links` 管卡间关系，`card_sessions` 管卡和 session 的关系。支持多 session。
 
-CLI 一般不直接调这个端点——出处由**旁白 / 标注机制**自动写入（见 [`POST /v4/cards`](cards.md) 的 `cite`、[session-annotation](../../works/v4/session-annotation.md)）。本页两个端点用于显式记录和反查。字段语义详见 [`../../structure/v4/card-session.md`](../../structure/v4/card-session.md)。
+CLI 一般不直接调这个端点——出处由**旁白 / 标注机制**自动写入（也可在 [`POST /v4/cards/{card_id}/positions`](cards.md#post-v4cardscard_idpositions) 带 `source`、或 [session-annotation](../../works/v4/session-annotation.md)）。本页两个端点用于显式记录和反查。字段语义详见 [`../../structure/v4/card-session.md`](../../structure/v4/card-session.md)。
 
 ---
 

@@ -1,11 +1,13 @@
 # card
 
-v4 卡的写入 + 查看入口。一张卡 = **一个问题(Issue)+ 若干答案(Position)**,所以 `card` 拆成两条子命令:
+v4 卡的写入 + 查看入口。一张卡 = **一个问题(Issue)+ 若干答案(Position)**,而 Card 和 Position 是**两个对象**——所以 `card` 拆成三条子命令:**建问题**、**加答案**、**看卡**:
 
 ```
 memory.talk card
-├── create (--card <cid> | --issue '<问题>') --answer '<答案>' [--cite <sid>:<indexes> ...] [--scope '<场景>'] [--json]
-│                                                    # 建新问题 / 给老问题加一个答案
+├── create --issue '<问题>' [--card_id <id>] [--json]
+│                                                    # 建一张卡(只有问题;没答案也合法)
+├── position --card <cid> --answer '<答案>' [--source <sid>:<indexes> ...] [--scope '<场景>'] [--position_id <id>] [--json]
+│                                                    # 给一张卡加一个答案(Position)
 └── view <card_id> [--json]                          # 看一张卡:问题 + 它所有答案(各自 credence / 顶踩 / scope)
 ```
 
@@ -15,14 +17,58 @@ memory.talk card
 
 ## card create
 
-在一张卡下创建一个候选答案(Position);没给 `--card` 时先建一张新卡(新问题)。
+建一张卡——**只立一个问题(`issue`),不带答案**。一张没有任何 Position 的卡是合法的(就是个还在等答案的问题,见 [`../../works/v4/card.md`](../../works/v4/card.md));答案另走 [`card position`](#card-position)。
 
 ```bash
-memory.talk card create \
-    (--card <card_id> | --issue '<问题文本>') \
+memory.talk card create --issue '<问题文本>' [--card_id <id>] [--json]
+```
+
+### 参数
+
+| 参数 | 必填 | 说明 |
+|---|---|---|
+| `--issue` | 是 | 问题文本(`issue`),也是 embedding 锚点(检索撞的就是它)。值支持 `@<file>` / `@-`(见 [#文本字段:传文件--stdin](#文本字段传文件--stdin)) |
+| `--card_id` | 否 | 显式指定 id;不提供则自动生成 `card_<ULID>` |
+
+### 输出 — Markdown(默认)
+
+````markdown
+ok: created `card_01jz8k2m`
+````
+
+### 输出 — JSON(`--json`)
+
+```json
+{"status": "ok", "card_id": "card_01jz8k2m"}
+```
+
+### 副作用
+
+- 落 `cards`(`issue` + `created_at`)+ 计算 `issue` 的 embedding 写向量库(检索锚点)。
+- 文件罐:`cards/<bucket>/<card_id>/card.json`(问题不可变)。
+- **不落任何 Position**——答案另走 `card position`。
+
+### 错误
+
+| 情况 | 行为 |
+|---|---|
+| server 未运行 | `error: cannot reach server`,exit 1 |
+| `--issue` 缺失 / 空 | `error: --issue required`,exit 1 |
+| `--card_id` 前缀错 / 已存在 | `error: invalid card_id prefix` / `... already exists`,exit 1 |
+
+---
+
+## card position
+
+给一张**已存在的卡**加一个答案候选(Position)。同一个问题下可以有多个答案,各自被顶踩、按现算 credence 竞争。
+
+```bash
+memory.talk card position \
+    --card <card_id> \
     --answer '<答案文本>' \
-    [--cite <session_id>:<indexes> ...] \
+    [--source <session_id>:<indexes> ...] \
     [--scope '<适用场景描述>'] \
+    [--position_id <id>] \
     [--json]
 ```
 
@@ -30,38 +76,30 @@ memory.talk card create \
 
 | 参数 | 必填 | 说明 |
 |---|---|---|
-| `--issue` | 二选一 | 新建一张卡,`issue` = 这句问题文本(也是 embedding 锚点)。与 `--card` 互斥 |
-| `--card` | 二选一 | 给已有卡 `<card_id>`(`card_<…>`)加答案,不新建卡。与 `--issue` 互斥 |
-| `--answer` | 是 | 这个候选答案的文本(`claim`,内联在 Position 上,不单独建节点、不共享) |
-| `--cite` | 否,可多次 | 出处:`<session_id>:<indexes>`,每个落一条 `card_sessions`。支持多 session(多次 `--cite`) |
-| `--scope` | 否 | 一句话**适用场景**描述(`scope`,软提示,非门禁;负边界如「别用于育儿」直接写进这句) |
-| `--card_id` / `--position_id` | 否 | 显式指定 id;不提供则自动生成 `card_<ULID>` / `pos_<ULID>` |
+| `--card` | 是 | 给哪张卡(`card_<…>`)加答案;卡必须**已存在** |
+| `--answer` | 是 | 答案文本(`claim`,内联在 Position 上,不单独建节点、不共享) |
+| `--source` | 否,可多次 | 出处:`<session_id>:<indexes>`,每个落一条 `card_sessions`。支持多 session(多次 `--source`) |
+| `--scope` | 否 | **这个答案(Position)的**一句话适用场景描述(`scope` 是 **Position 字段**,软提示、非门禁;负边界如「别用于育儿」直接写进这句)。不是卡级属性 |
+| `--position_id` | 否 | 显式指定 id;不提供则自动生成 `pos_<ULID>` |
 
-> **文本字段(`--issue` / `--answer` / `--scope`)的值都支持 `@<file>` / `@-`**:从文件 / stdin **原样**读入,专治内容里的引号、换行、`$`、反引号等特殊字符(见 [#文本字段:传文件--stdin](#文本字段传文件--stdin))。
+> **文本字段(`--answer` / `--scope`)的值都支持 `@<file>` / `@-`**:从文件 / stdin **原样**读入,专治内容里的引号、换行、`$`、反引号等特殊字符(见 [#文本字段:传文件--stdin](#文本字段传文件--stdin))。
 
 详细字段语义见 [`../../structure/v4/card.md`](../../structure/v4/card.md)。
 
-### `--issue` vs `--card`(必须二选一)
+### `--source` 语法 / indexes
 
-- `--issue '<问题>'`:**建新卡**——新问题落 `cards`,再在其下落第一个 Position(`--answer`)。用于"冒出一个图里还没有的新问题"。
-- `--card <cid>`:**复用老卡**——只在 `<cid>` 下加一个**竞争 Position**。用于"这个问题已经在图里,我有个(不同的)答案"。
-
-两者**不能同时给**(报错),也**不能都不给**(报错)。"这是新问题还是老问题"的判定本身由上游写路径的检索 miss/hit 决定(见 [`../../works/v4/card.md`](../../works/v4/card.md#6-写路径每轮对话怎么变成卡--旁白--惊讶--question));CLI 这层只执行已定的那一岔。
-
-### `--cite` 语法 / indexes
-
-每个 `--cite` 形如 `<session_id>:<indexes>`,`indexes` 语法沿用 v3:
+每个 `--source` 形如 `<session_id>:<indexes>`,`indexes` 语法沿用 v3:
 
 | 形式 | 示例 | 含义 |
 |---|---|---|
 | 区间 | `sess_abc:11-15` | 闭区间 `[11,15]`,展开 `11..15` |
 | 列表 | `sess_abc:3,7,12` | 离散 index 列表 |
 
-约束(不满足整次拒绝):**严格单调递增**(`15-11` / `12,7,3` 报错);**越界 / session 不存在** 报错。多个 `--cite` 各落一条 `card_sessions`(`position_id` 指向新建的这个答案)。
+约束(不满足整次拒绝):**严格单调递增**(`15-11` / `12,7,3` 报错);**越界 / session 不存在** 报错。多个 `--source` 各落一条 `card_sessions`(`position_id` 指向新建的这个答案)。
 
 ### 文本字段:传文件 / stdin
 
-`--issue` / `--answer` / `--scope` 的值有三种传法,后两种**不经 shell / JSON 转义**,专门用于文本带引号、换行、`$`、反引号等特殊字符的情况:
+`--issue`(create)、`--answer` / `--scope`(position)的值有三种传法,后两种**不经 shell / JSON 转义**,专门用于文本带引号、换行、`$`、反引号等特殊字符的情况:
 
 | 写法 | 含义 |
 |---|---|
@@ -71,23 +109,15 @@ memory.talk card create \
 
 ```bash
 # 答案带特殊字符 → 写进文件再传,一个字符都不丢
-memory.talk card create --issue '提交信息怎么写?' --answer @answer.md --cite sess_abc:11-15
+memory.talk card position --card card_01jz8k2m --answer @answer.md --source sess_abc:11-15
 
 # 或从 stdin 喂(剪贴板 / heredoc)
-pbpaste | memory.talk card create --card card_01jz8k2m --answer @-
+pbpaste | memory.talk card position --card card_01jz8k2m --answer @-
 ```
 
 > 值本身就以 `@` 开头时,改用 `@<file>` / `@-` 传(文件内容原样读入,不会被再解释成路径)。
 
 ### 输出 — Markdown(默认)
-
-新建卡 + 答案:
-
-````markdown
-ok: created `card_01jz8k2m` (issue) · `pos_01jzp3nq` (answer)
-````
-
-给老卡加答案:
 
 ````markdown
 ok: `pos_01jzr5kq` (answer) under `card_01jz8k2m`
@@ -102,29 +132,28 @@ ok: `pos_01jzr5kq` (answer) under `card_01jz8k2m`
 ### 输出 — JSON(`--json`)
 
 ```json
-{"status": "ok", "card_id": "card_01jz8k2m", "position_id": "pos_01jzp3nq", "card_created": true}
+{"status": "ok", "card_id": "card_01jz8k2m", "position_id": "pos_01jzr5kq"}
 ```
 
-`card_created` 标明这次是不是顺带新建了卡(`--issue` 走 true,`--card` 走 false)。返回的 `position_id` 就是以后 `review` 的对象。
+返回的 `position_id` 就是以后 `review` 的对象。
 
 ### 副作用
 
-- `--issue`:落 `cards`(`issue` + `created_at`)+ 计算 `issue` 的 embedding 写向量库(检索锚点)。
-- 在卡下落一个 Position:`claim`(内联)+ `up/down/neutral_count` 初始化为 0 + `scope`(默认 `''`)。**不算 credence**(读时现算)。
-- 每个 `--cite` 落一条 `card_sessions`(`card_id` + `session_id` + `position_id` + `indexes`);校验 indexes 不越界,失败整条不落库。
-- 文件罐:`cards/<bucket>/<card_id>/card.json`(问题不可变)、`positions/<pid>.json`(答案 `claim` 不可变);计数 / `scope` / 边 / 出处是 SQLite 派生运行态。详见 [`../../structure/v4/filesystem.md`](../../structure/v4/filesystem.md)。
+- 在 `<card>` 下落一个 Position:`claim`(内联)+ `up/down/neutral_count` 初始化为 0 + `scope`(默认 `''`)。**不算 credence**(读时现算)。
+- 每个 `--source` 落一条 `card_sessions`(`card_id` + `session_id` + `position_id` + `indexes`);校验 indexes 不越界,失败整条不落库。
+- 文件罐:`positions/<pid>.json`(答案 `claim` 不可变);计数 / `scope` / 出处是 SQLite 派生运行态。详见 [`../../structure/v4/filesystem.md`](../../structure/v4/filesystem.md)。
+- **不动卡上其它 Position**(append-only,新增不覆盖)。
 
 ### 错误
 
 | 情况 | 行为 |
 |---|---|
 | server 未运行 | `error: cannot reach server`,exit 1 |
-| `--issue` 和 `--card` 同时给 / 都不给 | `error: provide exactly one of --issue / --card`,exit 1 |
-| `--answer` 缺失 / 空 | `error: --answer required`,exit 1 |
 | `--card` 指向的卡不存在 | `error: card 'card_xxx' not found`,exit 1 |
-| `--cite` 的 session 不存在 | `error: session 'sess_xxx' not found`,exit 1 |
-| `--cite` 的 indexes 越界 / 非单调 | `error: index N out of range ...` / `indexes must be monotonically increasing`,exit 1 |
-| 显式 id 前缀错 / 已存在 | `error: invalid <kind>_id prefix` / `... already exists`,exit 1 |
+| `--answer` 缺失 / 空 | `error: --answer required`,exit 1 |
+| `--source` 的 session 不存在 | `error: session 'sess_xxx' not found`,exit 1 |
+| `--source` 的 indexes 越界 / 非单调 | `error: index N out of range ...` / `indexes must be monotonically increasing`,exit 1 |
+| 显式 `--position_id` 前缀错 / 已存在 | `error: invalid position_id prefix` / `... already exists`,exit 1 |
 
 ---
 
@@ -220,12 +249,12 @@ memory.talk card view <card_id> [--json]
 
 | 想做的事 | 用哪条 |
 |---|---|
-| 冒出一个新问题 + 第一个答案 | `card create --issue '<Q>' --answer '<A>' --cite ...` |
-| 给已有问题补一个竞争答案 | `card create --card <cid> --answer '<A>' --cite ...` |
+| 建一个新问题(卡) | `card create --issue '<Q>'` |
+| 给问题加一个答案 | `card position --card <cid> --answer '<A>' [--source ...]` |
 | 看一张卡的所有答案 / 当下答案 | `card view <card_id>` |
 | 对某个答案顶 / 踩 / 中立 | `review <position_id> <+1\|0\|-1> --cite ...` |
 | 按相关度找卡 | `search <query>`(沿用 v3) |
 | hook 阶段无意识召回 | `recall <session_id> <prompt>` |
 | 连两张卡(IBIS 边) | `card-links`(API,见 [`../../api/v4/card-links.md`](../../api/v4/card-links.md)) |
 
-> **改主意 ≠ 改卡**:答案错了不改 `claim`,而是 `card create --card <同一卡>` 加一个新答案 + `review <旧pid> -1` 踩旧的;credence 现算会把新答案抬上来,旧答案留作认知史。
+> **改主意 ≠ 改卡**:答案错了不改 `claim`,而是 `card position --card <同一卡>` 加一个新答案 + `review <旧pid> -1` 踩旧的;credence 现算会把新答案抬上来,旧答案留作认知史。

@@ -14,7 +14,7 @@ memory.talk review <position_id> <+1|0|-1> --cite <session_id>:<indexes> [--comm
 |---|---|---|
 | `<position_id>` | 是 | 被表态的答案,必须是 `pos_<…>`;不存在或前缀错报错。**target 是 Position,不是 card** |
 | `<argument>` | 是 | `+1` 支持(顶) / `0` 中立 / `-1` 反对(踩)。其它值报错 |
-| `--cite` | 是 | 证据:`<session_id>:<indexes>`,**单 session**(一次表态来自一次具体对话);indexes 语法同 [card.md](card.md#--cite-语法--indexes) |
+| `--cite` | 是 | 证据:`<session_id>:<indexes>`,**单 session**(一次表态来自一次具体对话);indexes 语法同 [card.md](card.md#--source-语法--indexes) |
 | `--comment` | 否 | 一句话归因;`argument=0` 时强烈建议填,服务端不强制。值支持 `@<file>` / `@-`(从文件 / stdin 原样读,专治特殊字符;同 [card.md](card.md#文本字段传文件--stdin)) |
 | `--review_id` | 否 | 不提供则自动生成 `review_<ULID>` |
 
@@ -72,7 +72,7 @@ ok: created `review_01jzr5kq` · `pos_01jzp3nq` **+1** by `sess_abc` #20-25
 
 ## 中立(argument=0)堆多了 → 可能衍生新 Position
 
-一条中立 = "证据跟这个问题相关,但不站现有任何答案的队"。一张卡积累一批中立,说明现有答案没接住这些证据——可能在为一个**还没说出来的答案**背书。可**离线**(人 / LLM 判)把这堆中立聚类,提一个新 Position(`card create --card <同卡> --answer ...`),再把这些 review 以 `+1` 重挂到新答案上。**不自动**触发。详见 [`../../works/v4/card.md`](../../works/v4/card.md#3-第二推credence--现算的质量分相关性只在召回时算)。
+一条中立 = "证据跟这个问题相关,但不站现有任何答案的队"。一张卡积累一批中立,说明现有答案没接住这些证据——可能在为一个**还没说出来的答案**背书。可**离线**(人 / LLM 判)把这堆中立聚类,提一个新 Position(`card position --card <同卡> --answer ...`),再把这些 review 以 `+1` 重挂到新答案上。**不自动**触发。详见 [`../../works/v4/card.md`](../../works/v4/card.md#3-第二推credence--现算的质量分相关性只在召回时算)。
 
 ## 错误
 
@@ -91,7 +91,7 @@ review **不单独 read** —— 在 [`card view <card_id>`](card.md#card-view) 
 
 ## 跟 card 的边界
 
-| | `card create` | `review` |
+| | `card position` | `review` |
 |---|---|---|
 | 角色 | 立一个答案(候选) | 对答案的后续表态 |
 | 时序 | 先 | 后(Position 必须已存在) |
