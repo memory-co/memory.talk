@@ -8,8 +8,10 @@ memory.talk card
 │                                            # 建一张卡(只有问题;没答案也合法)
 ├── position <card_id> '<答案>' [--source <sid>:<indexes> ...] [--scope '<场景>'] [--position_id <id>] [--json]
 │                                            # 给一张卡加一个答案(Position)
-└── review <position_id> <+1|0|-1> --cite <sid>:<indexes> [--comment '<一句话>'] [--json]
-                                             # 对某个答案表态(顶/踩/中立),详见 review.md
+├── review <position_id> <+1|0|-1> --cite <sid>:<indexes> [--comment '<一句话>'] [--json]
+│                                            # 对某个答案表态(顶/踩/中立),详见 review.md
+└── link create <from> <type> <target> | link list <card>
+                                             # 卡间 IBIS 边(card_links),详见 link.md
 ```
 
 **读**一张卡(问题 + 它所有答案 + 边 + 出处)走 [`read <card_id>`](read.md);表态(顶/踩答案)走 [`card review`](review.md);找卡走 [`search`](search.md);hook 召回走 [`recall`](recall.md)。
@@ -160,6 +162,6 @@ ok: `pos_01jzr5kq` (answer) under `card_01jz8k2m`
 | 对某个答案顶 / 踩 / 中立 | `card review <position_id> <+1\|0\|-1> --cite ...` |
 | 按相关度找卡 | `search <query>` |
 | hook 阶段无意识召回 | `recall <session_id> <prompt>` |
-| 连两张卡(IBIS 边) | `link create <from> <type> <target>`(见 [link.md](link.md)) |
+| 连两张卡(IBIS 边) | `card link create <from> <type> <target>`(见 [link.md](link.md)) |
 
 > **改主意 ≠ 改卡**:答案错了不改 `claim`,而是 `card position <同一卡> '<新答案>'` 加一个新答案 + `card review <旧pid> -1` 踩旧的;credence 现算会把新答案抬上来,旧答案留作认知史。

@@ -1,9 +1,9 @@
-# link
+# card link
 
-卡与卡之间的 **IBIS 边**(`card_links`)——问题图的关联主干(细化 / 取代 / 质疑 / 引出 / 泛关联)。
+卡与卡之间的 **IBIS 边**(`card_links`)——问题图的关联主干(细化 / 取代 / 质疑 / 引出 / 泛关联)。`card` 命令组的第四条子命令(create / position / review / link)。
 
 ```
-memory.talk link
+memory.talk card link
 ├── create <from_card_id> <type> <target_id> [--json]    # 建一条有向边
 └── list <card_id> [--json]                              # 列一张卡的边(出 + 入)
 ```
@@ -12,10 +12,10 @@ memory.talk link
 
 > 边连的是**卡(问题)**:主体是 `from_card_id`(`card_<…>`)。`target_id` 一般是另一张卡(`card_<…>`);只有 `suggested_by` 允许指向一个答案(`pos_<…>`)——「这个答案勾出了那个新问题」。
 
-## link create
+## card link create
 
 ```bash
-memory.talk link create <from_card_id> <type> <target_id> [--json]
+memory.talk card link create <from_card_id> <type> <target_id> [--json]
 ```
 
 ### type 取值
@@ -29,7 +29,7 @@ memory.talk link create <from_card_id> <type> <target_id> [--json]
 | `related` | 兜底泛关联 | 无向 |
 
 - 同一 `(from_card_id, type)` 下可挂多条(如 `specializes` 多父)。
-- `related` 无向:写时规范化两端顺序,只存一遍(`link create A related B` 与 `B related A` 等价、不重复落)。
+- `related` 无向:写时规范化两端顺序,只存一遍(`card link create A related B` 与 `B related A` 等价、不重复落)。
 - **不校验 `target_id` 是否存在**:SQLite 是派生索引,容忍悬挂引用,从不加 FOREIGN KEY(target 可能后到 / 已删,图层照样成立)。
 
 ### 输出
@@ -42,12 +42,12 @@ ok: `card_01jz8k2m` —specializes→ `card_01jzsub`
 {"status": "ok", "card_id": "card_01jz8k2m", "type": "specializes", "target_id": "card_01jzsub"}
 ```
 
-## link list
+## card link list
 
 列一张卡相关的所有边——它**指出去的**(本卡为主体)和**指过来的**(别的卡指本卡)。
 
 ```bash
-memory.talk link list <card_id> [--json]
+memory.talk card link list <card_id> [--json]
 ```
 
 ### 输出 — Markdown
