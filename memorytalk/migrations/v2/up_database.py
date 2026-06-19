@@ -33,7 +33,7 @@ _INDEXES = [
 ]
 
 
-async def run(conn: aiosqlite.Connection) -> None:
+async def run(conn: aiosqlite.Connection, *, data_root=None) -> None:
     """Bring ``conn`` from v1 to v2. Safe to run repeatedly."""
     await conn.execute(_EXPLORES)
 

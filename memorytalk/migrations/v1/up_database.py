@@ -29,7 +29,7 @@ import aiosqlite
 from memorytalk.migrations.v1.init_database import INDEXES, TABLES
 
 
-async def run(conn: aiosqlite.Connection) -> None:
+async def run(conn: aiosqlite.Connection, *, data_root=None) -> None:
     """Bring ``conn`` up to v1. Safe to run repeatedly."""
     # 1. Snapshot CREATE TABLEs — guarantees every table is present.
     #    Indexes come LATER, after the additive ALTERs add the columns

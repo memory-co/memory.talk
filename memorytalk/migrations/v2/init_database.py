@@ -12,7 +12,7 @@ from memorytalk.migrations.v1 import init_database as _v1
 from memorytalk.migrations.v2 import up_database as _delta
 
 
-async def run(conn: aiosqlite.Connection) -> None:
+async def run(conn: aiosqlite.Connection, *, data_root=None) -> None:
     """Apply the v2 snapshot to a fresh ``conn``."""
     await _v1.run(conn)       # v1 tables + indexes
     await _delta.run(conn)    # explores table + explore columns + indexes

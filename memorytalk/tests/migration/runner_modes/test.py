@@ -21,7 +21,7 @@ def _install_stub_migrations(root_dir, name: str) -> None:
     (pkg_dir / "__init__.py").write_text("recorder = []\n")
     template = (
         f"from {name} import recorder\n"
-        "async def run(handle):\n"
+        "async def run(handle, *, data_root=None):\n"
         "    recorder.append({tag!r})\n"
     )
     for version in ("v1", "v2"):
@@ -178,7 +178,7 @@ async def test_state_saved_per_migration(tmp_path, stub_pkg, monkeypatch):
 
     failing = importlib.import_module(f"{pkg}.v2.up_database")
 
-    async def boom(_handle):
+    async def boom(_handle, *, data_root=None):
         raise RuntimeError("simulated crash")
 
     monkeypatch.setattr(failing, "run", boom)
