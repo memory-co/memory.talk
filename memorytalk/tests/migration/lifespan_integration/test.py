@@ -170,13 +170,18 @@ async def test_081_data_root_boots_cleanly_and_serves_status(
 
     # After the lifespan closes, confirm the v3 searchbase + file-can
     # renames landed in the real data_root. LanceDB stores each collection
-    # as a ``<name>.lance`` dir under the vectors root, so the collection
-    # rename is observable on disk (no second client connection needed).
+    # as a ``<name>.lance`` dir under the vectors root, so the moves are
+    # observable on disk (no second client connection needed).
     vectors = tmp_path / "vectors"
+    # v3 rename: the old ``cards`` collection → ``insights`` (its data
+    # moved there); the v3 file-can ``cards/`` → ``insights/``.
     assert (vectors / "insights.lance").exists()
-    assert not (vectors / "cards.lance").exists()
     assert (tmp_path / "insights" / "c1" / "c1" / "card.json").exists()
     assert not (tmp_path / "cards").exists()
+    # v4 re-minted ``cards`` (issue) + ``positions`` (claim) as fresh
+    # collections on the name v3 freed.
+    assert (vectors / "cards.lance").exists()
+    assert (vectors / "positions.lance").exists()
 
 
 @pytest.mark.asyncio
