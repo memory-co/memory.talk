@@ -39,12 +39,14 @@ async def _seed_card(app, *, card_id: str, insight: str,
     now = _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     await db.cards.insert(card_id, insight, [], now)
     await db.cards.init_stats(card_id, now)
-    for _ in range(up):
-        await db.cards.bump_review(card_id, 1, now)
-    for _ in range(down):
-        await db.cards.bump_review(card_id, -1, now)
-    for _ in range(neutral):
-        await db.cards.bump_review(card_id, 0, now)
+    if up or down or neutral:
+        await db.conn.execute(
+            "UPDATE card_stats SET review_up = ?, review_down = ?, "
+            "review_neutral = ?, review_count = ?, updated_at = ? "
+            "WHERE card_id = ?",
+            (up, down, neutral, up + down + neutral, now, card_id),
+        )
+        await db.conn.commit()
     for _ in range(reads):
         await db.cards.bump_read(card_id, now)
     if searchbase is not None:

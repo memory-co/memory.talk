@@ -103,7 +103,6 @@ class TestReadCard:
         assert c["stats"]["read_count"] == 1
         assert c["stats"]["review_count"] == 0
         assert len(c["rounds"]) == 2
-        assert c["reviews"] == []
 
     async def test_read_bumps_read_count(self, app, client):
         cid = await _seed_card(app)

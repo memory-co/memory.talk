@@ -38,7 +38,7 @@ def test_card_delete_yes_flag_skips_confirm(monkeypatch):
         calls.append((method, path))
         if method == "DELETE":
             return {
-                "card_id": "card_01xx", "reviews_deleted": 3,
+                "card_id": "card_01xx",
                 "inbound_refs_dangling": 1,
             }
         raise AssertionError(f"unexpected call: {method} {path}")
@@ -52,7 +52,6 @@ def test_card_delete_yes_flag_skips_confirm(monkeypatch):
     assert r.exit_code == 0, r.output
     assert calls == [("DELETE", "/v3/cards/card_01xx")], calls
     assert "deleted" in r.output
-    assert "3 reviews" in r.output
     assert "1 inbound" in r.output
 
 
@@ -62,10 +61,10 @@ def test_card_delete_confirm_yes(monkeypatch):
         if method == "POST" and path == "/v3/read":
             return {"card": {
                 "card_id": "card_01yy", "insight": "lancedb pick",
-                "created_at": "2026-05-24T09:12:00Z", "reviews": [],
+                "created_at": "2026-05-24T09:12:00Z",
             }}
         if method == "DELETE":
-            return {"card_id": "card_01yy", "reviews_deleted": 0,
+            return {"card_id": "card_01yy",
                     "inbound_refs_dangling": 0}
         raise AssertionError(f"unexpected: {method} {path}")
 
@@ -87,7 +86,7 @@ def test_card_delete_confirm_no_aborts(monkeypatch):
         if method == "POST" and path == "/v3/read":
             return {"card": {
                 "card_id": "card_01zz", "insight": "abc",
-                "created_at": "2026-05-24T09:12:00Z", "reviews": [],
+                "created_at": "2026-05-24T09:12:00Z",
             }}
         if method == "DELETE":
             saw_delete["hit"] = True
@@ -110,7 +109,7 @@ def test_card_delete_json_skips_confirm(monkeypatch):
     def _fake_api(method, path, cfg, json_body=None, timeout=30.0, params=None):
         calls.append((method, path))
         if method == "DELETE":
-            return {"card_id": "card_01jj", "reviews_deleted": 0,
+            return {"card_id": "card_01jj",
                     "inbound_refs_dangling": 0}
         raise AssertionError(f"unexpected: {method} {path}")
 
@@ -131,17 +130,14 @@ def test_card_delete_json_skips_confirm(monkeypatch):
 
 def test_fmt_card_delete_simple():
     from memorytalk.cli._format import fmt_card_delete
-    out = fmt_card_delete({"card_id": "card_01x", "reviews_deleted": 0,
-                           "inbound_refs_dangling": 0})
+    out = fmt_card_delete({"card_id": "card_01x", "inbound_refs_dangling": 0})
     assert "deleted" in out
     assert "card_01x" in out
 
 
-def test_fmt_card_delete_with_reviews_and_dangling():
+def test_fmt_card_delete_with_dangling():
     from memorytalk.cli._format import fmt_card_delete
-    out = fmt_card_delete({"card_id": "card_01y", "reviews_deleted": 3,
-                           "inbound_refs_dangling": 2})
-    assert "3 reviews removed" in out
+    out = fmt_card_delete({"card_id": "card_01y", "inbound_refs_dangling": 2})
     assert "2 inbound" in out
     assert "dangling" in out
 

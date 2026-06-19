@@ -14,8 +14,6 @@ from memorytalk.schemas.recall import (
     RecallSessionSummary,
     RecalledCard,
 )
-from memorytalk.schemas.review import Review
-from memorytalk.schemas.reviews import CreateReviewRequest, CreateReviewResponse
 from memorytalk.schemas.search import (
     CardResult, SearchRequest, SearchResponse, SessionHit, SessionResult,
 )
@@ -40,7 +38,6 @@ __all__ = [
     "ReadRequest", "ReadResponse",
     "RecalledCard", "RecallRequest", "RecallResponse",
     "RecallEventOut", "RecallListResponse", "RecallReadResponse", "RecallSessionSummary",
-    "Review", "CreateReviewRequest", "CreateReviewResponse",
     "CardResult", "SearchRequest", "SearchResponse", "SessionHit", "SessionResult",
     "ContentBlock",
     "AppendRoundsRequest", "AppendRoundsResponse",

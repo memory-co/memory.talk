@@ -193,12 +193,10 @@ def delete(card_id: str, yes: bool, json_out: bool) -> None:
             sys.exit(1)
 
         card_doc = preview.get("card") or {}
-        reviews = card_doc.get("reviews") or []
         click.echo("", err=True)
         click.echo(f"card delete · {card_id}", err=True)
         click.echo(f"  insight:  {card_doc.get('insight', '?')}", err=True)
         click.echo(f"  created:  {card_doc.get('created_at', '?')}", err=True)
-        click.echo(f"  reviews:  {len(reviews)} (will be deleted with the card)", err=True)
         click.echo("", err=True)
         if not click.confirm("Delete this card?", default=False, err=True):
             click.echo("aborted.", err=True)

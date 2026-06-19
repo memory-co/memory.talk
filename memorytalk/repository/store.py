@@ -7,7 +7,6 @@ SQL ops (via aiosqlite). Services access them as::
     await db.sessions.upsert(...)                      # SQL
     await db.cards.write_doc(card)                    # file
     await db.cards.insert(...)                         # SQL
-    await db.reviews.insert(...)                      # SQL
 """
 from __future__ import annotations
 from pathlib import Path
@@ -18,7 +17,6 @@ from memorytalk.provider.storage import Storage
 from memorytalk.repository.cards import CardStore
 from memorytalk.repository.explores import ExploreStore
 from memorytalk.repository.recall import RecallStore
-from memorytalk.repository.reviews import ReviewStore
 from memorytalk.repository.search_log import SearchLogStore
 from memorytalk.repository.sessions import SessionStore
 
@@ -30,7 +28,6 @@ class SQLiteStore:
         self.storage = storage
         self.sessions = SessionStore(conn, storage)
         self.cards = CardStore(conn, storage)
-        self.reviews = ReviewStore(conn)
         self.search_log = SearchLogStore(conn)
         self.recall = RecallStore(conn)
         self.explores = ExploreStore(conn)

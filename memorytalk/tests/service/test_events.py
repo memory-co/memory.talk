@@ -166,23 +166,6 @@ class TestCardEvents:
         assert linked[0]["from_card"] == child
         assert linked[0]["relation"] == "supersedes"
 
-    async def test_reviewed_event(self, client, data_root):
-        sid = await _ingest(client)
-        r = await client.post("/v3/cards", json={
-            "insight": "x", "rounds": [{"session_id": sid, "indexes": "1"}],
-        })
-        cid = r.json()["card_id"]
-        await client.post("/v3/reviews", json={
-            "card_id": cid, "session_id": sid, "indexes": "2", "score": 1,
-        })
-        events = _card_events(data_root, cid)
-        reviewed = [e for e in events if e["event"] == "reviewed"]
-        assert len(reviewed) == 1
-        assert reviewed[0]["score"] == 1
-        # The event carries indexes (not comment — comment is in reviews.jsonl).
-        assert reviewed[0]["indexes"] == "2"
-        assert "comment" not in reviewed[0]
-
     async def test_read_event(self, client, data_root):
         sid = await _ingest(client)
         r = await client.post("/v3/cards", json={

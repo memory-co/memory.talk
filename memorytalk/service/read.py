@@ -17,7 +17,7 @@ import datetime as _dt
 
 from memorytalk.repository import SQLiteStore
 from memorytalk.schemas import (
-    Card, CardRound, CardStats, ContentBlock, Review, Round, Session, SourceCard,
+    Card, CardRound, CardStats, ContentBlock, Round, Session, SourceCard,
 )
 # CardNotFound is owned by service.cards (the card service is the canonical
 # place for card lifecycle errors); re-exported here for callers that
@@ -59,14 +59,12 @@ class ReadService:
         counts = await self.db.recall.recall_counts([card_id])
         stats_dict["recall_count"] = counts.get(card_id, 0)
         source_cards = await self.db.cards.list_source_cards(card_id)
-        reviews_rows = await self.db.reviews.list_for_card(card_id)
 
         card = Card(
             card_id=row["card_id"],
             insight=row["insight"],
             source_cards=[SourceCard(**sc) for sc in source_cards],
             rounds=[CardRound(**r) for r in row["rounds"]],
-            reviews=[Review(**r) for r in reviews_rows],
             stats=CardStats(**stats_dict),
             created_at=row["created_at"],
         )

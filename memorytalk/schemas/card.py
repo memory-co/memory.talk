@@ -4,8 +4,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from memorytalk.schemas.review import Review
-
 
 class SourceCard(BaseModel):
     """One ``source_cards[]`` entry on a card.
@@ -53,6 +51,5 @@ class Card(BaseModel):
     insight: str
     source_cards: list[SourceCard] = Field(default_factory=list)
     rounds: list[CardRound] = Field(default_factory=list)
-    reviews: list[Review] = Field(default_factory=list)
     stats: CardStats = Field(default_factory=CardStats)
     created_at: str

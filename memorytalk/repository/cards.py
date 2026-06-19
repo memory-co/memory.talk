@@ -3,8 +3,7 @@
 File layout::
 
     cards/<bucket>/<card_id>/card.json        (immutable payload mirror)
-    cards/<bucket>/<card_id>/events.jsonl     (created / read / reviewed / recalled)
-    cards/<bucket>/<card_id>/reviews.jsonl    (review mirror — full reviews appended)
+    cards/<bucket>/<card_id>/events.jsonl     (created / read / recalled)
 
 The ``card_stats`` and ``card_source_cards`` tables hold runtime state +
 edges; ``cards`` itself holds immutable payload (insight + rounds JSON).
@@ -34,8 +33,8 @@ class CardStore:
 
     def _card_dir_key(self, card_id: str) -> str:
         """Per-card directory prefix; used by ``delete_files`` to rmtree
-        the whole card footprint (card.json + events.jsonl + reviews.jsonl
-        + tags.json) in one shot."""
+        the whole card footprint (card.json + events.jsonl + tags.json)
+        in one shot."""
         return f"{self.PREFIX}/{self._bucket(card_id)}/{card_id}"
 
     def _doc_key(self, card_id: str) -> str:
@@ -43,9 +42,6 @@ class CardStore:
 
     def _events_key(self, card_id: str) -> str:
         return f"{self.PREFIX}/{self._bucket(card_id)}/{card_id}/events.jsonl"
-
-    def _reviews_key(self, card_id: str) -> str:
-        return f"{self.PREFIX}/{self._bucket(card_id)}/{card_id}/reviews.jsonl"
 
     def _tags_key(self, card_id: str) -> str:
         # tags live in their own sidecar so card.json stays the
@@ -69,12 +65,6 @@ class CardStore:
         await self.storage.append_text(
             self._events_key(card_id),
             json.dumps(event, ensure_ascii=False) + "\n",
-        )
-
-    async def append_review_mirror(self, card_id: str, review: dict) -> None:
-        await self.storage.append_text(
-            self._reviews_key(card_id),
-            json.dumps(review, ensure_ascii=False) + "\n",
         )
 
     async def read_tags_file(self, card_id: str) -> dict:
@@ -193,24 +183,6 @@ class CardStore:
         )
         await self.conn.commit()
 
-    async def bump_review(self, card_id: str, score: int, now: str) -> None:
-        """Atomically increment review_count + the score-specific bucket."""
-        if score == 1:
-            col = "review_up"
-        elif score == -1:
-            col = "review_down"
-        elif score == 0:
-            col = "review_neutral"
-        else:
-            raise ValueError(f"score must be -1/0/1, got {score!r}")
-        await self.conn.execute(
-            f"UPDATE card_stats "
-            f"SET {col} = {col} + 1, review_count = review_count + 1, updated_at = ? "
-            f"WHERE card_id = ?",
-            (now, card_id),
-        )
-        await self.conn.commit()
-
     # ────────── card_source_cards ──────────
 
     async def insert_source_cards(self, card_id: str, items: list[dict]) -> None:
@@ -275,8 +247,8 @@ class CardStore:
 
     async def delete_files(self, card_id: str) -> None:
         """Recursively remove the card's per-card directory (card.json,
-        events.jsonl, reviews.jsonl, tags.json). Best-effort — missing
-        directory is a no-op."""
+        events.jsonl, tags.json). Best-effort — missing directory is a
+        no-op."""
         await self.storage.delete_prefix(self._card_dir_key(card_id))
 
     # ─── 0.8.x: list + user-side tags ──────────────────────────────

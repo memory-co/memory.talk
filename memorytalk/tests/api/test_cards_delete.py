@@ -1,7 +1,7 @@
 """DELETE /v3/cards/{card_id} — hard delete contract.
 
 Covers:
-- happy path: card row gone, reviews gone, vector gone, files gone
+- happy path: card row gone, vector gone, files gone
 - 404 on unknown card
 - inbound_refs_dangling surfacing (referenced-by count) but NOT cascade
 - recall_event history preserved (deleting a card doesn't rewrite history)
@@ -47,38 +47,11 @@ async def test_delete_removes_card_row(app, client):
     assert r.status_code == 200
     body = r.json()
     assert body["card_id"] == cid
-    assert body["reviews_deleted"] == 0
     assert body["inbound_refs_dangling"] == 0
 
     # POST /v3/read on a deleted card → 404
     rd = await client.post("/v3/read", json={"id": cid})
     assert rd.status_code == 404
-
-
-async def test_delete_cascades_reviews_and_stats(app, client):
-    sid = await _ingest(client)
-    cid = await _make_card(client, sid)
-
-    # Add two reviews.
-    for score in (1, -1):
-        r = await client.post("/v3/reviews", json={
-            "card_id": cid, "session_id": sid,
-            "indexes": "1", "score": score,
-        })
-        r.raise_for_status()
-
-    db = app.state.db
-    before = await db.reviews.list_for_card(cid)
-    assert len(before) == 2
-
-    r = await client.delete(f"/v3/cards/{cid}")
-    assert r.json()["reviews_deleted"] == 2
-
-    after = await db.reviews.list_for_card(cid)
-    assert after == []
-    # card_stats row gone — get_stats falls back to all-zeros placeholder.
-    stats = await db.cards.get_stats(cid)
-    assert stats["review_count"] == 0
 
 
 async def test_delete_surfaces_inbound_refs_dangling_but_does_not_cascade(

@@ -179,22 +179,21 @@ class CardService:
     # ──────── delete ────────
 
     async def delete(self, card_id: str) -> dict:
-        """Remove a card from SQLite + vector + file. Idempotent in the
+        """Remove a card from SQLite + vector + files. Idempotent in the
         sense that re-calling on an already-deleted id raises CardNotFound
         (not a silent no-op — callers should not call us twice).
 
         Order matters:
 
-          1. Read summary (reviews count + inbound refs) for response.
-          2. Delete reviews (separate store, no FK cascade).
-          3. Delete SQLite card rows (cards + card_stats + outbound
+          1. Read inbound refs count for response.
+          2. Delete SQLite card rows (cards + card_stats + outbound
              source_cards, atomic).
-          4. Delete LanceDB vector (best-effort — orphan rows are
+          3. Delete LanceDB vector (best-effort — orphan rows are
              filtered out at search time by ``card_row is None`` checks).
-          5. Delete filesystem dir (best-effort — orphan dirs are
+          4. Delete filesystem dir (best-effort — orphan dirs are
              cosmetic, no read path scans them).
 
-        Steps 4 + 5 are best-effort: by the time we get there SQLite has
+        Steps 3 + 4 are best-effort: by the time we get there SQLite has
         already committed the deletion, and reverting it would leave us
         with a card the user thinks is gone but vector/files still show
         up in odd places. Failures get logged; the response still says
@@ -207,10 +206,7 @@ class CardService:
 
         inbound = await self.db.cards.count_inbound_refs(card_id)
 
-        # 1. Reviews first — separate store, no FK cascade.
-        reviews_deleted = await self.db.reviews.delete_for_card(card_id)
-
-        # 2. SQLite — atomic across cards / card_stats / outbound source_cards.
+        # 1. SQLite — atomic across cards / card_stats / outbound source_cards.
         await self.db.cards.delete(card_id)
 
         # 3. Vector — best-effort.
@@ -234,7 +230,6 @@ class CardService:
 
         return {
             "card_id": card_id,
-            "reviews_deleted": reviews_deleted,
             "inbound_refs_dangling": inbound,
         }
 

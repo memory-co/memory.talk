@@ -336,18 +336,6 @@ def fmt_card_created(payload: dict) -> str:
     return f"ok: created `{payload['card_id']}`\n"
 
 
-# ────────── review ──────────
-
-def fmt_review_created(payload: dict) -> str:
-    score = payload.get("score", 0)
-    score_str = f"+{score}" if score > 0 else str(score)
-    return (
-        f"ok: created `{payload['review_id']}` · "
-        f"`{payload['card_id']}` **{score_str}** "
-        f"by `{payload['session_id']}`\n"
-    )
-
-
 # ────────── recall ──────────
 
 def fmt_recall(payload: dict) -> str:
@@ -866,14 +854,9 @@ def fmt_card_delete(payload: dict) -> str:
     cleared / files cleared / etc.) — those are best-effort and
     typically silent."""
     cid = payload.get("card_id") or "?"
-    reviews = int(payload.get("reviews_deleted", 0) or 0)
     dangling = int(payload.get("inbound_refs_dangling", 0) or 0)
 
     bits = [f"deleted · `{cid}`"]
-    if reviews:
-        bits.append(
-            f"{reviews} review{'s' if reviews != 1 else ''} removed",
-        )
     if dangling:
         bits.append(
             f"⚠ {dangling} inbound `source_cards` reference"

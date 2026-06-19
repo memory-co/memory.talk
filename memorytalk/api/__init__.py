@@ -29,7 +29,7 @@ from memorytalk.repository import SQLiteStore
 from memorytalk.repository.sync_checkpoint import SyncCheckpointStore
 from memorytalk.service import (
     CardService, EventWriter, IngestService, ReadService,
-    RecallService, ReviewService,
+    RecallService,
 )
 from memorytalk.service.backfill import IndexBackfill
 from memorytalk.service.explores import ExploreService
@@ -136,7 +136,6 @@ def create_app(config: Config | None = None) -> FastAPI:
         app.state.cards = CardService(
             db=db, search=searchbase, events=events,
         )
-        app.state.reviews = ReviewService(db=db, events=events)
         app.state.recall = RecallService(
             config=config, db=db, search=searchbase,
         )
@@ -200,7 +199,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.include_router(sessions_router, prefix="/v3")
 
     # Optional routers — lazy import so missing ones don't break boot.
-    for name in ("sync", "search", "cards", "reviews", "recall", "explores"):
+    for name in ("sync", "search", "cards", "recall", "explores"):
         try:
             mod = __import__(f"memorytalk.api.{name}", fromlist=["router"])
             app.include_router(mod.router, prefix="/v3")
