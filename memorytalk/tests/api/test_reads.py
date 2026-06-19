@@ -27,19 +27,32 @@ async def _ingest(client, sid: str = "abc-123", sha: str = "sha1", rounds=None) 
     return r.json()["session_id"]
 
 
-async def _seed_card(app) -> str:
-    """Insert a minimal card directly through the repo (faster than going via
-    POST /v4/insights; we just want a card_id to read back)."""
+async def _seed_insight(app) -> str:
+    """Insert a minimal read-only insight directly via SQL (the insight
+    store is read-only — no insert method). Returns the insight_id."""
+    import json as _json
     db = app.state.db
     now = _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-    await db.insights.insert("card_seed", "seeded insight", [
+    iid = "insight_seed"
+    rounds = [
         {"role": "human", "text": "what's lancedb?",
-         "session_id": "sess_abc", "index": 1},
+         "session_id": "sess-abc", "index": 1},
         {"role": "assistant", "text": "embedded vector db",
-         "session_id": "sess_abc", "index": 2},
-    ], now)
-    await db.insights.init_stats("card_seed", now)
-    return "card_seed"
+         "session_id": "sess-abc", "index": 2},
+    ]
+    await db.conn.execute(
+        "INSERT INTO insights (card_id, insight, rounds, tags, created_at) "
+        "VALUES (?, ?, ?, '{}', ?)",
+        (iid, "seeded insight", _json.dumps(rounds), now),
+    )
+    await db.conn.execute(
+        "INSERT INTO insight_stats "
+        "(card_id, review_up, review_down, review_neutral, review_count, "
+        " read_count, updated_at) VALUES (?, 0, 0, 0, 0, 0, ?)",
+        (iid, now),
+    )
+    await db.conn.commit()
+    return iid
 
 
 # ────────── read session ──────────
@@ -87,33 +100,31 @@ class TestReadSession:
         assert all(k != "read_at" for k in event_kinds)
 
 
-# ────────── read card ──────────
+# ────────── read insight (read-only old card) ──────────
 
-class TestReadCard:
-    async def test_returns_full_card(self, app, client):
-        cid = await _seed_card(app)
-        r = await client.post("/v4/read", json={"id": cid})
+class TestReadInsight:
+    async def test_returns_full_insight(self, app, client):
+        iid = await _seed_insight(app)
+        r = await client.post("/v4/read", json={"id": iid})
         assert r.status_code == 200
         body = r.json()
-        assert body["type"] == "card"
-        c = body["card"]
-        assert c["card_id"] == cid
+        assert body["type"] == "insight"
+        c = body["insight"]
+        assert c["insight_id"] == iid
         assert c["insight"] == "seeded insight"
-        # Stats populated; read_count bumped to 1 by this very call.
-        assert c["stats"]["read_count"] == 1
-        assert c["stats"]["review_count"] == 0
         assert len(c["rounds"]) == 2
 
-    async def test_read_bumps_read_count(self, app, client):
-        cid = await _seed_card(app)
+    async def test_read_is_pure_no_bump(self, app, client):
+        """Insight is read-only in v4 — reading must NOT bump read_count."""
+        iid = await _seed_insight(app)
         for _ in range(4):
-            r = await client.post("/v4/read", json={"id": cid})
+            r = await client.post("/v4/read", json={"id": iid})
             assert r.status_code == 200
         body = r.json()
-        assert body["card"]["stats"]["read_count"] == 4
+        assert body["insight"]["stats"]["read_count"] == 0
 
-    async def test_card_not_found_404(self, client):
-        r = await client.post("/v4/read", json={"id": "card_doesnotexist"})
+    async def test_insight_not_found_404(self, client):
+        r = await client.post("/v4/read", json={"id": "insight_doesnotexist"})
         assert r.status_code == 404
 
 

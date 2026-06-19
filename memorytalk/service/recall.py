@@ -188,15 +188,16 @@ class RecallService:
         }
 
     async def _materialize(self, card_ids: list[str]) -> list[dict]:
-        """Look up each card_id and return ``[{card_id, insight}, ...]``.
-        Drops ids whose cards are missing (LanceDB row exists but card
-        row missing — rolled-back card, race window during rebuild)."""
+        """Look up each card_id and return ``[{card_id, issue}, ...]``.
+
+        The v4 card recall writes card ids into ``recall_event``; enrich
+        with the card's current issue. Ids whose card row is missing are
+        surfaced as ``{card_id, issue: None}`` so the timeline still shows
+        what was recalled."""
         out: list[dict] = []
         for cid in card_ids:
-            row = await self.db.insights.get(cid)
-            if row is None:
-                continue
-            out.append({"card_id": cid, "insight": row["insight"]})
+            row = await self.db.cards.get(cid)
+            out.append({"card_id": cid, "issue": row["issue"] if row else None})
         return out
 
     # ──────────── list (read) ────────────

@@ -133,9 +133,9 @@ async def test_081_data_root_boots_cleanly_and_serves_status(
         applied = {(a["version"], a["subsystem"]) for a in body["applied"]}
         assert ("v1", "database") in applied
         assert ("v1", "searchbase") in applied
-        # Full catch-up reached v3 (rename) + v4 (new card tables).
+        # Full catch-up reached v3 (the combined rename + new card tables).
         assert ("v3", "database") in applied
-        assert ("v4", "database") in applied
+        assert ("v3", "searchbase") in applied
 
         conn = await aiosqlite.connect(str(tmp_path / "memory.db"))
         try:

@@ -32,7 +32,9 @@ class RecallRequest(BaseModel):
 
 class RecalledCard(BaseModel):
     card_id: str
-    insight: str
+    # The card's current issue (None if the card row is gone). v4 recall
+    # history references v4 cards.
+    issue: str | None = None
 
 
 class RecallResponse(BaseModel):
