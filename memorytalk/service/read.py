@@ -45,20 +45,20 @@ class ReadService:
 
     async def read_card(self, card_id: str) -> tuple[Card, str]:
         """Return (card, read_at). Bumps read_count + emits a `read` event."""
-        row = await self.db.cards.get(card_id)
+        row = await self.db.insights.get(card_id)
         if row is None:
             raise CardNotFound(f"card {card_id} not found")
 
         now = _utc_iso()
-        await self.db.cards.bump_read(card_id, now)
+        await self.db.insights.bump_read(card_id, now)
         await self.events.card_event(card_id, "read", read_at=now)
 
-        stats_dict = await self.db.cards.get_stats(card_id)
+        stats_dict = await self.db.insights.get_stats(card_id)
         # Merge in derived recall_count (single source of truth lives in
         # recall_event; card_stats no longer carries the column).
         counts = await self.db.recall.recall_counts([card_id])
         stats_dict["recall_count"] = counts.get(card_id, 0)
-        source_cards = await self.db.cards.list_source_cards(card_id)
+        source_cards = await self.db.insights.list_source_cards(card_id)
 
         card = Card(
             card_id=row["card_id"],

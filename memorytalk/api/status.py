@@ -17,7 +17,7 @@ async def get_status(request: Request) -> StatusResponse:
         settings_path=str(config.settings_path),
         status="running",
         sessions_total=await db.sessions.count(),
-        cards_total=await db.cards.count(),
+        cards_total=await db.insights.count(),
         reviews_total=await db.reviews.count(),
         searches_total=await db.search_log.count(),
         recalls_total=await db.recall.count(),

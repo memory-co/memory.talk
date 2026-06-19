@@ -1,12 +1,12 @@
-"""CardStore — card persistence (file layer + SQLite).
+"""InsightStore — insight persistence (file layer + SQLite).
 
 File layout::
 
-    cards/<bucket>/<card_id>/card.json        (immutable payload mirror)
-    cards/<bucket>/<card_id>/events.jsonl     (created / read / recalled)
+    insights/<bucket>/<card_id>/card.json        (immutable payload mirror)
+    insights/<bucket>/<card_id>/events.jsonl     (created / read / recalled)
 
-The ``card_stats`` and ``card_source_cards`` tables hold runtime state +
-edges; ``cards`` itself holds immutable payload (insight + rounds JSON).
+The ``insight_stats`` and ``insight_source_cards`` tables hold runtime state +
+edges; ``insights`` itself holds immutable payload (insight + rounds JSON).
 """
 from __future__ import annotations
 import json
@@ -17,8 +17,8 @@ import aiosqlite
 from memorytalk.provider.storage import Storage
 
 
-class CardStore:
-    PREFIX = "cards"
+class InsightStore:
+    PREFIX = "insights"
 
     def __init__(self, conn: aiosqlite.Connection, storage: Storage):
         self.conn = conn
@@ -94,7 +94,7 @@ class CardStore:
         explore_id: str | None = None,
     ) -> None:
         await self.conn.execute(
-            "INSERT INTO cards "
+            "INSERT INTO insights "
             "(card_id, insight, rounds, tags, created_at, explore_id) "
             "VALUES (?, ?, ?, ?, ?, ?)",
             (card_id, insight,
@@ -106,7 +106,7 @@ class CardStore:
 
     async def get(self, card_id: str) -> dict | None:
         async with self.conn.execute(
-            "SELECT * FROM cards WHERE card_id = ?", (card_id,),
+            "SELECT * FROM insights WHERE card_id = ?", (card_id,),
         ) as cursor:
             row = await cursor.fetchone()
         if not row:
@@ -122,17 +122,17 @@ class CardStore:
 
     async def exists(self, card_id: str) -> bool:
         async with self.conn.execute(
-            "SELECT 1 FROM cards WHERE card_id = ?", (card_id,),
+            "SELECT 1 FROM insights WHERE card_id = ?", (card_id,),
         ) as cursor:
             row = await cursor.fetchone()
         return row is not None
 
     async def count(self) -> int:
-        async with self.conn.execute("SELECT COUNT(*) FROM cards") as cursor:
+        async with self.conn.execute("SELECT COUNT(*) FROM insights") as cursor:
             row = await cursor.fetchone()
         return row[0]
 
-    # ────────── card_stats ──────────
+    # ────────── insight_stats ──────────
 
     async def init_stats(self, card_id: str, now: str) -> None:
         """Insert a stats row for a freshly created card (all zeros).
@@ -141,7 +141,7 @@ class CardStore:
         Recall popularity is derived from ``recall_event`` at read time
         via ``RecallStore.recall_counts``."""
         await self.conn.execute(
-            "INSERT INTO card_stats "
+            "INSERT INTO insight_stats "
             "(card_id, review_up, review_down, review_neutral, review_count, "
             " read_count, updated_at) "
             "VALUES (?, 0, 0, 0, 0, 0, ?)",
@@ -158,7 +158,7 @@ class CardStore:
         when they need it."""
         async with self.conn.execute(
             "SELECT review_up, review_down, review_neutral, review_count, "
-            "read_count FROM card_stats WHERE card_id = ?",
+            "read_count FROM insight_stats WHERE card_id = ?",
             (card_id,),
         ) as cursor:
             row = await cursor.fetchone()
@@ -177,13 +177,13 @@ class CardStore:
 
     async def bump_read(self, card_id: str, now: str, delta: int = 1) -> None:
         await self.conn.execute(
-            "UPDATE card_stats SET read_count = read_count + ?, updated_at = ? "
+            "UPDATE insight_stats SET read_count = read_count + ?, updated_at = ? "
             "WHERE card_id = ?",
             (delta, now, card_id),
         )
         await self.conn.commit()
 
-    # ────────── card_source_cards ──────────
+    # ────────── insight_source_cards ──────────
 
     async def insert_source_cards(self, card_id: str, items: list[dict]) -> None:
         """Insert source_cards rows in declared order."""
@@ -194,7 +194,7 @@ class CardStore:
             for i, item in enumerate(items)
         ]
         await self.conn.executemany(
-            "INSERT INTO card_source_cards "
+            "INSERT INTO insight_source_cards "
             "(card_id, seq, source_card_id, relation) VALUES (?, ?, ?, ?)",
             rows,
         )
@@ -202,7 +202,7 @@ class CardStore:
 
     async def list_source_cards(self, card_id: str) -> list[dict]:
         async with self.conn.execute(
-            "SELECT source_card_id, relation FROM card_source_cards "
+            "SELECT source_card_id, relation FROM insight_source_cards "
             "WHERE card_id = ? ORDER BY seq ASC",
             (card_id,),
         ) as cursor:
@@ -214,7 +214,7 @@ class CardStore:
         (i.e. would be left with a dangling reference if we delete it).
         Covered by ``idx_csc_source``."""
         async with self.conn.execute(
-            "SELECT COUNT(*) FROM card_source_cards WHERE source_card_id = ?",
+            "SELECT COUNT(*) FROM insight_source_cards WHERE source_card_id = ?",
             (card_id,),
         ) as cursor:
             row = await cursor.fetchone()
@@ -224,24 +224,24 @@ class CardStore:
 
     async def delete(self, card_id: str) -> None:
         """Atomic SQLite tx removing the card row + everything 1:1 with it
-        (``card_stats``, outbound ``card_source_cards``). Caller is
+        (``insight_stats``, outbound ``insight_source_cards``). Caller is
         responsible for reviews (separate store) + vector + files.
 
-        ``card_source_cards`` rows where ``source_card_id = card_id``
+        ``insight_source_cards`` rows where ``source_card_id = card_id``
         (inbound refs) are intentionally LEFT IN PLACE — see
         ``count_inbound_refs``. The other card's "references this one"
         link becomes dangling, but cascading deletes upstream would
         be a destructive surprise."""
         # Single transaction so a mid-flight failure leaves no
-        # half-state (no orphan card_stats / source_cards rows).
+        # half-state (no orphan insight_stats / source_cards rows).
         await self.conn.execute(
-            "DELETE FROM card_source_cards WHERE card_id = ?", (card_id,),
+            "DELETE FROM insight_source_cards WHERE card_id = ?", (card_id,),
         )
         await self.conn.execute(
-            "DELETE FROM card_stats WHERE card_id = ?", (card_id,),
+            "DELETE FROM insight_stats WHERE card_id = ?", (card_id,),
         )
         await self.conn.execute(
-            "DELETE FROM cards WHERE card_id = ?", (card_id,),
+            "DELETE FROM insights WHERE card_id = ?", (card_id,),
         )
         await self.conn.commit()
 
@@ -294,11 +294,11 @@ class CardStore:
         where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
 
         async with self.conn.execute(
-            f"SELECT COUNT(*) FROM cards {where}", params,
+            f"SELECT COUNT(*) FROM insights {where}", params,
         ) as cur:
             total = (await cur.fetchone())[0]
 
-        # LEFT JOIN card_stats so cards without an explicit stats row
+        # LEFT JOIN insight_stats so cards without an explicit stats row
         # (legacy DBs, tests that hit ``insert`` directly) still render
         # with all-zeros instead of being filtered out by an inner join.
         async with self.conn.execute(
@@ -308,7 +308,7 @@ class CardStore:
             f"       COALESCE(s.review_neutral, 0) AS review_neutral, "
             f"       COALESCE(s.review_count, 0)   AS review_count, "
             f"       COALESCE(s.read_count, 0)     AS read_count "
-            f"FROM cards c LEFT JOIN card_stats s ON c.card_id = s.card_id "
+            f"FROM insights c LEFT JOIN insight_stats s ON c.card_id = s.card_id "
             f"{where} ORDER BY c.created_at DESC LIMIT ?",
             params + [limit],
         ) as cur:
@@ -335,7 +335,7 @@ class CardStore:
     async def get_tags(self, card_id: str) -> dict | None:
         """Return tags dict or ``None`` if the card row doesn't exist."""
         async with self.conn.execute(
-            "SELECT tags FROM cards WHERE card_id = ?", (card_id,),
+            "SELECT tags FROM insights WHERE card_id = ?", (card_id,),
         ) as cur:
             row = await cur.fetchone()
         if row is None:
@@ -357,7 +357,7 @@ class CardStore:
         if not await self.exists(card_id):
             return False
         await self.conn.execute(
-            "UPDATE cards SET tags = ? WHERE card_id = ?",
+            "UPDATE insights SET tags = ? WHERE card_id = ?",
             (json.dumps(tags, ensure_ascii=False), card_id),
         )
         await self.conn.commit()

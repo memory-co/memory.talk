@@ -226,10 +226,10 @@ class SearchService:
             card_id = hit.id
             if not card_id:
                 continue
-            card_row = await self.db.cards.get(card_id)
+            card_row = await self.db.insights.get(card_id)
             if card_row is None:
                 continue  # index might point at a card that was rolled back
-            stats = await self.db.cards.get_stats(card_id)
+            stats = await self.db.insights.get_stats(card_id)
             out.append({
                 "card_id": card_id,
                 "insight": card_row["insight"],

@@ -91,7 +91,7 @@ class CardService:
         card_id = req.card_id or new_card_id()
         if not card_id.startswith(CARD_PREFIX):
             raise CardServiceError("invalid card_id prefix")
-        if req.card_id and await self.db.cards.exists(card_id):
+        if req.card_id and await self.db.insights.exists(card_id):
             raise CardConflict(f"card_id {card_id} already exists")
 
         # ── tags validation (pre-flight; reject whole create) ────────────
@@ -113,17 +113,17 @@ class CardService:
                 raise CardServiceError("invalid source card_id prefix")
             if sc.relation not in _ALLOWED_RELATIONS:
                 raise CardServiceError(f"unknown relation: {sc.relation}")
-            if not await self.db.cards.exists(sc.card_id):
+            if not await self.db.insights.exists(sc.card_id):
                 raise CardServiceError(f"source card {sc.card_id} not found")
 
         now = _utc_iso()
 
         # ── 1. SQL ───────────────────────────────────────────────────────
-        await self.db.cards.insert(card_id, req.insight, expanded_rounds, now,
+        await self.db.insights.insert(card_id, req.insight, expanded_rounds, now,
                                    tags=tags, explore_id=req.explore_id)
-        await self.db.cards.init_stats(card_id, now)
+        await self.db.insights.init_stats(card_id, now)
         if req.source_cards:
-            await self.db.cards.insert_source_cards(card_id, [
+            await self.db.insights.insert_source_cards(card_id, [
                 {"card_id": sc.card_id, "relation": sc.relation}
                 for sc in req.source_cards
             ])
@@ -132,7 +132,7 @@ class CardService:
         # card.json is the immutable-payload mirror — tags live in
         # their own ``tags.json`` sidecar so a later ``card tag`` PATCH
         # never has to touch card.json.
-        await self.db.cards.write_doc({
+        await self.db.insights.write_doc({
             "card_id": card_id,
             "insight": req.insight,
             "rounds": expanded_rounds,
@@ -143,7 +143,7 @@ class CardService:
             "created_at": now,
         })
         if tags:
-            await self.db.cards.write_tags_file(card_id, tags)
+            await self.db.insights.write_tags_file(card_id, tags)
 
         # ── 3. Vector index (searchbase) ─────────────────────────────────
         # Best-effort — like the sessions path, vector failure shouldn't
@@ -200,14 +200,14 @@ class CardService:
         "deleted" because from the user's POV it IS deleted. Cleanup
         scripts handle the orphans later.
         """
-        row = await self.db.cards.get(card_id)
+        row = await self.db.insights.get(card_id)
         if row is None:
             raise CardNotFound(f"card {card_id} not found")
 
-        inbound = await self.db.cards.count_inbound_refs(card_id)
+        inbound = await self.db.insights.count_inbound_refs(card_id)
 
         # 1. SQLite — atomic across cards / card_stats / outbound source_cards.
-        await self.db.cards.delete(card_id)
+        await self.db.insights.delete(card_id)
 
         # 3. Vector — best-effort.
         if self.search is not None:
@@ -221,7 +221,7 @@ class CardService:
 
         # 4. Files — best-effort.
         try:
-            await self.db.cards.delete_files(card_id)
+            await self.db.insights.delete_files(card_id)
         except Exception as e:  # noqa: BLE001
             _log.warning(
                 "file delete failed for %s; orphan dir is cosmetic: %s",

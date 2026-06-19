@@ -84,7 +84,7 @@ async def get_cards(
         )
     tag_filters = _parse_tag_filters(tag)
 
-    total, rows = await request.app.state.db.cards.list_cards(
+    total, rows = await request.app.state.db.insights.list_cards(
         tag_filters=tag_filters,
         since=since_iso,
         until=until_iso,
@@ -124,7 +124,7 @@ async def patch_card_tags(
     """Set / unset / query tags. Empty body = query (returns current
     tags unchanged). Validates before any write — partial application
     is impossible by construction."""
-    store = request.app.state.db.cards
+    store = request.app.state.db.insights
     current = await store.get_tags(card_id)
     if current is None:
         raise HTTPException(

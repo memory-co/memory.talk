@@ -32,13 +32,13 @@ async def _seed_card(app) -> str:
     POST /v3/cards; we just want a card_id to read back)."""
     db = app.state.db
     now = _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-    await db.cards.insert("card_seed", "seeded insight", [
+    await db.insights.insert("card_seed", "seeded insight", [
         {"role": "human", "text": "what's lancedb?",
          "session_id": "sess_abc", "index": 1},
         {"role": "assistant", "text": "embedded vector db",
          "session_id": "sess_abc", "index": 2},
     ], now)
-    await db.cards.init_stats("card_seed", now)
+    await db.insights.init_stats("card_seed", now)
     return "card_seed"
 
 

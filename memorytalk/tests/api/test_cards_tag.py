@@ -33,11 +33,11 @@ async def _seed(client) -> str:
 
 async def _read_card_doc(app, cid: str) -> dict | None:
     """Read the on-disk card.json — immutable payload."""
-    return await app.state.db.cards.read_doc(cid)
+    return await app.state.db.insights.read_doc(cid)
 
 
 async def _read_tags_file(app, cid: str) -> dict:
-    return await app.state.db.cards.read_tags_file(cid)
+    return await app.state.db.insights.read_tags_file(cid)
 
 
 # ────────── happy path ──────────

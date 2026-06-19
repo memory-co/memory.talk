@@ -193,7 +193,7 @@ class RecallService:
         row missing — rolled-back card, race window during rebuild)."""
         out: list[dict] = []
         for cid in card_ids:
-            row = await self.db.cards.get(cid)
+            row = await self.db.insights.get(cid)
             if row is None:
                 continue
             out.append({"card_id": cid, "insight": row["insight"]})
