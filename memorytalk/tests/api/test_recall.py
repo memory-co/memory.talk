@@ -23,7 +23,7 @@ async def _ingest(client) -> str:
 
 
 async def _make_card(client, sid: str, insight: str) -> str:
-    r = await client.post("/v3/cards", json={
+    r = await client.post("/v3/insights", json={
         "insight": insight,
         "rounds": [{"session_id": sid, "indexes": "1"}],
     })

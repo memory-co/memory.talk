@@ -13,7 +13,7 @@ from click.testing import CliRunner
 def test_card_group_lists_subcommands():
     from memorytalk.cli import main
     runner = CliRunner()
-    r = runner.invoke(main, ["card", "--help"])
+    r = runner.invoke(main, ["insight", "--help"])
     assert r.exit_code == 0
     for sub in ("create", "list", "tag", "delete"):
         assert sub in r.output
@@ -23,7 +23,7 @@ def test_card_group_lists_subcommands():
 def test_card_subcommand_help_succeeds(sub):
     from memorytalk.cli import main
     runner = CliRunner()
-    r = runner.invoke(main, ["card", sub, "--help"])
+    r = runner.invoke(main, ["insight", sub, "--help"])
     assert r.exit_code == 0, r.output
 
 
@@ -43,14 +43,14 @@ def test_card_delete_yes_flag_skips_confirm(monkeypatch):
             }
         raise AssertionError(f"unexpected call: {method} {path}")
 
-    from memorytalk.cli import card as card_mod
+    from memorytalk.cli import insight as card_mod
     monkeypatch.setattr(card_mod, "api", _fake_api)
 
     from memorytalk.cli import main
     runner = CliRunner()
-    r = runner.invoke(main, ["card", "delete", "card_01xx", "--yes"])
+    r = runner.invoke(main, ["insight", "delete", "card_01xx", "--yes"])
     assert r.exit_code == 0, r.output
-    assert calls == [("DELETE", "/v3/cards/card_01xx")], calls
+    assert calls == [("DELETE", "/v3/insights/card_01xx")], calls
     assert "deleted" in r.output
     assert "1 inbound" in r.output
 
@@ -68,12 +68,12 @@ def test_card_delete_confirm_yes(monkeypatch):
                     "inbound_refs_dangling": 0}
         raise AssertionError(f"unexpected: {method} {path}")
 
-    from memorytalk.cli import card as card_mod
+    from memorytalk.cli import insight as card_mod
     monkeypatch.setattr(card_mod, "api", _fake_api)
 
     from memorytalk.cli import main
     runner = CliRunner()
-    r = runner.invoke(main, ["card", "delete", "card_01yy"], input="y\n")
+    r = runner.invoke(main, ["insight", "delete", "card_01yy"], input="y\n")
     assert r.exit_code == 0, r.output
     assert "deleted" in r.output
 
@@ -92,12 +92,12 @@ def test_card_delete_confirm_no_aborts(monkeypatch):
             saw_delete["hit"] = True
         raise AssertionError(f"unexpected: {method} {path}")
 
-    from memorytalk.cli import card as card_mod
+    from memorytalk.cli import insight as card_mod
     monkeypatch.setattr(card_mod, "api", _fake_api)
 
     from memorytalk.cli import main
     runner = CliRunner()
-    r = runner.invoke(main, ["card", "delete", "card_01zz"], input="n\n")
+    r = runner.invoke(main, ["insight", "delete", "card_01zz"], input="n\n")
     assert r.exit_code != 0
     assert not saw_delete["hit"], "user said no — DELETE must not have run"
 
@@ -113,31 +113,31 @@ def test_card_delete_json_skips_confirm(monkeypatch):
                     "inbound_refs_dangling": 0}
         raise AssertionError(f"unexpected: {method} {path}")
 
-    from memorytalk.cli import card as card_mod
+    from memorytalk.cli import insight as card_mod
     monkeypatch.setattr(card_mod, "api", _fake_api)
 
     from memorytalk.cli import main
     runner = CliRunner()
-    r = runner.invoke(main, ["card", "delete", "card_01jj", "--json"])
+    r = runner.invoke(main, ["insight", "delete", "card_01jj", "--json"])
     assert r.exit_code == 0, r.output
-    assert calls == [("DELETE", "/v3/cards/card_01jj")]
+    assert calls == [("DELETE", "/v3/insights/card_01jj")]
     import json as _json
     body = _json.loads(r.stdout.strip())
     assert body["card_id"] == "card_01jj"
 
 
-# ────────── fmt_card_delete ──────────
+# ────────── fmt_insight_delete ──────────
 
-def test_fmt_card_delete_simple():
-    from memorytalk.cli._format import fmt_card_delete
-    out = fmt_card_delete({"card_id": "card_01x", "inbound_refs_dangling": 0})
+def test_fmt_insight_delete_simple():
+    from memorytalk.cli._format import fmt_insight_delete
+    out = fmt_insight_delete({"card_id": "card_01x", "inbound_refs_dangling": 0})
     assert "deleted" in out
     assert "card_01x" in out
 
 
-def test_fmt_card_delete_with_dangling():
-    from memorytalk.cli._format import fmt_card_delete
-    out = fmt_card_delete({"card_id": "card_01y", "inbound_refs_dangling": 2})
+def test_fmt_insight_delete_with_dangling():
+    from memorytalk.cli._format import fmt_insight_delete
+    out = fmt_insight_delete({"card_id": "card_01y", "inbound_refs_dangling": 2})
     assert "2 inbound" in out
     assert "dangling" in out
 
@@ -148,21 +148,21 @@ def test_old_card_json_form_is_gone():
     name — `card '{"insight":"..."}'` → unknown subcommand → exit 2."""
     from memorytalk.cli import main
     runner = CliRunner()
-    r = runner.invoke(main, ["card", '{"insight":"x"}'])
+    r = runner.invoke(main, ["insight", '{"insight":"x"}'])
     assert r.exit_code != 0
 
 
-# ────────── fmt_card_list ──────────
+# ────────── fmt_insight_list ──────────
 
-def test_fmt_card_list_empty():
-    from memorytalk.cli._format import fmt_card_list
-    out = fmt_card_list({"total": 0, "returned": 0, "cards": []})
+def test_fmt_insight_list_empty():
+    from memorytalk.cli._format import fmt_insight_list
+    out = fmt_insight_list({"total": 0, "returned": 0, "cards": []})
     assert "# card list" in out
     assert "0 / 0 results" in out
 
 
-def test_fmt_card_list_renders_block_per_card():
-    from memorytalk.cli._format import fmt_card_list
+def test_fmt_insight_list_renders_block_per_card():
+    from memorytalk.cli._format import fmt_insight_list
     payload = {
         "total": 2, "returned": 2,
         "cards": [
@@ -186,7 +186,7 @@ def test_fmt_card_list_renders_block_per_card():
             },
         ],
     }
-    out = fmt_card_list(payload, filter_summary="tag=project=billing")
+    out = fmt_insight_list(payload, filter_summary="tag=project=billing")
     # Header echoes filter + counts.
     assert "`filter: tag=project=billing` · 2 / 2 results" in out
     # One H3 per card.
@@ -201,8 +201,8 @@ def test_fmt_card_list_renders_block_per_card():
     assert "tags:" not in second_block
 
 
-def test_fmt_card_list_truncation_hint():
-    from memorytalk.cli._format import fmt_card_list
+def test_fmt_insight_list_truncation_hint():
+    from memorytalk.cli._format import fmt_insight_list
     payload = {
         "total": 50, "returned": 2,
         "cards": [
@@ -212,32 +212,32 @@ def test_fmt_card_list_truncation_hint():
             for i in range(2)
         ],
     }
-    out = fmt_card_list(payload)
+    out = fmt_insight_list(payload)
     assert "showing 2 of 50" in out
 
 
-# ────────── fmt_card_tag ──────────
+# ────────── fmt_insight_tag ──────────
 
-def test_fmt_card_tag_query_empty():
-    from memorytalk.cli._format import fmt_card_tag
-    out = fmt_card_tag(
+def test_fmt_insight_tag_query_empty():
+    from memorytalk.cli._format import fmt_insight_tag
+    out = fmt_insight_tag(
         {"card_id": "card_x", "tags": {}}, is_query=True,
     )
     assert out.strip() == "(no tags)"
 
 
-def test_fmt_card_tag_query_table():
-    from memorytalk.cli._format import fmt_card_tag
-    out = fmt_card_tag(
+def test_fmt_insight_tag_query_table():
+    from memorytalk.cli._format import fmt_insight_tag
+    out = fmt_insight_tag(
         {"card_id": "card_x", "tags": {"a": "1", "b": "2"}}, is_query=True,
     )
     assert "# card_x · tags" in out
     assert "| a | 1 |" in out
 
 
-def test_fmt_card_tag_set_confirm():
-    from memorytalk.cli._format import fmt_card_tag
-    out = fmt_card_tag(
+def test_fmt_insight_tag_set_confirm():
+    from memorytalk.cli._format import fmt_insight_tag
+    out = fmt_insight_tag(
         {"card_id": "card_x", "tags": {"a": "1"}}, is_query=False,
     )
     assert "ok:" in out

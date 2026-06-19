@@ -25,7 +25,7 @@ async def test_full_pipeline_ingest_card_search_read(client):
     sid = r.json()["session_id"]
 
     # ── 2. extract a card from rounds 2-3 ────────────────────────────
-    r = await client.post("/v3/cards", json={
+    r = await client.post("/v3/insights", json={
         "insight": "选定 LanceDB 做向量存储",
         "rounds": [{"session_id": sid, "indexes": "2-3"}],
     })

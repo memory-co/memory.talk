@@ -29,7 +29,7 @@ async def _ingest(client, sid: str = "abc-123", sha: str = "sha1", rounds=None) 
 
 async def _seed_card(app) -> str:
     """Insert a minimal card directly through the repo (faster than going via
-    POST /v3/cards; we just want a card_id to read back)."""
+    POST /v3/insights; we just want a card_id to read back)."""
     db = app.state.db
     now = _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     await db.insights.insert("card_seed", "seeded insight", [

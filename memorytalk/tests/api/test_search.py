@@ -41,7 +41,7 @@ async def _seed_card(app, *, card_id: str, insight: str,
     await db.insights.init_stats(card_id, now)
     if up or down or neutral:
         await db.conn.execute(
-            "UPDATE card_stats SET review_up = ?, review_down = ?, "
+            "UPDATE insight_stats SET review_up = ?, review_down = ?, "
             "review_neutral = ?, review_count = ?, updated_at = ? "
             "WHERE card_id = ?",
             (up, down, neutral, up + down + neutral, now, card_id),
