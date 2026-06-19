@@ -1,6 +1,6 @@
-"""POST /v3/cards + GET /v3/cards + PATCH /v3/cards/{cid}/tags.
+"""POST /v3/insights + GET /v3/insights + PATCH /v3/insights/{cid}/tags.
 
-Card read is via ``POST /v3/read`` (no ``GET /v3/cards/{cid}`` — read is
+Card read is via ``POST /v3/read`` (no ``GET /v3/insights/{cid}`` — read is
 the universal entry point keyed by id prefix). List + tag PATCH are
 maintenance endpoints, designed to mirror the session counterparts so
 the two object types' management UX stays consistent.
@@ -25,7 +25,7 @@ from memorytalk.util.tags import TagValidationError, apply_patch
 router = APIRouter()
 
 
-@router.post("/cards", response_model=CreateInsightResponse)
+@router.post("/insights", response_model=CreateInsightResponse)
 async def post_cards(payload: CreateInsightRequest, request: Request) -> CreateInsightResponse:
     svc = request.app.state.insights
     if svc is None:
@@ -68,7 +68,7 @@ def _parse_tag_filters(raw: list[str]):
     return preds
 
 
-@router.get("/cards", response_model=InsightListResponse)
+@router.get("/insights", response_model=InsightListResponse)
 async def get_cards(
     request: Request,
     tag: list[str] = Query(default_factory=list),
@@ -117,7 +117,7 @@ async def get_cards(
     return InsightListResponse(total=total, returned=len(cards), cards=cards)
 
 
-@router.patch("/cards/{card_id}/tags", response_model=InsightTagResponse)
+@router.patch("/insights/{card_id}/tags", response_model=InsightTagResponse)
 async def patch_card_tags(
     card_id: str, payload: TagPatchRequest, request: Request,
 ):
@@ -145,7 +145,7 @@ async def patch_card_tags(
     return InsightTagResponse(card_id=card_id, tags=merged)
 
 
-@router.delete("/cards/{card_id}", response_model=InsightDeleteResponse)
+@router.delete("/insights/{card_id}", response_model=InsightDeleteResponse)
 async def delete_card(card_id: str, request: Request) -> InsightDeleteResponse:
     """Hard-delete a card: SQLite row + reviews + outbound source_cards
     + vector embedding + per-card filesystem dir.

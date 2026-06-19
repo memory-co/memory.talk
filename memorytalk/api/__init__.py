@@ -199,7 +199,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.include_router(sessions_router, prefix="/v3")
 
     # Optional routers — lazy import so missing ones don't break boot.
-    for name in ("sync", "search", "cards", "recall", "explores"):
+    for name in ("sync", "search", "insights", "recall", "explores"):
         try:
             mod = __import__(f"memorytalk.api.{name}", fromlist=["router"])
             app.include_router(mod.router, prefix="/v3")

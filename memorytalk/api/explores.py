@@ -2,8 +2,8 @@
 
 Plural ``/v3/explores`` is the explore *object* surface (create / view /
 list), deliberately distinct from the legacy ``/v3/explore/*`` cwd feed.
-Card/review minting under an explore goes through the existing
-``/v3/cards`` / ``/v3/reviews`` endpoints with an ``explore_id``.
+Insight minting under an explore goes through the existing
+``/v3/insights`` endpoint with an ``explore_id``.
 """
 from __future__ import annotations
 
