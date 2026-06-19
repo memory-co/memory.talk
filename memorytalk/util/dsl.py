@@ -37,6 +37,8 @@ from typing import Any, Callable
 CARD_ONLY_FIELDS = {
     "card_id", "review_up", "review_down", "review_neutral",
     "review_count", "read_count", "recall_count",
+    # v4 question-graph current-answer fields (credence is computed).
+    "up_count", "down_count", "neutral_count", "credence", "position_count",
 }
 SESSION_ONLY_FIELDS = {"session_id", "source"}
 SHARED_FIELDS = {"created_at", "type"}

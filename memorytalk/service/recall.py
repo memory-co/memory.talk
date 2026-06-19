@@ -31,7 +31,7 @@ import logging
 from memorytalk.adapters import get_adapter
 from memorytalk.config import Config
 from memorytalk.searchbase import Query, SearchBackend
-from memorytalk.service.searchbase_schema import CARDS
+from memorytalk.service.searchbase_schema import INSIGHTS
 from memorytalk.repository import SQLiteStore
 from memorytalk.util.ids import new_event_id
 
@@ -106,7 +106,7 @@ class RecallService:
         # searchbase embeds the query + ensures the FTS index internally.
         oversample = max(top_k * _RECALL_OVERSAMPLE, top_k + 5)
         hits = await self.search.search(
-            CARDS, Query(text=prompt, top_k=oversample),
+            INSIGHTS, Query(text=prompt, top_k=oversample),
         )
 
         # Dedup against this session's prior recalls (derived from
@@ -193,7 +193,7 @@ class RecallService:
         row missing — rolled-back card, race window during rebuild)."""
         out: list[dict] = []
         for cid in card_ids:
-            row = await self.db.cards.get(cid)
+            row = await self.db.insights.get(cid)
             if row is None:
                 continue
             out.append({"card_id": cid, "insight": row["insight"]})

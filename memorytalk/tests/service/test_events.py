@@ -48,7 +48,7 @@ def _session_events(data_root: Path, session_id: str) -> list[dict]:
 def _card_events(data_root: Path, card_id: str) -> list[dict]:
     raw = card_id[len("card_"):] if card_id.startswith("card_") else card_id
     bucket = (raw[:2] if len(raw) >= 2 else raw).lower()
-    path = data_root / "cards" / bucket / card_id / "events.jsonl"
+    path = data_root / "insights" / bucket / card_id / "events.jsonl"
     if not path.exists():
         return []
     return [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
@@ -98,7 +98,7 @@ class TestSessionEvents:
 class TestCardEvents:
     async def test_created_event(self, client, data_root):
         sid = await _ingest(client)
-        r = await client.post("/v3/cards", json={
+        r = await client.post("/v3/insights", json={
             "insight": "the claim",
             "rounds": [{"session_id": sid, "indexes": "1-2"}],
         })
@@ -113,7 +113,7 @@ class TestCardEvents:
         """Each *unique* source session referenced by ``rounds[]`` receives
         a single ``card_extracted`` event."""
         sid = await _ingest(client)
-        r = await client.post("/v3/cards", json={
+        r = await client.post("/v3/insights", json={
             "insight": "x", "rounds": [{"session_id": sid, "indexes": "1-2"}],
         })
         cid = r.json()["card_id"]
@@ -131,7 +131,7 @@ class TestCardEvents:
              "content": [{"type": "text", "text": f"round {i}"}]}
             for i in range(1, 6)
         ], sha="sha_long")
-        await client.post("/v3/cards", json={
+        await client.post("/v3/insights", json={
             "insight": "spans two slices of same session",
             "rounds": [
                 {"session_id": sid, "indexes": "1-2"},
@@ -149,12 +149,12 @@ class TestCardEvents:
         """When card B is created with ``source_cards: [{card_id: A, relation: ...}]``,
         card A's events.jsonl gets a ``card_linked`` event."""
         sid = await _ingest(client)
-        r_parent = await client.post("/v3/cards", json={
+        r_parent = await client.post("/v3/insights", json={
             "insight": "parent",
             "rounds": [{"session_id": sid, "indexes": "1"}],
         })
         parent = r_parent.json()["card_id"]
-        r_child = await client.post("/v3/cards", json={
+        r_child = await client.post("/v3/insights", json={
             "insight": "child supersedes parent",
             "rounds": [{"session_id": sid, "indexes": "2"}],
             "source_cards": [{"card_id": parent, "relation": "supersedes"}],
@@ -166,26 +166,9 @@ class TestCardEvents:
         assert linked[0]["from_card"] == child
         assert linked[0]["relation"] == "supersedes"
 
-    async def test_reviewed_event(self, client, data_root):
-        sid = await _ingest(client)
-        r = await client.post("/v3/cards", json={
-            "insight": "x", "rounds": [{"session_id": sid, "indexes": "1"}],
-        })
-        cid = r.json()["card_id"]
-        await client.post("/v3/reviews", json={
-            "card_id": cid, "session_id": sid, "indexes": "2", "score": 1,
-        })
-        events = _card_events(data_root, cid)
-        reviewed = [e for e in events if e["event"] == "reviewed"]
-        assert len(reviewed) == 1
-        assert reviewed[0]["score"] == 1
-        # The event carries indexes (not comment — comment is in reviews.jsonl).
-        assert reviewed[0]["indexes"] == "2"
-        assert "comment" not in reviewed[0]
-
     async def test_read_event(self, client, data_root):
         sid = await _ingest(client)
-        r = await client.post("/v3/cards", json={
+        r = await client.post("/v3/insights", json={
             "insight": "x", "rounds": [{"session_id": sid, "indexes": "1"}],
         })
         cid = r.json()["card_id"]

@@ -13,8 +13,14 @@ existing on-disk schemas up to match.
 """
 from __future__ import annotations
 
-CARDS = "cards"
+INSIGHTS = "insights"
 ROUNDS = "rounds"
+# v4 card subsystem collections. ``cards`` embeds the Issue (question-level
+# retrieval); ``positions`` embeds the Claim (answer-level retrieval) and
+# carries ``card_id`` as a field so a position hit maps back to its card.
+# The ``cards`` name was freed by the v3 card→insight rename.
+V4_CARDS = "cards"
+V4_POSITIONS = "positions"
 
 # Max text length searchbase will accept per doc (passed in at
 # construction; searchbase itself never reads settings). Over-length
@@ -36,11 +42,17 @@ def cap_text(text: str | None) -> str:
 # rejected. Cards don't: insights are short, and a rejected card just
 # stays un-indexed (no backfill loop), so reject-and-skip is fine.
 SCHEMAS: dict[str, dict] = {
-    CARDS: {"fields": {}},
+    INSIGHTS: {"fields": {}},
     ROUNDS: {
         "fields": {"session_id": "str", "idx": "int", "role": "str"},
         "auto_split": True,
     },
+    # v4: issue embedding (id = card_id, text = issue). Short like
+    # insights → no auto_split, reject-and-skip on over-length.
+    V4_CARDS: {"fields": {}},
+    # v4: claim embedding (id = position_id, text = claim). card_id kept
+    # as a field so a position hit maps back to / groups by its card.
+    V4_POSITIONS: {"fields": {"card_id": "str"}},
 }
 
 

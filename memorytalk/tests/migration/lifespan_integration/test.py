@@ -106,6 +106,13 @@ async def test_081_data_root_boots_cleanly_and_serves_status(
     (tmp_path / "settings.json").write_text(json.dumps(_SETTINGS_JSON))
     await _seed_081_sqlite(tmp_path / "memory.db")
     await _seed_081_lancedb(tmp_path / "vectors")
+    # Seed a file-can under cards/ so the v3 dir-move (cards/ → insights/)
+    # has something to relocate.
+    card_dir = tmp_path / "cards" / "c1" / "c1"
+    card_dir.mkdir(parents=True)
+    (card_dir / "card.json").write_text(
+        '{"card_id": "c1", "insight": "hello insight"}'
+    )
 
     monkeypatch.setenv("MEMORY_TALK_DATA_ROOT", str(tmp_path))
     from memorytalk.api import create_app
@@ -126,6 +133,9 @@ async def test_081_data_root_boots_cleanly_and_serves_status(
         applied = {(a["version"], a["subsystem"]) for a in body["applied"]}
         assert ("v1", "database") in applied
         assert ("v1", "searchbase") in applied
+        # Full catch-up reached v3 (rename) + v4 (new card tables).
+        assert ("v3", "database") in applied
+        assert ("v4", "database") in applied
 
         conn = await aiosqlite.connect(str(tmp_path / "memory.db"))
         try:
@@ -142,8 +152,36 @@ async def test_081_data_root_boots_cleanly_and_serves_status(
                 "WHERE type='table' AND name='recall_log'"
             ) as cur:
                 assert await cur.fetchone() is None
+            # v3 rename ran end-to-end: cards table → insights, seeded
+            # row survives with its card_ id intact.
+            async with conn.execute(
+                "SELECT insight FROM insights WHERE card_id='c1'"
+            ) as cur:
+                assert (await cur.fetchone())[0] == "hello insight"
+            # v4 tables created on top (cards is re-minted as the v4 table).
+            async with conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ) as cur:
+                tbls = {r[0] for r in await cur.fetchall()}
+            assert {"insights", "cards", "positions",
+                    "card_links", "card_sessions"} <= tbls
         finally:
             await conn.close()
+
+    # After the lifespan closes, confirm the v3 searchbase + file-can
+    # renames landed in the real data_root. LanceDB stores each collection
+    # as a ``<name>.lance`` dir under the vectors root, so the moves are
+    # observable on disk (no second client connection needed).
+    vectors = tmp_path / "vectors"
+    # v3 rename: the old ``cards`` collection → ``insights`` (its data
+    # moved there); the v3 file-can ``cards/`` → ``insights/``.
+    assert (vectors / "insights.lance").exists()
+    assert (tmp_path / "insights" / "c1" / "c1" / "card.json").exists()
+    assert not (tmp_path / "cards").exists()
+    # v4 re-minted ``cards`` (issue) + ``positions`` (claim) as fresh
+    # collections on the name v3 freed.
+    assert (vectors / "cards.lance").exists()
+    assert (vectors / "positions.lance").exists()
 
 
 @pytest.mark.asyncio

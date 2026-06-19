@@ -28,10 +28,10 @@ from pathlib import Path
 
 from memorytalk.config import Config
 from memorytalk.searchbase import Query, SearchBackend
-from memorytalk.service.searchbase_schema import CARDS, ROUNDS
+from memorytalk.service.searchbase_schema import INSIGHTS, ROUNDS
 from memorytalk.repository import SQLiteStore
 from memorytalk.schemas import (
-    CardResult, CardStats, SearchResponse, SessionHit, SessionResult,
+    CardResult, InsightStats, SearchResponse, SessionHit, SessionResult,
 )
 from memorytalk.util import dsl as dsl_mod
 from memorytalk.util.formula import FormulaError, compile_formula
@@ -219,17 +219,17 @@ class SearchService:
         if self.searchbase is None:
             return []
         hits = await self.searchbase.search(
-            CARDS, Query(text=query, top_k=top_k * _CARD_OVERSAMPLE),
+            INSIGHTS, Query(text=query, top_k=top_k * _CARD_OVERSAMPLE),
         )
         out: list[dict] = []
         for hit in hits:
             card_id = hit.id
             if not card_id:
                 continue
-            card_row = await self.db.cards.get(card_id)
+            card_row = await self.db.insights.get(card_id)
             if card_row is None:
                 continue  # index might point at a card that was rolled back
-            stats = await self.db.cards.get_stats(card_id)
+            stats = await self.db.insights.get_stats(card_id)
             out.append({
                 "card_id": card_id,
                 "insight": card_row["insight"],
@@ -325,7 +325,7 @@ class SearchService:
             card_id=cand["card_id"],
             insight=highlight_keywords(cand["insight"], query),
             created_at=cand["created_at"],
-            stats=CardStats(**cand["stats"]),
+            stats=InsightStats(**cand["stats"]),
         )
 
     async def _build_session_result(

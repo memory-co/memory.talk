@@ -332,20 +332,8 @@ def _fmt_index_health(index: dict | None) -> str | None:
 
 # ────────── card ──────────
 
-def fmt_card_created(payload: dict) -> str:
+def fmt_insight_created(payload: dict) -> str:
     return f"ok: created `{payload['card_id']}`\n"
-
-
-# ────────── review ──────────
-
-def fmt_review_created(payload: dict) -> str:
-    score = payload.get("score", 0)
-    score_str = f"+{score}" if score > 0 else str(score)
-    return (
-        f"ok: created `{payload['review_id']}` · "
-        f"`{payload['card_id']}` **{score_str}** "
-        f"by `{payload['session_id']}`\n"
-    )
 
 
 # ────────── recall ──────────
@@ -807,7 +795,7 @@ def _session_meta_line(s: dict) -> str:
 
 # ────────── card list / tag ──────────
 
-def fmt_card_list(payload: dict, filter_summary: str = "") -> str:
+def fmt_insight_list(payload: dict, filter_summary: str = "") -> str:
     """Render ``GET /v3/cards`` as H3-per-result blocks.
 
     Mirrors docs/cli/v3/card.md exactly and stays visually aligned
@@ -858,7 +846,7 @@ def fmt_card_list(payload: dict, filter_summary: str = "") -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def fmt_card_delete(payload: dict) -> str:
+def fmt_insight_delete(payload: dict) -> str:
     """Render DELETE /v3/cards/<cid> response.
 
     One-line confirmation + a hint about inbound-ref dangling when
@@ -866,14 +854,9 @@ def fmt_card_delete(payload: dict) -> str:
     cleared / files cleared / etc.) — those are best-effort and
     typically silent."""
     cid = payload.get("card_id") or "?"
-    reviews = int(payload.get("reviews_deleted", 0) or 0)
     dangling = int(payload.get("inbound_refs_dangling", 0) or 0)
 
     bits = [f"deleted · `{cid}`"]
-    if reviews:
-        bits.append(
-            f"{reviews} review{'s' if reviews != 1 else ''} removed",
-        )
     if dangling:
         bits.append(
             f"⚠ {dangling} inbound `source_cards` reference"
@@ -882,7 +865,7 @@ def fmt_card_delete(payload: dict) -> str:
     return " · ".join(bits) + "\n"
 
 
-def fmt_card_tag(payload: dict, *, is_query: bool) -> str:
+def fmt_insight_tag(payload: dict, *, is_query: bool) -> str:
     """Render PATCH /v3/cards/<cid>/tags response.
 
     `is_query` is True when the CLI sent an empty body — output a

@@ -1,8 +1,8 @@
 """Pydantic schemas — request / response shapes for the v3 HTTP API."""
-from memorytalk.schemas.card import Card, CardStats, SourceCard, CardRound
-from memorytalk.schemas.cards import (
-    CardDeleteResponse, CardListResponse, CardMeta, CardRoundRef, CardTagResponse,
-    CreateCardRequest, CreateCardResponse,
+from memorytalk.schemas.insight import Insight, InsightStats, SourceInsight, InsightRound
+from memorytalk.schemas.insights import (
+    InsightDeleteResponse, InsightListResponse, InsightMeta, CardRoundRef, InsightTagResponse,
+    CreateInsightRequest, CreateInsightResponse,
 )
 from memorytalk.schemas.read import ReadRequest, ReadResponse
 from memorytalk.schemas.recall import (
@@ -14,8 +14,6 @@ from memorytalk.schemas.recall import (
     RecallSessionSummary,
     RecalledCard,
 )
-from memorytalk.schemas.review import Review
-from memorytalk.schemas.reviews import CreateReviewRequest, CreateReviewResponse
 from memorytalk.schemas.search import (
     CardResult, SearchRequest, SearchResponse, SessionHit, SessionResult,
 )
@@ -33,14 +31,13 @@ from memorytalk.schemas.sync import (
 
 
 __all__ = [
-    "Card", "CardStats", "SourceCard", "CardRound",
-    "CardDeleteResponse", "CardListResponse", "CardMeta", "CardRoundRef",
-    "CardTagResponse",
-    "CreateCardRequest", "CreateCardResponse",
+    "Insight", "InsightStats", "SourceInsight", "InsightRound",
+    "InsightDeleteResponse", "InsightListResponse", "InsightMeta", "CardRoundRef",
+    "InsightTagResponse",
+    "CreateInsightRequest", "CreateInsightResponse",
     "ReadRequest", "ReadResponse",
     "RecalledCard", "RecallRequest", "RecallResponse",
     "RecallEventOut", "RecallListResponse", "RecallReadResponse", "RecallSessionSummary",
-    "Review", "CreateReviewRequest", "CreateReviewResponse",
     "CardResult", "SearchRequest", "SearchResponse", "SessionHit", "SessionResult",
     "ContentBlock",
     "AppendRoundsRequest", "AppendRoundsResponse",

@@ -136,3 +136,53 @@ class LocalAdminBackend(AdminBackend):
         self._index._declared.pop(name, None)
         self._index._auto_split.discard(name)
         self._index._fts_index_known.discard(name)
+
+    async def rename_collection(self, old: str, new: str) -> None:
+        """Rename a collection (data preserved). Idempotent: no-op once
+        ``old`` is gone.
+
+        ``new`` may already exist as an **empty placeholder** — boot
+        eagerly creates every declared collection (see
+        ``CollectionIndex.create``), so when a migration renames an
+        on-disk ``old`` into a now-declared ``new`` the placeholder races
+        ahead. We drop that empty placeholder so the rename — which
+        carries ``old``'s real rows — can proceed. A **non-empty** ``new``
+        is left untouched (no-op) to avoid clobbering real data.
+        """
+        tables = await self._index._list_tables()
+        if old not in tables:
+            return
+        new_spec = None
+        if new in tables:
+            if await self._index.count(new) > 0:
+                return  # real data under `new` — refuse to clobber
+            new_spec = self._index._declared.get(new)
+            await self.drop_collection(new)
+        try:
+            await self._index.db.rename_table(old, new)
+        except (AttributeError, NotImplementedError):
+            import os
+            import lancedb
+            try:
+                await self._index.db.close()
+            except Exception:
+                pass
+            os.rename(
+                self._index.data_dir / f"{old}.lance",
+                self._index.data_dir / f"{new}.lance",
+            )
+            self._index.db = await lancedb.connect_async(str(self._index.data_dir))
+        # Mirror the bookkeeping that create/drop_collection maintain.
+        self._index._collections.discard(old)
+        self._index._collections.add(new)
+        spec = self._index._declared.pop(old, None)
+        if spec is not None:
+            self._index._declared[new] = spec
+        elif new_spec is not None:
+            # `old` wasn't a declared collection (it's the legacy name);
+            # keep `new`'s declared spec that the dropped placeholder held.
+            self._index._declared.setdefault(new, new_spec)
+        if old in self._index._auto_split:
+            self._index._auto_split.discard(old)
+            self._index._auto_split.add(new)
+        self._index._fts_index_known.discard(old)

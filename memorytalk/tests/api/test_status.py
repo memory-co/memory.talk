@@ -25,5 +25,5 @@ def test_cli_main_imports():
     from memorytalk.cli import main  # registration walks all submodules
     # Force-instantiate each subcommand so click decorators run.
     cmd_names = list(main.commands.keys())
-    assert {"server", "read", "setup", "sync", "search", "card",
-            "review", "recall"}.issubset(set(cmd_names))
+    assert {"server", "read", "setup", "sync", "search", "insight",
+            "recall"}.issubset(set(cmd_names))

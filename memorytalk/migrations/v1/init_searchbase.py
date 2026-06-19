@@ -14,7 +14,7 @@ from memorytalk.searchbase import AdminBackend
 from memorytalk.service.searchbase_schema import SCHEMAS
 
 
-async def run(admin: AdminBackend) -> None:
+async def run(admin: AdminBackend, *, data_root=None) -> None:
     """Make sure every v1 collection exists with the declared shape."""
     for name, schema in SCHEMAS.items():
         await admin.create_collection(name, schema)

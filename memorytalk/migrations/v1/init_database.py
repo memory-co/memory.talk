@@ -127,7 +127,7 @@ INDEXES: list[str] = [
 ]
 
 
-async def run(conn: aiosqlite.Connection) -> None:
+async def run(conn: aiosqlite.Connection, *, data_root=None) -> None:
     """Apply the v1 snapshot to ``conn``. Commits at the end."""
     for stmt in TABLES:
         await conn.execute(stmt)

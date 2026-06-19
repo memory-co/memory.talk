@@ -5,9 +5,8 @@ SQL ops (via aiosqlite). Services access them as::
 
     await db.sessions.write_meta(source, sid, meta)   # file
     await db.sessions.upsert(...)                      # SQL
-    await db.cards.write_doc(card)                    # file
-    await db.cards.insert(...)                         # SQL
-    await db.reviews.insert(...)                      # SQL
+    await db.insights.write_doc(card)                 # file
+    await db.insights.insert(...)                      # SQL
 """
 from __future__ import annotations
 from pathlib import Path
@@ -15,12 +14,16 @@ from pathlib import Path
 import aiosqlite
 
 from memorytalk.provider.storage import Storage
-from memorytalk.repository.cards import CardStore
+from memorytalk.repository.insights import InsightStore
 from memorytalk.repository.explores import ExploreStore
 from memorytalk.repository.recall import RecallStore
-from memorytalk.repository.reviews import ReviewStore
 from memorytalk.repository.search_log import SearchLogStore
 from memorytalk.repository.sessions import SessionStore
+from memorytalk.repository.v4.cards import V4CardStore
+from memorytalk.repository.v4.positions import PositionStore
+from memorytalk.repository.v4.reviews import V4ReviewStore
+from memorytalk.repository.v4.links import CardLinkStore
+from memorytalk.repository.v4.sessions import CardSessionStore
 
 
 class SQLiteStore:
@@ -29,11 +32,17 @@ class SQLiteStore:
         self.db_path = db_path
         self.storage = storage
         self.sessions = SessionStore(conn, storage)
-        self.cards = CardStore(conn, storage)
-        self.reviews = ReviewStore(conn)
+        self.insights = InsightStore(conn, storage)
         self.search_log = SearchLogStore(conn)
         self.recall = RecallStore(conn)
         self.explores = ExploreStore(conn)
+        # v4 card subsystem (governed question graph). Coexists with the
+        # v3 ``insights`` stores; separate tables, no FK between them.
+        self.v4cards = V4CardStore(conn, storage)
+        self.positions = PositionStore(conn, storage)
+        self.v4reviews = V4ReviewStore(conn)
+        self.card_links = CardLinkStore(conn)
+        self.card_sessions = CardSessionStore(conn)
 
     @classmethod
     async def open_connection(cls, db_path: Path) -> aiosqlite.Connection:

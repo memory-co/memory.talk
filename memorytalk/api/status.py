@@ -17,8 +17,11 @@ async def get_status(request: Request) -> StatusResponse:
         settings_path=str(config.settings_path),
         status="running",
         sessions_total=await db.sessions.count(),
-        cards_total=await db.cards.count(),
-        reviews_total=await db.reviews.count(),
+        cards_total=await db.insights.count(),
+        # reviews retired (v3→insight); field kept as a vestigial 0 to
+        # avoid churning the status contract (mirrors the kept-but-unwritten
+        # insight_stats review_* columns).
+        reviews_total=0,
         searches_total=await db.search_log.count(),
         recalls_total=await db.recall.count(),
         embedding_provider=config.settings.embedding.provider,

@@ -29,8 +29,8 @@ def main(no_pager: bool) -> None:
 # Register subcommands. Module name = command name (with one exception
 # noted inline). Missing modules are ignored so an in-flight v3 build
 # still has a usable `--help`.
-_COMMANDS = ("server", "read", "setup", "sync", "search", "card", "review",
-             "recall", "session", "explore", "upgrade")
+_COMMANDS = ("server", "read", "setup", "sync", "search", "insight",
+             "card", "recall", "session", "explore", "upgrade")
 
 for _name in _COMMANDS:
     try:

@@ -175,7 +175,7 @@ class MigrationRunner:
         _log.info(
             "migration: %s/%s/%s start", version, subsystem, method,
         )
-        await module.run(handle)
+        await module.run(handle, data_root=self._data_root)
         duration_ms = int((time.monotonic() - start) * 1000)
         _log.info(
             "migration: %s/%s/%s done (%d ms)",

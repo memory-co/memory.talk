@@ -27,8 +27,16 @@ class EventWriter:
             {"event": event, "ts": _utc_iso(), **detail},
         )
 
+    async def insight_event(self, card_id: str, event: str, **detail: Any) -> None:
+        await self.db.insights.append_event(
+            card_id,
+            {"event": event, "ts": _utc_iso(), **detail},
+        )
+
     async def card_event(self, card_id: str, event: str, **detail: Any) -> None:
-        await self.db.cards.append_event(
+        """v4 card lifecycle event (created / position_added / reviewed /
+        card_linked / session_cited / vector_index_failed)."""
+        await self.db.v4cards.append_event(
             card_id,
             {"event": event, "ts": _utc_iso(), **detail},
         )

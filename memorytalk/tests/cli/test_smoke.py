@@ -18,13 +18,13 @@ def test_top_level_help():
     runner = CliRunner()
     result = runner.invoke(main, ["--help"])
     assert result.exit_code == 0
-    for cmd in ("server", "read", "setup", "sync", "search", "card",
-                "review", "recall", "session"):
+    for cmd in ("server", "read", "setup", "sync", "search", "insight",
+                "recall", "session"):
         assert cmd in result.output
 
 
 @pytest.mark.parametrize("cmd", [
-    "server", "read", "setup", "sync", "search", "card", "review", "recall",
+    "server", "read", "setup", "sync", "search", "insight", "recall",
     "session",
 ])
 def test_each_command_help_succeeds(cmd):

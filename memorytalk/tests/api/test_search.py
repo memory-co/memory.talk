@@ -32,23 +32,25 @@ async def _seed_card(app, *, card_id: str, insight: str,
                      reads: int = 0) -> None:
     """Insert a card + stats directly into the store, then index it."""
     from memorytalk.searchbase import Doc
-    from memorytalk.service.searchbase_schema import CARDS, cap_text
+    from memorytalk.service.searchbase_schema import INSIGHTS, cap_text
 
     db = app.state.db
     searchbase = app.state.searchbase
     now = _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-    await db.cards.insert(card_id, insight, [], now)
-    await db.cards.init_stats(card_id, now)
-    for _ in range(up):
-        await db.cards.bump_review(card_id, 1, now)
-    for _ in range(down):
-        await db.cards.bump_review(card_id, -1, now)
-    for _ in range(neutral):
-        await db.cards.bump_review(card_id, 0, now)
+    await db.insights.insert(card_id, insight, [], now)
+    await db.insights.init_stats(card_id, now)
+    if up or down or neutral:
+        await db.conn.execute(
+            "UPDATE insight_stats SET review_up = ?, review_down = ?, "
+            "review_neutral = ?, review_count = ?, updated_at = ? "
+            "WHERE card_id = ?",
+            (up, down, neutral, up + down + neutral, now, card_id),
+        )
+        await db.conn.commit()
     for _ in range(reads):
-        await db.cards.bump_read(card_id, now)
+        await db.insights.bump_read(card_id, now)
     if searchbase is not None:
-        await searchbase.upsert(CARDS, [
+        await searchbase.upsert(INSIGHTS, [
             Doc(id=card_id, text=cap_text(insight), fields={}),
         ])
 

@@ -24,7 +24,7 @@ from __future__ import annotations
 from memorytalk.searchbase import AdminBackend
 
 
-async def run(admin: AdminBackend) -> None:
+async def run(admin: AdminBackend, *, data_root=None) -> None:
     collections = set(await admin.list_collections())
 
     if "cards" in collections:
