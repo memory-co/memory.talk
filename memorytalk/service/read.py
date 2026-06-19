@@ -1,7 +1,7 @@
 """ReadService — prefix-dispatched read of card or session.
 
 The CLI / API layer parses the id prefix and calls one of:
-- ``read_card(card_id)`` → full Insight with stats, source_cards, reviews, rounds
+- ``read_insight(card_id)`` → full Insight with stats, source_cards, reviews, rounds
 - ``read_session(session_id)`` → full Session with rounds (read from jsonl)
 
 Insight reads have a side effect: ``card.stats.read_count`` is bumped by one
@@ -19,10 +19,10 @@ from memorytalk.repository import SQLiteStore
 from memorytalk.schemas import (
     Insight, InsightRound, InsightStats, ContentBlock, Round, Session, SourceInsight,
 )
-# CardNotFound is owned by service.cards (the card service is the canonical
+# InsightNotFound is owned by service.cards (the card service is the canonical
 # place for card lifecycle errors); re-exported here for callers that
 # historically imported it from service.read.
-from memorytalk.service.cards import CardNotFound
+from memorytalk.service.insights import InsightNotFound
 from memorytalk.service.events import EventWriter
 
 
@@ -43,15 +43,15 @@ class ReadService:
         self.db = db
         self.events = events
 
-    async def read_card(self, card_id: str) -> tuple[Insight, str]:
+    async def read_insight(self, card_id: str) -> tuple[Insight, str]:
         """Return (card, read_at). Bumps read_count + emits a `read` event."""
         row = await self.db.insights.get(card_id)
         if row is None:
-            raise CardNotFound(f"card {card_id} not found")
+            raise InsightNotFound(f"card {card_id} not found")
 
         now = _utc_iso()
         await self.db.insights.bump_read(card_id, now)
-        await self.events.card_event(card_id, "read", read_at=now)
+        await self.events.insight_event(card_id, "read", read_at=now)
 
         stats_dict = await self.db.insights.get_stats(card_id)
         # Merge in derived recall_count (single source of truth lives in

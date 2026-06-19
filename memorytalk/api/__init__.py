@@ -28,7 +28,7 @@ from memorytalk.provider.storage import LocalStorage
 from memorytalk.repository import SQLiteStore
 from memorytalk.repository.sync_checkpoint import SyncCheckpointStore
 from memorytalk.service import (
-    CardService, EventWriter, IngestService, ReadService,
+    InsightService, EventWriter, IngestService, ReadService,
     RecallService,
 )
 from memorytalk.service.backfill import IndexBackfill
@@ -133,7 +133,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         app.state.search = SearchService(
             config=config, db=db, search=searchbase,
         )
-        app.state.cards = CardService(
+        app.state.insights = InsightService(
             db=db, search=searchbase, events=events,
         )
         app.state.recall = RecallService(

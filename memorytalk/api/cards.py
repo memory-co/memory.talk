@@ -16,8 +16,8 @@ from memorytalk.schemas import (
     CreateInsightRequest, CreateInsightResponse,
     TagPatchRequest,
 )
-from memorytalk.service import CardConflict, CardServiceError
-from memorytalk.service.cards import CardNotFound
+from memorytalk.service import InsightConflict, InsightServiceError
+from memorytalk.service.insights import InsightNotFound
 from memorytalk.util.tag_filter import parse_tag_arg
 from memorytalk.util.tags import TagValidationError, apply_patch
 
@@ -27,14 +27,14 @@ router = APIRouter()
 
 @router.post("/cards", response_model=CreateInsightResponse)
 async def post_cards(payload: CreateInsightRequest, request: Request) -> CreateInsightResponse:
-    svc = request.app.state.cards
+    svc = request.app.state.insights
     if svc is None:
         raise HTTPException(status_code=503, detail="cards service unavailable")
     try:
         card_id = await svc.create(payload)
-    except CardConflict as e:
+    except InsightConflict as e:
         raise HTTPException(status_code=409, detail=str(e))
-    except CardServiceError as e:
+    except InsightServiceError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return CreateInsightResponse(card_id=card_id)
 
@@ -156,11 +156,11 @@ async def delete_card(card_id: str, request: Request) -> InsightDeleteResponse:
     user. recall_event rows that mention this card_id are NOT touched
     — they're historical records, deleting the card doesn't rewrite
     history."""
-    svc = request.app.state.cards
+    svc = request.app.state.insights
     if svc is None:
         raise HTTPException(status_code=503, detail="cards service unavailable")
     try:
         result = await svc.delete(card_id)
-    except CardNotFound as e:
+    except InsightNotFound as e:
         raise HTTPException(status_code=404, detail=str(e))
     return InsightDeleteResponse(**result)

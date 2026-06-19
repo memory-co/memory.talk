@@ -1,4 +1,4 @@
-"""CardService — POST /v3/cards.
+"""InsightService — POST /v3/cards.
 
 Validates the create request, expands ``rounds[].indexes`` against the
 source sessions' jsonl, persists across SQLite / files / LanceDB, and
@@ -46,15 +46,15 @@ _ALLOWED_RELATIONS = {"derives_from", "supersedes"}
 _log = logging.getLogger(__name__)
 
 
-class CardServiceError(Exception):
+class InsightServiceError(Exception):
     """4xx-equivalent: validation failed, request rejected."""
 
 
-class CardConflict(CardServiceError):
+class InsightConflict(InsightServiceError):
     """409-equivalent: the supplied card_id already exists."""
 
 
-class CardNotFound(CardServiceError):
+class InsightNotFound(InsightServiceError):
     """404-equivalent: card_id doesn't exist."""
 
 
@@ -72,7 +72,7 @@ def _extract_thinking(content: list[dict]) -> str | None:
     return None
 
 
-class CardService:
+class InsightService:
     def __init__(
         self,
         db: SQLiteStore,
@@ -86,13 +86,13 @@ class CardService:
     async def create(self, req: CreateInsightRequest) -> str:
         """Validate + persist; return the card_id (auto-gen'd or supplied)."""
         if not req.insight or not req.insight.strip():
-            raise CardServiceError("insight required")
+            raise InsightServiceError("insight required")
 
         card_id = req.card_id or new_card_id()
         if not card_id.startswith(CARD_PREFIX):
-            raise CardServiceError("invalid card_id prefix")
+            raise InsightServiceError("invalid card_id prefix")
         if req.card_id and await self.db.insights.exists(card_id):
-            raise CardConflict(f"card_id {card_id} already exists")
+            raise InsightConflict(f"card_id {card_id} already exists")
 
         # ── tags validation (pre-flight; reject whole create) ────────────
         # Validate before any DB write so a bad tag doesn't leave a
@@ -102,7 +102,7 @@ class CardService:
             try:
                 validate_tag_dict(tags)
             except TagValidationError as e:
-                raise CardServiceError(str(e)) from e
+                raise InsightServiceError(str(e)) from e
 
         # ── expand rounds ─────────────────────────────────────────────────
         expanded_rounds, referenced_sessions = await self._expand_rounds(req.rounds)
@@ -110,11 +110,11 @@ class CardService:
         # ── validate source_cards ────────────────────────────────────────
         for sc in req.source_cards:
             if not sc.card_id.startswith(CARD_PREFIX):
-                raise CardServiceError("invalid source card_id prefix")
+                raise InsightServiceError("invalid source card_id prefix")
             if sc.relation not in _ALLOWED_RELATIONS:
-                raise CardServiceError(f"unknown relation: {sc.relation}")
+                raise InsightServiceError(f"unknown relation: {sc.relation}")
             if not await self.db.insights.exists(sc.card_id):
-                raise CardServiceError(f"source card {sc.card_id} not found")
+                raise InsightServiceError(f"source card {sc.card_id} not found")
 
         now = _utc_iso()
 
@@ -154,12 +154,12 @@ class CardService:
                     Doc(id=card_id, text=cap_text(req.insight), fields={}),
                 ])
             except Exception as e:
-                await self.events.card_event(
+                await self.events.insight_event(
                     card_id, "vector_index_failed", error=str(e),
                 )
 
         # ── 4. Events ────────────────────────────────────────────────────
-        await self.events.card_event(
+        await self.events.insight_event(
             card_id, "created",
             insight_preview=req.insight[:80],
             round_count=len(expanded_rounds),
@@ -169,7 +169,7 @@ class CardService:
             await self.events.session_event(source, sid, "card_extracted",
                                             card_id=card_id)
         for sc in req.source_cards:
-            await self.events.card_event(
+            await self.events.insight_event(
                 sc.card_id, "card_linked",
                 from_card=card_id, relation=sc.relation,
             )
@@ -180,7 +180,7 @@ class CardService:
 
     async def delete(self, card_id: str) -> dict:
         """Remove a card from SQLite + vector + files. Idempotent in the
-        sense that re-calling on an already-deleted id raises CardNotFound
+        sense that re-calling on an already-deleted id raises InsightNotFound
         (not a silent no-op — callers should not call us twice).
 
         Order matters:
@@ -202,7 +202,7 @@ class CardService:
         """
         row = await self.db.insights.get(card_id)
         if row is None:
-            raise CardNotFound(f"card {card_id} not found")
+            raise InsightNotFound(f"card {card_id} not found")
 
         inbound = await self.db.insights.count_inbound_refs(card_id)
 
@@ -240,7 +240,7 @@ class CardService:
 
         Reads each referenced session's full rounds.jsonl once (cached per
         ``session_id`` within this call), parses the ``indexes`` string,
-        and assembles one dict per matched round. Raises ``CardServiceError``
+        and assembles one dict per matched round. Raises ``InsightServiceError``
         if a session is missing or an index is out of range.
 
         Returns ``(expanded_rounds, [(session_id, source), ...])`` —
@@ -251,16 +251,16 @@ class CardService:
         out: list[dict] = []
         for ref in refs:
             if not ref.session_id.startswith((SESSION_PREFIX, SESSION_PREFIX_LEGACY)):
-                raise CardServiceError("invalid session_id prefix")
+                raise InsightServiceError("invalid session_id prefix")
             session_row = await self.db.sessions.get(ref.session_id)
             if session_row is None:
-                raise CardServiceError(f"session {ref.session_id} not found")
+                raise InsightServiceError(f"session {ref.session_id} not found")
             sources[ref.session_id] = session_row["source"]
 
             try:
                 want = parse_indexes(ref.indexes)
             except IndexesParseError as e:
-                raise CardServiceError(str(e)) from e
+                raise InsightServiceError(str(e)) from e
 
             if ref.session_id not in cache:
                 cache[ref.session_id] = await self.db.sessions.read_rounds_file(
@@ -271,7 +271,7 @@ class CardService:
             for idx in want:
                 round_dict = rounds_by_idx.get(idx)
                 if round_dict is None:
-                    raise CardServiceError(
+                    raise InsightServiceError(
                         f"index {idx} out of range for session {ref.session_id}"
                     )
                 out.append({
