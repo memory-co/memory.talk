@@ -2,7 +2,7 @@
 
 v4 卡子系统在 data root(**固定** `~/.memory.talk/`)下产生的文件 / 目录 / SQLite 表 / LanceDB collection —— 这一页只回答「v4 的卡到底放在磁盘哪、双写关系是什么」。字段语义见对应对象 md。
 
-> v4 **只新增 / 重写卡子系统这一层**。`sessions/` 镜像、`sync.db`、`logs/`、顶层 `settings.json` / `server.pid` 等沿用 v3,不在这里复制,见 [`../v3/filesystem.md`](../v3/filesystem.md)。
+> v4 **只新增 / 重写卡子系统这一层**。`sessions/` 镜像、`sync.db`、`logs/`、顶层 `settings.json` / `server.pid` 等的磁盘布局**沿用 v3**;为了让本页自洽,这套沿用层在末尾 [#沿用层session--sync--logs--settings](#沿用层session--sync--logs--settings) 里完整列出。
 
 ## 全景(卡子系统部分)
 
@@ -121,3 +121,59 @@ v4 写路径前端 = **session mark(以写代读:逐 round 读、产 session 级
 | 出处 | `rounds[].session_id` 内联 | card→session `card_sessions`(mark)+ position→session `position_sessions`(indexes) |
 | LanceDB | `cards`(embed insight)+ `rounds` | `cards`(embed issue)+ `positions`(embed claim)+ `insights`(v3 遗产)+ `rounds` |
 | FOREIGN KEY | `card_stats` 有 FK | **全无 FK**(贯彻派生索引立场) |
+
+## 沿用层(session / sync / logs / settings)
+
+卡子系统以外的磁盘布局 v4 一字不改地沿用 v3,这里完整列出以便本页自洽。
+
+### Data root
+
+固定在 `~/.memory.talk/`,**不开 `--data-root` 参数**(详见 [`../../cli/v4/setup.md`](../../cli/v4/setup.md))。`MEMORY_TALK_DATA_ROOT` 环境变量存在,但**仅作测试 hook**(允许 tmpdir 隔离多实例),不在用户文档中暴露。
+
+### 顶层文件
+
+| 文件 | 内容 | 写入方 | 删除时机 |
+|---|---|---|---|
+| `settings.json` | 全局配置(server / embedding / search / sync / explore 等) | `setup` wizard(原子写)或手工编辑 | 用户手动 |
+| `memory.db` | SQLite — 业务数据(sessions / rounds 元数据 / 卡子系统表 / 日志) | server lifespan 启动时 `init_schema` 幂等建表;各 service 写入 | 用户手动(重建走 `setup`) |
+| `sync.db` | SQLite — sync 连接器自己的游标库(`sync_session_checkpoint` 表) | `SyncCheckpointStore` 在 lifespan 启动时建表;sync watcher 写入 | 删掉 = 触发下一次 server start 时全量冷扫(数据安全,因为 ingest 是 append-only + UNIQUE 兜底) |
+| `server.pid` | daemon 进程 pid 文本(单行整数) | `cli server start` | `cli server stop`,或 start 探测到 pid 失活时清理 |
+| `server.port` | daemon 实际监听端口(单行整数) | `cli server start` | 同 `server.pid` |
+
+### sessions 镜像(每 session 一目录)
+
+布局:`sessions/<source>/<id[0:2]>/<session_id>/`
+
+- `<source>` 来自请求,如 `claude-code` / `codex`
+- `<id[0:2]>` 是 `session_id` 去掉 `sess_` 前缀后的前 2 字符(bucket 散列,避免单目录过大)
+
+| 文件 | 内容 | 写入时机 |
+|---|---|---|
+| `meta.json` | `session_id` / `source` / `created_at` / `metadata` / `round_count` / `synced_at` | ingest 首次创建;`round_count` / `synced_at` 变化时刷新 |
+| `rounds.jsonl` | 一行一 Round JSON,**append-only** | 每次 ingest 把新增 round 追加进去。strictly append-only:同 `round_id` 的内容变更不会传到这里,sync 的 `read_after` 只产出 strictly-new round |
+| `events.jsonl` | session 生命周期事件(`imported` / `rounds_appended` / `vector_index_failed` 等) | 各路径触发时追加 |
+| `marks/` | **v4 新增**:逐 round 注解(见 [session-mark.md](session-mark.md)) | session mark 写入时 |
+
+完整 session 结构(`sessions` 表列、Round / ContentBlock、cursor 三元组)见 [session.md](session.md)。
+
+### sync.db(SQLite)
+
+sync watcher 自己的状态库,跟 memory.db 分文件存。
+
+| 表 | 粒度 | 用途 |
+|---|---|---|
+| `sync_session_checkpoint` | `(source, location, session_id)` | 每个上游 session 的 `sha256` + `last_round_id` + `line_offset` + `updated_at`。**source 是 adapter 名(`claude-code` / ...),`session_id` 是平台原始 id 不含 `sess_` 前缀** |
+
+这里只回答一个问题:"我上次同步这个上游 session 到什么位置了"。删除 sync.db 不影响 memory.db,只会触发下一次启动重新冷扫所有上游 session。
+
+### logs/
+
+| 路径 | 内容 |
+|---|---|
+| `logs/search/<YYYY-MM-DD>.jsonl` | search 审计,**UTC 日切分**,每行一条完整 search 响应快照。老化按 `settings.search.search_log_retention_days`(默认 `0` = 永不老化) |
+| `logs/sync/watch.log` | sync watcher 细粒度日志(每个文件事件 / append 结果 / 冲突 / backfill milestones) |
+| `logs/server.log`(`server.log`) | uvicorn + memorytalk app 主日志 |
+
+### 启动时确保的目录
+
+server 启动 / `setup` 完成时,`Config.ensure_dirs` 会 `mkdir -p`:`~/.memory.talk/`、`vectors/`、`sessions/`、`cards/`、`logs/`、`logs/search/`、`logs/sync/`。`memory.db` 和 `sync.db` 由各自的 store 在首次连接时自动创建;`{source}` / `{bucket}` / `{card_id}` 等子目录在第一次写入时按需建。

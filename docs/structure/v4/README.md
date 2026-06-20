@@ -28,7 +28,7 @@ v4 是 **card 的另一代**:一张卡不再是「一句陈述」,而是「**一
 | Settings(`settings.json`) | 沿用 v3;向量 collections 增 `cards` / `positions` | [settings.md](settings.md) |
 | Search-Result | **跟 v3 不同**(`top_position` + 现算 credence,无沉浮排序) | [search-result.md](search-result.md) |
 
-> Recall-Event 等其余基础设施在 v4 没变,直接看 [`../../structure/v3/`](../../structure/v3/)。v4 只重写「卡子系统」这一层(上面 6 个对象)。
+> v4 只重写「卡子系统」这一层(上面 6 个对象)+ 把沿用层(session / settings / search-result)在本目录就地补全;Recall-Event 等其余无变化的派生记录跟 v3 一致(召回的运行态去重落 `recall_log`,无独立 schema 文档),其字段在 [recall.md](recall.md) 的「排序与去重」小节里说明。
 
 ## ID 前缀
 

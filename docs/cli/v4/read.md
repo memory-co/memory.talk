@@ -106,7 +106,73 @@ memory.talk read <id> [--json]
 
 ## `sess_` —— session
 
-沿用 v3 的 session 读取(`meta` + `rounds`),见 [`../v3/read.md`](../v3/read.md)。
+读一条 session = 头部元数据(`meta`)+ 展开的 `rounds`,完全只读(不更新任何 stats;session 不参与卡的动力学)。rounds 一次性全返回,不支持窗口参数;session 过长时在 [`search`](search.md) 侧用更精准的 `query` / `--where` 缩小命中。
+
+### 输出 — Markdown(默认)
+
+````markdown
+# SESSION `sess_187c6576`
+
+**Created:** `2026-04-10`
+
+**Metadata:**
+
+- project: `/home/user/myapp`
+
+**Source:** claude-code
+
+## rounds (2)
+
+**[#1 human]**
+
+ChromaDB vs LanceDB?
+
+---
+
+**[#2 assistant]**
+
+推荐 LanceDB,零依赖嵌入式。
+````
+
+约定:
+- 顺序固定:**头部元数据**(`Created` / `Metadata` / `Source`)→ **`## rounds`**。每段元数据之间空行隔开;`Source` 跟其它元数据并排放头部(放最末尾会被长 rounds 推得看不见)。
+- `## rounds` 放最后,因为单条 round 内容里**经常本身就是 Markdown**(代码块、列表、引用、子标题),放在中间会跟外层结构混。挪到最后等于"先看元数据,再看内容正文"。
+- 每个 round 之间用 `---` 分隔。round 内部:第一行 `**[#<idx> <role>]**`,空一行后是 round 正文(原样输出 content 文本,可含任意 Markdown)。
+- 多 ContentBlock 的 round(含 thinking 等非 text 块)用 `+ <type>` 标注:`**[#3 assistant +thinking +tool_use]**`。正文里只渲染 text/code 块,其它类型用头部 `+xxx` 标记。
+- 单条 round 正文不做 80 列截断;完整 raw 内容仍在 `--json`。
+
+### 输出 — JSON(`--json`)
+
+```json
+{
+  "type": "session",
+  "read_at": "2026-04-20T14:32:05Z",
+  "session": {
+    "session_id": "sess_187c6576",
+    "source": "claude-code",
+    "created_at": "2026-04-10T14:30:00Z",
+    "metadata": {"project": "/home/user/myapp"},
+    "rounds": [
+      {
+        "index": 1,
+        "round_id": "r001",
+        "speaker": "user",
+        "role": "human",
+        "content": [{"type": "text", "text": "ChromaDB vs LanceDB?"}]
+      },
+      {
+        "index": 2,
+        "round_id": "r002",
+        "speaker": "assistant",
+        "role": "assistant",
+        "content": [{"type": "text", "text": "推荐 LanceDB,零依赖嵌入式"}]
+      }
+    ]
+  }
+}
+```
+
+响应直接暴露**带前缀的裸 id**(`session_id`),拿到就能喂给下一次 `read`。session 结构见 [`../../structure/v4/session.md`](../../structure/v4/session.md)。
 
 ## 错误
 

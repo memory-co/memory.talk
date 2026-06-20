@@ -28,7 +28,7 @@ memory.talk
 └── session mark --session <sid> [--mark <file>] # v4 新增:打注解(给 --mark=文件 / 不给=交互;#…？ 自动建卡)
 ```
 
-**v4 重写 / 新增的命令**:`card`(create / position / review / link)/ `read` / `search` / `recall` / `insight` / `session mark`——卡的数据模型变了(问题 + 答案 + IBIS 边 + 出处),这些命令行为都跟 v3 不同;`session mark` 是 v4 抽卡的**写路径前端**(逐 round 打注解,机制见 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md))。**真·沿用 v3 不变的只有基础设施**:`setup` / `server` / `sync` / `session list|tag`(见 [`../v3/`](../v3/),本目录不复制);`explore`(抽 v4 卡的工作台)**留下一轮设计**。命令详情见 [#六、命令详情](#六命令详情)。
+**v4 重写 / 新增的命令**:`card`(create / position / review / link)/ `read` / `search` / `recall` / `insight` / `session mark`——卡的数据模型变了(问题 + 答案 + IBIS 边 + 出处),这些命令行为都跟 v3 不同;`session mark` 是 v4 抽卡的**写路径前端**(逐 round 打注解,机制见 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md))。**沿用 v3 行为不变的基础设施**:`setup` / `server` / `sync` / `session list|tag`(本目录已完整收录各自的契约 doc);`explore`(抽 v4 卡的工作台)产物从 insight 卡换成 v4 卡。命令详情见 [#六、命令详情](#六命令详情)。
 
 ## 三、问题图 / 治理术语 → CLI 字段对照
 
@@ -120,9 +120,9 @@ memory.talk card review --position pos_OLD --argument -1 --cite sess_xyz:4-9 --c
 
 旧答案不删不改、仍在卡里可查;谁浮上来由 credence 现算说了算。认知史落在 reviews 日志 + 并存的旧 Position 上。
 
-### 抽卡仍走 explore 工作台(沿用 v3)
+### 抽卡仍走 explore 工作台(行为沿用 v3)
 
-在 explore 目录里逐 round 旁白标注,`#问题` 自动建卡 / 关联;产物从"insight 卡"换成"v4 卡(问题 + 答案)"。机制见 [`../v3/explore.md`](../v3/explore.md) 与 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md)。
+在 explore 目录里逐 round 旁白标注,`#问题` 自动建卡 / 关联;产物从"insight 卡"换成"v4 卡(问题 + 答案)"。命令契约见 [explore.md](explore.md),写路径机制见 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md)。
 
 ## 六、命令详情
 
@@ -135,10 +135,10 @@ memory.talk card review --position pos_OLD --argument -1 --cite sess_xyz:4-9 --c
 | `insight`(search / view,只读) | [insight.md](insight.md) |
 | `session`(list / tag 沿用 v3 + **mark v4 新增**) | [session.md](session.md) |
 | `setup`(沿用 v3) | [setup.md](setup.md) |
-| `server`(沿用 v3,无独立 doc) | [`../v3/setup.md`](../v3/setup.md) |
+| `server`(沿用 v3,无独立 doc;起停 / 重启见 setup) | [setup.md](setup.md) |
 | `sync`(沿用 v3;端点 `/v3`→`/v4`) | [sync.md](sync.md) |
 | `upgrade`(沿用 v3) | [upgrade.md](upgrade.md) |
-| `explore`(抽 v4 卡工作台,下一轮设计) | [explore.md](explore.md) |
+| `explore`(抽 v4 卡工作台;产物换 v4 卡) | [explore.md](explore.md) |
 
 > 数据结构 / schema 见 [`../../structure/v4/`](../../structure/v4/);HTTP API 见 [`../../api/v4/`](../../api/v4/);**机制 / 设计决策** 见 [`../../works/v4/card.md`](../../works/v4/card.md)。
 

@@ -70,7 +70,38 @@ CLI 对应 [`read <id>`](../../cli/v4/read.md)。字段语义见 [`../../structu
 
 ### 响应 — `sess_`
 
-沿用 v3 session 读取形态(`meta` + `rounds`),见 [`../v3/`](../v3/) / v3 session 文档。
+session 读取 = 头部元数据 + 展开的 `rounds`,完全只读(不更新任何计数;session 不参与卡的动力学)。rounds 一次性全返回,不支持窗口参数。
+
+```json
+{
+  "type": "session",
+  "read_at": "2026-04-20T14:32:05Z",
+  "session": {
+    "session_id": "sess_187c6576",
+    "source": "claude-code",
+    "created_at": "2026-04-10T14:30:00Z",
+    "metadata": {"project": "/home/user/myapp"},
+    "rounds": [
+      {
+        "index": 1,
+        "round_id": "r001",
+        "speaker": "user",
+        "role": "human",
+        "content": [{"type": "text", "text": "ChromaDB vs LanceDB?"}]
+      },
+      {
+        "index": 2,
+        "round_id": "r002",
+        "speaker": "assistant",
+        "role": "assistant",
+        "content": [{"type": "text", "text": "推荐 LanceDB,零依赖嵌入式"}]
+      }
+    ]
+  }
+}
+```
+
+Round / ContentBlock 结构见 [`../../structure/v4/session.md`](../../structure/v4/session.md)。
 
 ### 错误
 

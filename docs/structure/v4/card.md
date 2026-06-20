@@ -153,7 +153,7 @@ CREATE INDEX idx_pos_card ON positions(card_id);
 - `cards.position_count` / `cards.link_count` / `positions.review_count` 是**冗余计数**:分别从 `positions` / `card_links` / 顶踩计数重算得到,写时维护、免 join。
 - 向量侧 embed `cards.issue`(问题级)+ `positions.claim`(答案级)两个 collection,索引在 `vectors/`(LanceDB),见 [filesystem.md](filesystem.md)。
 
-存储分层(file canonical + SQLite index)总体模式见 [`../v3/filesystem.md`](../v3/filesystem.md) 与 [`../../works/v4/card.md`](../../works/v4/card.md) §8。
+存储分层(file canonical + SQLite index)总体模式见 [filesystem.md](filesystem.md) 与 [`../../works/v4/card.md`](../../works/v4/card.md) §8。
 
 ## 跟 v3 talk-card 的差异
 

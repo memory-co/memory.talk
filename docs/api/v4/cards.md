@@ -2,7 +2,7 @@
 
 卡 = 一个**问题**（`issue`）+ 它底下的若干**答案候选**（Position）。本页四个端点：建卡、列卡、给卡加答案、列卡的答案。
 
-读单卡 / 单 Position 走沿用 v3 的 `POST /v3/read`（`card_` / `pos_` 前缀都认）。对答案表态走 [`POST /v4/positions/{pid}/reviews`](reviews.md)。
+读单卡 / 单 Position 走 [`POST /v4/read`](read.md)（`card_` / `pos_` 前缀都认）。对答案表态走 [`POST /v4/positions/{pid}/reviews`](reviews.md)。
 
 CLI 对应 [`card create | position`](../../cli/v4/card.md)（读卡走 [`read`](../../cli/v4/read.md))。字段语义详见 [`../../structure/v4/card.md`](../../structure/v4/card.md)。
 

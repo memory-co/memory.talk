@@ -85,7 +85,7 @@ memory.talk recall --session <session_id> --prompt '<prompt>' [--json]
 |---|---|---|
 | 触发 | hook 阶段无意识 | 用户 / agent 有意识 |
 | 输出 | 极简(问题 + 当下答案 + scope) | 完整(可带 DSL 过滤、多答案) |
-| 排序 | 检索相关性 → credence(取当下答案) | 沿用 v3 search |
+| 排序 | 检索相关性 → credence(取当下答案) | 见 [`search`](search.md) |
 | 用途 | 注入 context | 检索 / 排查 |
 
-`search` 沿用 v3,见 [`../v3/search.md`](../v3/search.md)。
+`search` 的完整契约见 [`search.md`](search.md)。
