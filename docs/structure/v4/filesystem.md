@@ -65,10 +65,11 @@ DDL 详见各对象 md 的「存储」小节。**全部无 FOREIGN KEY**(SQLite 
 | `positions` | 一行一答案 | `claim` + `up/down/neutral_count` + `review_count`(冗余) + `scope` + `forked_from_position_id` | [card.md](card.md) |
 | `reviews` | 一行一表态 | `position_id` / `card_id` / `session_id` / `indexes` / `argument` / `comment` | [review.md](review.md) |
 | `card_links` | (card_id, type, target_id) | card↔card IBIS 边(+ `target_type` 派生列) | [card-link.md](card-link.md) |
-| `card_sessions` | (card_id, session_id, mark, position_id) | card↔session 出处(`mark` = 哪条 mark) | [card-session.md](card-session.md) |
+| `card_sessions` | (card_id, session_id, mark) | **card→session** 出处(经 mark;同一对可多条) | [card-session.md](card-session.md) |
+| `position_sessions` | (position_id, session_id) | **position→session** 出处(答案来自哪几轮 `indexes`;**无 mark**) | [position-session.md](position-session.md) |
 | `session_marks` | (session_id, mark) | mark 元信息(round_index / last_index;撑乐观锁 + 寻址) | [session-mark.md](session-mark.md) |
 
-索引:`idx_pos_card`(positions.card_id)、`idx_reviews_position`(position_id, created_at DESC)、`idx_reviews_card`(card_id)、`idx_card_sessions_session`(session_id)、`idx_card_sessions_mark`(session_id, mark)、`idx_session_marks_session`(session_id)。
+索引:`idx_pos_card`(positions.card_id)、`idx_reviews_position`(position_id, created_at DESC)、`idx_reviews_card`(card_id)、`idx_card_sessions_session`(session_id)、`idx_card_sessions_mark`(session_id, mark)、`idx_position_sessions_session`(session_id)、`idx_session_marks_session`(session_id)。
 
 > **credence 不在任何表**:它是 `up_count`/`down_count` 的现算函数,排序时算,不落列(见 [card.md](card.md))。「当下答案」(accepted)、「相不相关」(salience)同样不存 —— 召回时现算。
 
@@ -103,7 +104,8 @@ v4 写路径前端 = **逐 round mark(以写代读)**,落在 session 目录的 `
 | credence / 当下答案 / 相不相关 | **不存(现算)** | — | — |
 | review payload | `reviews` | `reviews.jsonl`(卡目录下,沿用 v3) | — |
 | card↔card 边 | `card_links` | (待定,见 §12) | — |
-| card↔session 出处 | `card_sessions`(派生) | `marks/m<n>.yaml` 的 `questions[]`(canonical) | — |
+| **card→session 出处**(经 mark) | `card_sessions`(派生) | `marks/m<n>.yaml` 的 `questions[]`(canonical) | — |
+| **position→session 出处**(经 indexes,无 mark) | `position_sessions`(派生) | (随 Position 的 `--source`) | — |
 | mark 元信息(round / last_index) | `session_marks`(派生) | `marks/m<n>.yaml` | — |
 | 卡 / position 事件 | — | `events.jsonl`(卡目录下) | — |
 | insight(v3 遗产) | `insights` 系列表 | `insights/<bucket>/...` | `insights` collection |
@@ -116,6 +118,6 @@ v4 写路径前端 = **逐 round mark(以写代读)**,落在 session 目录的 `
 | 卡子系统 SQLite 表 | `cards` / `card_stats` / `card_source_cards` / `reviews` | `cards` / `positions` / `reviews` / `card_links` / `card_sessions` / `session_marks` |
 | engagement 计数 | `card_stats.read_count` / `recall_count` 落库 | 不存(召回时现算) |
 | 质量分 | 沉浮公式吃多列 | credence 现算 = f(up, down),不落列 |
-| 出处 | `rounds[].session_id` 内联 | `card_sessions` 表 + mark `questions[]`(`marks/m<n>.yaml`) |
+| 出处 | `rounds[].session_id` 内联 | card→session `card_sessions`(mark)+ position→session `position_sessions`(indexes) |
 | LanceDB | `cards`(embed insight)+ `rounds` | `cards`(embed issue)+ `positions`(embed claim)+ `insights`(v3 遗产)+ `rounds` |
 | FOREIGN KEY | `card_stats` 有 FK | **全无 FK**(贯彻派生索引立场) |

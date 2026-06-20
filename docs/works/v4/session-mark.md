@@ -82,59 +82,67 @@ mark 内容里只要冒出一个问题,就用 **`#…？` 语法**就地标:`#` 
 
 ---
 
-## 4. `card_source` 指向 mark,而不是仅仅 session
+## 4. mark 建的是 **card→session** 出处(经 mark);position→session 不经 mark
 
-这是本次相对旧设计最关键的调整。旧 `card_sessions` 的出处是 `(session_id, indexes)`——只能说「这卡来自这个 session 的第 11–15 轮」,**粒度到 round、且要靠 round index 间接定位**。新设计让出处**直接指那条 mark**——而 mark **不是一等 id,是 session 的附属**,id `m<n>`、寻址 `<session_id>#<id>`,所以 `card_sessions` 里出处 = `session_id` + 那条 mark 的 **id `mark`(`m1`)**:
+**两条出处链路要分清**(别混成一张表):
+
+| 链路 | 经 mark? | 谁建的 | 表 |
+|---|---|---|---|
+| **card → session** | **是** | 某条 mark 的 `#…？` 建 / 连了这张卡 | `card_sessions(card_id, session_id, **mark**)` |
+| **position → session** | **否** | `card position --source <sid>:<idx>` 给答案标来源 | `position_sessions(position_id, session_id, **indexes**)` |
+
+mark 写路径**只产 card→session**:`#…？` miss 建新卡 / hit 连老卡,各记一条 `card_sessions`,出处就是**那条 mark**。**同一 card↔session 可以有多条**——不同 mark(不同感悟)各碰到 / 建了这张卡,各记一条:
 
 ```json
 {
   "card_id": "card_01jz8k2m",
   "session_id": "sess_def456",
   "mark": "m1",
-  "position_id": "",
   "created_at": "2026-06-18T14:30:00Z"
 }
 ```
 
-读「`sess_def456` 里**第 1 条 mark**(`sess_def456#m1`)启发 / 生出了 `card_01jz8k2m`」。
+读「`sess_def456` 的**第 1 条 mark**(`sess_def456#m1`)的 `#…？` 建 / 连了 `card_01jz8k2m`」。**没有 `position_id`**——这是卡级关系。
 
-为什么指 mark 更好:
+**为什么 position→session 不经 mark**:Position(答案)**本身就是「观点」主体**;它的出处是「从哪几轮长出来的」(round `indexes`),直接 position→session 就够了。再给它挂一条 mark = 又来一个「观点」、跟 Position **重复**。所以答案的出处走 [`position_sessions`](../../structure/v4/position-session.md)(`indexes`,无 mark),**不**走 mark 这条线。
 
-- **出处是「那句感悟」,不是「那几轮原文」**:真正启发建卡的是 AI 写的那条 mark(带 `#…？` 的那句),而不是裸 round 正文。指 mark,出处就**精确到提问的那句话**,点开能看到「当时是怎么想到这个问题的」。
-- **round 是 mark 的属性,可派生**:每条 mark 挂在 `(session_id, round_index)` 上,所以**给了 `(session_id, mark)` 就等于给了 round**——不丢信息,反而多了「哪条 mark」这一层。
-- **答案出处同样精确**:某条 mark 写出了答案 → 落一个 Position,这条 `card_sessions` 的 `position_id` 指那个答案、`mark` 指写出它的 mark 序号(`position_id=""` 则指向问题/卡本身)。
-
-### `card_sessions` 形态调整(设计)
+### `card_sessions` 形态(设计)
 
 ```sql
--- card ↔ session 出处:哪条 mark(在哪个 session)启发了这张卡/哪个答案;支持多 mark
+-- card → session 出处:哪条 mark 建/连了这张卡;同一 card↔session 可多条(不同 mark)
 CREATE TABLE card_sessions (
-  card_id     TEXT NOT NULL,             -- 哪张卡
-  session_id  TEXT NOT NULL,             -- 哪个 session(扁平,可 join;无 FK)
-  mark        TEXT NOT NULL,             -- 哪条 mark 的 id(m1 / m2 …;寻址 = session_id#mark)
-  position_id TEXT NOT NULL DEFAULT '',  -- 启发了哪个答案('' = 关联到问题/卡本身)
+  card_id     TEXT NOT NULL,   -- 哪张卡
+  session_id  TEXT NOT NULL,   -- 哪个 session(扁平,可 join;无 FK)
+  mark        TEXT NOT NULL,   -- 哪条 mark 的 id(m1 / m2 …;寻址 = session_id#mark)
   created_at  TEXT NOT NULL,
-  PRIMARY KEY (card_id, session_id, mark, position_id)
+  PRIMARY KEY (card_id, session_id, mark)
 );
-CREATE INDEX idx_card_sessions_session ON card_sessions(session_id);          -- 反查「这个 session 启发了哪些卡」
-CREATE INDEX idx_card_sessions_mark    ON card_sessions(session_id, mark);    -- 反查「这条 mark 启发了哪些卡」
+CREATE INDEX idx_card_sessions_session ON card_sessions(session_id);
+CREATE INDEX idx_card_sessions_mark    ON card_sessions(session_id, mark);
 ```
 
-- 把旧的 `indexes TEXT`(round 区间)**换成 `mark TEXT`**(mark id `m1`/`m2`)。出处寻址 = `session_id` + `#` + `mark`(如 `sess_def456#m1`)。round 不再冗存——它是 mark 的属性,要时从 mark 文件取。
-- PK 加进 `mark`:同一卡可被多条 mark(乃至多 session)启发;同一条 mark 也可同时启发问题 + 答案(不同 `position_id`)。
-- `idx_card_sessions_mark`(`session_id, mark`):支持「拿一条 mark(`sess_xxx#m1`),反查它建/连了哪些卡」。
+- 旧设计的 `(session_id, indexes)` + `position_id` 一张表**拆成两条链路**:卡级 → `card_sessions`(mark,本表);答案级 → [`position_sessions`](../../structure/v4/position-session.md)(indexes,无 mark)。
+- **PK `(card_id, session_id, mark)`、无 `position_id`**:同一卡可被同一 session 的**多条不同 mark** 建 / 连。
 
-> **与已落地实现的差异**:当前实现的 `card_sessions` 用的是 `(session_id, indexes)`(card.md §8 那版)。本篇把它改成 `(session_id, mark)`,属**未实施的设计调整**,落地时连带 mark 的存储 / 解析一起做。
+> **与已落地实现的差异**:当前实现 `card_sessions` 是 `(card_id, session_id, position_id, indexes)` 一张表(card.md §8 那版,卡级 + 答案级混在一起)。本篇把它拆成 `card_sessions`(mark)+ `position_sessions`(indexes),属**未实施的设计调整**。
 
 ---
 
-## 5. 多遍 mark ↔ 卡的生命周期
+## 5. mark 建问题,答案 / 表态各走各的
 
-`#…？` 建的卡一开始**只有问题、还没答案**。答案(Position)也从 mark 里长出来:
+`#…？` 建 / 连的是**卡(问题)**,一开始**只有问题、还没答案**。三条线分开,别都塞进 mark:
 
-- **第一遍**:`#为什么 pty 会让用户想到 tmux？` → 建一张**还没答案的卡**,`card_sessions` 记这条 mark 为出处。
-- **后面的轮 / 后面的遍**:某条 mark 写出「他其实要的是可重连会话」——这是对那张卡的一个**答案**,落成它底下的一个 **Position**(答案文本内联在 Position 上),`card_sessions` 再记一条(`position_id` = 这个答案、`mark` = 写出它的那条 mark id,如 `m5`)。卡从「只有问题」变成「有候选答案」。
-- 再有别的证据 顶/踩 这个 Position(review,evidence 也可来自某条 mark 指的 round),按 `credence`(现算)排序——回到 [card.md §3](card.md#3-第二推credence--现算的质量分相关性只在召回时算)。
+| 动作 | 命令 / 入口 | 落哪 | 出处 |
+|---|---|---|---|
+| **提问 → 建/连卡** | `session mark` 里的 `#…？` | 卡 + `card_sessions` | **mark**(`sess#m<n>`) |
+| **给问题加答案** | [`card position --claim … --source <sid>:<idx>`](../../cli/v4/card.md#card-position) | Position + [`position_sessions`](../../structure/v4/position-session.md) | **round `indexes`**(无 mark) |
+| **对答案顶/踩** | [`card review --argument … --cite <sid>:<idx>`](../../cli/v4/card.md#card-review) | `reviews` | **round `indexes`**(证据) |
+
+- **提问**:某条 mark 的 `#…？` miss → 建新卡(只有问题)/ hit → 连老卡;记 `card_sessions`(出处 = 那条 mark)。
+- **答它**:`card position` 给这张卡加一个 **Position**(答案文本内联),它的出处 = `position_sessions`(那个答案从哪几轮长出来,`indexes`)——**不经 mark**(答案本身就是观点,见 §4)。
+- **评它**:`card review` 顶/踩某 Position,`argument` 累成计数,按 `credence`(现算)排序——回到 [card.md §3](card.md#3-第二推credence--现算的质量分相关性只在召回时算)。
+
+> mark 写路径**只负责把问题从认真读里捞出来**(`#…？` → 卡);答案和表态是后续显式动作,各有各的出处链路。这正是「启发用 mark、出处用 indexes、证据用 indexes」三线分工。
 
 所以一条龙都长在「逐 round mark」这个自然动作上:**mark 提问(`#…？`)→ 建卡(只有问题)+ 记 `card_sessions` 出处(指 mark);mark 答它 → Position;证据顶踩 → credence**。
 
