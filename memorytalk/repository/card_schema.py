@@ -98,6 +98,44 @@ V4_TABLES: list[str] = [
     )""",
 ]
 
+# Expected column set per v4 table, kept adjacent to ``V4_TABLES`` as the
+# drift detector's reference. A table that EXISTS with a different column
+# set is a drifted/older derived index (e.g. a preview build's
+# ``card_sessions`` with ``position_id`` instead of ``mark``, or
+# ``positions`` with ``forked_from_position_id`` instead of ``forked_from``)
+# and gets dropped + recreated by ``create_card_schema``. Asserted to match
+# the DDL in tests so the two can't silently drift apart.
+V4_EXPECTED_COLUMNS: dict[str, frozenset[str]] = {
+    "cards": frozenset({
+        "card_id", "issue", "created_at", "position_count", "link_count",
+    }),
+    "positions": frozenset({
+        "card_id", "position", "claim", "created_at", "up_count",
+        "down_count", "neutral_count", "review_count", "scope", "forked_from",
+    }),
+    "reviews": frozenset({
+        "review_id", "card_id", "target", "target_kind", "session_id",
+        "indexes", "argument", "comment", "created_at",
+    }),
+    "card_links": frozenset({
+        "card_id", "link", "type", "target_id", "target_type", "claim",
+        "up_count", "down_count", "neutral_count", "review_count",
+        "created_at",
+    }),
+    "card_sessions": frozenset({
+        "card_id", "session_id", "mark", "indexes", "created_at",
+    }),
+    "position_sessions": frozenset({
+        "card_id", "position", "session_id", "indexes", "mark", "created_at",
+    }),
+    "link_sessions": frozenset({
+        "card_id", "link", "session_id", "indexes", "created_at",
+    }),
+    "session_marks": frozenset({
+        "session_id", "mark", "last_index", "created_at",
+    }),
+}
+
 V4_INDEXES: list[str] = [
     "CREATE INDEX IF NOT EXISTS idx_v4_cards_created ON cards(created_at)",
     "CREATE INDEX IF NOT EXISTS idx_v4_reviews_target ON reviews(card_id, target, created_at DESC)",
@@ -111,8 +149,35 @@ V4_INDEXES: list[str] = [
 ]
 
 
+async def _table_columns(conn: aiosqlite.Connection, table: str) -> set[str]:
+    """Actual column names of ``table``, or empty set if it doesn't exist."""
+    async with conn.execute(f"PRAGMA table_info({table})") as cur:
+        rows = await cur.fetchall()
+    return {row[1] for row in rows}
+
+
+async def _drop_drifted_tables(conn: aiosqlite.Connection) -> None:
+    """Drop any v4 table that EXISTS but whose column set ≠ the current
+    schema's expected set. These tables are derived indexes over
+    file-canonical truth, so dropping a drifted/older one is safe — the
+    subsequent CREATE rebuilds it with the right structure. A table that
+    already matches (or doesn't exist) is left untouched, keeping re-runs
+    idempotent. Scoped to the 8 v4 tables this module owns, so a
+    freshly-renamed v3 ``insights`` table is never touched."""
+    for table, expected in V4_EXPECTED_COLUMNS.items():
+        actual = await _table_columns(conn, table)
+        if actual and actual != set(expected):
+            await conn.execute(f"DROP TABLE {table}")
+
+
 async def create_card_schema(conn: aiosqlite.Connection) -> None:
-    """Create all v4 tables + indexes (idempotent)."""
+    """Create all v4 tables + indexes (idempotent, drift-tolerant).
+
+    Before creating, drop any pre-existing v4 table whose columns drifted
+    from the current schema (e.g. left by an earlier preview build) — a
+    plain ``CREATE TABLE IF NOT EXISTS`` would skip it, then an index on a
+    new column would crash with ``no such column``."""
+    await _drop_drifted_tables(conn)
     for stmt in V4_TABLES:
         await conn.execute(stmt)
     for stmt in V4_INDEXES:

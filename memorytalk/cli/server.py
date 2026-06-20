@@ -39,12 +39,35 @@ def _server_responsive(cfg: Config) -> bool:
     """HTTP-probe the server. ``pid_alive`` alone can't tell us whether
     the PID in ``server.pid`` is actually our daemon — the kernel may
     have recycled it to an unrelated process after a crash/reboot. A
-    successful ``/v3/status`` call proves it really is memory.talk."""
+    successful ``/v4/status`` call proves it really is memory.talk."""
     try:
         api("GET", "/v4/status", cfg, timeout=1.0)
         return True
     except Exception:
         return False
+
+
+# Startup readiness budget. A fresh boot may run a v3→v4 migration that
+# takes a couple of seconds (and can itself crash at ~2s, exiting the
+# daemon) — a fixed 1.2s liveness check would report ``started`` for a
+# process that immediately dies. So we poll ``/v4/status`` until it
+# returns 200, bailing the instant the process exits.
+_START_READY_SECONDS = 15.0
+_START_POLL_INTERVAL = 0.2
+
+
+def _log_tail(cfg: Config, n_lines: int = 20) -> str:
+    """Best-effort tail of the daemon log, to surface in a failure
+    payload (the daemon redirects its stdout/stderr there once up)."""
+    try:
+        log_path = cfg.logs_dir / "server.log"
+        if not log_path.exists():
+            return ""
+        return "\n".join(
+            raw.decode(errors="replace") for raw in _tail_bytes(log_path, n_lines)
+        ).strip()
+    except Exception:
+        return ""
 
 
 def start_server_proc(cfg: Config) -> dict:
@@ -76,7 +99,7 @@ def start_server_proc(cfg: Config) -> dict:
     # rotating file handler before uvicorn starts — so the daemon's
     # logs survive the parent CLI exiting.
     #
-    # ``stderr=subprocess.PIPE`` is kept narrowly for the 1.2s failure
+    # ``stderr=subprocess.PIPE`` is kept narrowly for the startup failure
     # probe below: errors from interpreter startup or module-import
     # time happen before the shim's ``_redirect_os_fds_to`` runs, so
     # we still want to capture those into the failure payload. After
@@ -89,15 +112,35 @@ def start_server_proc(cfg: Config) -> dict:
         start_new_session=True,
     )
 
-    # Give it a moment; if it dies on startup checks we'll know quickly.
-    time.sleep(1.2)
-    if proc.poll() is not None:
-        err = (proc.stderr.read() or b"").decode(errors="replace") if proc.stderr else ""
-        return {"status": "failed", "exit_code": proc.returncode, "error": err.strip()}
-
-    cfg.pid_path.write_text(str(proc.pid))
+    # The port file lets ``_server_responsive`` reach the right port even
+    # before we've committed to the pid; we only persist the pid once the
+    # server actually answers. Written first so the probe can resolve it.
     cfg.port_path.write_text(str(port))
-    return {"status": "started", "pid": proc.pid, "port": port}
+
+    # Poll ``/v4/status`` until it answers 200 — a real readiness signal,
+    # not a fixed liveness window. Bail immediately to ``failed`` if the
+    # process exits (e.g. the migration crashes at ~2s with SystemExit),
+    # so we never report ``started`` for a daemon that just died.
+    deadline = time.monotonic() + _START_READY_SECONDS
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            err = (proc.stderr.read() or b"").decode(errors="replace") if proc.stderr else ""
+            hint = err.strip() or _log_tail(cfg)
+            cfg.port_path.unlink(missing_ok=True)
+            return {"status": "failed", "exit_code": proc.returncode, "error": hint}
+        if _server_responsive(cfg):
+            cfg.pid_path.write_text(str(proc.pid))
+            return {"status": "started", "pid": proc.pid, "port": port}
+        time.sleep(_START_POLL_INTERVAL)
+
+    # Timed out without a 200 and the process is still alive but wedged.
+    # Don't write a stale pid; surface a hint and report failure.
+    cfg.port_path.unlink(missing_ok=True)
+    return {
+        "status": "failed",
+        "exit_code": None,
+        "error": _log_tail(cfg) or f"server did not become ready within {_START_READY_SECONDS:.0f}s",
+    }
 
 
 def stop_server_proc(cfg: Config) -> dict:
