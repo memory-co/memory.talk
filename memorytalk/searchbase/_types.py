@@ -145,6 +145,24 @@ class SearchBackend(Protocol):
         fields match every key in ``match``."""
         ...
 
+    # ─── reembed (admin: rebuild all vectors of a collection) ───
+
+    async def vector_index_dim(self, collection: str) -> int | None:
+        """The dim the collection's vector column is actually indexed at on
+        disk (may differ from the configured dim when the embedding dim
+        changed but no reembed has run). ``None`` if absent/closed."""
+        ...
+
+    async def rebuild_collection(
+        self, collection: str, *, on_progress=None,
+    ) -> tuple[int, int]:
+        """Re-embed every stored row's anchor ``text`` and overwrite its
+        vector in place. Returns ``(processed, failed)``. A single row's
+        embed failure is isolated (counted, run continues); a wholly
+        unavailable provider (``ConnectionError``) aborts the run.
+        ``on_progress(processed)`` fires after each successful row."""
+        ...
+
     # ─── admin (migration framework only) ───
     def admin(self) -> AdminBackend:
         """Low-level schema admin port. Used by ``memorytalk.migration``

@@ -19,3 +19,7 @@ class StatusResponse(BaseModel):
     vector_provider: str
     relation_provider: str
     sync_enabled: bool
+    # Present only while a searchbase reembed is running: ``status`` flips
+    # to ``"reembedding"`` and this carries the rows re-embedded so far.
+    # Omitted (``None``) in the normal ``"running"`` state.
+    reembed_processed: int | None = None

@@ -133,6 +133,24 @@ class CollectionIndex:
             await table.delete(expr)
         await table.add(prepared)
 
+    async def overwrite_rows(self, collection: str, rows: list[dict]) -> None:
+        """Replace whole rows by their physical ``id``, preserving every
+        stored column (including the hidden ``_base_id`` / ``_chunk`` of
+        auto_split collections). Used by the reembed rebuild path to swap
+        in freshly-computed vectors WITHOUT re-running the auto_split
+        chunker (the rows are already chunked on disk; we only change the
+        ``vector`` column). Unlike :meth:`upsert`, this keys on the
+        physical ``id`` for every collection so each chunk row is replaced
+        in place rather than collapsed by ``_base_id``."""
+        if not rows or not await self._exists(collection):
+            return
+        table = await self.db.open_table(collection)
+        ids = [r["id"] for r in rows if r.get("id") is not None]
+        expr = in_clause(ids, "id")
+        if expr:
+            await table.delete(expr)
+        await table.add(rows)
+
     async def delete(self, collection: str, ids: list[str]) -> None:
         if not ids or not await self._exists(collection):
             return
@@ -229,6 +247,35 @@ class CollectionIndex:
         table = await self.db.open_table(collection)
         stats = await table.optimize(cleanup_older_than=_dt.timedelta(0))
         return {"collection": collection, "stats": str(stats)}
+
+    async def vector_index_dim(self, collection: str) -> int | None:
+        """The dim the collection's vector column is ACTUALLY indexed at on
+        disk — read from the Arrow ``fixed_size_list`` width. May differ
+        from ``self.dim`` (the declared/settings dim) when the embedding
+        dim changed but no reembed has run yet; that gap is exactly what a
+        reembed dry-run surfaces. ``None`` if the table is absent."""
+        if not await self._exists(collection):
+            return None
+        table = await self.db.open_table(collection)
+        schema = await table.schema()
+        try:
+            field = schema.field("vector")
+        except KeyError:
+            return None
+        list_size = getattr(field.type, "list_size", None)
+        return int(list_size) if list_size is not None else None
+
+    async def scan_all(self, collection: str) -> list[dict]:
+        """Read every stored row of ``collection`` (id + text + fields +
+        vector). Used by the reembed rebuild path — it re-embeds each row's
+        stored ``text`` (the embed anchor written at upsert time) and
+        overwrites the vector. A full table read; reembed is a rare,
+        operator-triggered, dim-change-only operation, so eager
+        materialization is fine. ``[]`` if the table is absent."""
+        if not await self._exists(collection):
+            return []
+        table = await self.db.open_table(collection)
+        return await table.query().to_list()
 
     async def reset_connection(self) -> None:
         """Close the LanceDB connection and reopen it.

@@ -40,6 +40,7 @@ from memorytalk.service.sync import SyncWatcher
 from memorytalk.service.card_read import V4ReadService
 from memorytalk.service.card_recall import V4RecallService
 from memorytalk.service.card_search import V4SearchService
+from memorytalk.service.reembed import ReembedService
 
 
 def create_app(config: Config | None = None) -> FastAPI:
@@ -151,6 +152,10 @@ def create_app(config: Config | None = None) -> FastAPI:
         app.state.v4read = V4ReadService(db=db)
         app.state.v4search = V4SearchService(db=db, search=searchbase)
         app.state.v4recall = V4RecallService(db=db, search=searchbase)
+        # searchbase admin (reembed). Holds the in-progress guard + live
+        # progress counter that GET /v4/status reads to flip to
+        # ``reembedding`` during a run.
+        app.state.reembed = ReembedService(config=config, search=searchbase)
 
         # Spin up the watcher if settings says so. start() returns fast
         # now — backfill runs as a background task; uvicorn's "startup
@@ -218,6 +223,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     for name in (
         "sync", "explores", "insights", "search", "recall",
         "cards", "positions", "card_sessions", "session_marks",
+        "searchbase",
     ):
         try:
             mod = __import__(f"memorytalk.api.{name}", fromlist=["router"])

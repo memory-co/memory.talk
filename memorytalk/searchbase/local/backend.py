@@ -219,6 +219,70 @@ class LocalSearchBackend:
             return 0
         return await self._index.count(collection, where_from_match(match))
 
+    # ─── reembed (admin: rebuild all vectors of a collection) ───
+
+    async def vector_index_dim(self, collection: str) -> int | None:
+        """Dim the collection's vector column is actually indexed at on
+        disk (may differ from the configured dim when the embedding dim
+        changed but no reembed has run). ``None`` if absent/closed."""
+        if self._index is None:
+            return None
+        return await self._index.vector_index_dim(collection)
+
+    async def rebuild_collection(
+        self, collection: str, *, on_progress=None,
+    ) -> tuple[int, int]:
+        """Re-embed every stored row's anchor ``text`` and OVERWRITE its
+        vector in place. The embed anchor is the ``text`` column written at
+        upsert time (``cards.issue`` / ``positions.claim`` / insight body /
+        round turn) — so no canonical re-read is needed; the index already
+        holds the immutable anchor alongside each vector.
+
+        Semantics (mirrors the reembed contract):
+          * one embed call per row → a single row's embed failure is
+            isolated: it's counted as failed and the (stale) vector is left
+            untouched, the run continues;
+          * if the provider raises ``ConnectionError`` the run aborts
+            (re-raised) so the caller can return 500 with the
+            processed-so-far count — a wholly-unavailable provider must not
+            be swallowed as N per-row failures;
+          * ``on_progress(processed)`` is invoked after each successful row
+            so the service can expose a live counter via ``GET /v4/status``.
+
+        Returns ``(processed, failed)``. Does NOT touch canonical files,
+        counters or events — pure vector overwrite.
+        """
+        if self._index is None:
+            return (0, 0)
+        rows = await self._index.scan_all(collection)
+        processed = 0
+        failed = 0
+        for r in rows:
+            text = r.get("text") or ""
+            try:
+                vec = await self._embedder.embed_one(text)
+            except ConnectionError:
+                # Provider wholly unavailable — abort, let caller 500 with
+                # the count so far. Re-running restarts from scratch.
+                raise
+            except Exception:
+                # Isolated per-object failure (over-length, transient 4xx,
+                # ...). Leave the stale vector, keep going.
+                failed += 1
+                _ilog.warning("reembed row failed coll=%s id=%s", collection, r.get("id"))
+                continue
+            r2 = dict(r)
+            r2["vector"] = vec
+            await self._index.overwrite_rows(collection, [r2])
+            processed += 1
+            if on_progress is not None:
+                on_progress(processed)
+        _ilog.info(
+            "reembed coll=%s rows=%d processed=%d failed=%d",
+            collection, len(rows), processed, failed,
+        )
+        return (processed, failed)
+
     # ─── read ───
 
     async def search(self, collection: str, query: Query) -> list[Hit]:

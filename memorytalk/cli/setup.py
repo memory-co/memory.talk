@@ -266,9 +266,22 @@ STEPS: tuple[Step, ...] = (
 
 def _build_result(ctx: Ctx, results: dict[str, dict]) -> dict:
     """Translate per-step results into the dict ``_summary_md`` expects."""
-    # Embedding dim change → would trigger reembed (deferred). Derived
-    # from base vs owned rather than tracked in a step because it's
-    # purely informational and doesn't fan out into another action.
+    # Embedding dim change → the vector index is now stale at the old dim
+    # and must be rebuilt via POST /v4/searchbase/reembed (now implemented;
+    # see memorytalk/api/searchbase.py). Derived from base vs owned rather
+    # than tracked in a step because the auto-call isn't wired yet.
+    #
+    # TODO(reembed-autocall): after _run_server_proc restarts the daemon,
+    #   when dim_changed, call:
+    #       api("POST", "/v4/searchbase/reembed", cfg,
+    #           {"expected_dim": new_dim}, timeout=<large>)
+    #   It is NOT a clean one-liner here because it needs (a) polling
+    #   GET /v4/status until the just-restarted server is reachable, (b) a
+    #   generous timeout — a full reembed of a large corpus blocks for
+    #   minutes, far past _http's 30s default, and (c) surfacing the
+    #   resulting cards_processed/failed in the summary. Until then the
+    #   notice below tells the operator to run it. The endpoint + service
+    #   exist and are tested; only this orchestration is pending.
     old_dim = (ctx.base.get("embedding") or {}).get("dim")
     new_emb = ctx.owned.get("embedding") or {}
     new_dim = new_emb.get("dim")
@@ -708,7 +721,7 @@ def _summary_md(cfg: Config, result: dict) -> str:
         host_strs = [f"{h['host']}={h['action']}" for h in hooks["hosts"]]
         lines.append(f"| hooks | {', '.join(host_strs)} |")
     if result["embedding_dim_changed"]:
-        lines.append("| notice | **embedding dim changed** — re-embed all cards via `memory.talk setup` once card writes are implemented |")
+        lines.append("| notice | **embedding dim changed** — vector index is stale; rebuild it with `POST /v4/searchbase/reembed` (expected_dim = new dim) against the running server |")
     return "\n".join(lines) + "\n"
 
 
