@@ -28,25 +28,33 @@
 |---|---|---|---|---|---|
 | **A. 纯 stdlib REPL**(`input()`) | 无 | 否 | 好 | 一般 | 现状的更糙版;渲染丑、无多行编辑。**否决** |
 | **B. `rich` 渲染 + `questionary` 输入(REPL)** | **无**(都已有) | 否(滚动式) | **好** | **完全一致** | round 用 rich `Panel` 漂亮渲染;mark 用 questionary 多行文本;`:back`/`:q`/跳过在 loop 里。**← 推荐** |
-| C. `prompt_toolkit` 全屏 `Application` | 无(已传递引入,需显式声明) | **是**(持久屏 + 状态栏) | 中(PipeInput 可测,较繁) | 一致(底层就是它) | 真·全屏:顶部窗格放 2-round、底部多行编辑 + 状态栏。**最贴近「全 TUI」,但代码量/测试成本高**。若确需持久屏再上 |
-| D. `textual` 框架 | **新增大依赖** | 是 | 很好(Pilot) | 不一致 | 现代 widget 框架、最适合**复杂**多窗格 + 未来 explore 工作台;**当前线性流 overkill** |
+| C. `prompt_toolkit` 全屏 `Application` | 无(已传递引入,需显式声明) | **是**(持久屏 + 状态栏) | 中 | 一致(底层就是它) | 真·全屏,但**靠终端转义序列绘屏 → 对 AI 是负资产**(escape-code 乱码,没法经 tool-use 驱动);对人也过度设计。**否决(见 §3)** |
+| D. `textual` 框架 | **新增大依赖** | 是 | 很好(Pilot) | 不一致 | 同 C:全屏转义对 AI 不友好 + 新大依赖;留给未来复杂多窗格(explore 工作台)。**当前否决** |
 | E. `curses` | 无(stdlib) | 是 | 差 | 不一致 | 低层、脆、难测、Windows 要额外包。**否决** |
 
 ---
 
-## 3. 推荐:**B —— `rich` 渲染 + `questionary` 输入的引导式 REPL**
+## 3. 关键:主要消费者是 **AI** —— 这改变结论
 
-理由:
-1. **零新依赖**:`rich` + `questionary` 都已在用,跟 setup wizard 同栈,风格统一。
-2. **匹配交互本质**:这是线性「走一遍」流程,不是多窗格应用;全屏框架(C/D)的持久屏/widget 对它是过度设计。
-3. **可测**:`questionary` 输入可在测试里喂(monkeypatch / `DummyInput`),提交体能断言;rich 输出可快照。跟仓库**测试文化**(600+ 测试)契合。
-4. **可演进**:若以后真要持久全屏(或 explore 工作台变重),底层 `prompt_toolkit` 已在,可平滑升到方案 C,不返工。
+交互式 `session mark` 后续**主要给 AI 用**(LLM 经 tool-use 调命令、读 stdout / JSON),人是次要。这条直接否掉「全屏」:
 
-> **何时改投 C/D**:若用户明确要「持久全屏、不滚屏、实时状态栏」,升到 **C(prompt_toolkit 全屏 Application)**——底层依赖已具备,只是多写布局/键绑定 + 测试。**D(Textual)** 只在 explore 抽卡工作台演化成复杂多窗格 TUI 时才值得引入。本设计**先落 B**,把 C 留作记录在案的升级路径。
+- **全屏 TUI(C/D)对 AI 是负资产**:prompt_toolkit / Textual 靠**终端转义序列**绘屏,AI 经 tool-use 读到的是 escape-code 乱码,**没法驱动**。→ **排除 C/D**。
+- **「以写代读」对 AI 打折**:逐 round 窗口本是逼**人**别跳读;对 AI,跳读产生的噪声**下游检索 miss/hit 已兜底过滤**(见 [card.md §6](card.md)),所以「强制逐轮」对 AI 不是非有不可。
+
+**AI-native 的三种形态(好 → 可用)**:
+1. **批量(文件 / 管道,★ 已实现)**:AI `read <sid>` 拿结构化 rounds → 组 marks YAML → 一次 `--mark` / 管道提交。完全结构化、最贴合 tool-use(一问一答)。**这是 AI 的主路径。**
+2. **逐 round stepping 协议(未来选项)**:若要对 AI **强制**逐轮(不止靠 prompt),把每个 round 暴露成一次离散调用(给窗口 JSON → AI 答 mark / skip → 进),AI 必须逐轮处理才能往下——既是 forcing function、又全结构化。代价:逐步草稿态。**记录在案,先不做。**
+3. **行式 REPL(方案 B)**:给**人**用够好;对 AI 的「持续 stdin 交互」不如 1 / 2 贴合 tool-use。
+
+### 修订结论
+- **AI 主路径 = 批量(`--mark` 文件 / 管道,已实现)** —— 把**逐步结构化输出 `--json`**(哪些 `#…？` 建新 / 连老卡、`card_id`)打磨好;以写代读靠 **prompt 要求 + 下游检索过滤**兜底。
+- **人路径 = 行式 REPL(B,`rich` + `questionary`)** —— 薄展示层,够用即可。
+- **不建全屏 TUI(C / D)** —— 对 AI 负资产、对人也过度设计。
+- **stepping 协议(形态 2)** 留作「要对 AI 强制逐 round」的未来升级,已记录在案。
 
 ---
 
-## 4. 架构(方案 B)
+## 4. 架构(人路径 = 方案 B 行式 REPL;AI 走批量,见 §3)
 
 ```
 session mark --session <sid>            (无 --mark → 交互)
