@@ -356,7 +356,7 @@ insight 让出 `card`/`cards`/`reviews`/`cards` collection/`cards/` 目录、且
 
 ## 10. API / CLI 面
 
-- **端点**(复数):`/v4/cards`(建卡 / 列卡,只管 issue)、`/v4/cards/{id}/positions`(给卡加答案)、`/v4/cards/{cid}/positions/{p}/reviews`(对某卡某 Position 表态 ±1/0)、`/v4/cards/{id}/links`、`/v4/cards/{id}/sessions`(出处;反查走 `/v4/sessions/{sid}/cards`)、`/v4/read`(按前缀读 card_/sess_,`card_…#p` 分片读单个 Position)、`/v4/search`(撞问题检索 + DSL)。读路径 `/v4/recall` 走「撞问题 → 取 Position → 现算校验分排序(平手按最近更新)→ 连 `scope` 注入」(scope 是软提示,不挡)。
+- **端点**(复数):`/v4/cards`(列卡,只管 issue;**建卡由 mark 写路径**,无 POST,见 §6)、`/v4/cards/{id}/positions`(给卡加答案)、`/v4/cards/{cid}/positions/{p}/reviews`(对某卡某 Position 表态 ±1/0)、`/v4/cards/{id}/links`、`/v4/cards/{id}/sessions`(出处;反查走 `/v4/sessions/{sid}/cards`)、`/v4/read`(按前缀读 card_/sess_,`card_…#p` 分片读单个 Position)、`/v4/search`(撞问题检索 + DSL)。读路径 `/v4/recall` 走「撞问题 → 取 Position → 现算校验分排序(平手按最近更新)→ 连 `scope` 注入」(scope 是软提示,不挡)。
 - **CLI**:`memory.talk card`(v4 复用此命令),管 **Position(答案)** / 表态 / 连边。**问题(卡)不在这建** —— 由 [`session mark`](../../cli/v4/session.md#session-mark) 的 `#…？` 在读 session 时自动建 / 关联(§6);`card` 命令组只对**已有卡**写。最小面:
   - `card position --card <cid> --claim '<答案文本>' [--source <sid>:<indexes> ...] [--scope '<场景>']` → 给卡加一个 **Position(答案)**;`--source` 可多次,每个 session 落一条 `position_sessions`(答案的出处:那答案从哪几轮 `indexes` 长出来,支持多 session)。
   - `card review --position <pid> --argument <+1|0|-1> --cite <sid>:<indexes>` → 对某个答案表态(沿用 v3 review,target 从 card 变 position;`review` 并入 `card` 组,不独立)。
