@@ -1,12 +1,14 @@
-# Embedding API
+# Searchbase API
 
-## POST /v4/embedding/reembed
+**searchbase** 是 v4 管「向量 collections + embedding」的子系统端口(LanceDB 各 collection + embedding provider;见 [`../../works/v4/card.md`](../../works/v4/card.md) §8)。它对外暴露的 HTTP admin 操作只有一个 —— **reembed**(重算所有向量)。另一个 admin 操作 `rename_collection` 只在**迁移内部**调用(`migrations/v3/up_searchbase.py`),**不走 HTTP**。embedding 的 provider / model / dim **配置**仍由 `settings.json` 的 `embedding` 段管(见 [`../../structure/v4/settings.md`](../../structure/v4/settings.md));searchbase 只负责按它执行重算。
+
+## POST /v4/searchbase/reembed
 
 重算所有向量的 embedding,覆盖写向量库。**setup wizard 内部调用**(仅在 `embedding.dim` 改变时触发),不直接给最终用户用。
 
 没有独立的 `rebuild` CLI 命令 —— 重算 embedding 嵌在 setup 流程里。这个 HTTP 端点是 setup 跟 server 通讯的内部接口。
 
-> **v4 唯一变化**:路由从 `/v3/embedding/reembed` 挪到 **`/v4/embedding/reembed`**。v4 新增了 `cards`(embed issue)/ `positions`(embed claim)两个向量 collection,reembed 会一并覆盖;embedding 的 provider / model / dim 配置仍由同一套 `settings.json` 的 `embedding` 段管,重算行为不变(collection 清单见 [`../../structure/v4/settings.md`](../../structure/v4/settings.md))。
+> **v4 变化**:v3 的 `/v3/embedding/reembed` 不再单列「embedding」namespace —— reembed 本就是 searchbase 的 admin 操作,挪进 **`/v4/searchbase/reembed`**。v4 新增了 `cards`(embed issue)/ `positions`(embed claim)两个向量 collection,reembed 会一并覆盖;重算行为不变。
 
 ### 请求体
 
@@ -69,7 +71,7 @@
 
 ### 中断恢复
 
-不支持断点续跑。中断后再次调 `POST /v4/embedding/reembed` 会**从头重算所有对象** —— 这条端点本来就只在 dim 改变时调,大库重算耗时较长但频率极低,不优化这条路径。
+不支持断点续跑。中断后再次调 `POST /v4/searchbase/reembed` 会**从头重算所有对象** —— 这条端点本来就只在 dim 改变时调,大库重算耗时较长但频率极低,不优化这条路径。
 
 ### 周边
 

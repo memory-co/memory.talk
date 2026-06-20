@@ -1,33 +1,19 @@
 # card
 
-v4 卡的**写入**入口。一张卡 = 一个问题(Issue)+ 若干答案(Position),Card 和 Position 是两个对象。`card` 是命令组,所有卡相关写操作都是它的子命令:
+v4 卡的**写入**入口(给卡加答案 / 表态 / 连边)。一张卡 = 一个问题(Issue)+ 若干答案(Position),Card 和 Position 是两个对象。
+
+> **问题(卡)本身不在这里建** —— 它由 [`session mark`](session.md#session-mark) 里的 `#…？` 在读 session 时**自动建 / 关联**(`#…？` miss = 新卡、hit = 连老卡;见 [生命周期 §1](../../works/v4/card-lifecycle.md))。`card` 命令组管的是对**已有卡**的写:加答案、顶踩、连边。
 
 ```
 memory.talk card
-├── create --issue '<问题>' [--card_id <id>] [--json]
 ├── position --card <cid> --claim '<答案>' [--source <sid>:<idx> ...] [--scope '<场景>'] [--json]
 ├── review --position card_xxx#p<n> --argument <+1|0|-1> --cite <sid>:<idx> [--comment '<一句话>'] [--review_id <id>] [--json]
 └── link --card <cid> --type <type> --target <id> [--json]   # 卡间 IBIS 边;看边走 read
 ```
 
-**读**一张卡(问题 + 它所有答案 + 边 + 出处)走 [`read <card_id>`](read.md);找卡走 [`search`](search.md);hook 召回走 [`recall`](recall.md)。
+**读**一张卡(问题 + 它所有答案 + 边 + 出处)走 [`read <card_id>`](read.md);找卡走 [`search`](search.md);hook 召回走 [`recall`](recall.md);**建问题(卡)走 [`session mark`](session.md#session-mark)**。
 
 > **参数风格:除 `read` / `search` 用位置参数(裸 id / query)外,所有命令的参数都是命名 flag(`--xx`)。** `card` 不带子命令直接打印 help。设计推理见 [`../../works/v4/card.md`](../../works/v4/card.md)。
-
-## card create
-
-建一张卡——只立一个问题,不带答案。一张没有任何 Position 的卡是合法的(就是个还在等答案的问题);答案另走 [`card position`](#card-position)。
-
-```bash
-memory.talk card create --issue '<问题文本>' [--card_id <id>] [--json]
-```
-
-| 参数 | 必填 | 说明 |
-|---|---|---|
-| `--issue` | 是 | 问题文本(`issue`),也是 embedding 锚点(检索撞的就是它)。值支持 `@<file>` / `@-`(见 [#文本传文件--stdin](#文本传文件--stdin)) |
-| `--card_id` | 否 | 显式指定 id;不提供则自动生成 `card_<ULID>` |
-
-输出 `{"status":"ok","card_id":"card_…"}`。副作用:落 `cards`(`issue` + `created_at`)+ 写向量库;`cards/<bucket>/<card_id>/card.json`(问题不可变);**不落任何 Position**。错误:`--issue` 缺失 → `--issue required`;`--card_id` 前缀错 / 已存在 → 报错 exit 1。
 
 ## card position
 
@@ -62,7 +48,7 @@ memory.talk card position --card <card_id> --claim '<答案文本>' \
 
 ### 文本传文件 / stdin
 
-文本类 flag 的值——`--issue`(create)、`--claim` / `--scope`(position)、`--comment`(review)——都有三种传法,后两种**不经 shell / JSON 转义**,专门用于内容带引号、换行、`$`、反引号等特殊字符的情况:
+文本类 flag 的值——`--claim` / `--scope`(position)、`--comment`(review)——都有三种传法,后两种**不经 shell / JSON 转义**,专门用于内容带引号、换行、`$`、反引号等特殊字符的情况:
 
 | 写法 | 含义 |
 |---|---|
@@ -151,7 +137,7 @@ memory.talk card link --card <card_id> --type <type> --target <target_id> [--jso
 
 | 想做的事 | 用哪条 |
 |---|---|
-| 建一个新问题(卡) | `card create --issue '<Q>'` |
+| 建一个新问题(卡) | 在 [`session mark`](session.md#session-mark) 里写 `#…？`(卡由 mark 自动建,无 `card create`) |
 | 给问题加一个答案 | `card position --card <cid> --claim '<A>' [--source ...]` |
 | 对某个答案顶 / 踩 / 中立 | `card review --position card_xxx#p<n> --argument <+1\|0\|-1> --cite ...` |
 | 连两张卡(IBIS 边) | `card link --card <cid> --type <type> --target <id>` |

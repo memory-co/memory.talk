@@ -357,14 +357,13 @@ insight 让出 `card`/`cards`/`reviews`/`cards` collection/`cards/` 目录、且
 ## 10. API / CLI 面
 
 - **端点**(复数):`/v4/cards`(建卡 / 列卡,只管 issue)、`/v4/cards/{id}/positions`(给卡加答案)、`/v4/cards/{cid}/positions/{p}/reviews`(对某卡某 Position 表态 ±1/0)、`/v4/cards/{id}/links`、`/v4/cards/{id}/sessions`(出处;反查走 `/v4/sessions/{sid}/cards`)、`/v4/read`(按前缀读 card_/sess_,`card_…#p` 分片读单个 Position)、`/v4/search`(撞问题检索 + DSL)。读路径 `/v4/recall` 走「撞问题 → 取 Position → 现算校验分排序(平手按最近更新)→ 连 `scope` 注入」(scope 是软提示,不挡)。
-- **CLI**:`memory.talk card`(v4 复用此命令),管 **Card(问题)** 和 **Position(答案)** 两类对象——**建问题和加答案是两条命令**(Card 和 Position 是两个对象,且没答案的问题也合法,见 §2)。最小面:
-  - `card create --issue '<问题文本>' [--card_id]` → 建一张卡(**只有问题**,可无答案)。
+- **CLI**:`memory.talk card`(v4 复用此命令),管 **Position(答案)** / 表态 / 连边。**问题(卡)不在这建** —— 由 [`session mark`](../../cli/v4/session.md#session-mark) 的 `#…？` 在读 session 时自动建 / 关联(§6);`card` 命令组只对**已有卡**写。最小面:
   - `card position --card <cid> --claim '<答案文本>' [--source <sid>:<indexes> ...] [--scope '<场景>']` → 给卡加一个 **Position(答案)**;`--source` 可多次,每个 session 落一条 `position_sessions`(答案的出处:那答案从哪几轮 `indexes` 长出来,支持多 session)。
   - `card review --position <pid> --argument <+1|0|-1> --cite <sid>:<indexes>` → 对某个答案表态(沿用 v3 review,target 从 card 变 position;`review` 并入 `card` 组,不独立)。
   - **参数风格**:除 `read <id>` / `search <query>` 用位置参数外,所有命令参数都是命名 flag(`--xx`)。
   - `card link --card <cid> --type <type> --target <id>` → 卡间 IBIS 边(`card_links`,主体 `card_id` + `target_id`,无 from/to),直接建边;看一张卡的边走 `read`(不单设 list)。
   - **读卡走 `read`**:`read <card_id>` → 问题 + 它所有 Position(各自 up/down/neutral 计数、现算 credence、治理),credence 最高的高亮(read 也读 `card_…#p<n>` 单个 Position / `sess_`,不另设 `card view`)。
-- **抽卡仍走 explore 工作台**(§6):`card create` / `card position` 在 explore 目录里跑,产物盖 `explore_id` 戳(沿用 [explore.md](../v3/explore.md) 的关联机制,产物类型换成 v4 卡)。
+- **抽卡仍走 explore 工作台**(§6):`session mark`(建问题)/ `card position`(加答案)在 explore 目录里跑,产物盖 `explore_id` 戳(沿用 [explore.md](../v3/explore.md) 的关联机制,产物类型换成 v4 卡)。
 - **insight 端点**:`memory.talk insight search` / `view`、`GET /v4/insights` + `POST /v4/read {id: insight_…}`(步骤一改名而来),**只读 + 搜索**(无写路径)。
 
 > 面的细节(flag 表、输出、退出码)等设计敲定后另起 `docs/cli/v4/` / `docs/api/v4/` / `docs/structure/v4/`,本稿只立机制。

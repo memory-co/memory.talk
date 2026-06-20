@@ -1,13 +1,13 @@
 # Session Marks API
 
-逐 round 打注解(mark)的写入端点。一次提交 = 一个 round 的一份 mark;`mark` 文本里 `#…？` 自动建卡 / 关联老卡,出处落 [`card_sessions`](card-sessions.md)。机制见 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md),数据结构见 [`../../structure/v4/session-mark.md`](../../structure/v4/session-mark.md),CLI 见 [`../../cli/v4/session.md#session-mark`](../../cli/v4/session.md#session-mark)。
+逐 round 打注解(mark)的写入端点。一次提交 = 一个 round 的一份 mark;`mark` 文本里 `#…？` 自动建卡 / 关联老卡,出处落 [`card_sessions`](../../structure/v4/card-session.md)。机制见 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md),数据结构见 [`../../structure/v4/session-mark.md`](../../structure/v4/session-mark.md),CLI 见 [`../../cli/v4/session.md#session-mark`](../../cli/v4/session.md#session-mark)。
 
 ```
 Submit   POST  /v4/sessions/{session_id}/marks      提交一份 mark(乐观锁 last_index)
 List     GET   /v4/sessions/{session_id}/marks      列这个 session 的所有 mark(元信息)
 ```
 
-> 读单条 mark 走 [`POST /v4/read`](read.md)(`{"id": "sess_…#m1"}`,按 `#` 分片判型);反查「这条 mark 启发了哪些卡」走 [`GET /v4/sessions/{session_id}/cards`](card-sessions.md)。
+> 读单条 mark 走 [`POST /v4/read`](read.md)(`{"id": "sess_…#m1"}`,按 `#` 分片判型);反查「这条 mark 启发了哪些卡」走 [`GET /v4/sessions/{session_id}/cards`](sessions.md#get-v4sessionssession_idcards)。
 
 ## POST /v4/sessions/{session_id}/marks
 
@@ -39,7 +39,7 @@ List     GET   /v4/sessions/{session_id}/marks      列这个 session 的所有 
 
 1. **乐观锁校验**:`last_index` == session `max(round_index)`?否 → 409,不写任何东西。
 2. 每条 mark 分配 `m<n>` → 落 `marks/m<n>.yaml`(canonical · YAML)+ 插一行 `session_marks`。
-3. 解析每条 `mark` 的 `#…？` → embed 撞 `cards`(issue)向量库:miss 建新卡 / hit 关联;各记一条 [`card_sessions`](card-sessions.md),`mark` 列 = `m<n>`(出处指 `(session_id, mark)`)。
+3. 解析每条 `mark` 的 `#…？` → embed 撞 `cards`(issue)向量库:miss 建新卡 / hit 关联;各记一条 [`card_sessions`](../../structure/v4/card-session.md),`mark` 列 = `m<n>`(出处指 `(session_id, mark)`)。
 
 ### 响应 `200`
 

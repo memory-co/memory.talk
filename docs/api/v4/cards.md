@@ -1,10 +1,10 @@
 # Cards API
 
-卡 = 一个**问题**（`issue`）+ 它底下的若干**答案候选**（Position）。本页四个端点：建卡、列卡、给卡加答案、列卡的答案。
+卡 = 一个**问题**（`issue`）+ 它底下的若干**答案候选**（Position）。本页端点：建卡、列卡、给卡加答案、列答案、列出处（card→session）。
 
 读单卡 / 单 Position 走 [`POST /v4/read`](read.md)（`card_` 与 `card_…#p<n>` 分片都认）。对答案表态走 [`POST /v4/cards/{cid}/positions/{p}/reviews`](reviews.md)。
 
-CLI 对应 [`card create | position`](../../cli/v4/card.md)（读卡走 [`read`](../../cli/v4/read.md))。字段语义详见 [`../../structure/v4/card.md`](../../structure/v4/card.md)。
+CLI 对应 [`card position`](../../cli/v4/card.md)(问题由 [`session mark`](../../cli/v4/session.md#session-mark) 的 `#…？` 建)（读卡走 [`read`](../../cli/v4/read.md))。字段语义详见 [`../../structure/v4/card.md`](../../structure/v4/card.md)。
 
 ---
 
@@ -186,3 +186,32 @@ CLI 对应 [`card create | position`](../../cli/v4/card.md)（读卡走 [`read`]
 | 情况 | 状态 |
 |---|---|
 | `card_id` 不存在 | 404 |
+
+---
+
+## GET /v4/cards/{card_id}/sessions
+
+列这张卡的**出处**:哪些 session 的哪条 mark 建 / 连了它(card→session,经 **mark**)。
+
+> card→session **没有显式写端点** —— 只由 mark 写路径自动写([`POST /v4/sessions/{id}/marks`](session-marks.md) 里 `#…？` miss 建新卡 / hit 连老卡时各记一条 `card_sessions`)。本端点只读。反查「某 session 建/连了哪些卡」走 [`GET /v4/sessions/{session_id}/cards`](sessions.md#get-v4sessionssession_idcards)。答案级出处(position→session)是另一条链路,见 [`POST positions` 的 `source`](#post-v4cardscard_idpositions) → [`position-session.md`](../../structure/v4/position-session.md)。数据结构见 [`../../structure/v4/card-session.md`](../../structure/v4/card-session.md)。
+
+### 响应
+
+```json
+{
+  "card_id": "card_01jz8k2m",
+  "sessions": [
+    {"session_id": "sess_abc", "mark": "m1", "created_at": "2026-05-24T09:12:03Z"},
+    {"session_id": "sess_def", "mark": "m3", "created_at": "2026-05-24T09:40:00Z"}
+  ]
+}
+```
+
+每行 = 某 session 的某条 mark(`m<n>`,寻址 `session_id#mark`)建 / 连了本卡;同一对可多条(不同 mark)。
+
+### 错误
+
+| 情况 | 状态 |
+|---|---|
+| 路径 `card_id` 不存在 | 404 |
+| `card_id` 前缀 / 格式不合法 | 400 |

@@ -9,7 +9,7 @@ There is **no public "read a session" endpoint** — reads go through
 
 > **v4 唯一变化**:所有 `/v3/sessions*` 路由挪到 **`/v4/sessions*`** 前缀,接口形态、cursor 语义、请求 / 响应体不变。
 >
-> 该 session 下**新增的 mark 写入端点**(逐 round 注解 → `#…？` 自动建卡)不在本页,见 [`session-marks.md`](session-marks.md)(`POST/GET /v4/sessions/{id}/marks`)。反查「这个 session 启发了哪些卡 / 答案」见 [`card-sessions.md`](card-sessions.md)(`GET /v4/sessions/{id}/cards`)。CLI 用法见 [`../../cli/v4/session.md`](../../cli/v4/session.md)。
+> 该 session 下**新增的 mark 写入端点**(逐 round 注解 → `#…？` 自动建卡)不在本页,见 [`session-marks.md`](session-marks.md)(`POST/GET /v4/sessions/{id}/marks`)。反查「这个 session 启发了哪些卡」见本页 [`GET /v4/sessions/{session_id}/cards`](#get-v4sessionssession_idcards)。CLI 用法见 [`../../cli/v4/session.md`](../../cli/v4/session.md)。
 
 > 心智模型:**sync owns the cursor (sha256 + last_round_id + line_offset), ingest is a dumb append target with optimistic concurrency.**
 
@@ -261,6 +261,31 @@ List session 元数据(**不带 rounds**)。CLI 入口 [`memory.talk session lis
 - 改写 SQLite `sessions.tags`。
 - 不改 `metadata`(metadata 是平台原生字段,tag 是用户字段,两者解耦)。
 - 不动 `rounds.jsonl` / LanceDB / events.jsonl —— tag 是元数据,不是对话事件。
+
+---
+
+## GET /v4/sessions/{session_id}/cards
+
+**反查**:这个 session(的哪条 mark)建 / 连了哪些卡 —— `session_id` 上有索引,这正是出处从 JSON 改扁平表后能 join 的收益。正向(某卡的出处 session)走 [`GET /v4/cards/{card_id}/sessions`](cards.md#get-v4cardscard_idsessions);本端点是反向。
+
+### 响应
+
+```json
+{
+  "session_id": "sess_abc123",
+  "cards": [
+    {"card_id": "card_01jz8k2m", "mark": "m1", "created_at": "2026-05-24T09:12:03Z"}
+  ]
+}
+```
+
+每行 = 这个 session 的某条 mark 建 / 连了某张卡(`mark` = `m<n>`,寻址 `session_id#mark`)。
+
+### 错误
+
+| 情况 | 状态 |
+|---|---|
+| 路径 id 前缀错 | 400 |
 
 ---
 
