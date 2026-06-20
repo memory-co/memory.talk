@@ -65,13 +65,13 @@ session mark --session <sid>            (无 --mark → 交互)
   ├─ GET /v4/sessions/<sid>/marks       → 当前最大 m<n>,后续 m<n+1> 顺序发
   ├─ description = questionary.text(...) 问一次场景(可空)
   │
-  ├─ 滑窗 loop  k = 1..N-1:
-  │     渲染窗口:rich.Panel(prev=r[k] 上下文) + rich.Panel(cur=r[k+1] 当前·标这里)
+  ├─ 滑窗 loop  k = 0..N-1(每轮可标):
+  │     渲染窗口:rich.Panel(prev=r[k-1] 淡色上下文,k=0 时无) + rich.Panel(cur=r[k] 当前·标这里)
   │     ans = questionary.text("mark>", multiline=True)   # 多行;含 #…？
   │     · 空        → 跳过当前轮,k++
-  │     · ":back"   → k--(看回上一窗口;已收集的 mark 不撤,append-only)
+  │     · ":back"   → k--(看回上一轮;已收集的 mark 不撤,append-only)
   │     · ":q"      → 跳出
-  │     · 文本      → 收集 {id:"m<n+1>", mark:ans, indexes:窗口当前轮区间},k++
+  │     · 文本      → 收集 {id:"m<n+1>", mark:ans, indexes:当前轮 index},k++
   │
   └─ 收集非空 → POST /v4/sessions/<sid>/marks {last_index, description, marks:[...]}
         · 200 → fmt_mark_result(哪些 #…？ 建新/连老卡)
