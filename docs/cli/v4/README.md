@@ -24,10 +24,11 @@ memory.talk
 ├── search <query> [--where DSL]                # v4:撞问题检索(无沉浮,DSL 换计数字段)
 ├── recall --session <sid> --prompt '<p>'      # v4:hook 无意识召回,撞问题 → 取答案 → 注入
 ├── insight search | view                       # v4:v3 老卡改名(只读 + 搜索)
-└── session list | tag                          # 沿用 v3:列 / 标 session
+├── session list | tag                          # 沿用 v3:列 / 标 session
+└── session mark --session <sid> [--file …]     # v4 新增:逐 round 打注解(以写代读;#…？ 自动建卡)
 ```
 
-**v4 重写 / 新增的命令**:`card`(create / position / review / link)/ `read` / `search` / `recall` / `insight`——卡的数据模型变了(问题 + 答案 + IBIS 边 + 出处),这些命令行为都跟 v3 不同。**真·沿用 v3 不变的只有基础设施**:`setup` / `server` / `sync` / `session`(见 [`../v3/`](../v3/),本目录不复制);`explore`(抽 v4 卡的工作台)**留下一轮设计**。命令详情见 [#六、命令详情](#六命令详情)。
+**v4 重写 / 新增的命令**:`card`(create / position / review / link)/ `read` / `search` / `recall` / `insight` / `session mark`——卡的数据模型变了(问题 + 答案 + IBIS 边 + 出处),这些命令行为都跟 v3 不同;`session mark` 是 v4 抽卡的**写路径前端**(逐 round 打注解,机制见 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md))。**真·沿用 v3 不变的只有基础设施**:`setup` / `server` / `sync` / `session list|tag`(见 [`../v3/`](../v3/),本目录不复制);`explore`(抽 v4 卡的工作台)**留下一轮设计**。命令详情见 [#六、命令详情](#六命令详情) + [`session-mark.md`](session-mark.md)。
 
 ## 三、问题图 / 治理术语 → CLI 字段对照
 
