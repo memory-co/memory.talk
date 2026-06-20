@@ -20,8 +20,8 @@ List     GET   /v4/sessions/{session_id}/marks      列这个 session 的所有 
   "last_index": 41,
   "description": "在配 pty、用户突然提 tmux 的那几轮——想搞清他到底要什么",
   "marks": [
-    {"mark": "配 pty 时用户突然提了 tmux。#为什么 pty 会让用户想到 tmux？\n他其实想要可重连会话。"},
-    {"mark": "这段在排查 EMFILE,跟句柄上限有关。"}
+    {"id": "m1", "mark": "配 pty 时用户突然提了 tmux。#为什么 pty 会让用户想到 tmux？\n他其实想要可重连会话。"},
+    {"id": "m2", "mark": "这段在排查 EMFILE,跟句柄上限有关。"}
   ]
 }
 ```
@@ -31,14 +31,14 @@ List     GET   /v4/sessions/{session_id}/marks      列这个 session 的所有 
 | `last_index` | 是 | 提交时读到的 session 最新 round index(乐观锁基线) |
 | `description` | 是 | 这次标注的场景;随每条 mark 落盘 |
 | `marks[]` | 是 | 非空数组,每条 `{mark: <文本>}`;`mark` 里 `#…？` = 问题 |
-| `marks[].id` | 否 | mark id `m<n>`;**默认系统按 append 顺序分配**(`m1`→`m2`…,单调不复用);显式给则校验单调 |
+| `marks[].id` | **是** | mark id `m<n>`,**每条显式给、不默认分配**。session 内单调、不跳号 / 不复用(续标接着上次最大序号往后;不知道当前最大就先 `GET …/marks`) |
 
 > wire 也接受 YAML（CLI 直接转发);字段同上。
 
 ### 副作用(写入顺序)
 
 1. **乐观锁校验**:`last_index` == session `max(round_index)`?否 → 409,不写任何东西。
-2. 每条 mark 分配 `m<n>` → 落 `marks/m<n>.yaml`(canonical · YAML)+ 插一行 `session_marks`。
+2. 按提交里每条的 `id`(`m<n>`)→ 落 `marks/<id>.yaml`(canonical · YAML)+ 插一行 `session_marks`(`id` 缺失 / 跳号 / 复用 → 400,整份拒绝)。
 3. 解析每条 `mark` 的 `#…？` → embed 撞 `cards`(issue)向量库,按三岔:
    - **miss → 建新卡**(这是**唯一的建卡入口**,没有独立 `POST /v4/cards`):`issue` = 该 `#…？` 的问题文本(非空)、自动生成 `card_id` = `card_<ULID>`、embed `issue` 写 `cards` collection、落 `cards/<bucket>/<card_id>/card.json`(canonical:`issue` + `created_at`,**创建即冻**)。
    - **hit → 关联**老卡(不动老卡)。
@@ -62,7 +62,7 @@ List     GET   /v4/sessions/{session_id}/marks      列这个 session 的所有 
 | 码 | 情况 |
 |---|---|
 | `200` | 提交成功 |
-| `400` | `marks` 为空 / body 非法 / `id` 跳号或复用 |
+| `400` | `marks` 为空 / body 非法 / `id` 缺失 / 跳号 / 复用 |
 | `404` | `session_id` 不存在 |
 | `409` | `last_index` ≠ session 当前最新 round index(标注期间来了新 round;重读再标) |
 | `503` | 服务未就绪(searchbase 缺失时 `#…？` 建卡降级,详见 [cards.md](cards.md) 的 best-effort 约定) |

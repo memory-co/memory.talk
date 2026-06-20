@@ -153,10 +153,12 @@ memory.talk session mark --session <sid>                 [--json]   # 不给 --m
 last_index: 41          # 乐观锁:提交时我读到的 session 最新 round index
 description: 在配 pty、用户突然提 tmux 的那几轮——想搞清他到底要什么
 marks:
-  - mark: |
+  - id: m1
+    mark: |
       配 pty 的时候用户突然提了 tmux。#为什么 pty 会让用户想到 tmux？
       他其实想要的是「可重连的会话」,而不是 pty 本身。
-  - mark: 这段其实在排查 EMFILE,跟句柄上限有关。
+  - id: m2
+    mark: 这段其实在排查 EMFILE,跟句柄上限有关。
 ```
 
 | 字段 | 必填 | 说明 |
@@ -164,7 +166,7 @@ marks:
 | `last_index` | 是 | 提交时读到的 session 最新 round index。**乐观锁**:与 session 当前最新 round index 不一致 → 整份拒绝([错误](#错误)) |
 | `description` | 是 | 这次标注的场景;随每条 mark 落盘 |
 | `marks` | 是 | 数组,每条 `{mark: <文本>}`,**非空**。`mark` 里 `#…？`(`#` 起、`？`/`?` 止)就地标问题 |
-| `marks[].id` | 否 | mark id `m<n>`;**默认系统按 append 顺序分配**(`m1`→`m2`,session 内单调不复用)。给则校验单调 |
+| `marks[].id` | **是** | mark id `m<n>`,**每条显式给、不默认分配**;session 内单调、不跳号 / 不复用(续标接着上次最大序号) |
 
 ### 交互模式
 
@@ -251,6 +253,6 @@ Markdown(默认):
 | 同时 `K=V` 和 `-K` | `error: cannot both set and unset 'K' in the same call`,exit 1 |
 | mark:`last_index` ≠ session 当前最新 round index | `error: session advanced (last_index 41 ≠ current 43); re-read & re-mark`,exit 1(乐观锁 / 409) |
 | mark:`marks` 为空 / YAML 非法 | `error: marks required` / `error: invalid YAML`,exit 1 |
-| mark:显式 `id` 跳号 / 复用 | `error: mark id must be monotonic`,exit 1 |
+| mark:`id` 缺失 / 跳号 / 复用 | `error: mark id required and must be monotonic (m<n>)`,exit 1 |
 
 > **状态**:`list` / `tag` 已随 v3 实现并迁到 `/v4`;`mark` 是**设计提案、未实施**(见 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md))。
