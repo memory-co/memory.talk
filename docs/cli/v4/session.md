@@ -35,10 +35,15 @@ memory.talk session tag sess_def456 project=billing -draft
 对一个 session **逐 round 打注解**——以写代读防走神,mark 里 `#…？` 就地标问题、写入时自动建卡 / 关联老卡,出处(`card_source`)精确指那条 mark。
 
 ```bash
-memory.talk session mark --session <session_id> [--file <path>] [--json]
+# 文件 / 管道:喂一份 YAML,一次落一个 round 的 mark
+memory.talk session mark --session <sid> --file <path>
+cat sub.yaml | memory.talk session mark --session <sid>
+
+# 交互:不喂 YAML,2-round 滑动窗口逐轮走、逐轮标(标当前轮)
+memory.talk session mark --session <sid>
 ```
 
-一次调用 = 一个 round 的一份 mark 提交(YAML:`last_index` 乐观锁 + `round_index` + `description` 场景 + `marks` 数组;从 `--file` 或 stdin 读)。`last_index` 与 session 当前最新 round index 不一致 → 拒绝(标注期间又来了新 round)。
+**两种模式**:**文件 / 管道**喂一份 YAML 提交体(`last_index` 乐观锁 + `round_index` + `description` + `marks`),一次落一个 round;**交互**则进 2-round 滑动窗口——一次看上一轮 + 当前轮,逐轮往前走、标永远落在**当前(第二个)round**,逼着认真逐轮读。`last_index` 与 session 当前最新 round index 不一致 → 拒绝(标注期间又来了新 round)。
 
 **完整契约**(提交体格式、`#…？` 语法、`m<n>` 寻址、`session_marks` / `card_sessions` 落地、错误码)见 [`session-mark.md`](session-mark.md);机制与设计推理见 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md)。
 
