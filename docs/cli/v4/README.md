@@ -10,7 +10,7 @@
 - 卡↔卡用 IBIS 边(`card_links`)连图;答案出处(哪个 session 的哪几轮旁白)落 `card_sessions`。
 - 治理两条软约束:`scope`(一句话适用场景,软提示不挡)+ Position append-only(`forked_from_position_id` 记血缘)。
 
-**本页是 CLI 契约;机制与设计推理见 [`../../works/v4/card.md`](../../works/v4/card.md),写路径前端(逐 round 旁白标注)见 [`../../works/v4/session-annotation.md`](../../works/v4/session-annotation.md)。**
+**本页是 CLI 契约;机制与设计推理见 [`../../works/v4/card.md`](../../works/v4/card.md),写路径前端(逐 round 旁白标注)见 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md)。**
 
 ## 二、命令树
 
@@ -121,7 +121,7 @@ memory.talk card review --position pos_OLD --argument -1 --cite sess_xyz:4-9 --c
 
 ### 抽卡仍走 explore 工作台(沿用 v3)
 
-在 explore 目录里逐 round 旁白标注,`#问题` 自动建卡 / 关联;产物从"insight 卡"换成"v4 卡(问题 + 答案)"。机制见 [`../v3/explore.md`](../v3/explore.md) 与 [`../../works/v4/session-annotation.md`](../../works/v4/session-annotation.md)。
+在 explore 目录里逐 round 旁白标注,`#问题` 自动建卡 / 关联;产物从"insight 卡"换成"v4 卡(问题 + 答案)"。机制见 [`../v3/explore.md`](../v3/explore.md) 与 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md)。
 
 ## 六、命令详情
 

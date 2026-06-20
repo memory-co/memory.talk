@@ -6,7 +6,7 @@ v4 是 **card 的另一代**:一张卡不再是「一句陈述」,而是「**一
 
 - CLI 契约见 [`../../cli/v4/`](../../cli/v4/)
 - HTTP 契约见 [`../../api/v4/`](../../api/v4/)
-- 机制 / 设计决策见 [`../../works/v4/card.md`](../../works/v4/card.md)、写路径前端见 [`../../works/v4/session-annotation.md`](../../works/v4/session-annotation.md)
+- 机制 / 设计决策见 [`../../works/v4/card.md`](../../works/v4/card.md)、写路径前端见 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md)
 
 ## 对象清单
 

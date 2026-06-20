@@ -44,7 +44,7 @@ v4 **沿用 v3 的 review**,只把 target 从 `card_id` 换成 `position_id`(顶
 
 ## 跟 CardSession 的边界
 
-两者都带 `(session_id, indexes)`、都源自旁白标注(session-annotation.md),但角色不同:
+两者都带 `(session_id, indexes)`、都源自旁白标注(session-mark.md),但角色不同:
 
 | | Review | CardSession |
 |---|---|---|

@@ -84,7 +84,7 @@ DDL 详见各对象 md 的「存储」小节。**全部无 FOREIGN KEY**(SQLite 
 
 ## 旁白标注(card_sessions 的 canonical)
 
-v4 写路径 = **逐 round 旁白(以写代读)**,落在 session 目录的 `annotations.jsonl`(每行一 round 的旁白 + 解析出的 `questions[]`)。`questions[]` 是 card↔session 关联的 **canonical**;SQLite `card_sessions` 是它的派生索引。详见 [`../../works/v4/session-annotation.md`](../../works/v4/session-annotation.md) 与 [card-session.md](card-session.md)。
+v4 写路径 = **逐 round 旁白(以写代读)**,落在 session 目录的 `annotations.jsonl`(每行一 round 的旁白 + 解析出的 `questions[]`)。`questions[]` 是 card↔session 关联的 **canonical**;SQLite `card_sessions` 是它的派生索引。详见 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md) 与 [card-session.md](card-session.md)。
 
 ## 一张图看清「每类信息落在哪几处」
 

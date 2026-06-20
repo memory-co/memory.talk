@@ -2,7 +2,7 @@
 
 **card↔session 出处**关系:哪个 session(的哪几条旁白 round)**启发 / 生出**了这张卡或某个答案。和 [card↔card 的 links](card-links.md) 平行,都嵌在卡下(`/v4/cards/{card_id}/...`)。支持多 session。
 
-CLI 一般不直接调——出处由**旁白 / 标注机制**自动写入(也可在 [`POST /v4/cards/{card_id}/positions`](cards.md#post-v4cardscard_idpositions) 带 `source`、或 [session-annotation](../../works/v4/session-annotation.md))。本页端点用于显式记录和反查。字段语义详见 [`../../structure/v4/card-session.md`](../../structure/v4/card-session.md)。
+CLI 一般不直接调——出处由**旁白 / 标注机制**自动写入(也可在 [`POST /v4/cards/{card_id}/positions`](cards.md#post-v4cardscard_idpositions) 带 `source`、或 [session-mark](../../works/v4/session-mark.md))。本页端点用于显式记录和反查。字段语义详见 [`../../structure/v4/card-session.md`](../../structure/v4/card-session.md)。
 
 > SQLite 表名仍是 `card_sessions`(只是 API 路径嵌到卡下)。canonical 是旁白的 `questions[]`(file),这张表是它的派生 join 索引。
 
