@@ -1,13 +1,6 @@
 # explore
 
-**LLM 主导的卡维护工作台**:在一个隔离环境里启动 Claude Code,让它读会话、抽新卡或给老卡(答案)写 review。memory.talk 自己不抽不评 —— 抽 / 评是 LLM 的活,explore 负责**拉起 claude + 隔离 + 跟踪产出**。
-
-> **v4 产物差异**:抽出来的不再是一张 insight 卡(一句陈述),而是一张 **v4 卡**(一个问题 Issue + 若干答案 Position)。抽卡的写路径走 [`session mark`](session.md#session-mark) —— 在 explore 目录里逐 round 打注解,mark 里 `#…？` 就地标问题、写入时自动建卡 / 关联老卡。工作台的拉起 / 隔离 / 跟踪机制本身照 v3。
-
-| | v3 explore 产物 | v4 explore 产物 |
-|---|---|---|
-| 抽出来的是 | 一张 insight 卡(一句陈述 + rounds + stats) | 一张 **v4 卡**(一个问题 Issue + 若干答案 Position) |
-| 写入路径 | v3 探洞见 | [`session mark`](session.md#session-mark)(逐 round 注解,`#…？` 自动建 v4 卡) |
+**LLM 主导的 card 维护工作台**:在一个隔离环境里启动 Claude Code,让它读会话、抽新 card 或给老 card 写 review。memory.talk 自己不抽不评 —— 抽 / 评是 LLM 的活,explore 负责**拉起 claude + 隔离 + 跟踪产出**。
 
 机制(cwd 隔离 + recall hook 真空区 + 无独立工作队列)详见 [`../../works/v3/explore-cwd-suppression.md`](../../works/v3/explore-cwd-suppression.md)。
 
@@ -17,7 +10,7 @@
 
 ```
 memory.talk explore
-├── pending [--limit N]                 # 候选队列:未被任何卡引用过的 work session
+├── pending [--limit N]                 # 候选队列:未被任何 card 引用过的 work session
 ├── list [--limit N]                    # 产出历史:explore namespace 下已跑过的 session
 ├── detail <session_id>                 # 单条 explore session 详情(产出的 cards / reviews)
 ├── auto [--limit N]                    # 非交互式:claude -p 自动消费 pending
@@ -27,7 +20,7 @@ memory.talk explore
 
 适用的命令支持 `--json`。**所有读路径都走 backend HTTP**,所有 namespace 判断都走 `metadata.cwd` 前缀匹配,不直接读 `~/.claude/projects/*.jsonl`。
 
-> data root **固定在 `~/.memory.talk`**(不暴露 `--data-root` 参数)。后续如需配置,会在 [setup](setup.md) 里加入,其它命令不动。
+> data root **固定在 `~/.memory.talk`**(v3 不暴露 `--data-root` 参数)。后续如需配置,会在 [setup](setup.md) 里加入,其它命令不动。
 
 ### explore pending
 
@@ -37,10 +30,10 @@ memory.talk explore pending [--limit N] [--json]
 
 后端定义:
 
-> `pending = { session | NOT EXISTS(card 引用 session.id) AND session.metadata.cwd NOT startswith <explore.cwd> AND session.last_at <= now - 30min }`
+> `pending = { session | NOT EXISTS(card.rounds[*].session_id = session.id) AND session.metadata.cwd NOT startswith <explore.cwd> AND session.last_at <= now - 30min }`
 
 三条规则:
-- **未被引用**:还没有任何卡引用过这条 session
+- **未被引用**:还没有任何 card 的 rounds 引用过这条 session
 - **不是 explore 自己产出的**:排除 `<explore.cwd>` 下的 session(避免"抽 explore session 套娃")
 - **最近一轮 ≥ 30 分钟前**:可能还在跑的 session 暂不进队列(`last_at` 在 30 分钟内的算"active",pending 不取)
 
@@ -67,7 +60,7 @@ memory.talk explore pending [--limit N] [--json]
 }
 ```
 
-> **pending 的"未被引用"是严格的**:有 1 张卡引用过这条 session,这条 session 就出队 —— 即便里面还有更多问题没抽完。要重访 / 二次抽取,直接 `memory.talk read <sid>` + [`session mark`](session.md#session-mark) 即可,不靠 pending 推回来。
+> **pending 的"未被引用"是严格的**:有 1 张 card 引用过这条 session,这条 session 就出队 —— 即便里面还有更多 insight 没抽完。要重访 / 二次抽取,直接 `memory.talk read <sid>` + `card '{...}'` 即可,不靠 pending 推回来。
 
 ### explore list
 
@@ -91,8 +84,8 @@ memory.talk explore list [--limit N] [--json]
 
 字段定义(全部从 backend 实时算,不存):
 
-- `cards`:本 session 产出的 v4 卡数
-- `reviews`:本 session 产出的 review 数
+- `cards`:`COUNT cards WHERE EXISTS round IN cards.rounds: round.session_id = sid`
+- `reviews`:`COUNT reviews WHERE session_id = sid`
 - `status`(按时间戳的弱启发,仅显示用):
   - `active`:`last_at` 距今 < 30 分钟
   - `done`:`last_at` 距今 ≥ 30 分钟 **且** `cards + reviews > 0`
@@ -109,8 +102,8 @@ memory.talk explore detail <session_id> [--json]
 走 backend,聚焦**本 session 的产出**:
 
 - session 基本信息(`started_at` / `last_at` / `rounds` / `cwd` / `status`)
-- 产出的卡列表(每条 `card_id` + `issue` + `created_at`)
-- 产出的 review 列表(每条 `review_id` + 关联的 `card_id` + `position`(`p<n>`)+ `argument` + `comment` + `indexes`)
+- 产出的 card 列表(每条 `card_id` + `insight` + `created_at`)
+- 产出的 review 列表(每条 `review_id` + 关联的 `card_id` + `score` + `comment` + `indexes`)
 
 跟 `memory.talk read sess_xxx` 的差别:detail **不展开 round 内容**;要看对话原文用 `read`。
 
@@ -126,8 +119,8 @@ memory.talk explore auto [--limit N] [--json]
 2. 对每条候选:
    - `memory.talk read <sid>` 看内容
    - 决定**三选一**:
-     - **抽卡**(找到值得固化的新问题 / 答案)→ 逐 round 走 [`session mark`](session.md#session-mark)(`#…？` 自动建卡 / 加答案)
-     - **写 review**(内容反驳 / 支持某张卡的某个答案)→ `memory.talk card review --position <pid> ...`
+     - **抽 card**(找到值得固化的新判断)→ `memory.talk card '{...}'`
+     - **写 review**(内容反驳 / 支持某张已有 card)→ `memory.talk review '{...}'`
      - **跳过**(纯闲聊 / 已在别处沉淀)
 3. 处理完进下一条,直到队列空或达上限
 4. stdout 输出 summary
@@ -272,7 +265,7 @@ memory.talk explore resume sess_01k...  # 接着上次接着抽
 
 ### 为什么 explore 不直接调 LLM API,而是包一层 Claude Code
 
-架构原则(`CLAUDE.md`):Python 不调 LLM API,认知工作走 Skill / agent。explore 也不破这条 —— 不直连 OpenAI / Anthropic API,只起 `claude` 进程,让它用工具(`memory.talk read` / `session mark` / `card review`)完成抽取 + 评价。
+架构原则(`CLAUDE.md`):Python 不调 LLM API,认知工作走 Skill / agent。explore 也不破这条 —— 不直连 OpenAI / Anthropic API,只起 `claude` 进程,让它用工具(`memory.talk read` / `card` / `review`)完成抽取 + 评价。
 
 直接调 API 也能跑,但 explore 自己要管 prompt / context window / tool_use loop,等于把 Claude Code 的 agent 核心机制再做一遍。借 claude 已有的 agent loop 是更轻的实现,而且全流程都落 backend(`explore detail` 能拉出完整对话),debug 友好。
 
@@ -280,16 +273,16 @@ memory.talk explore resume sess_01k...  # 接着上次接着抽
 
 cwd 是 Claude Code **原生**的 project 分桶机制 —— 同一目录下起的所有 claude 共享 project_id。explore 只是消费这条已有信号,不重造一套 "explore session" 元数据。
 
-整体也不依赖 tag / 状态字段做 namespace 判断,走 `metadata.cwd` 前缀匹配是跟这条原则一致的选择。
+v3 整体也不依赖 tag / 状态字段(filter / tag 命令在 v3 已下线),namespace 判断走 `metadata.cwd` 前缀匹配是跟这条原则一致的选择。
 
 ### 为什么 pending 是"严格未引用",不是"未处理"
 
-定义严格简单:**有 1 张卡引用过这条 session,这条 session 就出 pending**。即便里面还有问题没抽。
+定义严格简单:**有 1 张 card 引用过这条 session,这条 session 就出 pending**。即便里面还有 insight 没抽。
 
 理由:
 - **简单**:一条 SQL 推得,无 cursor、无 checkpoint、无 state file。
 - **"被关注过一次"=核心已被 LLM 看过**:后续要不要再回来,是人 / agent 的判断,不应该由队列机制强行推。
-- **真有"忘抽了"**:`read <sid>` + [`session mark`](session.md#session-mark) 直接补,代价微小。
+- **真有"忘抽了"**:`read <sid>` + `card '{...}'` 直接补,代价微小。
 
 如果以后想要"按 last_at 排序 + 已被引用过但有新内容"这种更聪明的队列,做成 `explore pending --include-revisits` 扩展,**不进默认行为**。
 
@@ -302,7 +295,7 @@ sync 是后端实时 watcher,落 backend 跟 jsonl 落盘几乎同时,旁路读 
 - **精确 stats**:cards / reviews 计数走 backend SQL,准确
 - **namespace 校验干净**:resume 时直接 backend 查 metadata,不读文件系统
 
-代价是依赖 `server` 在跑。所有读路径都依赖 backend,explore 没理由特殊。
+代价是依赖 `server` 在跑。v3 所有读路径都依赖 backend,explore 没理由特殊。
 
 ### 为什么 manual / resume 走 exec 而不是 subprocess
 
@@ -313,4 +306,4 @@ sync 是后端实时 watcher,落 backend 跟 jsonl 落盘几乎同时,旁路读 
 
 ### 为什么 auto 阻塞而不是后台
 
-抽卡 / 写 review 是**用户主动决定的动作**,不是后台守护。每次几分钟到十几分钟。塞后台只让用户反复检查"我跑了吗?抽完了吗?",不如全程在终端看着 claude 输出。
+抽 card / 写 review 是**用户主动决定的动作**,不是后台守护。每次几分钟到十几分钟。塞后台只让用户反复检查"我跑了吗?抽完了吗?",不如全程在终端看着 claude 输出。

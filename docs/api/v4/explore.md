@@ -4,28 +4,23 @@ CLI `explore` 命令的 backend 数据出口。三个 GET 端点 —— **CLI / 
 
 CLI 对应 [`explore`](../../cli/v4/explore.md) 的 `pending` / `list` / `detail` 子命令。`auto` / `manual` / `resume` 是本地进程控制,不走 HTTP API。
 
-> **v4 唯一变化**:
-> - 路由从 `/v3/explore/*` 挪到 **`/v4/explore/*`** 前缀,GET 端点的请求 / 响应形态不变。
-> - 抽卡产物从 insight 卡(一句陈述)换成 **v4 卡**(一个问题 Issue + 若干答案 Position);`list` / `detail` 里 `cards[]` 指的是 v4 卡。
-> - 抽卡的**写路径**不是独立 explore 写端点,而是逐 round 注解 —— 见 [`session-marks.md`](session-marks.md)(`POST /v4/sessions/{id}/marks`,mark 里 `#…？` 自动建卡)。
-
 ## GET /v4/explore/pending
 
-返回 backend 视角下"还没被任何卡引用过、可作为抽取候选"的 session 列表。
+返回 backend 视角下"还没被任何 card 引用过、可作为抽取候选"的 session 列表。
 
 ### 形式化定义
 
 ```
 pending = {
   session
-  | NOT EXISTS card 引用 session.session_id
+  | NOT EXISTS card.rounds[*].session_id = session.session_id
   AND session.metadata.cwd NOT startswith <settings.explore.cwd>
   AND session.last_at <= now() - 30 minutes
 }
 ```
 
 三条规则:
-- **未被引用**:还没有任何卡引用过这条 session
+- **未被引用**:还没有任何 card 的 rounds 引用过这条 session
 - **不是 explore 自己产出的**:排除 `<explore.cwd>` 下的 session(避免套娃)
 - **不再"active"**:最近一轮 < 30 分钟前的 session 可能还在跑,暂不进队列
 
@@ -92,8 +87,8 @@ pending = {
 
 | 字段 | 说明 |
 |---|---|
-| `sessions[].cards` | 本 session 产出的 v4 卡数 |
-| `sessions[].reviews` | 本 session 产出的 review 数 |
+| `sessions[].cards` | 本 session 产出的 card 数 = `COUNT cards WHERE EXISTS round.session_id = sid` |
+| `sessions[].reviews` | 本 session 产出的 review 数 = `COUNT reviews WHERE session_id = sid` |
 | `sessions[].status` | 弱启发(仅显示用):`active`(`last_at` < 30m)/ `done`(`last_at` ≥ 30m 且 `cards + reviews > 0`)/ `abandoned`(`last_at` ≥ 1h 且 `cards + reviews = 0`) |
 
 按 `started_at` 倒序。
@@ -118,7 +113,7 @@ pending = {
   "cards": [
     {
       "card_id": "card_01jz8k2m",
-      "issue": "用户偏好什么回答风格?",
+      "insight": "选定 LanceDB 做向量存储",
       "created_at": "2026-05-03T10:28:00Z",
       "first_round_index": 5
     }
@@ -126,9 +121,8 @@ pending = {
   "reviews": [
     {
       "review_id": "review_01jzr5kq",
-      "card_id": "card_01jz8k2m",
-      "position": "p1",
-      "argument": -1,
+      "card_id": "card_01jzpold99",
+      "score": -1,
       "indexes": "9-11",
       "comment": "原以为 mmap 在 NFS 上没事...",
       "created_at": "2026-05-03T10:35:00Z"
@@ -141,10 +135,7 @@ pending = {
 
 | 字段 | 说明 |
 |---|---|
-| `cards[].issue` | 产出的 v4 卡的问题文本 |
-| `cards[].first_round_index` | 本 session 里**第一次**触发本卡的 round 编号(最小 index),方便 detail UI 排序 |
-| `reviews[].card_id` + `reviews[].position` | 这条 review 表态的 Position(寻址 `card_id#p<n>`;v4 review target 是 Position,不是整张卡。Position 无独立 id,是卡的附属) |
-| `reviews[].argument` | `+1` / `0` / `-1` |
+| `cards[].first_round_index` | 本 session 里**第一次**触发本 card 的 round 编号(最小 index),方便 detail UI 排序 |
 
 ### namespace 校验
 
@@ -160,7 +151,13 @@ pending = {
 
 ## 副作用
 
-三个端点**全部纯只读** —— 不修改任何对象、不刷计数、不写事件。
+三个端点**全部纯只读** —— 不修改任何对象、不刷 stats、不写事件。
+
+## 跟 v2 的差异
+
+v2 explore CLI **不通过 backend** —— 直接读 `~/.claude/projects/<explore-project-id>/*.jsonl`。v3 把这套搬到 backend HTTP,统一数据源。
+
+v2 没有对应的 API 端点;v3 新增这 3 个 GET。
 
 ### 为什么 explore detail 用 403 而不是 404
 
