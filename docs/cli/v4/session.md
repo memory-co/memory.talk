@@ -1,6 +1,6 @@
 # session
 
-操作 backend 已落库的 session —— **元数据**(`list` / `tag`)+ **逐 round 打注解**(`mark`,v4 新增的抽卡写路径前端)。对话**内容**不在这读,统一走 `memory.talk read <sid>`(`read` 按前缀判型,覆盖 `card_` / `pos_` / `sess_`,以及 mark 分片 `sess_…#m1`)。
+操作 backend 已落库的 session —— **元数据**(`list` / `tag`)+ **逐 round 打注解**(`mark`,v4 新增的抽卡写路径前端)。对话**内容**不在这读,统一走 `memory.talk read <sid>`(`read` 按前缀判型,覆盖 `card_` / `sess_`,以及分片 `card_…#p1` = Position、`sess_…#m1` = mark)。
 
 ```
 memory.talk session

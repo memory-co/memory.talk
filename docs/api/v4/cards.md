@@ -2,7 +2,7 @@
 
 卡 = 一个**问题**（`issue`）+ 它底下的若干**答案候选**（Position）。本页四个端点：建卡、列卡、给卡加答案、列卡的答案。
 
-读单卡 / 单 Position 走 [`POST /v4/read`](read.md)（`card_` / `pos_` 前缀都认）。对答案表态走 [`POST /v4/positions/{pid}/reviews`](reviews.md)。
+读单卡 / 单 Position 走 [`POST /v4/read`](read.md)（`card_` 与 `card_…#p<n>` 分片都认）。对答案表态走 [`POST /v4/cards/{cid}/positions/{p}/reviews`](reviews.md)。
 
 CLI 对应 [`card create | position`](../../cli/v4/card.md)（读卡走 [`read`](../../cli/v4/read.md))。字段语义详见 [`../../structure/v4/card.md`](../../structure/v4/card.md)。
 
@@ -103,7 +103,7 @@ CLI 对应 [`card create | position`](../../cli/v4/card.md)（读卡走 [`read`]
   "claim": "偏详细,默认带背景和权衡",
   "scope": "新人 onboarding 场景",
   "source": {"session_id": "sess_def456", "indexes": "3,7,12"},
-  "forked_from_position_id": "pos_01jzp3nq"
+  "forked_from": "p1"
 }
 ```
 
@@ -112,18 +112,19 @@ CLI 对应 [`card create | position`](../../cli/v4/card.md)（读卡走 [`read`]
 | `claim` | 是 | 答案文本（内联） |
 | `scope` | 否 | 一句话适用场景软提示，默认 `""` |
 | `source` | 否 | 出处 `{session_id, indexes}` → 落一条 `card_sessions` |
-| `forked_from_position_id` | 否 | 信念分叉血缘：本答案从哪个旧 Position 分出来（`pos_<...>`，保认知史；见 [`../../structure/v4/card.md`](../../structure/v4/card.md)） |
-| `position_id` | 否 | 不提供则自动生成 `pos_<ULID>` |
+| `forked_from` | 否 | 信念分叉血缘：本答案从**本卡的哪个旧 Position** 分出来（同卡内的 `p<n>`，如 `"p1"`，保认知史；见 [`../../structure/v4/card.md`](../../structure/v4/card.md)） |
 
 ### 响应
 
 ```json
-{"status": "ok", "card_id": "card_01jz8k2m", "position_id": "pos_01jzr8xy"}
+{"status": "ok", "card_id": "card_01jz8k2m", "position": "p2"}
 ```
+
+> `position` = 卡内自动递增的序号（`p1` / `p2`…），不由客户端指定；全址 = `card_01jz8k2m#p2`，正如 mark 是 `<session_id>#m<n>`。
 
 ### 副作用
 
-- 校验 `card_id` 存在、`claim` 非空、`forked_from_position_id`（如给）存在且 `pos_` 前缀 → 任一失败整条不落库。
+- 校验 `card_id` 存在、`claim` 非空、`forked_from`（如给）是**本卡内**已存在的 `p<n>` → 任一失败整条不落库。
 - 落一个 Position（计数全 0），canonical 写 `positions/<pid>.json`。
 - 若带 `source`：落一条 `card_sessions`。
 - **不动其它 Position**：append-only，新增不覆盖；"哪个答案当下用"由召回时现算 credence 决定，不在这里改任何状态位。
@@ -135,8 +136,7 @@ CLI 对应 [`card create | position`](../../cli/v4/card.md)（读卡走 [`read`]
 | `card_id` 不存在 | 404, `card <cid> not found` |
 | `claim` 为空 | 400, `claim required` |
 | `source.session_id` 前缀错 / 不存在 / `indexes` 越界 | 400, `invalid session_id prefix` / `session <sid> not found` / `index N out of range for session <sid>` |
-| `forked_from_position_id` 前缀错 / 不存在 | 400, `invalid forked_from_position_id prefix` / `position <pid> not found` |
-| 显式 `position_id` 已存在 | 409, `position_id already exists` |
+| `forked_from` 不是 `p<n>` 形态 / 本卡内不存在 | 400, `invalid forked_from` / 404, `position <card_id>#<p> not found` |
 
 ---
 
@@ -152,22 +152,22 @@ CLI 对应 [`card create | position`](../../cli/v4/card.md)（读卡走 [`read`]
   "issue": "用户偏好什么回答风格?",
   "positions": [
     {
-      "position_id": "pos_01jzp3nq",
+      "position": "p1",
       "claim": "偏简洁,先给结论再展开",
       "up_count": 7, "down_count": 1, "neutral_count": 2, "review_count": 10,
       "credence": 6,
       "scope": "技术问答场景;闲聊不一定适用",
-      "forked_from_position_id": null,
+      "forked_from": null,
       "last_reviewed_at": "2026-05-30T10:00:00Z",
       "created_at": "2026-05-24T09:12:03Z"
     },
     {
-      "position_id": "pos_01jzr8xy",
+      "position": "p2",
       "claim": "偏详细,默认带背景和权衡",
       "up_count": 2, "down_count": 0, "neutral_count": 1, "review_count": 3,
       "credence": 2,
       "scope": "新人 onboarding 场景",
-      "forked_from_position_id": "pos_01jzp3nq",
+      "forked_from": "p1",
       "last_reviewed_at": "2026-05-28T18:30:00Z",
       "created_at": "2026-05-26T11:00:00Z"
     }

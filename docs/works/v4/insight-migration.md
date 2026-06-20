@@ -7,7 +7,7 @@
 ## 关键取舍(已定/已实现)
 
 - **`reviews` 直接 DROP,不改名**:v3 的 review 数据从没真正用起来——不迁移、不留 `insight_reviews`。DROP 掉就把 `reviews` 名字腾给 v4(v4 的表态落在 Position 上)。v3 的 review 功能(`service/reviews.py` / `api/reviews.py` / `cli/review.py` + review 方法 + `card_stats` 的 review 计数写路径)一并退役。
-- **id 前缀彻底改成 `insight_`(单一 `/v4`)**:迁移把 insight 行的 id **值**从 `card_<ulid>` 重写成 `insight_<ulid>`(SQLite 三表 + `recall_event` JSON + 文件罐叶目录 + LanceDB 行 id,保 vector 不重灌)。SQLite **列名**仍叫 `card_id`(只改值),但 API/CLI/schema **表面统一用 `insight_id`**。全局只有一个 `/v4` 前缀:`POST /v4/read` 按 id 前缀分派(`card_`→卡 / `pos_`→Position / `insight_`→只读旧卡 / `sess-`→会话),`parse_id` 是全局唯一解析路径。
+- **id 前缀彻底改成 `insight_`(单一 `/v4`)**:迁移把 insight 行的 id **值**从 `card_<ulid>` 重写成 `insight_<ulid>`(SQLite 三表 + `recall_event` JSON + 文件罐叶目录 + LanceDB 行 id,保 vector 不重灌)。SQLite **列名**仍叫 `card_id`(只改值),但 API/CLI/schema **表面统一用 `insight_id`**。全局只有一个 `/v4` 前缀:`POST /v4/read` 按 id 前缀分派(`card_`→卡;`card_…#p<n>` 分片→Position;`insight_`→只读旧卡 / `sess-`→会话),`parse_id` 是全局唯一解析路径(Position 无独立前缀,跟 mark `sess_…#m<n>` 一样靠 `card_` id 上的 `#p` 分片判型)。
 - **collection 改名用目录级 rename + 行 id 重写,不重灌**:见 §三(`AdminBackend` 的 `rename_collection` + 逐行重写 id,保留原 vector)。
 
 ## 一、改什么(全清单)

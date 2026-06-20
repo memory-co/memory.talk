@@ -126,7 +126,8 @@ pending = {
   "reviews": [
     {
       "review_id": "review_01jzr5kq",
-      "position_id": "pos_01jzpold99",
+      "card_id": "card_01jz8k2m",
+      "position": "p1",
       "argument": -1,
       "indexes": "9-11",
       "comment": "原以为 mmap 在 NFS 上没事...",
@@ -142,7 +143,7 @@ pending = {
 |---|---|
 | `cards[].issue` | 产出的 v4 卡的问题文本 |
 | `cards[].first_round_index` | 本 session 里**第一次**触发本卡的 round 编号(最小 index),方便 detail UI 排序 |
-| `reviews[].position_id` | 这条 review 表态的 Position(v4 review target 是 Position,不是整张卡) |
+| `reviews[].card_id` + `reviews[].position` | 这条 review 表态的 Position(寻址 `card_id#p<n>`;v4 review target 是 Position,不是整张卡。Position 无独立 id,是卡的附属) |
 | `reviews[].argument` | `+1` / `0` / `-1` |
 
 ### namespace 校验

@@ -26,8 +26,8 @@
 |---|---|---|---|
 | `card_id` | string | 是 | **主体卡**(谁的边);`card_<...>` |
 | `type` | string | 是 | 边类型,见 [#类型](#类型) |
-| `target_id` | string | 是 | 对端 id;多为 `card_<...>`,`suggested_by` 可为 `pos_<...>` |
-| `target_type` | string | 自动 | 对端类型:`card` / `position`,从 `target_id` 前缀派生并**单独落列**——「列出所有指向 Position 的边」这类查询直接按它过滤,不必解析前缀 |
+| `target_id` | string | 是 | 对端 id;多为 `card_<...>`,`suggested_by` 可为一个 Position 地址 `card_<...>#p<n>` |
+| `target_type` | string | 自动 | 对端类型:`card` / `position`,从 `target_id` 派生(带 `#p` 分片 → `position`,否则 `card`)并**单独落列**——「列出所有指向 Position 的边」这类查询直接按它过滤,不必解析地址 |
 | `created_at` | string | 自动 | ISO 8601 |
 
 ## 类型
@@ -42,7 +42,7 @@
 
 > IBIS 关系集**不完备**,可按需补 `depends_on` / `part_of`。未识别 `type` 报 400。
 >
-> **`replaces`(issue 层)≠ `forked_from_position_id`(position 层)**:`replaces` 是一个**问题**重述取代另一个问题;`forked_from_position_id` 是同一问题下一个**答案**分叉自另一个答案。两个不同机制,别混。
+> **`replaces`(issue 层)≠ `forked_from`(position 层)**:`replaces` 是一个**问题**重述取代另一个问题;`forked_from` 是同一问题下一个**答案**分叉自另一个答案。两个不同机制,别混。
 
 ## 多值 / 方向
 
@@ -56,14 +56,14 @@
 CREATE TABLE card_links (
   card_id    TEXT NOT NULL,               -- 主体卡(谁的边),不是对称 from/to
   type        TEXT NOT NULL,              -- specializes|suggested_by|questions|replaces|related
-  target_id   TEXT NOT NULL,              -- 对端 id:多为 card_…;suggested_by 可为 pos_…
-  target_type TEXT NOT NULL,              -- 'card' | 'position',从 target_id 前缀派生
+  target_id   TEXT NOT NULL,              -- 对端 id:多为 card_…;suggested_by 可为 card_…#p<n>(一个 Position)
+  target_type TEXT NOT NULL,              -- 'card' | 'position',从 target_id 派生(带 #p 分片 → position)
   created_at  TEXT NOT NULL,
   PRIMARY KEY (card_id, type, target_id)  -- 同一(主体,类型)下可多条;target_type 随 target_id 定,不进 PK
 );
 ```
 
-- **无 FOREIGN KEY**(SQLite 派生索引,容忍悬空)。`target_type`(`card` / `position`)从 `target_id` 前缀派生、单独落列——便于按对端类型过滤,免每次解析前缀。
+- **无 FOREIGN KEY**(SQLite 派生索引,容忍悬空)。`target_type`(`card` / `position`)从 `target_id` 派生(带 `#p` 分片 = 一个 Position → `position`,否则 `card`)、单独落列——便于按对端类型过滤,免每次解析地址。
 - 关系数据的 canonical 落点(是否也进文件罐)与图整体是否值得 file-canonical 一并待定,见 [`../../works/v4/card.md`](../../works/v4/card.md) §12。
 
 ## 反查
@@ -76,5 +76,5 @@ CREATE TABLE card_links (
 |---|---|---|
 | 载体 | card 的内联字段(创建即冻) | 独立表(可后续增边) |
 | 关系 | `derives_from` / `supersedes` 两种 | 五类型(IBIS) |
-| 对端 | 只 card | card 为主,`suggested_by` 可指 Position |
+| 对端 | 只 card | card 为主,`suggested_by` 可指 Position(`card_…#p<n>`) |
 | 方向 | 单向(本卡 → 源卡) | 有向为主,`related` 无向 |

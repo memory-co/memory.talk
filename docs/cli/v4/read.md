@@ -6,13 +6,13 @@
 memory.talk read <id> [--json]
 ```
 
-| 前缀 | 读到的 |
+| 前缀 / 分片 | 读到的 |
 |---|---|
 | `card_` | 一张卡:**问题 + 它所有答案**(+ IBIS 边 + 出处) |
-| `pos_` | **单个答案**(Position):`claim` + 顶踩计数 + 现算 credence + scope + 它收到的全部 review |
+| `card_…#p<n>` 分片 | **单个答案**(Position):`claim` + 顶踩计数 + 现算 credence + scope + 它收到的全部 review |
 | `sess_` | session(沿用 v3 形态) |
 
-调 [`POST /v4/read`](../../api/v4/read.md)。
+> Position **没有独立 id**——是所属卡的附属,寻址 `card_…#p<n>`。`parse_id` 认出 `card_` id 上的 `#p<n>` 分片就分派到那张卡的第 n 个 Position(跟它认 `sess_…#m<n>` 分派到 mark 一个路子)。
 
 ## `card_` —— 问题 + 它所有答案
 
@@ -29,13 +29,13 @@ memory.talk read <id> [--json]
 
 ---
 
-### ★ [POSITION] `pos_01jzp3nq` · `credence +6 · ↑7 ↓1 ·0`
+### ★ [POSITION] `card_01jz8k2m#p1` · `credence +6 · ↑7 ↓1 ·0`
 
 默认简洁、要点优先
 
 `scope: 日常问答;调试场景另说` · 2026-06-18 14:30
 
-### [POSITION] `pos_01jzr5kq` · `credence +1 · ↑2 ↓1 ·3`
+### [POSITION] `card_01jz8k2m#p2` · `credence +1 · ↑2 ↓1 ·3`
 
 调试场景下要详细、带完整命令
 
@@ -50,7 +50,7 @@ memory.talk read <id> [--json]
 #### 约定
 
 - 顶部 `# card <card_id>` + `**issue:**` 整段问题;第三行 metadata(创建时间 · Position 数 · 出处 session 数)。
-- 每个 Position 一个 H3 块:`### [POSITION] \`<pid>\` · \`credence <现算分> · ↑<up> ↓<down> ·<neutral>\``。credence 现算(不是存的);**最高的那个标题前加 `★`** = 当下答案(平手按最近更新),**不是 `accepted` 字段**。
+- 每个 Position 一个 H3 块:`### [POSITION] \`card_…#p<n>\` · \`credence <现算分> · ↑<up> ↓<down> ·<neutral>\``。credence 现算(不是存的);**最高的那个标题前加 `★`** = 当下答案(平手按最近更新),**不是 `accepted` 字段**。
 - 标题下整段 `claim`,再一行 `scope`(空则 `(none)`)+ 时间。
 - 末尾 `**links:**`(IBIS 边)/ `**sessions:**`(出处),无则整段不出。
 
@@ -58,12 +58,12 @@ memory.talk read <id> [--json]
 
 跟 [`POST /v4/read`](../../api/v4/read.md) 的 `card_` 响应同形(`issue` + `positions[]` 按 credence 降序 + `links` + `sessions`)。`credence` 是响应里现算的字段,不在存储里。字段语义见 [`../../structure/v4/card.md`](../../structure/v4/card.md)。
 
-## `pos_` —— 单个答案 + 它的 review
+## `card_…#p` —— 单个答案 + 它的 review
 
 ### 输出 — Markdown(默认)
 
 `````markdown
-# position `pos_01jzp3nq` · `credence +6 · ↑7 ↓1 ·0`
+# position `card_01jz8k2m#p1` · `credence +6 · ↑7 ↓1 ·0`
 
 > under card `card_01jz8k2m` — 用户偏好什么回答风格?
 
@@ -79,7 +79,7 @@ memory.talk read <id> [--json]
 
 #### 约定
 
-- 标题 `# position <pid> · \`credence <现算分> · ↑<up> ↓<down> ·<neutral>\``,credence 现算(不是存的)。
+- 标题 `# position card_…#p<n> · \`credence <现算分> · ↑<up> ↓<down> ·<neutral>\``,credence 现算(不是存的)。
 - 第二行引用它所属卡的 `card_id` + `issue`(一句话定位)。
 - 整段 `claim`,再一行 `scope`(空则 `(none)`)+ 创建时间。
 - `## reviews (N)`:每条 `<argument> <session_id> #<indexes> · 时间 — comment`,按 `created_at` 倒序;无 review 时整段不出。
@@ -88,13 +88,13 @@ memory.talk read <id> [--json]
 
 ```json
 {
-  "position_id": "pos_01jzp3nq",
   "card_id": "card_01jz8k2m",
+  "position": "p1",
   "claim": "默认简洁、要点优先",
   "up_count": 7, "down_count": 1, "neutral_count": 0, "review_count": 8,
   "credence": 6,
   "scope": "日常问答;调试场景另说",
-  "forked_from_position_id": null,
+  "forked_from": null,
   "created_at": "2026-06-18T14:30:00Z",
   "reviews": [
     {"review_id": "review_01jzr5kq", "session_id": "sess_def", "indexes": "20-25", "argument": 1, "comment": "又一次验证", "created_at": "2026-05-30T10:00:00Z"}

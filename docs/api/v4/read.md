@@ -2,7 +2,7 @@
 
 ## POST /v4/read
 
-按 id 读一个对象。前缀判型:`card_` → 卡(问题 + 它所有答案)、`pos_` → 单个答案(+ 它收到的 review)、`sess_` → session(沿用 v3 session 形态)。
+按 id 判型读一个对象:`card_` → 卡(问题 + 它所有答案)、`card_…#p<n>` 分片 → 单个答案(+ 它收到的 review)、`sess_` → session(沿用 v3 session 形态)。Position 没有独立 id,寻址 `<card_id>#p<n>`(正如 mark 是 `<session_id>#m<n>`),`read` 见到 `#p` 分片就定位「这张卡的第 n 个答案」。
 
 CLI 对应 [`read <id>`](../../cli/v4/read.md)。字段语义见 [`../../structure/v4/card.md`](../../structure/v4/card.md)。
 
@@ -14,7 +14,7 @@ CLI 对应 [`read <id>`](../../cli/v4/read.md)。字段语义见 [`../../structu
 
 | 字段 | 必填 | 说明 |
 |---|---|---|
-| `id` | 是 | `card_<…>` / `pos_<…>` / `sess_<…>`,前缀决定读什么 |
+| `id` | 是 | `card_<…>` / `card_<…>#p<n>`(某卡的某答案)/ `sess_<…>`,判型决定读什么 |
 
 ### 响应 — `card_`(问题 + 所有答案)
 
@@ -28,18 +28,18 @@ CLI 对应 [`read <id>`](../../cli/v4/read.md)。字段语义见 [`../../structu
   "position_count": 1, "link_count": 1,
   "positions": [
     {
-      "position_id": "pos_01jzp3nq",
+      "position": "p1",
       "claim": "默认简洁、要点优先",
       "up_count": 7, "down_count": 1, "neutral_count": 0, "review_count": 8,
       "credence": 6,
       "scope": "日常问答;调试场景另说",
-      "forked_from_position_id": null,
+      "forked_from": null,
       "last_reviewed_at": "2026-05-30T10:00:00Z",
       "created_at": "2026-06-18T14:30:00Z"
     }
   ],
   "links": [{"type": "specializes", "target_id": "card_01jzsub", "dir": "in"}],
-  "sessions": [{"session_id": "sess_abc", "position_id": "pos_01jzp3nq", "indexes": "11-15"}]
+  "sessions": [{"session_id": "sess_abc", "position": "p1", "indexes": "11-15"}]
 }
 ```
 
@@ -48,17 +48,17 @@ CLI 对应 [`read <id>`](../../cli/v4/read.md)。字段语义见 [`../../structu
 - `sessions` = 出处(`card_sessions`)。
 - 一张**没有 Position** 的卡:`positions` 为 `[]`(还在等答案的问题,合法)。
 
-### 响应 — `pos_`(单个答案 + 它的 review)
+### 响应 — `card_…#p<n>`(单个答案 + 它的 review)
 
 ```json
 {
-  "position_id": "pos_01jzp3nq",
   "card_id": "card_01jz8k2m",
+  "position": "p1",
   "claim": "默认简洁、要点优先",
   "up_count": 7, "down_count": 1, "neutral_count": 0, "review_count": 8,
   "credence": 6,
   "scope": "日常问答;调试场景另说",
-  "forked_from_position_id": null,
+  "forked_from": null,
   "created_at": "2026-06-18T14:30:00Z",
   "reviews": [
     {"review_id": "review_01jzr5kq", "session_id": "sess_def", "indexes": "20-25", "argument": 1, "comment": "...", "created_at": "2026-05-30T10:00:00Z"}

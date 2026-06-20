@@ -45,7 +45,7 @@ CLI 对应 [`recall`](../../cli/v4/recall.md)。读路径全貌见 [`../../works
       "card_id": "card_01jz8k2m",
       "issue": "用户偏好什么回答风格?",
       "position": {
-        "position_id": "pos_01jzp3nq",
+        "position": "p1",
         "claim": "偏简洁,先给结论再展开",
         "scope": "技术问答场景;闲聊不一定适用",
         "credence": 6,

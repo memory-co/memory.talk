@@ -34,7 +34,7 @@
 | `status` | string | 永远是 `"running"` —— 能拿到响应就是 running;连不上就是 not_running(CLI 层判断) |
 | `sessions_total` | integer | 已 ingest 的 session 数 |
 | `cards_total` | integer | 累计创建的 **v4 卡**(`/v4/cards` 建的 Issue)数;append-only,永不减少。**v3 老卡已整体改名 `insight`,不进 `cards_total`** |
-| `reviews_total` | integer | **v4 中为 vestigial `0`** —— v3 论坛 review(对整张卡的顶踩)已退役;v4 的表态落在 Position 上(`reviews` 表 target = `position_id`),不计入这个老字段 |
+| `reviews_total` | integer | **v4 中为 vestigial `0`** —— v3 论坛 review(对整张卡的顶踩)已退役;v4 的表态落在 Position 上(`reviews` 表 target = `card_id#position`;Position 无独立 id,是卡的附属),不计入这个老字段 |
 | `searches_total` | integer | `search_log` 表行数(被 retention 老化掉的不计) |
 | `recalls_total` | integer | `recall_log` 表行数(被重启 / rebuild 清掉的不计) |
 | `embedding_provider` | string | `local` / `openai` / `dummy` |

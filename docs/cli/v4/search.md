@@ -91,7 +91,7 @@ memory.talk search "" -w 'neutral_count > 3 AND up_count = 0 AND down_count = 0'
       "issue": "用户偏好什么回答风格?",
       "position_count": 3,
       "top_position": {
-        "position_id": "pos_01jzp3nq",
+        "position": "p1",
         "claim": "默认简洁、要点优先",
         "up_count": 7, "down_count": 1, "neutral_count": 0,
         "credence": 6,

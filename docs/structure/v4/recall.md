@@ -27,7 +27,7 @@
       "issue": "用户偏好什么回答风格?",
       "relevance": 0.83,
       "answer": {
-        "position_id": "pos_01jzr5kq",
+        "position": "p1",
         "claim": "简洁优先 —— 默认给结论,展开按需",
         "credence": 6,
         "up_count": 7,
@@ -37,7 +37,7 @@
       },
       "alternatives": [
         {
-          "position_id": "pos_01jzp3nq",
+          "position": "p2",
           "claim": "看场景 —— 简单题简洁,决策题详细",
           "credence": 1,
           "scope": ""
@@ -71,7 +71,7 @@
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `position_id` | string | `pos_<...>` |
+| `position` | string | 卡内序号 `p<n>`(寻址 `card_id#position`;Position 无独立 id) |
 | `claim` | string | 答案文本 |
 | `credence` | float | **现算**校验分(= f(up, down));不是存储字段 |
 | `up_count` / `down_count` / `neutral_count` | integer | 顶踩计数(`answer` 给全,`alternatives` 可精简) |

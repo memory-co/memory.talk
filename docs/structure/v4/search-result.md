@@ -19,7 +19,7 @@ v4 搜索结果是**撞问题**检索的产物:一条结果 = 一张卡(Issue)+ 
 
 | 字段 | 说明 |
 |---|---|
-| `position_id` | 答案 id(`pos_<…>`) |
+| `position` | 答案在卡内的序号 `p<n>`(寻址 `card_id#position`;Position 无独立 id) |
 | `claim` | 答案文本(内联) |
 | `up_count` / `down_count` / `neutral_count` | 顶 / 踩 / 中立计数(存的) |
 | `credence` | **现算**校验分(`up − down` / Wilson),不落库 |
@@ -33,7 +33,7 @@ v4 搜索结果是**撞问题**检索的产物:一条结果 = 一张卡(Issue)+ 
   "issue": "用户偏好什么回答风格?",
   "position_count": 3,
   "top_position": {
-    "position_id": "pos_01jzp3nq",
+    "position": "p1",
     "claim": "默认简洁、要点优先",
     "up_count": 7, "down_count": 1, "neutral_count": 0,
     "credence": 6,

@@ -53,7 +53,7 @@ memory.talk recall --session <session_id> --prompt '<prompt>' [--json]
       "card_id": "card_01jz8k2m",
       "issue": "用户偏好什么回答风格?",
       "position": {
-        "position_id": "pos_01jzp3nq",
+        "position": "p1",
         "claim": "默认简洁、要点优先",
         "scope": "日常问答;调试/教学场景另说",
         "credence": 6

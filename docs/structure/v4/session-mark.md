@@ -84,6 +84,6 @@ CREATE INDEX idx_session_marks_session ON session_marks(session_id);  -- 列 ses
 | 表 | 管什么 |
 |---|---|
 | `session_marks` | mark 自己的元信息(序号 / round / `last_index` / 时间) |
-| [`card_sessions`](card-session.md) | mark → card 的出处边(`card_id` + `session_id` + `mark` + `position_id`) |
+| [`card_sessions`](card-session.md) | mark → card 的出处边(`card_id` + `session_id` + `mark` + `position`(p<n>,可空)) |
 
 `session_marks` 是「有哪些 mark」,`card_sessions` 是「哪条 mark 启发了哪张卡」;两者都从 `marks/*.yaml`(canonical · `questions[]`)派生。

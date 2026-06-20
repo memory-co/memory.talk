@@ -110,7 +110,7 @@ memory.talk explore detail <session_id> [--json]
 
 - session 基本信息(`started_at` / `last_at` / `rounds` / `cwd` / `status`)
 - 产出的卡列表(每条 `card_id` + `issue` + `created_at`)
-- 产出的 review 列表(每条 `review_id` + 关联的 `position_id` + `argument` + `comment` + `indexes`)
+- 产出的 review 列表(每条 `review_id` + 关联的 `card_id` + `position`(`p<n>`)+ `argument` + `comment` + `indexes`)
 
 跟 `memory.talk read sess_xxx` 的差别:detail **不展开 round 内容**;要看对话原文用 `read`。
 

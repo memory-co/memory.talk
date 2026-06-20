@@ -56,7 +56,7 @@ CLI 对应 [`search <query> [--where DSL]`](../../cli/v4/search.md)。
       "issue": "用户偏好什么回答风格?",
       "position_count": 3,
       "top_position": {
-        "position_id": "pos_01jzp3nq",
+        "position": "p1",
         "claim": "默认简洁、要点优先",
         "up_count": 7, "down_count": 1, "neutral_count": 0,
         "credence": 6,

@@ -20,12 +20,12 @@ v4 是 **card 的另一代**:一张卡不再是「一句陈述」,而是「**一
 | PositionSession | **position→session** 出处(答案来自某 session 的哪几轮 `indexes`;**`mark` 可选**) | [position-session.md](position-session.md) |
 | SessionMark | session 目录下逐 round 注解(`marks/m<n>.yaml` + `session_marks` 表),v4 新增 | [session-mark.md](session-mark.md) |
 
-> **基础设施文档**(下面这些在 v4 大体沿用 v3,只有少量 v4 增量,各页都是指回 v3 的短指针):
+> **基础设施文档**(下面这些与 v3 同源,但本目录已**就地补全成完整 v4 文档**——内容落在本地、不再是指回 v3 的短指针;凡是「沿用」之处指的是 schema 跟 v3 同形,文字本身已在这里写全):
 
 | 对象 | v4 状态 | 文档 |
 |---|---|---|
-| Session(`sessions` 表 + `rounds.jsonl`) | 沿用 v3;v4 旁挂 `marks/` + `session_marks`(见 SessionMark) | [session.md](session.md) |
-| Settings(`settings.json`) | 沿用 v3;向量 collections 增 `cards` / `positions` | [settings.md](settings.md) |
+| Session(`sessions` 表 + `rounds.jsonl`) | 与 v3 同形;v4 旁挂 `marks/` + `session_marks`(见 SessionMark) | [session.md](session.md) |
+| Settings(`settings.json`) | 与 v3 同形;向量 collections 增 `cards` / `positions` | [settings.md](settings.md) |
 | Search-Result | **跟 v3 不同**(`top_position` + 现算 credence,无沉浮排序) | [search-result.md](search-result.md) |
 
 > v4 只重写「卡子系统」这一层(上面 6 个对象)+ 把沿用层(session / settings / search-result)在本目录就地补全;Recall-Event 等其余无变化的派生记录跟 v3 一致(召回的运行态去重落 `recall_log`,无独立 schema 文档),其字段在 [recall.md](recall.md) 的「排序与去重」小节里说明。
@@ -35,23 +35,24 @@ v4 是 **card 的另一代**:一张卡不再是「一句陈述」,而是「**一
 | 对象 | 前缀 | 示例 |
 |---|---|---|
 | Card | `card_` | `card_01jz8k2m...` |
-| Position | `pos_` | `pos_01jzr5kq...` |
 | Review | `review_` | `review_01jzp3nq...` |
 | Session | `sess_` | `sess_187c6576-...`(沿用 v3) |
 
 前缀 = 类型,CLI / API 按前缀零成本判型分发。`card_` 前缀是 v3 card 改名 `insight_` 之后**腾出来复用**的(见 [#与-v3--insight-的关系](#与-v3--insight-的关系))。
 
+> **Position 没有全局前缀 id** —— 它是卡的附属,寻址 `<card_id>#p<n>`(`p` + 卡内递增序号,如 `card_01jz8k2m#p1`),跟 mark `<session_id>#m<n>` 同构(见 [session-mark.md](session-mark.md))。CLI / API 按 `card_` id 上的 `#p<n>` 分片判型,分发到那张卡的对应 Position。
+
 ## 一张卡长什么样
 
 ```
 Card (= Issue, card_xxx)  "用户偏好什么回答风格?"
-├── Position pos_a  "简洁优先"          up 7 / down 1 / neutral 2
-├── Position pos_b  "复杂问题要详细"     up 3 / down 0 / neutral 1
-└── Position pos_c  "看场景"            up 1 / down 0 / neutral 0  (forked_from pos_a)
+├── Position card_xxx#p1  "简洁优先"          up 7 / down 1 / neutral 2
+├── Position card_xxx#p2  "复杂问题要详细"     up 3 / down 0 / neutral 1
+└── Position card_xxx#p3  "看场景"            up 1 / down 0 / neutral 0  (forked_from p1)
 
 边(不内联,在 card_links):  card_xxx --specializes--> card_yyy
-出处(不内联,在 card_sessions): card_xxx ←── sess_def #11-15 启发了 pos_a
-表态(不内联,在 reviews):      review_* --argument=+1--> pos_a
+出处(不内联,在 card_sessions): card_xxx ←── sess_def #11-15 启发了 card_xxx#p1
+表态(不内联,在 reviews):      review_* --argument=+1--> card_xxx#p1
 ```
 
 **「当下用哪个答案」不是存字段**:召回时取 credence(= `up_count`/`down_count` **现算**的校验分,平手按最近更新)最高的 Position。没有 `accepted` 标志,也没有 open/closed 状态 —— 一个 Issue 允许多个 Position 长期并存竞争。
@@ -65,7 +66,7 @@ Card (= Issue, card_xxx)  "用户偏好什么回答风格?"
 ├── memory.db                            # SQLite,详见各 md 的"存储"小节
 ├── cards/<bucket>/<card_id>/
 │   ├── card.json                        # canonical:issue + created_at(问题不可变)
-│   └── positions/<pid>.json             # canonical:claim + created_at(答案核不可变)
+│   └── positions/p<n>.json              # canonical:claim + created_at(答案核不可变),文件名 = p<n>
 ├── insights/<bucket>/<insight_id>/...   # v3 card 改名而来,只读(见下)
 ├── vectors/                             # LanceDB:cards(embed issue) / insights / rounds
 └── sessions/ ...                        # 沿用 v3
@@ -80,10 +81,10 @@ Card (= Issue, card_xxx)  "用户偏好什么回答风格?"
 v4 的卡子系统遵守**三条不变性**:
 
 1. **不可变核 create 即冻** —— Card 的 `issue`、Position 的 `(card_id, claim, created_at)` 一旦写入不可改;canonical 落文件罐。要「翻新」只能**新增一个竞争 Position**(同卡内)或**新建一张卡**(`replaces` 边指回),不改旧的。
-2. **计数 / 治理是 runtime 状态,不属于不可变核** —— `up_count` / `down_count` / `neutral_count` 由 review 落库自动累加;`scope` / `forked_from_position_id` 是运行态。读时跟不可变核合并返回,写入路径独立。
+2. **计数 / 治理是 runtime 状态,不属于不可变核** —— `up_count` / `down_count` / `neutral_count` 由 review 落库自动累加;`scope` / `forked_from` 是运行态。读时跟不可变核合并返回,写入路径独立。
 3. **Position 只增不改不删(append-only)** —— 答案变了不覆盖、不归档:新增一个竞争 Position,旧的被踩则 credence 现算掉下去、自然不再被注入,但仍可查。认知史落在 `reviews` 日志 + 并存的旧 Position 上,**不靠状态位**(没有 `change_state` / `superseded_by`)。
 
-由这三条联合保证:**lineage 自然成 DAG**(Position / Card append-only + `forked_from_position_id` / `card_links` 只能引用已存在的对象 → 物理时序排除环)。
+由这三条联合保证:**lineage 自然成 DAG**(Position / Card append-only + `forked_from` / `card_links` 只能引用已存在的对象 → 物理时序排除环)。
 
 ## 「现算」而非「存储」的几个量
 

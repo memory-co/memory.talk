@@ -5,8 +5,8 @@ v4 卡的**写入**入口。一张卡 = 一个问题(Issue)+ 若干答案(Positi
 ```
 memory.talk card
 ├── create --issue '<问题>' [--card_id <id>] [--json]
-├── position --card <cid> --claim '<答案>' [--source <sid>:<idx> ...] [--scope '<场景>'] [--position_id <id>] [--json]
-├── review --position <pid> --argument <+1|0|-1> --cite <sid>:<idx> [--comment '<一句话>'] [--review_id <id>] [--json]
+├── position --card <cid> --claim '<答案>' [--source <sid>:<idx> ...] [--scope '<场景>'] [--json]
+├── review --position card_xxx#p<n> --argument <+1|0|-1> --cite <sid>:<idx> [--comment '<一句话>'] [--review_id <id>] [--json]
 └── link --card <cid> --type <type> --target <id> [--json]   # 卡间 IBIS 边;看边走 read
 ```
 
@@ -35,7 +35,7 @@ memory.talk card create --issue '<问题文本>' [--card_id <id>] [--json]
 
 ```bash
 memory.talk card position --card <card_id> --claim '<答案文本>' \
-    [--source <session_id>:<indexes> ...] [--scope '<场景>'] [--position_id <id>] [--json]
+    [--source <session_id>:<indexes> ...] [--scope '<场景>'] [--json]
 ```
 
 | 参数 | 必填 | 说明 |
@@ -44,7 +44,8 @@ memory.talk card position --card <card_id> --claim '<答案文本>' \
 | `--claim` | 是 | 答案文本(`claim`,内联在 Position 上,不单独建节点、不共享)。值支持 `@<file>` / `@-` |
 | `--source` | 否,可多次 | 出处:`<session_id>:<indexes>`,每个落一条 `card_sessions`。支持多 session(多次 `--source`) |
 | `--scope` | 否 | **这个答案(Position)的**适用场景描述(`scope` 是 **Position 字段**,软提示、非门禁;负边界如「别用于育儿」写进这句)。值支持 `@<file>` / `@-` |
-| `--position_id` | 否 | 显式指定 id;不提供则自动生成 `pos_<ULID>` |
+
+> **Position 没有独立 id**:它是所属卡的附属,寻址 `<card_id>#p<n>`(`p` + 卡内递增序号,跟 mark `<session_id>#m<n>` 一个路子)。序号由卡自动分配(本卡第几个答案 → `p1`/`p2`…),不由客户端指定。
 
 详细字段语义见 [`../../structure/v4/card.md`](../../structure/v4/card.md)。
 
@@ -57,7 +58,7 @@ memory.talk card position --card <card_id> --claim '<答案文本>' \
 | 区间 | `sess_abc:11-15` | 闭区间 `[11,15]`,展开 `11..15` |
 | 列表 | `sess_abc:3,7,12` | 离散 index 列表 |
 
-约束(不满足整次拒绝):**严格单调递增**(`15-11` / `12,7,3` 报错);**越界 / session 不存在** 报错。多个 `--source` 各落一条 `card_sessions`(`position_id` 指向新建的这个答案)。
+约束(不满足整次拒绝):**严格单调递增**(`15-11` / `12,7,3` 报错);**越界 / session 不存在** 报错。多个 `--source` 各落一条 `card_sessions`(`position` = 新建答案在卡内的 `p<n>`)。
 
 ### 文本传文件 / stdin
 
@@ -80,19 +81,19 @@ pbpaste | memory.talk card position --card card_01jz8k2m --claim @-
 
 ### 输出 / 副作用 / 错误
 
-输出 `{"status":"ok","card_id":…,"position_id":"pos_…"}`(`position_id` 就是以后 `card review` 的对象)。副作用:落一个 Position(`claim` 内联,`up/down/neutral_count` 初始化 0,`scope` 默认 `''`;**不算 credence**,读时现算)+ 每个 `--source` 落一条 `card_sessions` + `positions/<pid>.json`(`claim` 不可变);**不动卡上其它 Position**(append-only)。错误:`--card` 卡不存在 / `--claim` 空 / `--source` 越界·非单调 / `--position_id` 前缀错·已存在 → 报错 exit 1。
+输出 `{"status":"ok","card_id":…,"position":"p1"}`(`position` 就是以后 `card review` 的对象,寻址 `card_xxx#p1`)。副作用:落一个 Position(`claim` 内联,`up/down/neutral_count` 初始化 0,`scope` 默认 `''`;**不算 credence**,读时现算)+ 每个 `--source` 落一条 `card_sessions` + `positions/p<n>.json`(文件名 = 卡内序号,`claim` 不可变);**不动卡上其它 Position**(append-only)。错误:`--card` 卡不存在 / `--claim` 空 / `--source` 越界·非单调 → 报错 exit 1。
 
 ## card review
 
 对一个**答案(Position)**的"回帖"——表态它对不对:**支持(+1)、中立(0)、反对(−1)**,附带某次 session 的证据 rounds 和一句说明。沿用 v3 review,只把 target 从整张卡**下放到 Position**;`argument ≠ 0` 的 review 就是一条 **IBIS Argument**(顶 = pro / 踩 = con)。
 
 ```bash
-memory.talk card review --position <position_id> --argument <+1|0|-1> --cite <session_id>:<indexes> [--comment '<一句话>'] [--review_id <id>] [--json]
+memory.talk card review --position card_xxx#p<n> --argument <+1|0|-1> --cite <session_id>:<indexes> [--comment '<一句话>'] [--review_id <id>] [--json]
 ```
 
 | 参数 | 必填 | 说明 |
 |---|---|---|
-| `--position` | 是 | 被表态的答案,必须是 `pos_<…>`。**target 是 Position,不是 card** |
+| `--position` | 是 | 被表态的答案,寻址 `card_xxx#p<n>`(`#p` 分片 = 该卡的第 n 个 Position)。**target 是 Position,不是 card** |
 | `--argument` | 是 | `+1` 支持(顶) / `0` 中立 / `-1` 反对(踩)。就是 review 的 `argument` 字段;其它值报错 |
 | `--cite` | 是 | 证据:`<session_id>:<indexes>`,**单 session**(一次表态来自一次具体对话);indexes 语法同 [#--source-语法--indexes](#--source-语法--indexes) |
 | `--comment` | 否 | 一句话归因;`argument=0` 时强烈建议填。值支持 `@<file>` / `@-`(见 [#文本传文件--stdin](#文本传文件--stdin)) |
@@ -100,14 +101,14 @@ memory.talk card review --position <position_id> --argument <+1|0|-1> --cite <se
 
 > **`--cite`(review)vs `--source`(position)**:都填 `<session_id>:<indexes>`,但 `--cite` 是这次**表态的证据**(单 session);`--source` 是答案的**出处**(可多 session,落 `card_sessions`)。
 >
-> 一条 review 只挂**单 session**;同一 `(position_id, session_id)` **可有多条**(早期反对、深入后转支持),由 `indexes` 区分,**不去重**。完整字段语义见 [`../../structure/v4/review.md`](../../structure/v4/review.md)。
+> 一条 review 只挂**单 session**;同一 `(card_id, position, session_id)` **可有多条**(早期反对、深入后转支持),由 `indexes` 区分,**不去重**。完整字段语义见 [`../../structure/v4/review.md`](../../structure/v4/review.md)。
 
 ### 副作用
 
-- 校验 `position_id` 存在、`session_id` 存在且 `indexes` 不越界、`argument ∈ {-1,0,1}` → 任一失败不落库。
+- 校验 `card_xxx#p<n>` 存在(那张卡有第 n 个 Position)、`session_id` 存在且 `indexes` 不越界、`argument ∈ {-1,0,1}` → 任一失败不落库。
 - **累加该 Position 的计数**(原子 upsert):`+1`→`up_count++` / `-1`→`down_count++` / `0`→`neutral_count++`。
 - **不写 credence**——credence 读 / 排序时按 `up − down`(或 Wilson)现算,没有要 bump 的列。
-- 落 `reviews` 表(`position_id` + 冗余 `card_id` + `session_id` + `indexes` + `argument` + `comment`),沿用 v3 review 的 canonical;review **不进向量索引**。
+- 落 `reviews` 表(`card_id` + `position`(`p<n>`)+ `session_id` + `indexes` + `argument` + `comment`),沿用 v3 review 的 canonical;review **不进向量索引**。
 
 ### 中立(`--argument 0`)堆多了 → 可能衍生新 Position
 
@@ -115,16 +116,16 @@ memory.talk card review --position <position_id> --argument <+1|0|-1> --cite <se
 
 ### 读取 / 推荐姿势
 
-review **不单独 read**——在 [`read <card_id>`](read.md) 的每个 Position 块以计数体现,或 [`read <position_id>`](read.md#pos_--单个答案--它的-review) 看某答案的全部 review。
+review **不单独 read**——在 [`read <card_id>`](read.md) 的每个 Position 块以计数体现,或 [`read card_xxx#p1`](read.md#card_p--单个答案--它的-review) 看某答案的全部 review。
 
 ```bash
-memory.talk card review --position pos_01jzp3nq --argument +1 --cite "$SID:20-25" --comment '再次确认,简洁版接住了'
-memory.talk card review --position pos_01jz0xnq --argument -1 --cite "$SID:3-8"  --comment '纯简洁漏了调试细节'
+memory.talk card review --position card_01jz8k2m#p1 --argument +1 --cite "$SID:20-25" --comment '再次确认,简洁版接住了'
+memory.talk card review --position card_01jz8k2m#p2 --argument -1 --cite "$SID:3-8"  --comment '纯简洁漏了调试细节'
 ```
 
 ## card link
 
-卡与卡之间的 **IBIS 边**(`card_links`,列是 `card_id`(主体)+ `target_id`,**没有对称的 from/to**)。`card link` **直接建一条边**:主体卡 `--card`(= `card_id`,`card_<…>`);`--target`(= `target_id`)一般是另一张卡,只有 `suggested_by` 允许指向一个答案(`pos_<…>`,「这个答案勾出了那个新问题」)。**看一张卡的边走 [`read <card_id>`](read.md)(返回 out / in 两向)——边不多,不单设 list。** 调 [`POST /v4/cards/{card_id}/links`](../../api/v4/card-links.md);字段语义见 [`../../structure/v4/card-link.md`](../../structure/v4/card-link.md)。
+卡与卡之间的 **IBIS 边**(`card_links`,列是 `card_id`(主体)+ `target_id`,**没有对称的 from/to**)。`card link` **直接建一条边**:主体卡 `--card`(= `card_id`,`card_<…>`);`--target`(= `target_id`)一般是另一张卡,只有 `suggested_by` 允许指向一个答案(`card_<…>#p<n>`,「这个答案勾出了那个新问题」)。**看一张卡的边走 [`read <card_id>`](read.md)(返回 out / in 两向)——边不多,不单设 list。** 调 [`POST /v4/cards/{card_id}/links`](../../api/v4/card-links.md);字段语义见 [`../../structure/v4/card-link.md`](../../structure/v4/card-link.md)。
 
 ```bash
 memory.talk card link --card <card_id> --type <type> --target <target_id> [--json]
@@ -133,18 +134,18 @@ memory.talk card link --card <card_id> --type <type> --target <target_id> [--jso
 | type | 含义 | 方向 |
 |---|---|---|
 | `specializes` | from 是 target 的更窄版(子问题,DAG 非树) | 有向 |
-| `suggested_by` | from 被 target 引出来(出处 / 因果);target 可为 `pos_` | 有向 |
+| `suggested_by` | from 被 target 引出来(出处 / 因果);target 可为 `card_…#p<n>`(Position) | 有向 |
 | `questions` | from 质疑 target 的前提 / 框架 | 有向 |
 | `replaces` | from 重述并取代 target(**保留历史**,不删 target) | 有向 |
 | `related` | 兜底泛关联 | 无向 |
 
 - 同一 `(card, type)` 下可挂多条(如 `specializes` 多父)。
-- `--target` 的前缀(`card_` / `pos_`)决定 `target_type`(`card` / `position`),自动落进 `card_links` 表,便于按对端类型过滤。
+- `--target` 是 `card_<…>` 或 `card_<…>#p<n>`(后者 `#p` 分片 → `target_type=position`),自动落进 `card_links` 表,便于按对端类型过滤。
 - `related` 无向:写时规范化两端顺序只存一遍(`--card A … --target B` 与 `--card B … --target A` 等价)。
 - **不校验 `--target` 是否存在**:SQLite 派生索引,容忍悬挂引用,从不加 FOREIGN KEY。
-- `issue` 层的 `replaces`(问题取代问题)≠ Position 层的 `forked_from_position_id`(答案分叉),别混。
+- `issue` 层的 `replaces`(问题取代问题)≠ Position 层的 `forked_from`(答案分叉),别混。
 
-错误:`--card` 卡不存在 / `--type` 不在五类型 / `--target` 前缀错(非 `card_`·`pos_`,或 `pos_` 用在非 `suggested_by`)/ 同边已存在 → 报错 exit 1。
+错误:`--card` 卡不存在 / `--type` 不在五类型 / `--target` 非 `card_…`/`card_…#p`(或 `#p` 分片用在非 `suggested_by`)/ 同边已存在 → 报错 exit 1。
 
 ## 跟其他命令的边界
 
@@ -152,10 +153,10 @@ memory.talk card link --card <card_id> --type <type> --target <target_id> [--jso
 |---|---|
 | 建一个新问题(卡) | `card create --issue '<Q>'` |
 | 给问题加一个答案 | `card position --card <cid> --claim '<A>' [--source ...]` |
-| 对某个答案顶 / 踩 / 中立 | `card review --position <pid> --argument <+1\|0\|-1> --cite ...` |
+| 对某个答案顶 / 踩 / 中立 | `card review --position card_xxx#p<n> --argument <+1\|0\|-1> --cite ...` |
 | 连两张卡(IBIS 边) | `card link --card <cid> --type <type> --target <id>` |
 | **看一张卡 / 它所有答案 / 当下答案** | `read <card_id>`(见 [read.md](read.md)) |
 | 按相关度找卡 | `search <query>` |
 | hook 阶段无意识召回 | `recall --session <sid> --prompt '<p>'` |
 
-> **改主意 ≠ 改卡**:答案错了不改 `claim`,而是 `card position --card <同一卡> --claim '<新答案>'` 加一个新答案 + `card review --position <旧pid> --argument -1` 踩旧的;credence 现算会把新答案抬上来,旧答案留作认知史。
+> **改主意 ≠ 改卡**:答案错了不改 `claim`,而是 `card position --card <同一卡> --claim '<新答案>'` 加一个新答案 + `card review --position card_xxx#p<旧n> --argument -1` 踩旧的;credence 现算会把新答案抬上来,旧答案留作认知史。
