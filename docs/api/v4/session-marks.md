@@ -51,8 +51,8 @@ List     GET   /v4/sessions/{session_id}/marks      列这个 session 的所有 
   "session_id": "sess_def456",
   "last_index": 41,
   "marks": [
-    {"mark": "m1", "questions": [{"raw": "为什么 pty 会让用户想到 tmux", "card_id": "card_01jz8k2m", "is_new": true}]},
-    {"mark": "m2", "questions": []}
+    {"mark": "m1", "issues": [{"issue": "为什么 pty 会让用户想到 tmux", "card_id": "card_01jz8k2m", "is_new": true}]},
+    {"mark": "m2", "issues": []}
   ]
 }
 ```
