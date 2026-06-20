@@ -83,6 +83,7 @@ def fmt_status(payload: dict) -> str:
         f"| settings | `{payload['settings_path']}` |",
         f"| sessions | {payload['sessions_total']} |",
         f"| cards | {payload['cards_total']} |",
+        f"| insights | {payload.get('insights_total', 0)} |",
         f"| reviews | {payload['reviews_total']} |",
         f"| searches | {payload['searches_total']} |",
         f"| recalls | {payload['recalls_total']} |",

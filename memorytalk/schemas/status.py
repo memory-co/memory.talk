@@ -9,7 +9,12 @@ class StatusResponse(BaseModel):
     settings_path: str
     status: str
     sessions_total: int
+    # Real v4 cards (the governed question graph). 0 until the mark
+    # write-path builds the graph.
     cards_total: int
+    # Migrated v3 knowledge (read-only insights). Counted separately so
+    # the legacy figure stays visible, correctly labeled.
+    insights_total: int
     reviews_total: int
     searches_total: int
     recalls_total: int

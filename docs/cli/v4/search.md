@@ -1,6 +1,12 @@
 # search
 
-有意识检索:拿 query 撞**问题 + 答案**(`issue` + `claim`),返回匹配的卡,每张带它**最相关 / 当下的答案**(claim 命中取该答案,否则取现算 credence 最高的)。
+有意识检索:**统一跨三种记忆**做语义召回,排成一条按相关性混合的流,每条带 `kind`:
+
+- **`card`** —— v4 问题图谱(撞 `issue` + `claim`),命中卡带它**最相关 / 当下的答案**(claim 命中取该答案,否则取现算 credence 最高的)。
+- **`insight`** —— 迁移过来的 v3 老知识。
+- **`session`** —— 原始会话轮次,命中是带上下文的轮次摘录。
+
+真实安装在 mark 写路径建起卡图谱前,v4 卡可能是 0;把 insight + session 一并纳入,search 从首次 ingest 起就有用(issue #7)。
 
 ```bash
 memory.talk search <query> [--where '<DSL>'] [--limit N] [--json]
@@ -12,19 +18,19 @@ memory.talk search <query> [--where '<DSL>'] [--limit N] [--json]
 
 | 参数 | 必填 | 说明 |
 |---|---|---|
-| `<query>` | 是(可空串 `""`) | 撞 `issue` / `claim` 的检索词;空串 = 纯按 `--where` 过滤 |
-| `--where` | 否 | DSL 过滤(见下) |
-| `--limit` | 否,默认 `20`,上限 `200` | 返回多少张卡 |
+| `<query>` | 是(可空串 `""`) | 撞 `issue` / `claim` / `insight` / `round` 的检索词;空串 = 只列卡、纯按 `--where` 过滤 |
+| `--where` | 否 | DSL 过滤(见下),**只作用在 `card` 结果**上 |
+| `--limit` | 否,默认 `20`,上限 `200` | 整条混合流最多返回多少条 |
 
 ## 排序
 
-- `query` 非空:按**检索相关性**(向量 + FTS)排。**v4 无沉浮公式**——相关性只在这一刻算,不掺存储热度。
-- `query` 空:按 `created_at` 倒序。
+- `query` 非空:三库各自召回后**合并按检索相关性**排成一条流。**v4 无沉浮公式**——相关性只在这一刻算,不掺存储热度。
+- `query` 空:**只列卡**,按 `created_at` 倒序(insight / session 不纳入空 query)。
 - 卡内取现算 `credence` 最高的答案作"当下答案"(平手按最近 review 时间)。
 
 ## `--where` DSL
 
-作用在卡的**当下答案 + 卡元数据**上:
+**只过滤 `card` 结果**(作用在卡的当下答案 + 卡元数据上);`insight` / `session` 命中按相关性返回、不被 DSL 过滤。给了 `--where` 且没有卡命中时,仍会返回 insight / session 命中。字段:
 
 | 字段 | 含义 |
 |---|---|
@@ -49,36 +55,29 @@ memory.talk search "" -w 'neutral_count > 3 AND up_count = 0 AND down_count = 0'
 ## 输出 — Markdown(默认)
 
 `````markdown
-# search `回答风格`
+# search `回答风格` · 3/3
 
-3 results
-
----
-
-### [CARD] `card_01jz8k2m` · `credence +6 · ↑7 ↓1 ·0` · 3 answers
-
+### [CARD] `card_01jz8k2m` · 3 answers · credence +6
 **Q:** 用户偏好什么回答风格?
 **A:** 默认简洁、要点优先
 
-`scope: 日常问答;调试场景另说` · 2026-06-18 14:30
+### [INSIGHT] `insight_01jx...`
+用户在调试场景偏好先给定位再给改法
 
----
-
-### [CARD] `card_01jzp3nq` · `(no answer yet)` · 0 answers
-
-**Q:** 缓存层选 Redis 还是本地?
-
-`2026-05-25 14:21`
+### [SESSION] `sess-...` · 2 hits · claude-code
+- _[#17 human]_ 你回答时能不能先给结论？
 `````
 
 #### 约定
 
-- 每张卡一个 H3 块:`### [CARD] \`<card_id>\` · \`credence <分> · ↑<up> ↓<down> ·<neutral>\` · <N> answers`。
-- `**Q:**` 整段 `issue`;`**A:**` 当下答案的 `claim`(没答案时标 `(no answer yet)`,A 行不出)。
-- 再一行 `scope`(空不出)+ 时间。
-- 块间 `---`;末尾命中数 > 返回数时追 `_(showing N of TOTAL — pass --limit higher)_`。
+- 一条混合流,每条按 `kind` 渲不同块头:`[CARD]` / `[INSIGHT]` / `[SESSION]`。
+- `[CARD]`:`**Q:**` 整段 `issue`;`**A:**` 当下答案的 `claim`(没答案时标 `(no answer yet)`)。
+- `[INSIGHT]`:块头 + insight 正文。
+- `[SESSION]`:块头(命中数 + source)+ 每个命中轮次一行摘录 `- _[#<idx> <role>]_ <text>`。
 
 ## 输出 — JSON(`--json`)
+
+`cards` 是一条混合流(键名不变,每条带 `kind`):
 
 ```json
 {
@@ -87,24 +86,26 @@ memory.talk search "" -w 'neutral_count > 3 AND up_count = 0 AND down_count = 0'
   "returned": 3,
   "cards": [
     {
+      "kind": "card",
       "card_id": "card_01jz8k2m",
       "issue": "用户偏好什么回答风格?",
       "position_count": 3,
-      "top_position": {
-        "position": "p1",
-        "claim": "默认简洁、要点优先",
-        "up_count": 7, "down_count": 1, "neutral_count": 0,
-        "credence": 6,
-        "scope": "日常问答;调试场景另说"
-      },
-      "score": 0.82,
+      "top_position": {"position": "p1", "claim": "默认简洁、要点优先",
+                       "credence": 6, "up_count": 7, "down_count": 1, "neutral_count": 0},
+      "relevance": 0.82,
       "created_at": "2026-06-18T14:30:00Z"
-    }
+    },
+    {"kind": "insight", "insight_id": "insight_01jx...",
+     "insight": "用户在调试场景偏好先给定位再给改法", "relevance": 0.61},
+    {"kind": "session", "session_id": "sess-...", "source": "claude-code",
+     "round_count": 42, "hit_count": 2,
+     "hits": [{"index": 17, "role": "human", "text": "你回答时能不能先给结论？", "score": 0.55}],
+     "relevance": 0.55}
   ]
 }
 ```
 
-`top_position` 是当下答案(`position_count=0` 时为 `null`)。看一张卡全部答案走 [`read <card_id>`](read.md)。
+`kind` 区分形态:`card` 带 `top_position`(`position_count=0` 时为 `null`);`session` 带 `hits` 摘录。看一张卡全部答案走 [`read <card_id>`](read.md);看整段 session 走 `read <sess-…>`。
 
 ## 错误
 

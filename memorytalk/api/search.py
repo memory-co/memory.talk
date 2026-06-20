@@ -1,7 +1,10 @@
-"""POST /v4/search — v4 card search.
+"""POST /v4/search — unified semantic search.
 
-Collide on issue, return each card's current answer; the optional
-``where`` DSL filters over that current answer.
+A single relevance-ranked stream over the three memories: v4 cards
+(issue + current answer), migrated insights, and session rounds. Each
+result is tagged by ``kind``. The optional ``where`` DSL filters only the
+card results' current answer; insight / session hits pass through by
+relevance. See ``service/card_search.py::V4SearchService``.
 """
 from __future__ import annotations
 

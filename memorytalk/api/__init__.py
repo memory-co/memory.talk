@@ -34,7 +34,6 @@ from memorytalk.service.backfill import IndexBackfill
 from memorytalk.service.cards import CardService
 from memorytalk.service.session_marks import SessionMarkService
 from memorytalk.service.explores import ExploreService
-from memorytalk.service.search import SearchService
 from memorytalk.service.searchbase_schema import build_search_backend
 from memorytalk.service.sync import SyncWatcher
 from memorytalk.service.card_read import V4ReadService
@@ -134,9 +133,6 @@ def create_app(config: Config | None = None) -> FastAPI:
         app.state.sync = SyncWatcher(
             config=config, ingest=app.state.ingest,
             checkpoints=sync_checkpoints,
-        )
-        app.state.search = SearchService(
-            config=config, db=db, search=searchbase,
         )
         # insight is read-only — no write service; GET /v4/insights reads
         # db.insights directly, view goes through ReadService.read_insight.

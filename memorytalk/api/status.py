@@ -23,7 +23,9 @@ async def get_status(request: Request) -> StatusResponse:
         status="reembedding" if reembedding else "running",
         reembed_processed=reembed.processed if reembedding else None,
         sessions_total=await db.sessions.count(),
-        cards_total=await db.insights.count(),
+        # Real v4 cards (was previously mislabeled as the insight count).
+        cards_total=await db.cards.count(),
+        insights_total=await db.insights.count(),
         # reviews retired (v3→insight); field kept as a vestigial 0 to
         # avoid churning the status contract (mirrors the kept-but-unwritten
         # insight_stats review_* columns).

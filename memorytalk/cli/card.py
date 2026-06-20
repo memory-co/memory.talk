@@ -261,21 +261,81 @@ def _fmt_read(r: dict) -> str:
             )
         return "\n".join(lines)
     if t == "session":
-        return f"# session · `{r['session']['session_id']}`"
+        return _fmt_read_session(r["session"])
     return "（empty）"
 
 
+# Single round's text is capped so one giant turn doesn't blow up the
+# rendered session; the full content is always available via `--json`.
+_ROUND_TEXT_CAP = 2000
+
+
+def _flatten_round_text(blocks: list) -> str:
+    """Project a round's content blocks to displayable text. Text /
+    thinking blocks render verbatim; other block types (tool_use,
+    tool_result, …) show a ``_(type)_`` placeholder so the round isn't
+    silently empty."""
+    out: list[str] = []
+    for b in blocks or []:
+        if not isinstance(b, dict):
+            continue
+        txt = b.get("text") or b.get("thinking")
+        if txt:
+            out.append(str(txt))
+            continue
+        out.append(f"_({b.get('type') or 'block'})_")
+    return "\n\n".join(out)
+
+
+def _fmt_read_session(s: dict) -> str:
+    lines = [f"# session · `{s['session_id']}`"]
+    meta_bits = []
+    if s.get("source"):
+        meta_bits.append(f"source `{s['source']}`")
+    rounds = s.get("rounds") or []
+    meta_bits.append(f"{len(rounds)} round{'s' if len(rounds) != 1 else ''}")
+    if s.get("created_at"):
+        meta_bits.append(f"created {s['created_at']}")
+    lines.append(" · ".join(meta_bits))
+    lines.append("")
+    for i, rd in enumerate(rounds):
+        speaker = rd.get("speaker") or rd.get("role") or ""
+        head = f"### [#{rd.get('index', i)}]"
+        if speaker:
+            head += f" {speaker}"
+        lines.append(head)
+        text = _flatten_round_text(rd.get("content"))
+        if len(text) > _ROUND_TEXT_CAP:
+            text = text[:_ROUND_TEXT_CAP] + " …"
+        lines.append(text)
+    return "\n".join(lines)
+
+
 def _fmt_search(r: dict) -> str:
+    """Unified search render: a mixed relevance-ranked stream of card /
+    insight / session hits (each item tagged with ``kind``)."""
     lines = [f"# search `{r['query']}` · {r['returned']}/{r['total']}"]
     for c in r["cards"]:
-        top = c.get("top_position")
-        n = c["position_count"]
-        head = f"### [CARD] `{c['card_id']}` · {n} answer{'s' if n != 1 else ''}"
-        if top:
-            head += f" · credence {top['credence']:+d}"
-        lines.append(head)
-        lines.append(f"**Q:** {c['issue']}")
-        lines.append(f"**A:** {top['claim']}" if top else "_(no answer yet)_")
+        kind = c.get("kind", "card")
+        if kind == "insight":
+            lines.append(f"### [INSIGHT] `{c.get('insight_id', '')}`")
+            lines.append(c.get("insight", ""))
+        elif kind == "session":
+            n = c.get("hit_count", 0)
+            lines.append(
+                f"### [SESSION] `{c['session_id']}` · {n} hit{'s' if n != 1 else ''}"
+                f" · {c.get('source', '')}")
+            for h in c.get("hits", []):
+                lines.append(f"- _[#{h['index']} {h.get('role', '')}]_ {h.get('text', '')}")
+        else:
+            top = c.get("top_position")
+            n = c["position_count"]
+            head = f"### [CARD] `{c['card_id']}` · {n} answer{'s' if n != 1 else ''}"
+            if top:
+                head += f" · credence {top['credence']:+d}"
+            lines.append(head)
+            lines.append(f"**Q:** {c['issue']}")
+            lines.append(f"**A:** {top['claim']}" if top else "_(no answer yet)_")
     return "\n".join(lines)
 
 

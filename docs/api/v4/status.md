@@ -4,7 +4,7 @@
 
 服务健康检查 + 数据统计 + provider 信息。无 body。
 
-> **v4 唯一变化**:路由从 `/v3/status` 挪到 **`/v4/status`**,形态不变。v4 语义差异(字段不变,统计口径变)见下表的 `reviews_total` / `cards_total` 备注。
+> **v4 变化**:路由从 `/v3/status` 挪到 **`/v4/status`**;`cards_total` 现在数**真实 v4 卡**(`db.cards`),并新增 `insights_total` 单独数迁移过来的 v3 老知识(issue #7,之前 `cards_total` 误填 insight 数)。其余统计口径差异见下表的 `reviews_total` 备注。
 
 ### 响应
 
@@ -14,7 +14,8 @@
   "settings_path": "/home/user/.memory.talk/settings.json",
   "status": "running",
   "sessions_total": 47,
-  "cards_total": 184,
+  "cards_total": 12,
+  "insights_total": 184,
   "reviews_total": 0,
   "searches_total": 1083,
   "recalls_total": 4221,
@@ -33,7 +34,8 @@
 | `settings_path` | string | settings.json 路径 |
 | `status` | string | 永远是 `"running"` —— 能拿到响应就是 running;连不上就是 not_running(CLI 层判断) |
 | `sessions_total` | integer | 已 ingest 的 session 数 |
-| `cards_total` | integer | 累计创建的 **v4 卡**(`/v4/cards` 建的 Issue)数;append-only,永不减少。**v3 老卡已整体改名 `insight`,不进 `cards_total`** |
+| `cards_total` | integer | **真实 v4 卡**(`/v4/cards` 建的 Issue)数 = `db.cards.count()`。在 mark 写路径把图谱建起来前是 `0`。**之前误把 insight 数填进了这个字段(issue #7),已修** |
+| `insights_total` | integer | 迁移过来的 **v3 老知识(只读 insight)**数 = `db.insights.count()`。单独拆出来,让老口径仍可见且标注正确 |
 | `reviews_total` | integer | **v4 中为 vestigial `0`** —— v3 论坛 review(对整张卡的顶踩)已退役;v4 的表态落在 Position 上(`reviews` 表 target = `card_id#position`;Position 无独立 id,是卡的附属),不计入这个老字段 |
 | `searches_total` | integer | `search_log` 表行数(被 retention 老化掉的不计) |
 | `recalls_total` | integer | `recall_log` 表行数(被重启 / rebuild 清掉的不计) |

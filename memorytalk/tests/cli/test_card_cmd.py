@@ -201,3 +201,44 @@ def test_fmt_search_renders_q_and_a():
          "top_position": {"claim": "SQLite", "credence": 1}},
     ]})
     assert "**Q:** Which db?" in out and "**A:** SQLite" in out
+
+
+def test_fmt_search_renders_mixed_kinds():
+    out = card_mod._fmt_search({"query": "lancedb", "total": 3, "returned": 3, "cards": [
+        {"kind": "card", "card_id": "card_x", "issue": "Which db?",
+         "position_count": 1, "top_position": {"claim": "SQLite", "credence": 1}},
+        {"kind": "insight", "insight_id": "insight_y", "insight": "use embedded vecdb"},
+        {"kind": "session", "session_id": "sess-z", "source": "claude-code",
+         "hit_count": 2, "hits": [{"index": 3, "role": "human", "text": "lancedb rocks"}]},
+    ]})
+    assert "[CARD]" in out and "[INSIGHT]" in out and "[SESSION]" in out
+    assert "use embedded vecdb" in out
+    assert "sess-z" in out and "lancedb rocks" in out
+
+
+def test_fmt_read_session_renders_rounds():
+    out = card_mod._fmt_read({"type": "session", "session": {
+        "session_id": "sess-abc", "source": "claude-code",
+        "created_at": "2026-06-19T00:00:00Z",
+        "rounds": [
+            {"index": 1, "role": "human", "speaker": "user",
+             "content": [{"type": "text", "text": "what is lancedb?"}]},
+            {"index": 2, "role": "assistant",
+             "content": [{"type": "text", "text": "an embedded vector db"}]},
+        ],
+    }})
+    # Not just the title — the rounds' text is rendered.
+    assert "sess-abc" in out
+    assert "what is lancedb?" in out and "an embedded vector db" in out
+    assert "2 rounds" in out and "[#1]" in out and "[#2]" in out
+
+
+def test_fmt_read_session_non_text_block_placeholder():
+    out = card_mod._fmt_read({"type": "session", "session": {
+        "session_id": "sess-tool", "source": "claude-code",
+        "rounds": [
+            {"index": 1, "role": "assistant",
+             "content": [{"type": "tool_use", "name": "bash"}]},
+        ],
+    }})
+    assert "_(tool_use)_" in out
