@@ -42,7 +42,7 @@ memory.talk card position --card <card_id> --claim '<答案文本>' \
 |---|---|---|
 | `--card` | 是 | 给哪张卡(`card_<…>`)加答案;卡必须**已存在** |
 | `--claim` | 是 | 答案文本(`claim`,内联在 Position 上,不单独建节点、不共享)。值支持 `@<file>` / `@-` |
-| `--source` | 否,可多次 | 出处:`<session_id>:<indexes>`,每个落一条 `card_sessions`。支持多 session(多次 `--source`) |
+| `--source` | 否,可多次 | **答案的出处**:`<session_id>:<indexes>`,每个落一条 `position_sessions`(答案从哪几轮 `indexes` 长出来)。支持多 session(多次 `--source`) |
 | `--scope` | 否 | **这个答案(Position)的**适用场景描述(`scope` 是 **Position 字段**,软提示、非门禁;负边界如「别用于育儿」写进这句)。值支持 `@<file>` / `@-` |
 
 > **Position 没有独立 id**:它是所属卡的附属,寻址 `<card_id>#p<n>`(`p` + 卡内递增序号,跟 mark `<session_id>#m<n>` 一个路子)。序号由卡自动分配(本卡第几个答案 → `p1`/`p2`…),不由客户端指定。
@@ -58,7 +58,7 @@ memory.talk card position --card <card_id> --claim '<答案文本>' \
 | 区间 | `sess_abc:11-15` | 闭区间 `[11,15]`,展开 `11..15` |
 | 列表 | `sess_abc:3,7,12` | 离散 index 列表 |
 
-约束(不满足整次拒绝):**严格单调递增**(`15-11` / `12,7,3` 报错);**越界 / session 不存在** 报错。多个 `--source` 各落一条 `card_sessions`(`position` = 新建答案在卡内的 `p<n>`)。
+约束(不满足整次拒绝):**严格单调递增**(`15-11` / `12,7,3` 报错);**越界 / session 不存在** 报错。多个 `--source` 各落一条 `position_sessions`(`position` = 新建答案在卡内的 `p<n>`,`indexes` 必填、`mark` 可选)。
 
 ### 文本传文件 / stdin
 
@@ -81,7 +81,7 @@ pbpaste | memory.talk card position --card card_01jz8k2m --claim @-
 
 ### 输出 / 副作用 / 错误
 
-输出 `{"status":"ok","card_id":…,"position":"p1"}`(`position` 就是以后 `card review` 的对象,寻址 `card_xxx#p1`)。副作用:落一个 Position(`claim` 内联,`up/down/neutral_count` 初始化 0,`scope` 默认 `''`;**不算 credence**,读时现算)+ 每个 `--source` 落一条 `card_sessions` + `positions/p<n>.json`(文件名 = 卡内序号,`claim` 不可变);**不动卡上其它 Position**(append-only)。错误:`--card` 卡不存在 / `--claim` 空 / `--source` 越界·非单调 → 报错 exit 1。
+输出 `{"status":"ok","card_id":…,"position":"p1"}`(`position` 就是以后 `card review` 的对象,寻址 `card_xxx#p1`)。副作用:落一个 Position(`claim` 内联,`up/down/neutral_count` 初始化 0,`scope` 默认 `''`;**不算 credence**,读时现算)+ 每个 `--source` 落一条 `position_sessions` + `positions/p<n>.json`(文件名 = 卡内序号,`claim` 不可变);**不动卡上其它 Position**(append-only)。错误:`--card` 卡不存在 / `--claim` 空 / `--source` 越界·非单调 → 报错 exit 1。
 
 ## card review
 
@@ -99,7 +99,7 @@ memory.talk card review --position card_xxx#p<n> --argument <+1|0|-1> --cite <se
 | `--comment` | 否 | 一句话归因;`argument=0` 时强烈建议填。值支持 `@<file>` / `@-`(见 [#文本传文件--stdin](#文本传文件--stdin)) |
 | `--review_id` | 否 | 不提供则自动生成 `review_<ULID>` |
 
-> **`--cite`(review)vs `--source`(position)**:都填 `<session_id>:<indexes>`,但 `--cite` 是这次**表态的证据**(单 session);`--source` 是答案的**出处**(可多 session,落 `card_sessions`)。
+> **`--cite`(review)vs `--source`(position)**:都填 `<session_id>:<indexes>`,但 `--cite` 是这次**表态的证据**(单 session,落 `reviews`);`--source` 是答案的**出处**(可多 session,落 `position_sessions`)。两者都是 round 级 `indexes`,跟 card→session 的 `card_sessions`(经 mark)无关。
 >
 > 一条 review 只挂**单 session**;同一 `(card_id, position, session_id)` **可有多条**(早期反对、深入后转支持),由 `indexes` 区分,**不去重**。完整字段语义见 [`../../structure/v4/review.md`](../../structure/v4/review.md)。
 

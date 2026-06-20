@@ -111,7 +111,7 @@ CLI 对应 [`card create | position`](../../cli/v4/card.md)（读卡走 [`read`]
 |---|---|---|
 | `claim` | 是 | 答案文本（内联） |
 | `scope` | 否 | 一句话适用场景软提示，默认 `""` |
-| `source` | 否 | 出处 `{session_id, indexes}` → 落一条 `card_sessions` |
+| `source` | 否 | **答案的**出处 `{session_id, indexes}` → 落一条 `position_sessions`（position→session，经 `indexes`；`mark` 可选） |
 | `forked_from` | 否 | 信念分叉血缘：本答案从**本卡的哪个旧 Position** 分出来（同卡内的 `p<n>`，如 `"p1"`，保认知史；见 [`../../structure/v4/card.md`](../../structure/v4/card.md)） |
 
 ### 响应
@@ -125,8 +125,8 @@ CLI 对应 [`card create | position`](../../cli/v4/card.md)（读卡走 [`read`]
 ### 副作用
 
 - 校验 `card_id` 存在、`claim` 非空、`forked_from`（如给）是**本卡内**已存在的 `p<n>` → 任一失败整条不落库。
-- 落一个 Position（计数全 0），canonical 写 `positions/<pid>.json`。
-- 若带 `source`：落一条 `card_sessions`。
+- 落一个 Position（计数全 0），canonical 写 `positions/p<n>.json`（文件名 = 卡内序号）。
+- 若带 `source`：落一条 `position_sessions`（position→session，经 `indexes`）。**不写 `card_sessions`**——那是 card→session（经 mark）的另一条链路。
 - **不动其它 Position**：append-only，新增不覆盖；"哪个答案当下用"由召回时现算 credence 决定，不在这里改任何状态位。
 
 ### 错误

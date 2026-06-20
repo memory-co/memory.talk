@@ -39,13 +39,13 @@ CLI 对应 [`read <id>`](../../cli/v4/read.md)。字段语义见 [`../../structu
     }
   ],
   "links": [{"type": "specializes", "target_id": "card_01jzsub", "dir": "in"}],
-  "sessions": [{"session_id": "sess_abc", "position": "p1", "indexes": "11-15"}]
+  "sessions": [{"session_id": "sess_abc", "mark": "m1"}]
 }
 ```
 
 - `positions` 按现算 `credence` 降序(平手用 `last_reviewed_at`)。`credence` 是服务端**现算**派生值,不在存储里。
 - `links` = 这张卡的 IBIS 边(`card_links`),`dir` = `out`(本卡指出去)/ `in`(别的卡指过来)。
-- `sessions` = 出处(`card_sessions`)。
+- `sessions` = card→session 出处(`card_sessions`,经 **mark**;哪条 mark 建/连了这张卡)。答案级出处(某 Position 来自哪几轮 `indexes`)是另一条链路 `position_sessions`,不在这里。
 - 一张**没有 Position** 的卡:`positions` 为 `[]`(还在等答案的问题,合法)。
 
 ### 响应 — `card_…#p<n>`(单个答案 + 它的 review)
