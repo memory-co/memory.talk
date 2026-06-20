@@ -1,51 +1,240 @@
 # session
 
-操作 backend 已落库的 session —— **元数据**(list / tag)+ **逐 round 打注解**(mark,v4 新增)。对话内容不在这读,统一走 `memory.talk read <sid>`(`read` 按前缀判型覆盖 `card_` / `pos_` / `sess_`,以及 mark 的 `sess_…#m1` 分片)。
+操作 backend 已落库的 session —— **元数据**(`list` / `tag`)+ **逐 round 打注解**(`mark`,v4 新增的抽卡写路径前端)。对话**内容**不在这读,统一走 `memory.talk read <sid>`(`read` 按前缀判型,覆盖 `card_` / `pos_` / `sess_`,以及 mark 分片 `sess_…#m1`)。
 
 ```
 memory.talk session
-├── list [filters...] [--limit N] [--json]              # 沿用 v3:按多维过滤列 session
-├── tag <sid> [K=V ...] [-K ...] [--json]               # 沿用 v3:查 / 加 / 删 session 的 kv 标签
-└── mark --session <sid> [--file <path>] [--json]       # v4 新增:逐 round 打注解(#…？ 自动建卡)
+├── list [filters...] [--limit N] [--json]              # 按多维过滤列 session(只回元数据)
+├── tag <sid> [K=V ...] [-K ...] [--json]               # 查 / 加 / 删 session 的 kv 标签
+└── mark --session <sid> [--file <path>] [--json]       # 逐 round 打注解(#…？ 自动建卡)
 ```
 
-需要 server 在跑;CLI 通过 HTTP 调本地端点(v4 统一 `/v4` 前缀)。
+需要 server 在跑;CLI 通过 HTTP 调本地端点(`GET /v4/sessions`、`PATCH /v4/sessions/{sid}/tags`、`POST /v4/sessions/{sid}/marks`)。
 
-## 三个子命令的分工
+## 设计原则
 
-| 子命令 | 干什么 | 状态 |
+1. **元数据 vs 内容分开**:session 是「原始对话的只读历史」——看内容用 `read`,管标签 / 选条件用 `session list|tag`,打注解抽卡用 `session mark`。
+2. **`list` 只回元数据,不回 rounds**:一次列 N 条把全部 rounds 拉回来会爆 payload;列表只看 sid / source / 标签 / cwd / round_count / 时间,看内容用 `read <sid>`。
+3. **tag 是 kv 字典**,不是扁平字符串列表(`{"project":"billing","status":"wip"}` 比 `["billing","wip"]` 在过滤时更精确)。
+4. **mark 是以写代读**:打注解的首要价值是逼着逐轮真读(防走神),`#…？` 自动建卡是副产物。
+
+---
+
+## session list
+
+按多维条件列 session,**只回元数据**。
+
+```bash
+memory.talk session list \
+    [--source <name>] [--endpoint <source>@<label>] \
+    [--cwd <prefix>] \
+    [--tag <expr> ...] \
+    [--since <duration|date>] [-d <duration|date>] [--until <duration|date>] \
+    [--limit N] [--json]
+```
+
+### 过滤参数
+
+| 参数 | 取值 | 说明 |
 |---|---|---|
-| `session list` | 按 source / endpoint / cwd / tag / 时间多维过滤,**只回元数据**(不回 rounds) | **沿用 v3**,行为不变 |
-| `session tag` | 查 / 设 / 删 session 上的 kv 标签(PATCH 合并语义) | **沿用 v3**,行为不变 |
-| `session mark` | 对 session **逐 round 提交 mark**(以写代读),mark 里 `#…？` 自动建卡 / 关联老卡 | **v4 新增** |
+| `--source` | adapter 名(`claude-code` / `codex` / …) | 按 source 卡 |
+| `--endpoint` | `<source>@<label>` | 比 `--source` 更细,精确到一个 endpoint |
+| `--cwd` | 路径前缀 | 按 `metadata.cwd` 前缀匹配 |
+| `--tag` | 见 [`--tag` 操作符](#tag-操作符) | 多个 `--tag` 之间 AND |
+| `--since` / `-d` | 持续时长或 ISO 日期 | `created_at >= 起点`;时长语法 `<int><unit>`,unit ∈ `{h,d,w}`(`7d` / `12h` / `2w`)或 ISO `2026-05-01` |
+| `--until` | 同上 | `created_at <= 终点` |
+| `--limit` | 整数,默认 `20` | 最多返回多少条;按 `created_at` 倒序后截 |
 
-> **为什么这份 v4 doc 之前没有**:v4 一开始把 `session` 整条当「沿用 v3 基础设施、本目录不复制」,契约只留在 [`../v3/session.md`](../v3/session.md)。但 v4 给 `session` **加了 `mark` 子命令**(抽卡写路径前端)——它不再是纯沿用,所以这里补一份 v4 总览:`list` / `tag` 指回 v3,`mark` 是 v4 的新面。
+`-d` 是 `--since` 的短选项(跟 `git log --since` 风格一致)。
 
-## session list / tag(沿用 v3)
+### `--tag` 操作符
 
-行为、参数、`--tag` 操作符、输出格式**完全照 v3**,见 [`../v3/session.md`](../v3/session.md#session-list)。v4 下**唯一变化**:CLI 打的本地端点从 `/v3/sessions` 挪到 **`/v4/sessions`**(`GET /v4/sessions` + `PATCH /v4/sessions/{sid}/tags`),命令用法一字不改。
+| 表达式 | 语义 |
+|---|---|
+| `--tag K=V` | key `K` 严格等于 `V` |
+| `--tag K!=V` | key `K` **存在且不等于** `V`(严格 NE,**NULL 不命中**;要含「没打 K」再叠 `--tag !K`) |
+| `--tag K=V1,V2,V3` | key `K` ∈ `{V1,V2,V3}`(IN) |
+| `--tag K` | 有 key `K`(任意值) |
+| `--tag !K` | **没有** key `K` |
 
-```bash
-memory.talk session list --tag status=wip --since 7d
-memory.talk session tag sess_def456 project=billing -draft
+多个 `--tag` 用 AND;同一 key 给两次不同 eq(`--tag project=a --tag project=b`)合法,**返回空集**(不替你猜矛盾)。当前限制:`K=V1,V2` 的 value 不支持 `,`;无 `LIKE` / 前缀通配;无跨 key `OR`(用 IN 覆盖)。
+
+### 输出 — Markdown(默认)
+
+H3-per-result 块布局(跟 `search` 一致),不用表格:
+
+`````markdown
+# session list
+
+`filter: endpoint=claude-code · tag=project=billing` · 23 / 1247 results
+
+---
+
+### [SESSION] `sess-15f0a7fb-…190b0` · claude-code · 47 rounds
+
+`tags: project=billing status=wip` · `cwd: ~/work/billing-svc` · 2026-05-24 09:12 (1 day ago)
+
+---
+
+_(showing 23 of 1247 — pass --limit higher to see more)_
+`````
+
+约定:顶行 `# session list`(无 query 概念);第二行给生效过滤条件 + `返回数 / 总数`(没传过滤时只 `N / TOTAL results`,不出 `filter:` 段);每条一个 H3 块、`---` 分隔;标题 `### [SESSION] \`<sid>\` · <source> · <round_count> rounds`(sid 反引号包住便于 copy 给 `read`);标题下一行 metadata(`· ` 分隔):`tags: K=V K=V`(空 tags 整段不出)、`cwd: <path>`(`$HOME`→`~`,超 60 char 中截)、绝对+相对时间 `YYYY-MM-DD HH:MM (X units ago)`;0 命中也出 header;总数 > 返回数时末尾追 `_(showing N of TOTAL — pass --limit higher to see more)_`;不渲染 `metadata.cwd` 以外的 metadata。
+
+### 输出 — JSON(`--json`)
+
+```json
+{
+  "total": 1247,
+  "returned": 23,
+  "sessions": [
+    {
+      "session_id": "sess-15f0a7fb-...190b0",
+      "source": "claude-code",
+      "endpoint": "claude-code@/home/user/.claude/projects",
+      "cwd": "/home/user/work/billing-svc",
+      "created_at": "2026-05-24T09:12:03Z",
+      "synced_at": "2026-05-24T09:45:11Z",
+      "round_count": 47,
+      "tags": {"project": "billing", "status": "wip"}
+    }
+  ]
+}
 ```
 
-## session mark(v4 新增)
+---
 
-对一个 session **逐 round 打注解**——以写代读防走神,mark 里 `#…？` 就地标问题、写入时自动建卡 / 关联老卡,出处(`card_source`)精确指那条 mark。
+## session tag
+
+查 / 设 / 删 session 的 kv 标签。**单次可同时设多个 + 删多个**,服务端 PATCH 合并。
 
 ```bash
-# 文件 / 管道:喂一份 YAML,一次落一个 round 的 mark
-memory.talk session mark --session <sid> --file <path>
-cat sub.yaml | memory.talk session mark --session <sid>
-
-# 交互:不喂 YAML,2-round 滑动窗口逐轮走、逐轮标(标当前轮)
-memory.talk session mark --session <sid>
+memory.talk session tag <session_id>                              # 查(不传 K=V / -K)
+memory.talk session tag <session_id> project=billing status=wip   # 设 / 改
+memory.talk session tag <session_id> -status -obsolete            # 删
+memory.talk session tag <session_id> project=billing -draft       # 混用
+memory.talk session tag <session_id> project=billing --json
 ```
 
-**两种模式**:**文件 / 管道**喂一份 YAML 提交体(`last_index` 乐观锁 + `round_index` + `description` + `marks`),一次落一个 round;**交互**则进 2-round 滑动窗口——一次看上一轮 + 当前轮,逐轮往前走、标永远落在**当前(第二个)round**,逼着认真逐轮读。`last_index` 与 session 当前最新 round index 不一致 → 拒绝(标注期间又来了新 round)。
+### 语法
 
-**完整契约**(提交体格式、`#…？` 语法、`m<n>` 寻址、`session_marks` / `card_sessions` 落地、错误码)见 [`session-mark.md`](session-mark.md);机制与设计推理见 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md)。
+| 形式 | 含义 |
+|---|---|
+| `K=V` | 设 / 覆盖 key `K` 为 `V`(`V` 整体当字符串存,不做类型推断) |
+| `-K` | 删 key `K`(不存在则忽略,不报错) |
+| 不传任何 K=V / -K | 只查,输出当前 tags |
+
+约束(违反任一 → 整次拒绝、exit 1、不动 tag):key 匹配 `^[a-zA-Z][a-zA-Z0-9_.-]*$`;value ≤ 200 char;单 session tag ≤ 50;`K=V` 与 `-K` 不能对同一 key 同时出现。
+
+### 输出
+
+Markdown:设 / 删后 `ok: \`<sid>\` · tags = \`project=billing status=wip\``;只查时出一张 `| key | value |` 表;无 tag 输出 `(no tags)`。JSON:`{"session_id": "...", "tags": {...}}`,无论查 / 改都返回**改动后全量 tags**。
+
+---
+
+## session mark
+
+对一个 session **逐 round 打注解**(以写代读,见 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md))——mark 里 `#…？` 自动建卡 / 关联老卡,出处(`card_source`)精确指那条 mark。**两种模式**:
+
+```bash
+# 模式一 · 文件 / 管道:喂一份 YAML(这个 session 的一批 mark)
+memory.talk session mark --session <sid> --file <path>     [--json]
+cat sub.yaml | memory.talk session mark --session <sid>    [--json]
+
+# 模式二 · 交互:不喂 YAML,进 2-round 滑动窗口,逐轮走、逐轮标
+memory.talk session mark --session <sid>                   # 终端无管道输入时自动进交互
+memory.talk session mark --session <sid> --interactive
+```
+
+| 参数 | 必填 | 说明 |
+|---|---|---|
+| `--session` | 是 | 给哪个 session 打注解;`sess_<...>` |
+| `--file` | 否 | 提交体 YAML 的路径(**文件模式**);给了就不进交互 |
+| `--interactive` | 否 | 强制进**交互模式**(无管道输入时本就默认进) |
+| `--json` | 否 | JSON 输出(默认 Markdown) |
+
+### 提交体(YAML)· 文件 / 管道模式
+
+```yaml
+last_index: 41          # 乐观锁:提交时我读到的 session 最新 round index
+description: 在配 pty、用户突然提 tmux 的那几轮——想搞清他到底要什么
+marks:
+  - mark: |
+      配 pty 的时候用户突然提了 tmux。#为什么 pty 会让用户想到 tmux？
+      他其实想要的是「可重连的会话」,而不是 pty 本身。
+  - mark: 这段其实在排查 EMFILE,跟句柄上限有关。
+```
+
+| 字段 | 必填 | 说明 |
+|---|---|---|
+| `last_index` | 是 | 提交时读到的 session 最新 round index。**乐观锁**:与 session 当前最新 round index 不一致 → 整份拒绝([错误](#错误)) |
+| `description` | 是 | 这次标注的场景;随每条 mark 落盘 |
+| `marks` | 是 | 数组,每条 `{mark: <文本>}`,**非空**。`mark` 里 `#…？`(`#` 起、`？`/`?` 止)就地标问题 |
+| `marks[].id` | 否 | mark id `m<n>`;**默认系统按 append 顺序分配**(`m1`→`m2`,session 内单调不复用)。给则校验单调 |
+
+### 交互模式
+
+不喂 YAML 时进入。把 session 当对话**回放**着读:一次只摆 **2 个 round**——**上一轮**(上下文)+ **当前轮**——逐轮往前滑、逐轮打标,你边读边把感悟写成 mark(**session 级、不绑单一 round**),第一轮只做语境、当前轮是你正在评的那轮。
+
+- 窗口固定 2;每步**进一 round、出一 round**(模拟对话播下去)。第 k 步窗口 `[r_k, r_{k+1}]`,读当前轮 `r_{k+1}`、把感悟写成 mark(**session 级,不绑 round**)。走法 `[r1,r2]`→标 r2 → `[r2,r3]`→标 r3 → … → `[r_{N-1},r_N]`→标 r_N;`r1` 只当上下文。
+
+```
+$ memory.talk session mark --session sess_def456
+session sess_def456 · 41 rounds · 交互打标(标当前轮 / 回车跳过 / :back 回退 / :q 退出)
+
+──────── round 36 ·(上下文)────────
+[assistant] 我先帮你把 pty 配上……
+──────── round 37 ·(当前 · 标这里)────────
+[human] 等等,能不能直接用 tmux?
+
+mark> 配 pty 时用户突然提 tmux。#为什么 pty 会让用户想到 tmux？他其实想要可重连会话。
+↵
+✓ sess_def456#m1 · round 37 · → new card card_01jz8k2m  (#为什么 pty 会让用户想到 tmux？)
+```
+
+| 输入 | 作用 |
+|---|---|
+| 写文本后回车 | 为**当前轮**落一条 mark,往前滑一格 |
+| 直接回车(空) | 当前轮跳过(不落 mark),往前滑一格 |
+| `:back` | 回退一格(看回上一窗口;已落的 mark 不撤,append-only) |
+| `:q` | 退出 |
+
+`last_index` 进交互时**一次性锁定**;中途 session 又被写了新 round → 下一步提交触发乐观锁、提示退出重进。`description` 进交互时问一次(或 `--description` 预给)。两种模式落盘完全一致。
+
+### `#…？` → 自动建卡
+
+每条 `mark` 文本里的 `#…？` 在写入时被解析、embed 撞 `cards`(issue)向量库:**miss → 建新卡**(`issue` = 问题文本,还没答案)/ **hit → 关联**老卡;两种都记一条 [`card_sessions`](../../structure/v4/card-session.md),出处 = **`(session_id, mark)`**(即 `sess_<sid>#<mark>`)——精确到那条 mark。判「新 / 老」由**检索**算(miss = 惊讶 = 新卡),不靠 AI 自评。
+
+### 落地
+
+- 每条 mark → `sessions/<source>/<bucket>/<sid>/marks/m<n>.yaml`(canonical · YAML;`last_index` / `description` / `mark` / `questions` / `created_at`)。
+- 元信息 → `session_marks` 表(`session_id` / `mark` / `last_index` / `created_at`),撑乐观锁 + 寻址 + 反查。
+- 读回某条 mark 走 `read sess_<sid>#m1`(按 `#` 分片判型)。
+
+### 输出
+
+Markdown(默认):
+
+```
+✓ marked sess_def456 · round 37 · last_index 41
+  m1  #为什么 pty 会让用户想到 tmux？  → new card card_01jz8k2m
+  m2  (无问题)
+```
+
+`--json`:
+
+```json
+{
+  "session_id": "sess_def456",
+  "last_index": 41,
+  "marks": [
+    {"mark": "m1", "questions": [{"raw": "为什么 pty 会让用户想到 tmux", "card_id": "card_01jz8k2m", "is_new": true}]},
+    {"mark": "m2", "questions": []}
+  ]
+}
+```
+
+---
 
 ## 跟其他命令的边界
 
@@ -56,4 +245,18 @@ memory.talk session mark --session <sid>
 | 给 session 打注解、抽卡 | `memory.talk session mark --session <sid>` |
 | 按项目 / 状态找 session | `memory.talk session list --cwd … --tag …` |
 
-> **状态**:`list` / `tag` 已随 v3 实现;`mark` 是**设计提案、未实施**(见 [session-mark.md](session-mark.md))。
+## 错误
+
+| 情况 | 行为 |
+|---|---|
+| server 未运行 | `error: cannot reach server`,exit 1 |
+| `--source` 未注册 adapter | `error: unknown source 'xxx'`,exit 1 |
+| `--since` / `--until` 语法非法 | `error: invalid duration '7days', use '7d' / '12h' / '2w' or ISO date`,exit 1 |
+| `tag` / `mark` 的 sid 不存在 | `error: session '<id>' not found`,exit 1 |
+| tag key 不合规 / value 太长 / 数量超限 | `error: tag key '<k>' invalid: ...`,exit 1,不动 tag |
+| 同时 `K=V` 和 `-K` | `error: cannot both set and unset 'K' in the same call`,exit 1 |
+| mark:`last_index` ≠ session 当前最新 round index | `error: session advanced (last_index 41 ≠ current 43); re-read & re-mark`,exit 1(乐观锁 / 409) |
+| mark:`marks` 为空 / YAML 非法 | `error: marks required` / `error: invalid YAML`,exit 1 |
+| mark:显式 `id` 跳号 / 复用 | `error: mark id must be monotonic`,exit 1 |
+
+> **状态**:`list` / `tag` 已随 v3 实现并迁到 `/v4`;`mark` 是**设计提案、未实施**(见 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md))。

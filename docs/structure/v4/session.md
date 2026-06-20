@@ -9,7 +9,7 @@
 v4 在 session 旁挂了**逐 round 注解**的派生层(抽 v4 卡的写路径前端):
 
 - **`marks/` sidecar**:session 目录下新增 `marks/`,存逐 round 提交的注解(canonical file 罐)。
-- **`session_marks` 表**:SQLite 派生索引,把 mark 拍平成可 join 的行(每条 mark 一行,带 `round_index` / 关联到的 `card_` 等)。
+- **`session_marks` 表**:SQLite 派生索引,把 mark 拍平成可 join 的行(每条 mark 一行,带 `last_index` / 关联到的 `card_` 等)。
 
 这层是 v4 专属、v3 没有;它不改 session 本体(`sessions` / `rounds.jsonl` 仍照 v3),只在旁边追加注解 + 由 `#…？` 自动建 v4 卡。
 

@@ -1,16 +1,16 @@
-# session mark — 以写代读的逐 round 标记(v4 设计)
+# session mark — 以写代读的 session 标注(v4 设计)
 
-> **状态:设计提案,未实施。** 这是 v4 抽卡的**写路径前端**:总结一个 session 时,不让 AI 整段扫一遍就下结论(必走神),而是**逐 round 提交一份 mark**——**以写代读**,逼它真读;mark 里用 `#…？` 把问题就地标出来,写入时**自动建卡 / 关联老卡**,卡的出处(`card_source`)**精确指向那条 mark**。于是「建卡」不再是一个单独的、容易脑补的步骤,而是**认真读的自然副产物**。
+> **状态:设计提案,未实施。** 这是 v4 抽卡的**写路径前端**:总结一个 session 时,不让 AI 整段扫一遍就下结论(必走神),而是**逐 round 读、把感悟写成 mark**——**以写代读**,逼它真读;mark 里用 `#…？` 把问题就地标出来,写入时**自动建卡 / 关联老卡**,卡的出处(`card_source`)**精确指向那条 mark**。于是「建卡」不再是一个单独的、容易脑补的步骤,而是**认真读的自然副产物**。
 >
 > 跟 [card.md](card.md) 的关系:card.md §6 讲写路径的**逻辑**(旁白→惊讶→question、命门 = 惊讶 grounding 在检索);**本篇讲它落地成什么 ergonomics** —— mark 就是那个「旁白」,`#…？` 就是那个 question,「新卡 vs 关联」复用 card.md §6 的三岔,出处落 [`card_sessions`](../../structure/v4/card-session.md)。
 >
-> 本篇取代旧设计 `session-annotation.md`(annotation→**mark**、自由 jsonl 行→**每轮一份 YAML 数组**、`#问题` 到行尾→**`#…？` 收尾**、出处指 (session,round)→**指 mark id**)。
+> 本篇取代旧设计 `session-annotation.md`(annotation→**mark**、自由 jsonl 行→**一份 YAML(标注整个 session)**、`#问题` 到行尾→**`#…？` 收尾**、出处指 (session,round)→**指 mark id**;且 mark 是 session 级、不绑单一 round)。
 
 相关:
 - card 设计(问题图 + 写路径逻辑,本篇是它的写路径前端): [card.md](card.md)
 - 出处数据结构(`card_sessions`,本篇把它改成指 mark): [../../structure/v4/card-session.md](../../structure/v4/card-session.md)
 - explore 抽卡工作区(在先验 session 上跑 mark 的工作台): [../v3/explore.md](../v3/explore.md)
-- session rounds 写入(append-only;mark 挂在 round 上,不改 round): [../v3/session-rounds-write.md](../v3/session-rounds-write.md)
+- session rounds 写入(append-only;mark 是 session 级、只读 round 不改): [../v3/session-rounds-write.md](../v3/session-rounds-write.md)
 - file-canonical 模式(mark = sidecar 文件 + SQLite 派生索引): [../v3/file-canonical-pattern.md](../v3/file-canonical-pattern.md)
 
 ---
@@ -19,24 +19,24 @@
 
 把一个几十轮的 session 丢给 AI、让它「总结出 cards」,它会**走神**:扫读、跳读、脑补,漏掉真正有信息的轮次,还容易把没发生的事总结进去(confabulation)。根因是**读和写脱钩**——它不必逐轮证明自己读过,就能产出一段看似合理的总结。
 
-**以写代读**(用写驱动读):给**每个 round** 提交一份 **mark**。你没法给 round 37 写 mark 却没读 round 37——**mark 是「读过」的证据**。把「总结」从一次性顶层扫读,改成**自底向上、逐轮沉淀**,走神的空间被压没了。
+**以写代读**(用写驱动读):**逐 round 读**——交互窗口逼你一轮轮往前过、不跳读,边读边把感悟写成 **mark**。你没法跳过 round 37 还把它读懂——**逐轮过 = 「读过」的证据**。把「总结」从一次性顶层扫读,改成**自底向上、逐轮沉淀**,走神的空间被压没了。
 
-| | 整段总结(v3 抽卡) | 逐 round mark(本篇) |
+| | 整段总结(v3 抽卡) | session mark(逐 round 读,本篇) |
 |---|---|---|
-| 读写关系 | 脱钩:扫一遍 → 直接产 card | 绑定:每轮一份 mark = 强制逐轮读 |
+| 读写关系 | 脱钩:扫一遍 → 直接产 card | 绑定:逐 round 读 + 写 mark = 强制逐轮过 |
 | 失败模式 | 走神 / 跳读 / confabulation | 想脑补也得先逐轮落字 |
-| 产出粒度 | 顶层几张 card | 每轮 mark,卡是副产物 |
+| 产出粒度 | 顶层几张 card | session 的一批 mark,卡是副产物 |
 
-> **逐 round mark ≠ card.md §6 否决的 v0**。v0 的毛病是「每条旁白都想直接变成 card」→ 噪声。这里**mark 本身不变卡**:只有 mark 里 `#…？` 出来的问题、且经检索判为**新问题**(miss)才建卡(§3),噪声在下游被过滤掉。每轮都标,是为了**以写代读防走神**,不是把每轮都当信号。
+> **逐 round 读 + mark ≠ card.md §6 否决的 v0**。v0 的毛病是「每条旁白都想直接变成 card」→ 噪声。这里**mark 本身不变卡**:只有 mark 里 `#…？` 出来的问题、且经检索判为**新问题**(miss)才建卡(§3),噪声在下游被过滤掉。逐轮过、把感悟写下来,是为了**以写代读防走神**,不是把每轮都当信号。
 
 ---
 
-## 2. mark 是什么:每轮一份 YAML、数组、append-only
+## 2. mark 是什么:一份 YAML、一批 mark、append-only
 
-**一个 round = 一份完整的 mark 提交**,格式是 **YAML**:顶层 `description`(这份 mark 的场景:为什么读这段、读的时候在想什么)+ `marks`(数组,元素是一条 mark〔字典〕,字段 `id` + `mark`)。
+**一份提交 = 这个 session 的一批 mark**(标注整个 session,不绑单一 round),格式是 **YAML**:顶层 `description`(这份 mark 的场景:为什么读这段、读的时候在想什么)+ `marks`(数组,元素是一条 mark〔字典〕,字段 `id` + `mark`)。
 
 ```yaml
-# round 37 的 mark 提交(= sess_def456 的 m1、m2 两条 mark)
+# 一份提交 = sess_def456 的一批 mark(此处 m1、m2 两条)
 last_index: 41          # 乐观锁:提交时我读到的 session 最新 round index
 description: 在配 pty、用户突然提 tmux 的那几轮——想搞清他到底要什么
 marks:
@@ -48,15 +48,15 @@ marks:
     mark: 这段其实在排查 EMFILE,跟句柄上限有关。
 ```
 
-- **每轮一份**:一次提交对应**一个 round**(挂在 `(session_id, round_index)` 上)。一份提交里可以有**多条 mark**(`marks` 数组),各自一个 `id`、一段 `mark` 内容。
-- **`description` = 这份 mark 的场景**:顶层一句话,描述「为什么在这轮做这次标注、读的时候带着什么问题 / 上下文」。它是**这次提交的元信息**,跟着这份 mark 落盘(§6),让事后回看能秒懂当时心境,而不只是看到孤立的几条感悟。
+- **一份提交标注整个 session**:不绑定单一 round;一份提交里是这个 session 的**一批 mark**(`marks` 数组),各自一个 `id`、一段 `mark` 内容。
+- **`description` = 这份 mark 的场景**:顶层一句话,描述「为什么做这次标注、读的时候带着什么问题 / 上下文」。它是**这次提交的元信息**,跟着这份 mark 落盘(§6),让事后回看能秒懂当时心境,而不只是看到孤立的几条感悟。
 - **`last_index` = 乐观锁 + 「当时 session 到哪了」**:提交时填**我读到的 session 最新 round index**。写入时系统拿它跟 session 当前最新 round index 比——**一致才放行**;**不一致 = 标注过程中又来了新 round**(session 还在被 sync 写),你这份是**基于旧视图**的,**拒绝提交**(让你带着新 round 重读再标)。同时 `last_index` 落进 `session_marks` 表(§6),事后能看出**每条 mark 是在 session 长到第几轮时标的**——「当时是个什么情况」。
 - **`id` = `m<n>`,mark 不是一等 id**:mark **附属于 session**,id 形如 **`m1` / `m2`**(`m` + session 内递增序号),寻址 **`<session_id>#<id>`**(如 `sess_def456#m1` = 这个 session 的**第 1 条 mark**)。**不是** `mark_<ULID>` 那种独立前缀 id。`m<n>` 直接当**文件名**落盘(`marks/m1.yaml`,§6)。**`card_source` 就指 `(session_id, id)`**(§4)——这是「出处指 mark 而非仅 session」的落点。读它走 `read sess_def456#m1`(§7)。
 - **`mark` = 自由的「感悟」**:为什么有这段对话、它在干嘛、我意识到什么。其中**问题用 `#…？` 就地标出来**(§3)。
 - **append-only**:mark **只增不改**(跟 card / review / session 一个不变性)。改主意 = 追加新的一条(新 `m<n>`),不覆盖旧的;`m<n>` 序号在 session 内单调、不复用。
 - **可标很多遍**:整段对话可被**反复重读**,后一遍带着更多上下文 / 更多已建的卡回头看,常冒出新感悟——**就接着往后加 mark**(`m5`、`m6`…,§6),越后面往往越深;靠序号 / 时间戳就能看出哪些是后补的,不另起「遍」的目录。
 
-> 为什么 YAML + 数组:一轮里常常**不止一个感悟**(一个 `#…？` 问题 + 一句普通观察 + 另一个问题),数组让它们**各自独立成条、各带 id**,而不是糊成一段。YAML 的多行 `|` 块对「带换行、带 `#`、带引号」的自由文本最省转义(对照 [card create 的 `@file`/`@-`](../../cli/v4/card.md#文本传文件--stdin) 同理)。
+> 为什么 YAML + 数组:读一段常常**不止一个感悟**(一个 `#…？` 问题 + 一句普通观察 + 另一个问题),数组让它们**各自独立成条、各带 id**,而不是糊成一段。YAML 的多行 `|` 块对「带换行、带 `#`、带引号」的自由文本最省转义(对照 [card create 的 `@file`/`@-`](../../cli/v4/card.md#文本传文件--stdin) 同理)。
 
 ---
 
@@ -172,7 +172,6 @@ sessions/<source>/<sid[0:2]>/<sid>/
 ```yaml
 last_index: 41
 description: 在配 pty、用户突然提 tmux 的那几轮——想搞清他到底要什么
-round_index: 37
 mark: |
   配 pty 时用户突然提了 tmux。#为什么 pty 会让用户想到 tmux？
   他其实想要可重连会话。
@@ -183,7 +182,7 @@ questions:
 created_at: 2026-06-16T08:30:00Z
 ```
 
-> **提交 vs 落盘**:一次提交是**一份 round 级 YAML**(顶层 `last_index` + `description` + `marks: [{id, mark}, …]`,§2);写入时把 `marks` **拆开**——每条按它的 `id` 落成 `marks/<id>.yaml`,把这次提交的 `last_index` / `description` 一并带进每个文件(`round_index` 来自这次提交、`questions` 现解析)。wire 是一份带头信息的数组、盘上是一文件一 mark,两边都用 YAML。
+> **提交 vs 落盘**:一次提交是**一份 round 级 YAML**(顶层 `last_index` + `description` + `marks: [{id, mark}, …]`,§2);写入时把 `marks` **拆开**——每条按它的 `id` 落成 `marks/<id>.yaml`,把这次提交的 `last_index` / `description` 一并带进每个文件(`questions` 现解析)。wire 是一份带头信息的数组、盘上是一文件一 mark,两边都用 YAML。
 
 ### 表(派生索引):`session_marks`
 
@@ -192,7 +191,6 @@ created_at: 2026-06-16T08:30:00Z
 CREATE TABLE session_marks (
   session_id  TEXT NOT NULL,        -- 哪个 session
   mark        TEXT NOT NULL,        -- mark id(m1 / m2 …);寻址 = session_id#mark
-  round_index INTEGER NOT NULL,     -- 标的是哪一轮
   last_index  INTEGER NOT NULL,     -- 标这条 mark 时 session 的最新 round index(乐观锁基线 + 当时情况)
   created_at  TEXT NOT NULL,
   PRIMARY KEY (session_id, mark)
@@ -243,8 +241,8 @@ sess_def456#m2    ← 第 2 条
 ## 8. 与 v3 / card / explore 的关系
 
 - **card.md**:本篇是 card 写路径的**前端 ergonomics**;「新卡 vs 关联」的判定、卡 / Position / credence 全在 card.md,本篇不重复,只负责「从认真读里**自然冒出** `#…？`」+「出处指 mark」。
-- **explore.md**:explore 是**在先验 session 上跑 mark** 的工作台——你在 explore 目录里逐 round 提交 mark,`#…？` 建 / 连卡,产物盖 `explore_id` 戳。mark 就是 explore 里「抽卡」的那个具体动作(v4 版工作台另案,见 cli README)。
-- **v3 session / round**:mark 按 `round_index` 指回现成的 `rounds.jsonl`,**不改 round 本身**(round 仍 append-only);mark 是 session 目录下**新增的 `marks/` sidecar**,不动 v3 既有结构、也不进 SQLite。
+- **explore.md**:explore 是**在先验 session 上跑 mark** 的工作台——你在 explore 目录里逐 round 读、写 mark,`#…？` 建 / 连卡,产物盖 `explore_id` 戳。mark 就是 explore 里「抽卡」的那个具体动作(v4 版工作台另案,见 cli README)。
+- **v3 session / round**:mark 是**对整个 session 的感悟**、不绑单一 round(不在某条 round 上挂);它只读 `rounds.jsonl`(**不改 round 本身**,round 仍 append-only);mark 落在 session 目录下**新增的 `marks/` sidecar**,不动 v3 既有结构。
 - **v3 tag**:`#…？` 是**类 tag 的就地标记**,但语义不同——v3 `key=value` tag 是死字符串;`#…？` 写入时被**解析成卡 id**(建 / 连),是活的。
 
 ---

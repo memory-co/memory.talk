@@ -133,7 +133,7 @@ memory.talk card review --position pos_OLD --argument -1 --cite sess_xyz:4-9 --c
 | `search` | [search.md](search.md) |
 | `recall` | [recall.md](recall.md) |
 | `insight`(search / view,只读) | [insight.md](insight.md) |
-| `session`(list / tag 沿用 v3 + **mark v4 新增**) | [session.md](session.md) · [session-mark.md](session-mark.md) |
+| `session`(list / tag 沿用 v3 + **mark v4 新增**) | [session.md](session.md) |
 | `setup`(沿用 v3) | [setup.md](setup.md) |
 | `server`(沿用 v3,无独立 doc) | [`../v3/setup.md`](../v3/setup.md) |
 | `sync`(沿用 v3;端点 `/v3`→`/v4`) | [sync.md](sync.md) |
