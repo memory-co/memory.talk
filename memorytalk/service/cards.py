@@ -12,9 +12,14 @@ Persistence per write (mirrors InsightService ordering):
   4. lifecycle event(s) (cards/<bucket>/<card_id>/events.jsonl)
 
 Append-only: a Position is never mutated or deleted — a changed answer is
-a NEW competing Position (``forked_from_position_id`` records lineage).
-Reviews are append-only too. credence is computed at read time, never
-stored (see ``credence``).
+a NEW competing Position (``forked_from`` records lineage). Reviews are
+append-only too. credence is computed at read time, never stored (see
+``credence``).
+
+Positions/CardLinks have no global id — they are card-scoped subordinates
+addressed ``card_id#p<n>`` / ``card_id#l<n>``. A review targets one of
+those addresses; ``target_kind`` ('position'|'link') is derived from the
+seq prefix.
 """
 from __future__ import annotations
 
@@ -22,6 +27,8 @@ import datetime as _dt
 import logging
 
 from memorytalk.repository import SQLiteStore
+from memorytalk.repository.card_links import _target_type
+from memorytalk.repository.reviews import target_kind_of
 from memorytalk.schemas.card_requests import (
     CreateCardRequest, CreateLinkRequest, CreatePositionRequest,
     CreateReviewRequest,
@@ -30,8 +37,8 @@ from memorytalk.searchbase import Doc, SearchBackend
 from memorytalk.service.events import EventWriter
 from memorytalk.service.searchbase_schema import V4_CARDS, V4_POSITIONS, cap_text
 from memorytalk.util.ids import (
-    CARD_PREFIX, POSITION_PREFIX, SESSION_PREFIX, SESSION_PREFIX_LEGACY,
-    new_card_id, new_position_id, new_review_id,
+    CARD_PREFIX, FRAGMENT_SEP, IdKind, InvalidIdError, SESSION_PREFIX,
+    SESSION_PREFIX_LEGACY, new_card_id, new_review_id, parse_fragment,
 )
 from memorytalk.util.indexes import IndexesParseError, parse_indexes
 
@@ -106,90 +113,114 @@ class CardService:
     # ────────── add position (claim) ──────────
 
     async def add_position(self, card_id: str, req: CreatePositionRequest) -> str:
+        """Mint the next card-scoped ``p<n>``, persist it, mirror the file
+        doc, and (if ``source``) record position-level provenance. Returns
+        the minted ``position`` ('p<n>')."""
         if not await self.db.cards.exists(card_id):
             raise CardNotFound(f"card {card_id} not found")
         if not req.claim or not req.claim.strip():
             raise CardServiceError("claim required")
         if req.source is not None:
             await self._require_session(req.source.session_id, req.source.indexes)
-        if req.forked_from_position_id is not None:
-            fp = req.forked_from_position_id
-            if not fp.startswith(POSITION_PREFIX):
-                raise CardServiceError("invalid forked_from_position_id prefix")
-            if not await self.db.positions.exists(fp):
-                raise CardServiceError(f"position {fp} not found")
-
-        position_id = req.position_id or new_position_id()
-        if not position_id.startswith(POSITION_PREFIX):
-            raise CardServiceError("invalid position_id prefix")
-        if req.position_id and await self.db.positions.exists(position_id):
-            raise CardConflict(f"position_id {position_id} already exists")
+        if req.forked_from is not None:
+            fp = req.forked_from
+            if not (fp.startswith("p") and fp[1:].isdigit()):
+                raise CardServiceError("invalid forked_from seq (expected 'p<n>')")
+            if not await self.db.positions.exists(card_id, fp):
+                raise CardServiceError(f"position {card_id}#{fp} not found")
 
         now = _utc_iso()
-        await self.db.positions.insert(
-            position_id, card_id, req.claim, now,
-            scope=req.scope or "", forked_from_position_id=req.forked_from_position_id,
+        position = await self.db.positions.insert(
+            card_id, req.claim, now,
+            scope=req.scope or "", forked_from=req.forked_from,
         )
-        # file canonical = claim + created_at only (scope/fork are SQLite runtime state)
+        # file canonical = position + claim + created_at (scope/fork are
+        # SQLite runtime state, not part of the write-once file core).
         await self.db.positions.write_doc(card_id, {
-            "position_id": position_id, "card_id": card_id,
+            "position": position, "card_id": card_id,
             "claim": req.claim, "created_at": now,
         })
-        await self.db.cards.bump_position_count(card_id)
         if req.source is not None:
-            await self.db.card_sessions.insert(
-                card_id, req.source.session_id, position_id, req.source.indexes, now,
+            await self.db.position_sessions.insert(
+                card_id, position, req.source.session_id, req.source.indexes, now,
             )
         await self._index(
-            V4_POSITIONS, position_id, req.claim, {"card_id": card_id}, card_id,
+            V4_POSITIONS, f"{card_id}{FRAGMENT_SEP}{position}", req.claim,
+            {"card_id": card_id}, card_id,
         )
         await self.events.card_event(
-            card_id, "position_added", position_id=position_id,
-            forked_from_position_id=req.forked_from_position_id,
+            card_id, "position_added", position=position,
+            forked_from=req.forked_from,
         )
-        return position_id
+        return position
 
-    # ────────── review (argument ±1/0) ──────────
+    # ────────── review (argument ±1/0) on a Position OR a CardLink ──────────
 
-    async def review(self, position_id: str, req: CreateReviewRequest) -> dict:
-        if not position_id.startswith(POSITION_PREFIX):
-            raise CardServiceError("invalid position_id prefix")
-        pos = await self.db.positions.get(position_id)
-        if pos is None:
-            raise CardNotFound(f"position {position_id} not found")
+    async def review(self, target: str, req: CreateReviewRequest) -> dict:
+        """Review an addressed subordinate ``card_id#p<n>`` / ``card_id#l<n>``.
+        Inserts the review and bumps the matching store's argument tallies."""
+        try:
+            base_id, kind, seq = parse_fragment(target)
+        except InvalidIdError as e:
+            raise CardServiceError(str(e)) from e
+        if FRAGMENT_SEP not in target or kind not in (IdKind.POSITION, IdKind.LINK):
+            raise CardServiceError(
+                "review target must be card_id#p<n> or card_id#l<n>",
+            )
+        card_id = base_id
         if req.argument not in (-1, 0, 1):
             raise CardServiceError("argument must be one of 1, 0, -1")
+
+        if kind is IdKind.POSITION:
+            if await self.db.positions.get(card_id, seq) is None:
+                raise CardNotFound(f"position {target} not found")
+        else:
+            if await self.db.card_links.get(card_id, seq) is None:
+                raise CardNotFound(f"link {target} not found")
         await self._require_session(req.session_id, req.indexes)
 
         review_id = req.review_id or new_review_id()
         if await self.db.reviews.exists(review_id):
             raise CardConflict(f"review_id {review_id} already exists")
 
-        card_id = pos["card_id"]
+        target_kind = target_kind_of(seq)
         now = _utc_iso()
         await self.db.reviews.insert(
-            review_id, position_id, card_id, req.session_id, req.indexes,
+            review_id, card_id, seq, target_kind, req.session_id, req.indexes,
             req.argument, req.comment, now,
         )
-        await self.db.positions.bump_argument(position_id, req.argument)
+        if kind is IdKind.POSITION:
+            await self.db.positions.bump_argument(card_id, seq, req.argument)
+        else:
+            await self.db.card_links.bump_argument(card_id, seq, req.argument)
         await self.events.card_event(
-            card_id, "reviewed", review_id=review_id, position_id=position_id,
-            argument=req.argument, session_id=req.session_id, indexes=req.indexes,
+            card_id, "reviewed", review_id=review_id, target=seq,
+            target_kind=target_kind, argument=req.argument,
+            session_id=req.session_id, indexes=req.indexes,
         )
         return {
-            "status": "ok", "review_id": review_id, "position_id": position_id,
-            "card_id": card_id, "session_id": req.session_id, "argument": req.argument,
+            "status": "ok", "review_id": review_id,
+            "target": f"{card_id}{FRAGMENT_SEP}{seq}", "target_kind": target_kind,
+            "card_id": card_id, "session_id": req.session_id,
+            "argument": req.argument,
         }
 
-    # ────────── link (IBIS edge) ──────────
+    # ────────── link (governed IBIS edge) ──────────
 
     async def link(self, card_id: str, req: CreateLinkRequest) -> dict:
+        """Draw a governed IBIS edge. ``claim`` (why this edge) is required;
+        the edge is addressed ``card_id#l<n>`` and is itself reviewable.
+        Idempotent on (card_id, type, target_id). Returns the edge's
+        ``link`` seq + derived ``target_type``."""
         if not await self.db.cards.exists(card_id):
             raise CardNotFound(f"card {card_id} not found")
         if req.type not in _LINK_TYPES:
             raise CardServiceError(f"unknown link type: {req.type}")
+        if not req.claim or not req.claim.strip():
+            raise CardServiceError("claim required")
         target = req.target_id
-        if target.startswith(POSITION_PREFIX):
+        target_type = _target_type(target)
+        if target_type == "position":
             if req.type not in _POSITION_TARGET_OK:
                 raise CardServiceError(
                     f"link type {req.type!r} cannot target a position",
@@ -206,38 +237,50 @@ class CardService:
         existing = await self.db.card_links.list_out(subject)
         already = any(e["type"] == req.type and e["target_id"] == tgt for e in existing)
         now = _utc_iso()
-        await self.db.card_links.insert(subject, req.type, tgt, now)
+        # CardLinkStore.insert mints the seq AND bumps cards.link_count
+        # itself on a fresh row (idempotent on dup → no extra bump). The
+        # service only mirrors the file doc + emits the event for new edges.
+        link = await self.db.card_links.insert(subject, req.type, tgt, req.claim, now)
         if not already:
-            await self.db.cards.bump_link_count(subject)
+            await self.db.card_links.write_doc(subject, {
+                "link": link, "card_id": subject, "type": req.type,
+                "target_id": tgt, "claim": req.claim, "created_at": now,
+            })
             await self.events.card_event(
-                subject, "card_linked", type=req.type, target_id=tgt,
+                subject, "card_linked", link=link, type=req.type, target_id=tgt,
             )
-        target_type = "position" if tgt.startswith(POSITION_PREFIX) else "card"
         return {
-            "status": "ok", "card_id": subject, "type": req.type,
-            "target_id": tgt, "target_type": target_type,
+            "status": "ok", "card_id": subject, "link": link, "type": req.type,
+            "target_id": tgt, "target_type": _target_type(tgt), "claim": req.claim,
         }
 
-    # ────────── add session (provenance) ──────────
+    # ────────── add position-level session provenance ──────────
 
     async def add_session(
-        self, card_id: str, session_id: str, position_id: str = "",
+        self, card_id: str, session_id: str, position: str = "",
         indexes: str = "[]",
     ) -> dict:
+        """Record extra (session, indexes) provenance for a Position (or, with
+        an empty ``position``, card-level provenance via position_sessions's
+        '' position bucket). The mark-grounded ``card_sessions`` write-path is
+        owned by the (deferred) mark phase; this method serves the position
+        ``--source`` overflow only."""
         if not await self.db.cards.exists(card_id):
             raise CardNotFound(f"card {card_id} not found")
         if not _is_session_id(session_id):
             raise CardServiceError("invalid session_id prefix")
-        if position_id and not position_id.startswith(POSITION_PREFIX):
-            raise CardServiceError("invalid position_id prefix")
+        if position and not (position.startswith("p") and position[1:].isdigit()):
+            raise CardServiceError("invalid position seq (expected 'p<n>')")
         now = _utc_iso()
-        await self.db.card_sessions.insert(card_id, session_id, position_id, indexes, now)
+        await self.db.position_sessions.insert(
+            card_id, position, session_id, indexes, now,
+        )
         await self.events.card_event(
-            card_id, "session_cited", session_id=session_id, position_id=position_id,
+            card_id, "session_cited", session_id=session_id, position=position,
         )
         return {
             "status": "ok", "card_id": card_id, "session_id": session_id,
-            "position_id": position_id,
+            "position": position,
         }
 
     # ────────── internal: best-effort vector upsert ──────────

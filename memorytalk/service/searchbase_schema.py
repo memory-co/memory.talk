@@ -50,8 +50,9 @@ SCHEMAS: dict[str, dict] = {
     # v4: issue embedding (id = card_id, text = issue). Short like
     # insights → no auto_split, reject-and-skip on over-length.
     V4_CARDS: {"fields": {}},
-    # v4: claim embedding (id = position_id, text = claim). card_id kept
-    # as a field so a position hit maps back to / groups by its card.
+    # v4: claim embedding (id = card_id#position address, text = claim).
+    # card_id kept as a field so a position hit maps back to / groups by its
+    # card.
     V4_POSITIONS: {"fields": {"card_id": "str"}},
 }
 

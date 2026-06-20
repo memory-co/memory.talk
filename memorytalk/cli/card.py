@@ -5,7 +5,8 @@ competing by computed credence, connected by IBIS edges. Write commands:
 ``create`` / ``position`` / ``review`` / ``link``. All hit the ``/v4`` API.
 
 Reading a card is done through the top-level ``memory.talk read`` (it
-prefix-dispatches card_/pos_/insight_/sess-); search/recall are the
+prefix/fragment-dispatches card_/card_#p<n>/card_#l<n>/insight_/sess-);
+search/recall are the
 top-level ``memory.talk search`` / ``memory.talk recall``. Those commands
 reuse the ``_fmt_read`` / ``_fmt_search`` / ``_fmt_recall`` formatters
 defined at the bottom of this module.
@@ -101,27 +102,28 @@ def create(issue: str, card_id: str | None, json_out: bool) -> None:
 @click.option("--claim", required=True, help="Answer text (@file/@- ok)")
 @click.option("--source", "sources", multiple=True, help="<session_id>:<indexes>, repeatable")
 @click.option("--scope", default=None, help="When this answer applies (@file/@- ok)")
-@click.option("--position_id", "position_id", default=None)
+@click.option("--forked_from", "forked_from", default=None,
+              help="p<n> this answer is a refinement of")
 @click.option("--json", "json_out", is_flag=True, default=False)
-def position(card_ref, claim, sources, scope, position_id, json_out) -> None:
-    """Add a candidate answer (Position) to an existing card."""
+def position(card_ref, claim, sources, scope, forked_from, json_out) -> None:
+    """Add a candidate answer (Position) to an existing card. Prints p<n>."""
     body: dict = {"claim": _read_text_arg(claim)}
     if scope is not None:
         body["scope"] = _read_text_arg(scope)
-    if position_id:
-        body["position_id"] = position_id
+    if forked_from:
+        body["forked_from"] = forked_from
     srcs = [_parse_source(s) for s in sources]
     if srcs:
         sid, idx = srcs[0]
         body["source"] = {"session_id": sid, "indexes": idx}
     result = _run(json_out, "POST", f"/v4/cards/{card_ref}/positions", body, _fmt_position)
     # extra provenance sessions beyond the first → POST .../sessions
-    pid = result["position_id"]
+    pos = result["position"]
     for sid, idx in srcs[1:]:
         cfg = Config()
         try:
             api("POST", f"/v4/cards/{card_ref}/sessions", cfg,
-                json_body={"session_id": sid, "position_id": pid, "indexes": idx})
+                json_body={"session_id": sid, "position": pos, "indexes": idx})
         except Exception:
             pass
 
@@ -129,24 +131,30 @@ def position(card_ref, claim, sources, scope, position_id, json_out) -> None:
 # ────────── card review ──────────
 
 @card.command("review")
-@click.option("--position", "position_ref", required=True, help="pos_<id> to vote on")
+@click.option("--target", "target", required=True,
+              help="card_<id>#p<n> (position) or card_<id>#l<n> (link)")
 @click.option("--argument", required=True, type=click.Choice(["+1", "1", "0", "-1"]),
               help="+1 pro / 0 neutral / -1 con")
 @click.option("--cite", required=True, help="<session_id>:<indexes> evidence")
 @click.option("--comment", default=None, help="One-line note (@file/@- ok)")
 @click.option("--review_id", "review_id", default=None)
 @click.option("--json", "json_out", is_flag=True, default=False)
-def review(position_ref, argument, cite, comment, review_id, json_out) -> None:
-    """Take a stance (argument ±1/0) on a Position."""
+def review(target, argument, cite, comment, review_id, json_out) -> None:
+    """Take a stance (argument ±1/0) on a Position or a CardLink."""
+    if "#" not in target:
+        raise click.BadParameter("--target must be card_<id>#p<n> or card_<id>#l<n>")
+    card_ref, _, seq = target.partition("#")
+    kind = "links" if seq.startswith("l") else "positions"
     sid, idx = _parse_source(cite)
     arg = int(argument.lstrip("+"))
-    body: dict = {"position_id": position_ref, "session_id": sid,
+    body: dict = {"target": target, "session_id": sid,
                   "indexes": idx, "argument": arg}
     if comment is not None:
         body["comment"] = _read_text_arg(comment)
     if review_id:
         body["review_id"] = review_id
-    _run(json_out, "POST", f"/v4/positions/{position_ref}/reviews", body, _fmt_review)
+    _run(json_out, "POST", f"/v4/cards/{card_ref}/{kind}/{seq}/reviews",
+         body, _fmt_review)
 
 
 # ────────── card link ──────────
@@ -155,11 +163,14 @@ def review(position_ref, argument, cite, comment, review_id, json_out) -> None:
 @click.option("--card", "card_ref", required=True)
 @click.option("--type", "type_", required=True,
               type=click.Choice(["specializes", "suggested_by", "questions", "replaces", "related"]))
-@click.option("--target", required=True, help="card_<id> (or pos_<id> for suggested_by)")
+@click.option("--target", required=True, help="card_<id> (or card_<id>#p<n> for suggested_by)")
+@click.option("--claim", required=True, help="Why this edge holds (@file/@- ok)")
 @click.option("--json", "json_out", is_flag=True, default=False)
-def link(card_ref, type_, target, json_out) -> None:
-    """Draw an IBIS edge between cards (card↔card / card→position)."""
-    body = {"card_id": card_ref, "type": type_, "target_id": target}
+def link(card_ref, type_, target, claim, json_out) -> None:
+    """Draw a governed IBIS edge between cards (card↔card / card→position).
+    Prints l<n>; the edge is itself reviewable."""
+    body = {"card_id": card_ref, "type": type_, "target_id": target,
+            "claim": _read_text_arg(claim)}
     _run(json_out, "POST", f"/v4/cards/{card_ref}/links", body, _fmt_link)
 
 
@@ -174,20 +185,23 @@ def _fmt_create(r: dict) -> str:
 
 
 def _fmt_position(r: dict) -> str:
-    return f"✓ position added · `{r['position_id']}` on `{r['card_id']}`"
+    return f"✓ position added · `{r['position']}` on `{r['card_id']}` (`{r['card_id']}#{r['position']}`)"
 
 
 def _fmt_review(r: dict) -> str:
-    return f"✓ review `{r['review_id']}` · argument {r['argument']:+d} on `{r['position_id']}`"
+    return (f"✓ review `{r['review_id']}` · argument {r['argument']:+d} on "
+            f"`{r['target']}` ({r['target_kind']})")
 
 
 def _fmt_link(r: dict) -> str:
-    return f"✓ link · `{r['card_id']}` --{r['type']}--> `{r['target_id']}` ({r['target_type']})"
+    return (f"✓ link `{r['link']}` · `{r['card_id']}` --{r['type']}--> "
+            f"`{r['target_id']}` ({r['target_type']})")
 
 
 def _pos_line(p: dict, *, current: bool) -> str:
     star = "★ " if current else "  "
-    return (f"### {star}[POSITION] `{p['position_id']}` · "
+    addr = p.get("id") or f"{p.get('card_id', '')}#{p.get('position', '')}"
+    return (f"### {star}[POSITION] `{addr}` · "
             f"credence {p['credence']:+d} · ↑{p['up_count']} ↓{p['down_count']} ·{p['neutral_count']}\n"
             f"{p['claim']}"
             + (f"\n_scope: {p['scope']}_" if p.get('scope') else ""))
@@ -204,20 +218,37 @@ def _fmt_read(r: dict) -> str:
             lines.append("\n**links:**")
             for l in c["links"]:
                 arrow = "→" if l["dir"] == "out" else "←"
-                lines.append(f"- {arrow} {l['type']} `{l['target_id']}` ({l['target_type']})")
+                cred = f" · credence {l['credence']:+d}" if "credence" in l else ""
+                claim = f" — {l['claim']}" if l.get("claim") else ""
+                lines.append(
+                    f"- {arrow} {l['type']} `{l['target_id']}` "
+                    f"({l['target_type']}){cred}{claim}")
         if c.get("sessions"):
             lines.append("\n**sessions:** " + ", ".join(
                 f"`{s['session_id']}`" for s in c["sessions"]))
         return "\n".join(lines)
     if t == "position":
         p = r["position"]
-        lines = [f"# position · `{p['position_id']}`",
+        addr = p.get("id") or f"{p.get('card_id', '')}#{p.get('position', '')}"
+        lines = [f"# position · `{addr}`",
                  f"credence {p['credence']:+d} · ↑{p['up_count']} ↓{p['down_count']} ·{p['neutral_count']}",
                  p["claim"]]
         if p.get("scope"):
             lines.append(f"_scope: {p['scope']}_")
         lines.append(f"\n## reviews ({len(p.get('reviews', []))})")
         for rv in p.get("reviews", []):
+            lines.append(f"- {rv['argument']:+d} `{rv['session_id']}` ({rv['indexes']})"
+                         + (f" — {rv['comment']}" if rv.get("comment") else ""))
+        return "\n".join(lines)
+    if t == "link":
+        l = r["link"]
+        addr = l.get("id") or f"{l.get('card_id', '')}#{l.get('link', '')}"
+        lines = [f"# link · `{addr}` ({l['type']} → `{l['target_id']}`)",
+                 f"credence {l['credence']:+d} · ↑{l['up_count']} ↓{l['down_count']} ·{l['neutral_count']}"]
+        if l.get("claim"):
+            lines.append(l["claim"])
+        lines.append(f"\n## reviews ({len(l.get('reviews', []))})")
+        for rv in l.get("reviews", []):
             lines.append(f"- {rv['argument']:+d} `{rv['session_id']}` ({rv['indexes']})"
                          + (f" — {rv['comment']}" if rv.get("comment") else ""))
         return "\n".join(lines)

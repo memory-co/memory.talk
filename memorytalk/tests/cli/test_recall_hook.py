@@ -53,7 +53,8 @@ def test_hook_recalls_and_emits_json(tmp_path, monkeypatch):
                 "relevance": 1.0,
                 "answer": {"claim": "tcp keepalive issue", "scope": None,
                            "credence": 1, "up_count": 1, "down_count": 0,
-                           "neutral_count": 0, "position_id": "pos_1"},
+                           "neutral_count": 0, "position": "p1",
+                           "id": "card_001#p1"},
                 "alternatives": [],
             }],
         }
@@ -267,7 +268,7 @@ def test_recall_hook_positional_mode_without_stdin(tmp_path, monkeypatch):
             "card_id": "card_1", "issue": "the issue", "relevance": 1.0,
             "answer": {"claim": "the answer", "scope": None, "credence": 1,
                        "up_count": 1, "down_count": 0, "neutral_count": 0,
-                       "position_id": "pos_1"},
+                       "position": "p1", "id": "card_1#p1"},
             "alternatives": [],
         }],
     })

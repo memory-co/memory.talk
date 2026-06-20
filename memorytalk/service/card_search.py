@@ -28,8 +28,10 @@ class V4SearchService:
         rows = await self.db.positions.list_for_card(card_id)
         out = []
         for r in rows:
-            reviews = await self.db.reviews.list_for_position(r["position_id"])
-            out.append(with_credence(r, reviews[0]["created_at"] if reviews else None))
+            reviews = await self.db.reviews.list_for_target(card_id, r["position"])
+            inj = with_credence(r, reviews[0]["created_at"] if reviews else None)
+            inj["id"] = f"{card_id}#{r['position']}"
+            out.append(inj)
         out.sort(key=sort_key, reverse=True)
         return out
 
@@ -38,7 +40,7 @@ class V4SearchService:
             return None
         if matched_id:
             for p in positions:
-                if p["position_id"] == matched_id:
+                if p["id"] == matched_id:
                     return p
         return positions[0]   # highest credence (already sorted)
 
@@ -83,7 +85,7 @@ class V4SearchService:
         # ── candidate gather ──
         if query.strip() and self.searchbase is not None:
             ranked = await retrieve(self.searchbase, query, limit)
-            cand = [(cid, m["relevance"], m["position_id"]) for cid, m in ranked]
+            cand = [(cid, m["relevance"], m["position_addr"]) for cid, m in ranked]
         else:
             # empty query (or no searchbase) → newest-first listing, DSL only
             _, rows = await self.db.cards.list_cards(limit=max(limit * 5, 100))

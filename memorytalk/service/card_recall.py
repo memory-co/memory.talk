@@ -39,8 +39,10 @@ class V4RecallService:
         rows = await self.db.positions.list_for_card(card_id)
         injected = []
         for r in rows:
-            reviews = await self.db.reviews.list_for_position(r["position_id"])
-            injected.append(with_credence(r, reviews[0]["created_at"] if reviews else None))
+            reviews = await self.db.reviews.list_for_target(card_id, r["position"])
+            inj = with_credence(r, reviews[0]["created_at"] if reviews else None)
+            inj["id"] = f"{card_id}#{r['position']}"
+            injected.append(inj)
         injected.sort(key=sort_key, reverse=True)
         if not injected:
             return None, []

@@ -1,10 +1,11 @@
-"""POST /v4/read — prefix-dispatched read.
+"""POST /v4/read — prefix/fragment-dispatched read.
 
-Single entry point that routes by id prefix:
-  card_    → v4 card (issue + positions + credence + links + provenance)
-  pos_     → v4 position (claim + reviews)
-  insight_ → read-only old card (the renamed v3 "card"; view only)
-  sess-    → session (rounds from jsonl)
+Single entry point that routes by id:
+  card_              → v4 card (issue + positions + credence + links + provenance)
+  card_…#p<n>        → v4 position (claim + reviews + credence)
+  card_…#l<n>        → v4 link (claim + reviews + credence)
+  insight_           → read-only old card (the renamed v3 "card"; view only)
+  sess- / sess_      → session (rounds from jsonl)
 """
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ from fastapi import APIRouter, HTTPException, Request
 from memorytalk.api._card_common import require
 from memorytalk.schemas import ReadRequest
 from memorytalk.service import InsightNotFound, SessionNotFound
-from memorytalk.util.ids import IdKind, InvalidIdError, parse_id
+from memorytalk.util.ids import IdKind, InvalidIdError, parse_fragment
 
 router = APIRouter()
 
@@ -21,9 +22,23 @@ router = APIRouter()
 @router.post("/read")
 async def post_read(payload: ReadRequest, request: Request):
     try:
-        kind, _ = parse_id(payload.id)
+        base_id, kind, seq = parse_fragment(payload.id)
     except InvalidIdError:
         raise HTTPException(status_code=400, detail="invalid id prefix")
+
+    if kind == IdKind.POSITION:
+        svc = require(request.app.state.v4read, "read")
+        pos = await svc.read_position(base_id, seq)
+        if pos is None:
+            raise HTTPException(status_code=404, detail=f"position {payload.id} not found")
+        return {"type": "position", "position": pos}
+
+    if kind == IdKind.LINK:
+        svc = require(request.app.state.v4read, "read")
+        ln = await svc.read_link(base_id, seq)
+        if ln is None:
+            raise HTTPException(status_code=404, detail=f"link {payload.id} not found")
+        return {"type": "link", "link": ln}
 
     if kind == IdKind.CARD:
         svc = require(request.app.state.v4read, "read")
@@ -31,13 +46,6 @@ async def post_read(payload: ReadRequest, request: Request):
         if card is None:
             raise HTTPException(status_code=404, detail=f"card {payload.id} not found")
         return {"type": "card", "card": card}
-
-    if kind == IdKind.POSITION:
-        svc = require(request.app.state.v4read, "read")
-        pos = await svc.read_position(payload.id)
-        if pos is None:
-            raise HTTPException(status_code=404, detail=f"position {payload.id} not found")
-        return {"type": "position", "position": pos}
 
     if kind == IdKind.INSIGHT:
         # read-only old card (renamed v3 card). View only.

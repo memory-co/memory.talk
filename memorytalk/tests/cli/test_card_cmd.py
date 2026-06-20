@@ -67,7 +67,7 @@ def test_create_with_card_id(captured):
 
 
 def test_position_first_source_inline(captured):
-    captured.responses["/positions"] = {"status": "ok", "card_id": "card_c", "position_id": "pos_p"}
+    captured.responses["/positions"] = {"status": "ok", "card_id": "card_c", "position": "p1"}
     r = _invoke(["position", "--card", "card_c", "--claim", "SQLite",
                  "--source", "sess-abc:1-3", "--scope", "single node"])
     assert r.exit_code == 0, r.output
@@ -75,30 +75,55 @@ def test_position_first_source_inline(captured):
     assert path == "/v4/cards/card_c/positions"
     assert body["claim"] == "SQLite" and body["scope"] == "single node"
     assert body["source"] == {"session_id": "sess-abc", "indexes": "1-3"}
+    assert "p1" in r.output and "card_c#p1" in r.output
 
 
 def test_position_extra_sources_post_sessions(captured):
-    captured.responses["/positions"] = {"status": "ok", "card_id": "card_c", "position_id": "pos_p"}
+    captured.responses["/positions"] = {"status": "ok", "card_id": "card_c", "position": "p1"}
     _invoke(["position", "--card", "card_c", "--claim", "x",
              "--source", "sess-a:1", "--source", "sess-b:2"])
     paths = [c[1] for c in captured.calls]
     assert "/v4/cards/card_c/positions" in paths
-    assert any(p.endswith("/sessions") for p in paths)   # 2nd source
+    # 2nd source → POST .../sessions carrying the minted position seq
+    sess_call = next(c for c in captured.calls if c[1].endswith("/sessions"))
+    assert sess_call[2]["position"] == "p1" and sess_call[2]["session_id"] == "sess-b"
 
 
-def test_review_normalizes_argument(captured):
+def test_review_position_target(captured):
     captured.responses["/reviews"] = {"status": "ok", "review_id": "review_r",
-                                      "position_id": "pos_p", "argument": 1}
-    _invoke(["review", "--position", "pos_p", "--argument", "+1", "--cite", "sess-a:2"])
-    body = captured.calls[0][2]
+                                      "target": "card_c#p1", "target_kind": "position",
+                                      "argument": 1}
+    _invoke(["review", "--target", "card_c#p1", "--argument", "+1", "--cite", "sess-a:2"])
+    method, path, body = captured.calls[0]
+    assert path == "/v4/cards/card_c/positions/p1/reviews"
     assert body["argument"] == 1 and body["session_id"] == "sess-a" and body["indexes"] == "2"
+    assert body["target"] == "card_c#p1"
 
 
-def test_link_body(captured):
-    captured.responses["/links"] = {"status": "ok", "card_id": "card_a", "type": "specializes",
-                                    "target_id": "card_b", "target_type": "card"}
-    _invoke(["link", "--card", "card_a", "--type", "specializes", "--target", "card_b"])
-    assert captured.calls[0][2] == {"card_id": "card_a", "type": "specializes", "target_id": "card_b"}
+def test_review_link_target_routes_to_links(captured):
+    captured.responses["/reviews"] = {"status": "ok", "review_id": "review_r",
+                                      "target": "card_c#l2", "target_kind": "link",
+                                      "argument": -1}
+    _invoke(["review", "--target", "card_c#l2", "--argument", "-1", "--cite", "sess-a:3"])
+    method, path, body = captured.calls[0]
+    assert path == "/v4/cards/card_c/links/l2/reviews"
+    assert body["argument"] == -1
+
+
+def test_review_rejects_non_fragment_target():
+    r = _invoke(["review", "--target", "card_c", "--argument", "+1", "--cite", "sess-a:2"])
+    assert r.exit_code != 0
+
+
+def test_link_body_with_claim(captured):
+    captured.responses["/links"] = {"status": "ok", "card_id": "card_a", "link": "l1",
+                                    "type": "specializes", "target_id": "card_b",
+                                    "target_type": "card", "claim": "b narrows a"}
+    r = _invoke(["link", "--card", "card_a", "--type", "specializes",
+                 "--target", "card_b", "--claim", "b narrows a"])
+    assert captured.calls[0][2] == {"card_id": "card_a", "type": "specializes",
+                                    "target_id": "card_b", "claim": "b narrows a"}
+    assert "l1" in r.output
 
 
 # ────────── parsing helpers ──────────
@@ -127,16 +152,27 @@ def test_fmt_read_card_stars_current_answer():
     out = card_mod._fmt_read({"type": "card", "card": {
         "card_id": "card_x", "issue": "Q?",
         "positions": [
-            {"position_id": "pos_hi", "claim": "A", "credence": 2,
+            {"id": "card_x#p2", "position": "p2", "claim": "A", "credence": 2,
              "up_count": 2, "down_count": 0, "neutral_count": 0, "scope": "ctx"},
-            {"position_id": "pos_lo", "claim": "B", "credence": -1,
+            {"id": "card_x#p1", "position": "p1", "claim": "B", "credence": -1,
              "up_count": 0, "down_count": 1, "neutral_count": 0, "scope": ""},
         ],
-        "links": [{"dir": "out", "type": "specializes", "target_id": "card_y", "target_type": "card"}],
+        "links": [{"dir": "out", "type": "specializes", "target_id": "card_y",
+                   "target_type": "card", "claim": "y narrows x", "credence": 1}],
         "sessions": [{"session_id": "sess-a"}],
     }})
-    assert "★" in out and "pos_hi" in out and "credence +2" in out
-    assert "specializes" in out and "sess-a" in out
+    assert "★" in out and "card_x#p2" in out and "credence +2" in out
+    assert "specializes" in out and "sess-a" in out and "y narrows x" in out
+
+
+def test_fmt_read_link():
+    out = card_mod._fmt_read({"type": "link", "link": {
+        "id": "card_x#l1", "link": "l1", "card_id": "card_x", "type": "specializes",
+        "target_id": "card_y", "claim": "why", "credence": -1,
+        "up_count": 0, "down_count": 1, "neutral_count": 0,
+        "reviews": [{"argument": -1, "session_id": "sess-a", "indexes": "1"}],
+    }})
+    assert "card_x#l1" in out and "credence -1" in out and "why" in out
 
 
 def test_fmt_search_renders_q_and_a():

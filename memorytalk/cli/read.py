@@ -1,7 +1,7 @@
 """CLI: read <id> [--json] → POST /v4/read.
 
-Prefix-dispatched: card_ → v4 card, pos_ → position, insight_ → read-only
-old card (view), sess- → session.
+Prefix/fragment-dispatched: card_ → v4 card, card_…#p<n> → position,
+card_…#l<n> → link, insight_ → read-only old card (view), sess- → session.
 """
 from __future__ import annotations
 import sys
