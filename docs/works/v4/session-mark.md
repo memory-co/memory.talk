@@ -37,6 +37,7 @@
 
 ```yaml
 # round 37 的 mark 提交(= sess_def456 的 m1、m2 两条 mark)
+last_index: 41          # 乐观锁:提交时我读到的 session 最新 round index
 description: 在配 pty、用户突然提 tmux 的那几轮——想搞清他到底要什么
 marks:
   - id: m1
@@ -49,6 +50,7 @@ marks:
 
 - **每轮一份**:一次提交对应**一个 round**(挂在 `(session_id, round_index)` 上)。一份提交里可以有**多条 mark**(`marks` 数组),各自一个 `id`、一段 `mark` 内容。
 - **`description` = 这份 mark 的场景**:顶层一句话,描述「为什么在这轮做这次标注、读的时候带着什么问题 / 上下文」。它是**这次提交的元信息**,跟着这份 mark 落盘(§6),让事后回看能秒懂当时心境,而不只是看到孤立的几条感悟。
+- **`last_index` = 乐观锁 + 「当时 session 到哪了」**:提交时填**我读到的 session 最新 round index**。写入时系统拿它跟 session 当前最新 round index 比——**一致才放行**;**不一致 = 标注过程中又来了新 round**(session 还在被 sync 写),你这份是**基于旧视图**的,**拒绝提交**(让你带着新 round 重读再标)。同时 `last_index` 落进 `session_marks` 表(§6),事后能看出**每条 mark 是在 session 长到第几轮时标的**——「当时是个什么情况」。
 - **`id` = `m<n>`,mark 不是一等 id**:mark **附属于 session**,id 形如 **`m1` / `m2`**(`m` + session 内递增序号),寻址 **`<session_id>#<id>`**(如 `sess_def456#m1` = 这个 session 的**第 1 条 mark**)。**不是** `mark_<ULID>` 那种独立前缀 id。`m<n>` 直接当**文件名**落盘(`marks/m1.yaml`,§6)。**`card_source` 就指 `(session_id, id)`**(§4)——这是「出处指 mark 而非仅 session」的落点。读它走 `read sess_def456#m1`(§7)。
 - **`mark` = 自由的「感悟」**:为什么有这段对话、它在干嘛、我意识到什么。其中**问题用 `#…？` 就地标出来**(§3)。
 - **append-only**:mark **只增不改**(跟 card / review / session 一个不变性)。改主意 = 追加新的一条(新 `m<n>`),不覆盖旧的;`m<n>` 序号在 session 内单调、不复用。
@@ -138,9 +140,13 @@ CREATE INDEX idx_card_sessions_mark    ON card_sessions(session_id, mark);    --
 
 ---
 
-## 6. 存储:file-canonical、不进 SQLite
+## 6. 存储:mark 文件(canonical)+ `session_marks`(SQLite 派生索引)
 
-mark 是**大段自由文本**,量不小——所以**和 `rounds.jsonl`(round 正文)一个处理法**:**落文件、不进 SQLite**。**每条 mark 一个文件,文件名就是它的 id `m<n>`**,append-only。
+跟 session 一个分法:**正文落文件、元信息进表**。mark 正文(`mark` 大段文本)**落 YAML 文件**(canonical,像 `rounds.jsonl`);mark 的**元信息**(序号 / round / `last_index` / 时间)进 **`session_marks` 表**(SQLite 派生索引,像 `sessions` 表),用来撑乐观锁、寻址、反查。
+
+### 文件(canonical):一条 mark 一个 `m<n>.yaml`
+
+**每条 mark 一个文件,文件名就是它的 id `m<n>`**,append-only:
 
 ```
 sessions/<source>/<sid[0:2]>/<sid>/
@@ -151,9 +157,10 @@ sessions/<source>/<sid[0:2]>/<sid>/
     …                       ← 重读续标就接着加 m3、m4…
 ```
 
-一个 `mN.yaml` = 一条 mark,**用 YAML 存**(跟提交同语种,免转换);`description` 从这次提交带下来,`questions` 是写入时解析 `#…？` + 撞库的结果:
+一个 `mN.yaml` = 一条 mark,**用 YAML 存**(跟提交同语种,免转换);`description` / `last_index` 从这次提交带下来,`questions` 是写入时解析 `#…？` + 撞库的结果:
 
 ```yaml
+last_index: 41
 description: 在配 pty、用户突然提 tmux 的那几轮——想搞清他到底要什么
 round_index: 37
 mark: |
@@ -166,14 +173,43 @@ questions:
 created_at: 2026-06-16T08:30:00Z
 ```
 
-> **提交 vs 落盘**:一次提交是**一份 round 级 YAML**(顶层 `description` + `marks: [{id, mark}, …]`,§2);写入时把 `marks` **拆开**——每条按它的 `id` 落成 `marks/<id>.yaml`,把这次提交的 `description` 一并带进每个文件(`round_index` 来自这次提交、`questions` 现解析)。wire 是一份带 `description` 的数组、盘上是一文件一 mark(各自留着 `description`),两边都用 YAML。
+> **提交 vs 落盘**:一次提交是**一份 round 级 YAML**(顶层 `last_index` + `description` + `marks: [{id, mark}, …]`,§2);写入时把 `marks` **拆开**——每条按它的 `id` 落成 `marks/<id>.yaml`,把这次提交的 `last_index` / `description` 一并带进每个文件(`round_index` 来自这次提交、`questions` 现解析)。wire 是一份带头信息的数组、盘上是一文件一 mark,两边都用 YAML。
 
-规则(照搬 round 正文那套不变性):
+### 表(派生索引):`session_marks`
 
-- **一条 mark 一个文件**:文件名 = mark id `m<n>`。**写一次就不动**(append-only,跟 `rounds.jsonl` 一样);改主意 = 加新 `m<n>`,不覆盖旧文件。
-- **序号单调、session 内唯一**:`m1`→`m2`→… 按 append 顺序,不复用、不跳号。重读续标接着往后加,不另起「遍」的目录(谁先谁后看序号 / `created_at`)。
-- **不进 SQLite、也不进向量库**:mark 本身不是检索单元;进 `cards` 向量库的是它 `#…？` 出来的**问题(卡)**,卡走正常 card 写路径落 SQLite。
-- **mark ↔ card 的链就写在那条 mark 的 `questions[]` 里**;`card_sessions`(SQLite)是**从这些 `questions[]` 派生**的可 join 索引(`card_id` + `session_id` + `mark` id + `position_id`)。
+```sql
+-- mark 元信息(派生自 marks/*.yaml);撑乐观锁 + 寻址 + 反查。mark 正文不进表(留 YAML)
+CREATE TABLE session_marks (
+  session_id  TEXT NOT NULL,        -- 哪个 session
+  mark        TEXT NOT NULL,        -- mark id(m1 / m2 …);寻址 = session_id#mark
+  round_index INTEGER NOT NULL,     -- 标的是哪一轮
+  last_index  INTEGER NOT NULL,     -- 标这条 mark 时 session 的最新 round index(乐观锁基线 + 当时情况)
+  created_at  TEXT NOT NULL,
+  PRIMARY KEY (session_id, mark)
+);
+CREATE INDEX idx_session_marks_session ON session_marks(session_id);  -- 列一个 session 的所有 mark / 取最大序号
+```
+
+- **无 FOREIGN KEY**(SQLite 派生索引,容忍悬空;canonical 是 `marks/*.yaml`,表丢了能从文件重建)。
+- `mark` 正文**不进表**(大文本留 YAML);表只放**能 join / 能比 / 能排**的元信息。
+- 取「session 下一个 mark 序号」「session 当前 `last_index` 基线」「某条 mark 标在第几轮」都走这张表,不必扫文件。
+
+### 乐观锁:`last_index` 怎么校验
+
+提交一份 mark 时,系统:
+
+1. 读 session 当前**最新 round index**(`max(round_index)`,来自 sessions/rounds)。
+2. 跟提交里的 `last_index` 比:
+   - **相等** → 放行:`marks/m<n>.yaml` 落盘 + `session_marks` 各插一行。
+   - **不等**(session 又长了新 round)→ **拒绝**(409 / conflict):你这份是基于旧视图标的,带着新 round **重读再标**。
+3. 同一 session 并发两份提交,只有 `last_index` 仍等于当前的那份能进;另一份因序号 / 基线已变而被挡——**乐观锁,不上行锁**。
+
+### 不变性(照搬 round 正文那套)
+
+- **一条 mark 一个文件,写一次就不动**(append-only);改主意 = 加新 `m<n>`,不覆盖旧文件 / 旧表行。
+- **序号单调、session 内唯一**:`m1`→`m2`→…,不复用、不跳号;重读续标接着往后加。
+- **mark 不进向量库**:进 `cards` 向量库的是它 `#…？` 出来的**问题(卡)**,卡走正常 card 写路径。
+- **mark ↔ card 的链写在那条 mark 的 `questions[]` 里**(canonical · YAML);[`card_sessions`](../../structure/v4/card-session.md) 是从这些 `questions[]` 派生的 card↔session 可 join 索引(`card_id` + `session_id` + `mark` id + `position_id`)。**`session_marks` 管 mark 自己的元信息,`card_sessions` 管 mark→card 的出处边**,两张表各司其职。
 
 ---
 
@@ -186,7 +222,7 @@ sess_def456#m1    ← sess_def456 的第 1 条 mark(= 第一次标注;盘上 mar
 sess_def456#m2    ← 第 2 条
 ```
 
-- **`read sess_def456#m1`**:读时先按 `#` 拆成 `(session_id, mark_id)`——`parse_id` 见到 `card_` / `pos_` / `sess_` 等前缀照旧判型;**额外认 `sess_…#m<n>` 这种带 `#` 分片的形态 → 定位「这个 session 的 mark `m<n>`」**(直接读 `marks/m<n>.yaml`),返回它(`description` 场景 + `mark` 文本 + 所属 round + `questions` + 它建/连了哪些卡)。不需要新前缀,复用 session id + 分片。
+- **`read sess_def456#m1`**:读时先按 `#` 拆成 `(session_id, mark_id)`——`parse_id` 见到 `card_` / `pos_` / `sess_` 等前缀照旧判型;**额外认 `sess_…#m<n>` 这种带 `#` 分片的形态 → 定位「这个 session 的 mark `m<n>`」**(直接读 `marks/m<n>.yaml`),返回它(`description` 场景 + `last_index`〔标它时 session 到第几轮〕 + `mark` 文本 + 所属 round + `questions` + 它建/连了哪些卡)。不需要新前缀,复用 session id + 分片。
 - **`card_source` 指 `(session_id, mark)`**(§4):出处从「指 session+round 区间」升级成「指那条 mark」,点开就是「当时怎么想到这个问题的」。
 - **review / Position 的 evidence** 仍引 round(`indexes`),但「出处 / 启发」这条线统一指 mark——**启发用 mark(`sess#n`),证据用 round(`indexes`)**,各司其职。
 
