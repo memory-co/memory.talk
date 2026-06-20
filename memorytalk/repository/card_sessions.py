@@ -1,10 +1,11 @@
-"""CardSessionStore -- card<->session provenance (card_sessions).
+"""CardSessionStore -- card<->session provenance, via mark (card_sessions).
 
-Records where a card / position came from. Multi-session per card. No own
-id; composite PK (card_id, session_id, position_id), idempotent re-insert
-via INSERT OR IGNORE. position_id "" = card-level association. No FOREIGN
-KEY. The canonical of this relation is the per-round annotation
-(questions[]); this table is its derived index (see session-annotation.md).
+Records which mark of which session created/connected this card -- a
+card-level (issue-level) provenance edge, granular to the mark. No own id;
+composite PK (card_id, session_id, mark), idempotent re-insert via INSERT
+OR IGNORE. Same card<->session may have several rows (different marks). No
+FOREIGN KEY. Canonical is the per-mark ``issues[]`` in marks/m<n>.yaml;
+this table is its derived index.
 """
 from __future__ import annotations
 
@@ -16,14 +17,14 @@ class CardSessionStore:
         self.conn = conn
 
     async def insert(
-        self, card_id: str, session_id: str, position_id: str,
+        self, card_id: str, session_id: str, mark: str,
         indexes: str, created_at: str,
     ) -> None:
         await self.conn.execute(
             "INSERT OR IGNORE INTO card_sessions "
-            "(card_id, session_id, position_id, indexes, created_at) "
+            "(card_id, session_id, mark, indexes, created_at) "
             "VALUES (?, ?, ?, ?, ?)",
-            (card_id, session_id, position_id, indexes, created_at),
+            (card_id, session_id, mark, indexes, created_at),
         )
         await self.conn.commit()
 
@@ -38,5 +39,14 @@ class CardSessionStore:
         async with self.conn.execute(
             "SELECT * FROM card_sessions WHERE session_id = ? ORDER BY created_at ASC",
             (session_id,),
+        ) as cur:
+            return [dict(r) for r in await cur.fetchall()]
+
+    async def list_cards_for_mark(self, session_id: str, mark: str) -> list[dict]:
+        """Reverse lookup: which cards a specific mark (sess#m<n>) made/linked."""
+        async with self.conn.execute(
+            "SELECT * FROM card_sessions WHERE session_id = ? AND mark = ? "
+            "ORDER BY created_at ASC",
+            (session_id, mark),
         ) as cur:
             return [dict(r) for r in await cur.fetchall()]
