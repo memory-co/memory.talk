@@ -257,4 +257,4 @@ Markdown(默认):
 | mark:`marks` 为空 / YAML 非法 | `error: marks required` / `error: invalid YAML`,exit 1 |
 | mark:`id` 缺失 / 跳号 / 复用 | `error: mark id required and must be monotonic (m<n>)`,exit 1 |
 
-> **状态**:`list` / `tag` 已随 v3 实现并迁到 `/v4`;`mark` 是**设计提案、未实施**(见 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md))。
+> **状态**:`list` / `tag` / `mark` 均**已实现(v1.1.x)**;`mark` 的机制见 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md)。

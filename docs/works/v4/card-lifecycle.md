@@ -1,6 +1,6 @@
 # card IBIS 生命周期 —— 一张卡从问题到答案到治理(v4 设计)
 
-> **状态:设计提案,未实施。** 本篇把 v4 卡(被治理的 IBIS 问题图)的**完整生命周期**串起来:一个 session 怎么一路变成「问题 + 竞争答案 + 顶踩 + 当下结论」。核心是一条主线——**问题是客观捞出来的,答案是主观产出的**,两者的来路因此不同。
+> **状态:已实现并发布(v1.1.x)。** 本篇把 v4 卡(被治理的 IBIS 问题图)的**完整生命周期**串起来:一个 session 怎么一路变成「问题 + 竞争答案 + 顶踩 + 当下结论」。核心是一条主线——**问题是客观捞出来的,答案是主观产出的**,两者的来路因此不同。
 >
 > 各环节的数据模型 / 字段在别处,本篇只讲**流**与**为什么这么分**:卡 / Position / credence / IBIS 边见 [card.md](card.md);写路径前端(逐 round mark)见 [session-mark.md](session-mark.md);出处两条链路见 [card-session](../../structure/v4/card-session.md) / [position-session](../../structure/v4/position-session.md)。
 

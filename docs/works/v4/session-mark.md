@@ -1,6 +1,6 @@
 # session mark — 以写代读的 session 标注(v4 设计)
 
-> **状态:设计提案,未实施。** 这是 v4 抽卡的**写路径前端**:总结一个 session 时,不让 AI 整段扫一遍就下结论(必走神),而是**逐 round 读、把感悟写成 mark**——**以写代读**,逼它真读;mark 里用 `#…？` 把问题就地标出来,写入时**自动建卡 / 关联老卡**,卡的出处(`card_source`)**精确指向那条 mark**。于是「建卡」不再是一个单独的、容易脑补的步骤,而是**认真读的自然副产物**。
+> **状态:已实现并发布(v1.1.x)。** 这是 v4 抽卡的**写路径前端**:总结一个 session 时,不让 AI 整段扫一遍就下结论(必走神),而是**逐 round 读、把感悟写成 mark**——**以写代读**,逼它真读;mark 里用 `#…？` 把问题就地标出来,写入时**自动建卡 / 关联老卡**,卡的出处(`card_source`)**精确指向那条 mark**。于是「建卡」不再是一个单独的、容易脑补的步骤,而是**认真读的自然副产物**。
 >
 > 跟 [card.md](card.md) 的关系:card.md §6 讲写路径的**逻辑**(旁白→惊讶→question、命门 = 惊讶 grounding 在检索);**本篇讲它落地成什么 ergonomics** —— mark 就是那个「旁白」,`#…？` 就是那个 question,「新卡 vs 关联」复用 card.md §6 的三岔,出处落 [`card_sessions`](../../structure/v4/card-session.md)。
 >
@@ -126,7 +126,7 @@ CREATE INDEX idx_card_sessions_mark    ON card_sessions(session_id, mark);
 - 旧设计的 `(session_id, indexes)` + 指向 Position 的一张表**拆成两条链路**:卡级 → `card_sessions`(`mark` 必选,本表);答案级 → [`position_sessions`](../../structure/v4/position-session.md)(`indexes` 必选 + `mark` 可选)。
 - **PK `(card_id, session_id, mark)`、不指向具体 Position**:同一卡可被同一 session 的**多条不同 mark** 建 / 连。
 
-> **与已落地实现的差异**:当前**代码实现** `card_sessions` 仍是 `(card_id, session_id, position, indexes)` 一张表(卡级 + 答案级混在一起,`position` = 卡内 `p<n>`,`indexes` = round 范围)。**全套设计文档(本篇、[card.md §8](card.md#8-存储file-canonical-罐--sqlite-瘦索引--searchbase)、[card-session.md](../../structure/v4/card-session.md)、[position-session.md](../../structure/v4/position-session.md))已统一到拆分版** `card_sessions`(mark)+ `position_sessions`(indexes),属**未实施的设计调整**(代码待跟进)。
+> **已实现**:代码现为拆分版 —— `card_sessions(card_id, session_id, mark, indexes)`(卡级,经 mark)+ `position_sessions(card_id, position, session_id, indexes, mark?)`(答案级,经 indexes),与本篇、[card.md §8](card.md#8-存储file-canonical-罐--sqlite-瘦索引--searchbase)、[card-session.md](../../structure/v4/card-session.md)、[position-session.md](../../structure/v4/position-session.md) 一致。
 
 ---
 

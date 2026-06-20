@@ -1,6 +1,6 @@
 # 交互式 `session mark` —— TUI 方案设计(v4)
 
-> **状态:设计提案(待实现)。** 回答一个具体问题:`memory.talk session mark`(不带 `--mark`)的**交互模式**该用什么做。当前是 `click.prompt` 行式 loop([`cli/_mark.py`](../../../memorytalk/cli/_mark.py),179 行);本篇定方案再升级。命令契约见 [`../../cli/v4/session.md`](../../cli/v4/session.md) 的 `## session mark`。
+> **状态:已实现(v1.1.x)。** 交互模式现为 **`rich` 渲染 + `questionary` 输入的客户端 step 走查**([`cli/_mark.py`](../../../memorytalk/cli/_mark.py)),即本篇方案 B。命令契约见 [`../../cli/v4/session.md`](../../cli/v4/session.md) 的 `## session mark`。
 
 ---
 

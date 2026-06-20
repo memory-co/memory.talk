@@ -84,4 +84,4 @@ List     GET   /v4/sessions/{session_id}/marks      列这个 session 的所有 
 }
 ```
 
-> **状态:设计提案,未实施**(同 [session-mark.md](../../works/v4/session-mark.md))。
+> **状态:已实现(v1.1.x)**(机制见 [session-mark.md](../../works/v4/session-mark.md))。
