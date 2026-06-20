@@ -182,3 +182,38 @@ async def test_no_issue_without_searchbase_ok(marksvc):
         marksvc.session, 5, "x", [{"id": "m1", "mark": "no question"}],
     )
     assert res["marks"][0]["issues"] == []
+
+
+# ────────── atomicity: embed failure mid-batch persists nothing ──────────
+
+async def test_embed_failure_midbatch_persists_nothing(marksvc):
+    """A runtime embedding failure on the 2nd mark's issue must leave the
+    WHOLE batch unpersisted: no session_marks, no card_sessions, no yaml,
+    no new issue-cards from this batch (整份拒绝 / 不写任何东西)."""
+    sid = marksvc.session
+    real_nearest = marksvc.search.nearest
+    calls = {"n": 0}
+
+    async def flaky_nearest(*args, **kwargs):
+        calls["n"] += 1
+        # m1's issue resolves; m2's issue blows up (provider falls over).
+        if calls["n"] >= 2:
+            raise RuntimeError("embedding provider down")
+        return await real_nearest(*args, **kwargs)
+
+    marksvc.search.nearest = flaky_nearest
+    try:
+        with pytest.raises(MarkUnavailable):
+            await _submit(marksvc, sid, [
+                {"id": "m1", "indexes": "1", "mark": "#first question？"},
+                {"id": "m2", "indexes": "2", "mark": "#second question？"},
+            ])
+    finally:
+        marksvc.search.nearest = real_nearest
+
+    # NOTHING from the batch persisted: no marks, no provenance edges, no yaml.
+    assert await marksvc.db.session_marks.list_for_session(sid) == []
+    assert await marksvc.db.card_sessions.list_cards_for_mark(sid, "m1") == []
+    assert await marksvc.db.card_sessions.list_cards_for_mark(sid, "m2") == []
+    assert await marksvc.svc.read_mark(sid, "m1") is None
+    assert await marksvc.svc.read_mark(sid, "m2") is None

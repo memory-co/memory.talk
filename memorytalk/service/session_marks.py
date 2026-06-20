@@ -20,15 +20,22 @@ Ordering & invariants (docs/works/v4/session-mark.md):
      skip/reuse. The next id must equal ``next_seq`` (count+1) at the time
      that mark is inserted. Bad → ``MarkServiceError`` (400). Validated up
      front before any write, so a bad batch writes nothing.
-  3. Per mark, in order: insert ``session_marks`` row (mints the same
-     ``m<n>``), parse ``#…？`` → embed/collide each issue → create/link a
-     card + a ``card_sessions`` row, then write ``marks/<mark>.yaml``.
+  3. Atomic write, in two phases. (a) RESOLUTION: embed/collide every
+     ``#…？`` issue of every mark and create/link its card UP FRONT — before
+     any submission-level write. (b) WRITE: only then, per mark in order,
+     insert the ``session_marks`` row (mints the same ``m<n>``), the
+     ``card_sessions`` edges, and ``marks/<mark>.yaml``. Because all embedding
+     happens in phase (a), a provider failure mid-batch raises before phase
+     (b) starts → NONE of the batch's session_marks/card_sessions/yaml is
+     written (整份拒绝 / 不写任何东西).
 
-Embedding degradation (503): if searchbase is unavailable the issue can't
-be collided. Rather than silently mis-classify, the submission is rejected
-with ``MarkUnavailable`` *before* any write when a mark carries issues — so
-state never corrupts. A submission whose marks carry no ``#…？`` needs no
-searchbase and always proceeds.
+Embedding degradation (503): if searchbase is unavailable, or the embedding
+provider fails mid-resolution, the issue can't be collided. Rather than
+silently mis-classify (or leave a half-written batch), the submission is
+rejected with ``MarkUnavailable`` during phase (a), before any
+session_marks/card_sessions/yaml write — so state never corrupts. A
+submission whose marks carry no ``#…？`` needs no searchbase and always
+proceeds.
 """
 from __future__ import annotations
 
@@ -148,7 +155,33 @@ class SessionMarkService:
         if self.search is None and any(p["issues"] for p in parsed):
             raise MarkUnavailable("searchbase unavailable; cannot resolve #…？ issues")
 
-        # 3. write, in order.
+        # 3a. RESOLUTION PHASE — embed + nearest-collide + create/link every
+        #     issue of every mark UP FRONT, before any submission-level write.
+        #     Atomicity: if embedding raises mid-batch (e.g. provider falls
+        #     over on the 2nd mark) we surface MarkUnavailable here, having
+        #     written NONE of the batch's session_marks / card_sessions / yaml.
+        #     (create_card may mint a card row mid-resolution — that's the only
+        #     pre-commit write, and an orphaned issue-card is harmless/idempotent
+        #     on retry.) The only post-resolution writes below are local + ordered.
+        for p in parsed:
+            resolved = []
+            for issue in p["issues"]:
+                try:
+                    card_id, is_new = await self._resolve_issue(issue)
+                except MarkUnavailable:
+                    raise
+                except Exception as e:   # embedding / collision blew up
+                    raise MarkUnavailable(
+                        f"embedding/collision failed while resolving #…？: {e}",
+                    ) from e
+                resolved.append({
+                    "issue": issue, "card_id": card_id, "is_new": is_new,
+                    "indexes": p["indexes"],
+                })
+            p["resolved"] = resolved
+
+        # 3b. WRITE PHASE — every issue is resolved; nothing below embeds, so
+        #     these writes are local + ordered and can't fail on the provider.
         out_marks: list[dict] = []
         for p in parsed:
             now = _utc_iso()
@@ -157,16 +190,10 @@ class SessionMarkService:
             # this equals ``p['id']``.
             mark = await self.db.session_marks.insert(session_id, last_index, now)
 
-            resolved = []
-            for issue in p["issues"]:
-                card_id, is_new = await self._resolve_issue(issue)
+            for r in p["resolved"]:
                 await self.db.card_sessions.insert(
-                    card_id, session_id, mark, p["indexes"], now,
+                    r["card_id"], session_id, mark, p["indexes"], now,
                 )
-                resolved.append({
-                    "issue": issue, "card_id": card_id, "is_new": is_new,
-                    "indexes": p["indexes"],
-                })
 
             body = {
                 "last_index": last_index,
@@ -175,12 +202,12 @@ class SessionMarkService:
             }
             if p["indexes"]:
                 body["indexes"] = p["indexes"]
-            body["issues"] = resolved
+            body["issues"] = p["resolved"]
             body["created_at"] = now
             await self.db.session_mark_files.write_doc(
                 source, session_id, mark, body,
             )
-            out_marks.append({"mark": mark, "issues": resolved})
+            out_marks.append({"mark": mark, "issues": p["resolved"]})
 
         return {
             "session_id": session_id, "last_index": last_index, "marks": out_marks,

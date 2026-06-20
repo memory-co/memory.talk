@@ -114,18 +114,10 @@ def position(card_ref, claim, sources, scope, forked_from, json_out) -> None:
         body["forked_from"] = forked_from
     srcs = [_parse_source(s) for s in sources]
     if srcs:
-        sid, idx = srcs[0]
-        body["source"] = {"session_id": sid, "indexes": idx}
-    result = _run(json_out, "POST", f"/v4/cards/{card_ref}/positions", body, _fmt_position)
-    # extra provenance sessions beyond the first → POST .../sessions
-    pos = result["position"]
-    for sid, idx in srcs[1:]:
-        cfg = Config()
-        try:
-            api("POST", f"/v4/cards/{card_ref}/sessions", cfg,
-                json_body={"session_id": sid, "position": pos, "indexes": idx})
-        except Exception:
-            pass
+        # Every --source rides in the position-create call; the service
+        # lands one position_sessions row per source under the minted p<n>.
+        body["sources"] = [{"session_id": sid, "indexes": idx} for sid, idx in srcs]
+    _run(json_out, "POST", f"/v4/cards/{card_ref}/positions", body, _fmt_position)
 
 
 # ────────── card review ──────────
@@ -165,12 +157,17 @@ def review(target, argument, cite, comment, review_id, json_out) -> None:
               type=click.Choice(["specializes", "suggested_by", "questions", "replaces", "related"]))
 @click.option("--target", required=True, help="card_<id> (or card_<id>#p<n> for suggested_by)")
 @click.option("--claim", required=True, help="Why this edge holds (@file/@- ok)")
+@click.option("--source", "sources", multiple=True, help="<session_id>:<indexes>, repeatable")
 @click.option("--json", "json_out", is_flag=True, default=False)
-def link(card_ref, type_, target, claim, json_out) -> None:
+def link(card_ref, type_, target, claim, sources, json_out) -> None:
     """Draw a governed IBIS edge between cards (card↔card / card→position).
-    Prints l<n>; the edge is itself reviewable."""
+    Prints l<n>; the edge is itself reviewable. Each --source lands one
+    link_sessions provenance row under the minted l<n>."""
     body = {"card_id": card_ref, "type": type_, "target_id": target,
             "claim": _read_text_arg(claim)}
+    srcs = [_parse_source(s) for s in sources]
+    if srcs:
+        body["source"] = [{"session_id": sid, "indexes": idx} for sid, idx in srcs]
     _run(json_out, "POST", f"/v4/cards/{card_ref}/links", body, _fmt_link)
 
 

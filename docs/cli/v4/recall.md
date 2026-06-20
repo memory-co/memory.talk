@@ -3,15 +3,29 @@
 无意识召回:hook 阶段拿当前 prompt 去**撞问题图**,把命中卡的当下答案极简注入 LLM context。沿用 v3 recall 的"无意识、极简"姿态,只是从"撞陈述"变成"撞问题 → 取答案"。
 
 ```bash
-memory.talk recall --session <session_id> --prompt '<prompt>' [--json]
+memory.talk recall hook --source <adapter> <SESSION_ID> '<PROMPT>' [--top-k N] [--json]
 ```
+
+`recall hook` 是真正的 host-CLI hook 入口(Claude-Code / Codex 等在 `UserPromptSubmit` 阶段调它)。两种喂法:
+
+- **stdin JSON**(host 插件):管道里给 `{"session_id": "...", "prompt": "...", "cwd": "..."}`,hook 总是 exit 0 并在 stdout 吐 `hookSpecificOutput` JSON(非零退出会挡住用户 prompt)。
+- **位置参数**(手动 / 调试):`SESSION_ID` 与 `PROMPT` 作为位置实参。
+
+CLI 用 `--source` 的 adapter 在客户端把 host 的 raw session id 铸成 canonical `sess-…`,再 POST 给 `/v4/recall`。
 
 ## 参数
 
 | 参数 | 必填 | 说明 |
 |---|---|---|
-| `--session` | 是 | 当前所在 session(`sess_<…>`),用于同 session 去重 |
-| `--prompt` | 是 | 当前 context / 用户 prompt 文本,作召回 query。值支持 `@<file>` / `@-` |
+| `--source` | 是 | host adapter(`claude-code` / `codex` …),用于把 raw session id 铸成 canonical `sess-…` |
+| `SESSION_ID` | 是* | host 的 raw session id(位置实参);stdin JSON 模式下从 payload 的 `session_id` 取 |
+| `PROMPT` | 是* | 当前 context / 用户 prompt 文本,作召回 query(位置实参);stdin JSON 模式下从 payload 的 `prompt` 取 |
+| `--location` | 否 | adapter location(路径 / URL),默认取 adapter 的 `DEFAULT_LOCATION` |
+| `--top-k` | 否 | 召回上限(默认 = server 默认) |
+
+\* `SESSION_ID` / `PROMPT` 在位置参数模式必填;stdin JSON 模式从 payload 取,二者缺一报错。
+
+> 另有两个调试子命令:`recall list`(列有召回历史的 session)、`recall read <session_id>`(看某 session 的召回时间线)。
 
 ## 召回流程
 
@@ -73,11 +87,14 @@ memory.talk recall --session <session_id> --prompt '<prompt>' [--json]
 
 ## 错误
 
-| 情况 | 行为 |
+hook 的契约是**在每条分支都 exit 0 并吐合法 `hookSpecificOutput` JSON**——stdin JSON 模式下任何失败(malformed payload / session 铸造失败 / server 不可达 / recall 失败)都吞掉、注入空 context、exit 0,绝不挡用户 prompt。位置参数(手动)模式才走标准 CLI 报错:
+
+| 情况 | 行为(位置参数模式) |
 |---|---|
+| 缺 `SESSION_ID` / `PROMPT`(且无 stdin JSON) | `error: recall hook needs SESSION_ID and PROMPT`,exit 2 |
+| session id 铸造失败 | `error: cannot mint session id: …`,exit 1 |
 | server 未运行 | `error: cannot reach server`,exit 1 |
-| `--session` 前缀错 | `error: invalid session_id prefix`,exit 1 |
-| `--prompt` 为空 | `error: --prompt required`,exit 1 |
+| `SESSION_ID` 前缀错 / `PROMPT` 为空 | server 端 400,CLI 透出 `error: …`,exit 1 |
 
 ## 跟 search 的边界
 

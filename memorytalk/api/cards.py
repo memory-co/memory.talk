@@ -7,8 +7,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 from memorytalk.api._card_common import http_from_service_error, require
 from memorytalk.schemas.card_requests import (
-    CreateCardRequest, CreateCardResponse, CreateCardSessionRequest,
-    CreateCardSessionResponse, CreateLinkRequest, CreateLinkResponse,
+    CreateCardRequest, CreateCardResponse, CreateLinkRequest, CreateLinkResponse,
     CreatePositionRequest, CreatePositionResponse,
 )
 from memorytalk.service.cards import CardServiceError
@@ -104,18 +103,6 @@ async def get_links(card_id: str, request: Request):
         for e in rows
     ]
     return {"card_id": card_id, "links": links}
-
-
-@router.post("/cards/{card_id}/sessions", response_model=CreateCardSessionResponse)
-async def post_card_session(card_id: str, payload: CreateCardSessionRequest, request: Request) -> CreateCardSessionResponse:
-    svc = require(request.app.state.cards, "cards")
-    try:
-        result = await svc.add_session(
-            card_id, payload.session_id, payload.position, payload.indexes,
-        )
-    except CardServiceError as e:
-        raise http_from_service_error(e)
-    return CreateCardSessionResponse(**result)
 
 
 @router.get("/cards/{card_id}/sessions")

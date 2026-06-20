@@ -55,6 +55,34 @@ async def test_add_position_with_source(client):
     assert g.json()["positions"][0]["id"] == f"{cid}#{pos}"
 
 
+async def test_add_position_multi_source(client):
+    # All --source land position_sessions under the minted p<n>; reverse
+    # lookup via the session surfaces the card.
+    sid = await _session(client)
+    cid = await _card(client)
+    r = await client.post(f"/v4/cards/{cid}/positions", json={
+        "claim": "SQLite + a vector extension",
+        "sources": [
+            {"session_id": sid, "indexes": "1-2"},
+            {"session_id": sid, "indexes": "3,4"},
+        ],
+    })
+    assert r.status_code == 200, r.text
+    rl = await client.get(f"/v4/sessions/{sid}/cards")
+    assert any(row["card_id"] == cid for row in rl.json()["cards"])
+
+
+async def test_post_card_session_endpoint_removed(client):
+    # The card→session write endpoint was removed (card_sessions is written
+    # only by the mark path). GET still works; POST must not be routed.
+    cid = await _card(client)
+    r = await client.post(f"/v4/cards/{cid}/sessions", json={
+        "session_id": "sess-x0000000", "indexes": "1"})
+    assert r.status_code in (404, 405), r.text
+    g = await client.get(f"/v4/cards/{cid}/sessions")
+    assert g.status_code == 200
+
+
 async def test_position_on_missing_card_404(client):
     r = await client.post("/v4/cards/card_nope/positions", json={"claim": "x"})
     assert r.status_code == 404
@@ -123,6 +151,19 @@ async def test_link_carries_claim_and_is_reviewable(client):
     rc = await client.post("/v4/read", json={"id": a})
     out = next(l for l in rc.json()["card"]["links"] if l["dir"] == "out")
     assert out["target_id"] == b and out["credence"] == 1
+
+
+async def test_link_with_source_records_link_sessions(client, app):
+    sid = await _session(client)
+    a = await _card(client, issue="parent question")
+    b = await _card(client, issue="child question")
+    r = await client.post(f"/v4/cards/{a}/links", json={
+        "type": "specializes", "target_id": b, "claim": "b narrows a",
+        "source": [{"session_id": sid, "indexes": "1-2"}]})
+    assert r.status_code == 200, r.text
+    link = r.json()["link"]
+    rows = await app.state.db.link_sessions.list_for_link(a, link)
+    assert len(rows) == 1 and rows[0]["indexes"] == "1-2"
 
 
 async def test_link_requires_claim_422(client):

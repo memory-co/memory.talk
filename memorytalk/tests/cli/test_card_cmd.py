@@ -66,7 +66,7 @@ def test_create_with_card_id(captured):
     assert captured.calls[0][2] == {"issue": "q", "card_id": "card_x"}
 
 
-def test_position_first_source_inline(captured):
+def test_position_single_source_in_sources_list(captured):
     captured.responses["/positions"] = {"status": "ok", "card_id": "card_c", "position": "p1"}
     r = _invoke(["position", "--card", "card_c", "--claim", "SQLite",
                  "--source", "sess-abc:1-3", "--scope", "single node"])
@@ -74,19 +74,25 @@ def test_position_first_source_inline(captured):
     method, path, body = captured.calls[0]
     assert path == "/v4/cards/card_c/positions"
     assert body["claim"] == "SQLite" and body["scope"] == "single node"
-    assert body["source"] == {"session_id": "sess-abc", "indexes": "1-3"}
+    assert body["sources"] == [{"session_id": "sess-abc", "indexes": "1-3"}]
     assert "p1" in r.output and "card_c#p1" in r.output
 
 
-def test_position_extra_sources_post_sessions(captured):
+def test_position_all_sources_ride_in_create(captured):
+    # All --source go in the single position-create call (no overflow POST
+    # to .../sessions — that endpoint was removed).
     captured.responses["/positions"] = {"status": "ok", "card_id": "card_c", "position": "p1"}
     _invoke(["position", "--card", "card_c", "--claim", "x",
              "--source", "sess-a:1", "--source", "sess-b:2"])
-    paths = [c[1] for c in captured.calls]
-    assert "/v4/cards/card_c/positions" in paths
-    # 2nd source → POST .../sessions carrying the minted position seq
-    sess_call = next(c for c in captured.calls if c[1].endswith("/sessions"))
-    assert sess_call[2]["position"] == "p1" and sess_call[2]["session_id"] == "sess-b"
+    assert len(captured.calls) == 1
+    method, path, body = captured.calls[0]
+    assert path == "/v4/cards/card_c/positions"
+    assert body["sources"] == [
+        {"session_id": "sess-a", "indexes": "1"},
+        {"session_id": "sess-b", "indexes": "2"},
+    ]
+    # no call to a /sessions endpoint
+    assert not any(c[1].endswith("/sessions") for c in captured.calls)
 
 
 def test_review_position_target(captured):
@@ -124,6 +130,20 @@ def test_link_body_with_claim(captured):
     assert captured.calls[0][2] == {"card_id": "card_a", "type": "specializes",
                                     "target_id": "card_b", "claim": "b narrows a"}
     assert "l1" in r.output
+
+
+def test_link_with_sources(captured):
+    captured.responses["/links"] = {"status": "ok", "card_id": "card_a", "link": "l1",
+                                    "type": "specializes", "target_id": "card_b",
+                                    "target_type": "card", "claim": "why"}
+    _invoke(["link", "--card", "card_a", "--type", "specializes",
+             "--target", "card_b", "--claim", "why",
+             "--source", "sess-a:1-2", "--source", "sess-b:7"])
+    body = captured.calls[0][2]
+    assert body["source"] == [
+        {"session_id": "sess-a", "indexes": "1-2"},
+        {"session_id": "sess-b", "indexes": "7"},
+    ]
 
 
 # ────────── parsing helpers ──────────

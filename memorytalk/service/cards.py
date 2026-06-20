@@ -114,14 +114,16 @@ class CardService:
 
     async def add_position(self, card_id: str, req: CreatePositionRequest) -> str:
         """Mint the next card-scoped ``p<n>``, persist it, mirror the file
-        doc, and (if ``source``) record position-level provenance. Returns
+        doc, and record one ``position_sessions`` row per ``--source`` (each
+        position→session, ``position=p<n>``, via its ``indexes``). Returns
         the minted ``position`` ('p<n>')."""
         if not await self.db.cards.exists(card_id):
             raise CardNotFound(f"card {card_id} not found")
         if not req.claim or not req.claim.strip():
             raise CardServiceError("claim required")
-        if req.source is not None:
-            await self._require_session(req.source.session_id, req.source.indexes)
+        srcs = req.all_sources()
+        for s in srcs:
+            await self._require_session(s.session_id, s.indexes)
         if req.forked_from is not None:
             fp = req.forked_from
             if not (fp.startswith("p") and fp[1:].isdigit()):
@@ -140,9 +142,9 @@ class CardService:
             "position": position, "card_id": card_id,
             "claim": req.claim, "created_at": now,
         })
-        if req.source is not None:
+        for s in srcs:
             await self.db.position_sessions.insert(
-                card_id, position, req.source.session_id, req.source.indexes, now,
+                card_id, position, s.session_id, s.indexes, now,
             )
         await self._index(
             V4_POSITIONS, f"{card_id}{FRAGMENT_SEP}{position}", req.claim,
@@ -218,6 +220,8 @@ class CardService:
             raise CardServiceError(f"unknown link type: {req.type}")
         if not req.claim or not req.claim.strip():
             raise CardServiceError("claim required")
+        for s in req.source:
+            await self._require_session(s.session_id, s.indexes)
         target = req.target_id
         target_type = _target_type(target)
         if target_type == "position":
@@ -241,6 +245,13 @@ class CardService:
         # itself on a fresh row (idempotent on dup → no extra bump). The
         # service only mirrors the file doc + emits the event for new edges.
         link = await self.db.card_links.insert(subject, req.type, tgt, req.claim, now)
+        # One link_sessions row per --source (link→session via indexes),
+        # mirroring how a Position's --source lands position_sessions.
+        # INSERT OR IGNORE → idempotent, so re-citing a dup edge is safe.
+        for s in req.source:
+            await self.db.link_sessions.insert(
+                subject, link, s.session_id, s.indexes, now,
+            )
         if not already:
             await self.db.card_links.write_doc(subject, {
                 "link": link, "card_id": subject, "type": req.type,
@@ -252,35 +263,6 @@ class CardService:
         return {
             "status": "ok", "card_id": subject, "link": link, "type": req.type,
             "target_id": tgt, "target_type": _target_type(tgt), "claim": req.claim,
-        }
-
-    # ────────── add position-level session provenance ──────────
-
-    async def add_session(
-        self, card_id: str, session_id: str, position: str = "",
-        indexes: str = "[]",
-    ) -> dict:
-        """Record extra (session, indexes) provenance for a Position (or, with
-        an empty ``position``, card-level provenance via position_sessions's
-        '' position bucket). The mark-grounded ``card_sessions`` write-path is
-        owned by the (deferred) mark phase; this method serves the position
-        ``--source`` overflow only."""
-        if not await self.db.cards.exists(card_id):
-            raise CardNotFound(f"card {card_id} not found")
-        if not _is_session_id(session_id):
-            raise CardServiceError("invalid session_id prefix")
-        if position and not (position.startswith("p") and position[1:].isdigit()):
-            raise CardServiceError("invalid position seq (expected 'p<n>')")
-        now = _utc_iso()
-        await self.db.position_sessions.insert(
-            card_id, position, session_id, indexes, now,
-        )
-        await self.events.card_event(
-            card_id, "session_cited", session_id=session_id, position=position,
-        )
-        return {
-            "status": "ok", "card_id": card_id, "session_id": session_id,
-            "position": position,
         }
 
     # ────────── internal: best-effort vector upsert ──────────

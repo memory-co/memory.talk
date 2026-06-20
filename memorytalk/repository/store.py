@@ -66,10 +66,11 @@ class SQLiteStore:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         conn = await aiosqlite.connect(str(db_path))
         conn.row_factory = aiosqlite.Row
-        # PRAGMA foreign_keys=ON gates the FOREIGN KEY clauses in our
-        # schema. SQLite default-off; we want referential integrity at
-        # the boundary.
-        await conn.execute("PRAGMA foreign_keys = ON")
+        # No PRAGMA foreign_keys: the v4 schema declares ZERO FOREIGN KEY
+        # constraints by design (hard no-FK rule — referential integrity is
+        # enforced in the service layer, and cross-subsystem rows like
+        # card_sessions deliberately tolerate dangling refs). Turning the
+        # pragma on would be a no-op against this schema and only mislead.
         return conn
 
     async def close(self) -> None:

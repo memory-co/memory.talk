@@ -21,6 +21,7 @@ from memorytalk.service.card_read import V4ReadService
 from memorytalk.service.card_search import V4SearchService
 
 SEEDED_SESSION = "sess-test0001"
+SEEDED_SESSION_2 = "sess-test0002"
 
 
 @pytest.fixture
@@ -31,16 +32,18 @@ async def cardsvc(data_root):
     await v4_init.run(conn, data_root=None)   # v3 infra + v4 card tables
     storage = LocalStorage(config.data_root)
     db = SQLiteStore(conn, config.db_path, storage)
-    await db.sessions.upsert(
-        SEEDED_SESSION, "claude-code", "/x",
-        "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z", {}, 5, "r5",
-    )
+    for _sid in (SEEDED_SESSION, SEEDED_SESSION_2):
+        await db.sessions.upsert(
+            _sid, "claude-code", "/x",
+            "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z", {}, 5, "r5",
+        )
     svc = CardService(db=db, search=None, events=EventWriter(db))
     read = V4ReadService(db)
     search = V4SearchService(db, None)   # no backend → empty-query/DSL path
     try:
         yield SimpleNamespace(
-            svc=svc, db=db, session=SEEDED_SESSION, read=read, search=search,
+            svc=svc, db=db, session=SEEDED_SESSION, session2=SEEDED_SESSION_2,
+            read=read, search=search,
         )
     finally:
         await conn.close()

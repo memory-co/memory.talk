@@ -38,8 +38,21 @@ class CreateCardResponse(BaseModel):
 class CreatePositionRequest(BaseModel):
     claim: str
     scope: str = ""
+    # Provenance: each (session_id, indexes) lands one position_sessions row
+    # (position→session, position=p<n>). ``source`` is the single-source
+    # convenience; ``sources`` carries a multi-source list. The service
+    # unions both (see ``CreatePositionRequest.all_sources``).
     source: SourceRef | None = None
+    sources: list[SourceRef] = []
     forked_from: str | None = None      # 'p<n>' | None (lineage)
+
+    def all_sources(self) -> list[SourceRef]:
+        """Union of ``source`` (single) + ``sources`` (list), in order."""
+        out: list[SourceRef] = []
+        if self.source is not None:
+            out.append(self.source)
+        out.extend(self.sources)
+        return out
 
 
 class CreatePositionResponse(BaseModel):
@@ -75,6 +88,9 @@ class CreateLinkRequest(BaseModel):
     target_id: str
     claim: str
     card_id: str | None = None
+    # Provenance: each (session_id, indexes) lands one link_sessions row
+    # (link→session, link=l<n>). Mirrors a Position's ``--source``.
+    source: list[SourceRef] = []
 
 
 class CreateLinkResponse(BaseModel):
@@ -85,19 +101,6 @@ class CreateLinkResponse(BaseModel):
     target_id: str
     target_type: str
     claim: str
-
-
-class CreateCardSessionRequest(BaseModel):
-    session_id: str
-    position: str = ""             # "" = card-level, else 'p<n>' provenance
-    indexes: str = "[]"
-
-
-class CreateCardSessionResponse(BaseModel):
-    status: Literal["ok"] = "ok"
-    card_id: str
-    session_id: str
-    position: str
 
 
 class V4SearchRequest(BaseModel):

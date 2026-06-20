@@ -47,6 +47,38 @@ async def test_add_position_bumps_count_and_links_source(cardsvc):
     assert (await cardsvc.db.positions.read_doc(cid, pos))["position"] == pos
 
 
+async def test_add_position_multi_source_writes_one_row_each(cardsvc):
+    # Every --source must land its own position_sessions row under the minted
+    # p<n> (the old behaviour POSTed overflow sources to a card-level bucket).
+    cid = await cardsvc.svc.create_card(CreateCardRequest(issue="Which db?"))
+    pos = await cardsvc.svc.add_position(cid, CreatePositionRequest(
+        claim="SQLite",
+        sources=[
+            SourceRef(session_id=cardsvc.session, indexes="1-3"),
+            SourceRef(session_id=cardsvc.session2, indexes="4,5"),
+        ],
+    ))
+    ps = await cardsvc.db.position_sessions.list_for_position(cid, pos)
+    assert len(ps) == 2
+    # all rows carry the minted position seq (never the '' card-level bucket)
+    assert all(r["position"] == pos for r in ps)
+    assert {r["session_id"] for r in ps} == {cardsvc.session, cardsvc.session2}
+    assert {r["indexes"] for r in ps} == {"1-3", "4,5"}
+
+
+async def test_add_position_source_and_sources_union(cardsvc):
+    # ``source`` (single) + ``sources`` (list) union, all under p<n>.
+    cid = await cardsvc.svc.create_card(CreateCardRequest(issue="Which db?"))
+    pos = await cardsvc.svc.add_position(cid, CreatePositionRequest(
+        claim="SQLite",
+        source=SourceRef(session_id=cardsvc.session, indexes="1"),
+        sources=[SourceRef(session_id=cardsvc.session2, indexes="2")],
+    ))
+    ps = await cardsvc.db.position_sessions.list_for_position(cid, pos)
+    assert {r["session_id"] for r in ps} == {cardsvc.session, cardsvc.session2}
+    assert all(r["position"] == pos for r in ps)
+
+
 async def test_add_position_unknown_card_404(cardsvc):
     with pytest.raises(CardNotFound):
         await cardsvc.svc.add_position("card_nope", CreatePositionRequest(claim="x"))
@@ -133,6 +165,41 @@ async def test_link_related_canonicalized(cardsvc):
     await cardsvc.svc.link(a, CreateLinkRequest(
         type="related", target_id=b, claim="kin"))
     assert len(await cardsvc.db.card_links.list_out("card_aaa")) == 1
+
+
+async def test_link_source_writes_link_sessions(cardsvc):
+    # ``--source`` on a link mirrors a Position's --source: one link_sessions
+    # row per source, under the minted l<n>.
+    a = await cardsvc.svc.create_card(CreateCardRequest(issue="qa"))
+    b = await cardsvc.svc.create_card(CreateCardRequest(issue="qb"))
+    res = await cardsvc.svc.link(a, CreateLinkRequest(
+        type="specializes", target_id=b, claim="b narrows a",
+        source=[
+            SourceRef(session_id=cardsvc.session, indexes="1-2"),
+            SourceRef(session_id=cardsvc.session2, indexes="7"),
+        ],
+    ))
+    link = res["link"]
+    rows = await cardsvc.db.link_sessions.list_for_link(a, link)
+    assert len(rows) == 2
+    assert all(r["card_id"] == a and r["link"] == link for r in rows)
+    assert {r["session_id"] for r in rows} == {cardsvc.session, cardsvc.session2}
+    assert {r["indexes"] for r in rows} == {"1-2", "7"}
+    # reverse lookup: which edges a session surfaced
+    rev = await cardsvc.db.link_sessions.list_links_for_session(cardsvc.session)
+    assert any(r["link"] == link for r in rev)
+
+
+async def test_link_source_bad_session_rejected(cardsvc):
+    a = await cardsvc.svc.create_card(CreateCardRequest(issue="qa"))
+    b = await cardsvc.svc.create_card(CreateCardRequest(issue="qb"))
+    with pytest.raises(CardServiceError):
+        await cardsvc.svc.link(a, CreateLinkRequest(
+            type="specializes", target_id=b, claim="why",
+            source=[SourceRef(session_id="sess-nope0000", indexes="1")],
+        ))
+    # rejected before any link_sessions write
+    assert await cardsvc.db.card_links.list_out(a) == []
 
 
 async def test_link_position_target_only_suggested_by(cardsvc):
