@@ -41,7 +41,7 @@ List     GET   /v4/sessions/{session_id}/marks      列这个 session 的所有 
 1. **乐观锁校验**:`last_index` == session `max(round_index)`?否 → 409,不写任何东西。
 2. 按提交里每条的 `id`(`m<n>`)→ 落 `marks/<id>.yaml`(canonical · YAML)+ 插一行 `session_marks`(`id` 缺失 / 跳号 / 复用 → 400,整份拒绝)。
 3. 解析每条 `mark` 的 `#…？` → embed 撞 `cards`(issue)向量库,按三岔:
-   - **miss → 建新卡**(这是**唯一的建卡入口**,没有独立 `POST /v4/cards`):`issue` = 该 `#…？` 的问题文本(非空)、自动生成 `card_id` = `card_<ULID>`、embed `issue` 写 `cards` collection、落 `cards/<bucket>/<card_id>/card.json`(canonical:`issue` + `created_at`,**创建即冻**)。
+   - **miss → 建新卡**(读 session 抽卡的入口;**另有**显式 [`POST /v4/cards`](cards.md) 用于不从 session 来的卡,如质疑另一问题):`issue` = 该 `#…？` 的问题文本(非空)、自动生成 `card_id` = `card_<ULID>`、embed `issue` 写 `cards` collection、落 `cards/<bucket>/<card_id>/card.json`(canonical:`issue` + `created_at`,**创建即冻**)。
    - **hit → 关联**老卡(不动老卡)。
    - 两种都各记一条 [`card_sessions`](../../structure/v4/card-session.md):`mark` = `m<n>` + `indexes` = 这条 `#…？` grounding 的 round(s)(出处指 `(session_id, mark)`,记录它从哪几轮来)。embedding provider 失败 → 该问题建卡**降级**(见 503),不阻塞整份提交。
 

@@ -2,18 +2,34 @@
 
 v4 卡的**写入**入口(给卡加答案 / 表态 / 连边)。一张卡 = 一个问题(Issue)+ 若干答案(Position),Card 和 Position 是两个对象。
 
-> **问题(卡)本身不在这里建** —— 它由 [`session mark`](session.md#session-mark) 里的 `#…？` 在读 session 时**自动建 / 关联**(`#…？` miss = 新卡、hit = 连老卡;见 [生命周期 §1](../../works/v4/card-lifecycle.md))。`card` 命令组管的是对**已有卡**的写:加答案、顶踩、连边。
+> **问题(卡)有两个建法**:① 读 session 时由 [`session mark`](session.md#session-mark) 的 `#…？` **自动建 / 关联**(miss=新卡、hit=连老卡,主路径,见 [生命周期 §1](../../works/v4/card-lifecycle.md));② `card create` **显式建**(用于不从读 session 来的卡,如质疑另一问题)。`card` 命令组:建问题(create)、加答案、顶踩、连边。
 
 ```
 memory.talk card
+├── create --issue '<问题>' [--card_id <id>] [--json]
 ├── position --card <cid> --claim '<答案>' [--source <sid>:<idx> ...] [--scope '<场景>'] [--json]
 ├── review --target <card#p<n> | card#l<n>> --argument <+1|0|-1> --cite <sid>:<idx> [--comment '<一句话>'] [--review_id <id>] [--json]
 └── link --card <cid> --type <type> --target <id> --claim '<这条边为什么成立>' [--source <sid>:<idx> ...] [--json]   # 卡间 IBIS 边(受治理);看边走 read
 ```
 
-**读**一张卡(问题 + 它所有答案 + 边 + 出处)走 [`read <card_id>`](read.md),读单条边走 [`read card_xxx#l1`](read.md);找卡走 [`search`](search.md);hook 召回走 [`recall`](recall.md);**建问题(卡)走 [`session mark`](session.md#session-mark)**。
+**读**一张卡(问题 + 它所有答案 + 边 + 出处)走 [`read <card_id>`](read.md),读单条边走 [`read card_xxx#l1`](read.md);找卡走 [`search`](search.md);hook 召回走 [`recall`](recall.md);**建问题(卡):`card create`(显式)或 [`session mark`](session.md#session-mark) 的 `#…？`(从读 session)**。
 
 > **参数风格:除 `read` / `search` 用位置参数(裸 id / query)外,所有命令的参数都是命名 flag(`--xx`)。** `card` 不带子命令直接打印 help。设计推理见 [`../../works/v4/card.md`](../../works/v4/card.md)。
+
+## card create
+
+**显式建**一张卡——立一个问题,不带答案。**用于不从读 session 来的卡**(如提一个 `questions` 边去**质疑另一问题**);读 session 抽出的卡走 [`session mark`](session.md#session-mark) 的 `#…？`。答案另走 [`card position`](#card-position)。
+
+```bash
+memory.talk card create --issue '<问题文本>' [--card_id <id>] [--json]
+```
+
+| 参数 | 必填 | 说明 |
+|---|---|---|
+| `--issue` | 是 | 问题文本(`issue`),也是 embedding 锚点(检索撞的就是它)。值支持 `@<file>` / `@-`(见 [#文本传文件--stdin](#文本传文件--stdin)) |
+| `--card_id` | 否 | 显式指定 id;不提供则自动生成 `card_<ULID>` |
+
+输出 `{"status":"ok","card_id":"card_…"}`。副作用:落 `cards`(`issue` + `created_at`)+ 写向量库;`cards/<bucket>/<card_id>/card.json`(问题不可变);**不落任何 Position**。错误:`--issue` 缺失 → `--issue required`;`--card_id` 前缀错 / 已存在 → 报错 exit 1。
 
 ## card position
 
@@ -48,7 +64,7 @@ memory.talk card position --card <card_id> --claim '<答案文本>' \
 
 ### 文本传文件 / stdin
 
-文本类 flag 的值——`--claim` / `--scope`(position)、`--claim`(link)、`--comment`(review)——都有三种传法,后两种**不经 shell / JSON 转义**,专门用于内容带引号、换行、`$`、反引号等特殊字符的情况:
+文本类 flag 的值——`--issue`(create)、`--claim` / `--scope`(position)、`--claim`(link)、`--comment`(review)——都有三种传法,后两种**不经 shell / JSON 转义**,专门用于内容带引号、换行、`$`、反引号等特殊字符的情况:
 
 | 写法 | 含义 |
 |---|---|
@@ -151,7 +167,7 @@ memory.talk card link --card <card_id> --type <type> --target <target_id> --clai
 
 | 想做的事 | 用哪条 |
 |---|---|
-| 建一个新问题(卡) | 在 [`session mark`](session.md#session-mark) 里写 `#…？`(卡由 mark 自动建,无 `card create`) |
+| 建一个新问题(卡) | `card create --issue`(显式,如质疑另一问题)或 [`session mark`](session.md#session-mark) 的 `#…？`(从读 session) |
 | 给问题加一个答案 | `card position --card <cid> --claim '<A>' [--source ...]` |
 | 对某个答案 / 某条边顶 / 踩 / 中立 | `card review --target <card_xxx#p<n> \| card_xxx#l<n>> --argument <+1\|0\|-1> --cite ...` |
 | 连两张卡(IBIS 边,带理由) | `card link --card <cid> --type <type> --target <id> --claim '<为什么>'` |

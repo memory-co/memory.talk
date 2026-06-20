@@ -13,7 +13,8 @@ Recall       POST   /v4/recall                              hook 阶段无意识
 Search       POST   /v4/search                              有意识检索：撞问题 + where DSL，返回卡 + 当下答案
 Read         POST   /v4/read                                按 id 读 card_ / card_…#p / sess_（判型）
 
-Cards        GET    /v4/cards                               列卡（按时间 / 数量；建卡由 mark 写路径，无 POST /v4/cards）
+Cards        POST   /v4/cards                               建卡（显式,如质疑另一问题;另有 mark 写路径自动建）
+             GET    /v4/cards                               列卡（按时间 / 数量）
              POST   /v4/cards/{card_id}/positions           给某卡加一个答案 Position
              GET    /v4/cards/{card_id}/positions           列某卡的所有答案（各带计数 + 现算 credence）
              POST   /v4/cards/{card_id}/links               给某卡建一条 IBIS 边（受治理:claim + 现算 credence；看边走 /v4/read,无单独列边端点）

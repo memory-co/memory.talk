@@ -1,10 +1,57 @@
 # Cards API
 
-卡 = 一个**问题**（`issue`）+ 它底下的若干**答案候选**（Position）。本页端点：列卡、给卡加答案、列答案、列出处（card→session）。**卡的创建不在本页** —— 卡由 mark 写路径建（[`session-marks.md`](session-marks.md) 的 `#…？` miss）。
+卡 = 一个**问题**（`issue`）+ 它底下的若干**答案候选**（Position）。本页端点：**建卡**、列卡、给卡加答案、列答案、列出处（card→session）。**建卡两条路**:本页 `POST /v4/cards`（**显式**建,用于不从读 session 来的卡,如**质疑另一问题**）+ [mark 写路径](session-marks.md)（`#…？` miss,读 session 时自动建）。
 
 读单卡 / 单 Position 走 [`POST /v4/read`](read.md)（`card_` 与 `card_…#p<n>` 分片都认）。对答案表态走 [`POST /v4/cards/{cid}/positions/{p}/reviews`](reviews.md)。
 
-CLI 对应 [`card position`](../../cli/v4/card.md)(问题由 [`session mark`](../../cli/v4/session.md#session-mark) 的 `#…？` 建)（读卡走 [`read`](../../cli/v4/read.md))。字段语义详见 [`../../structure/v4/card.md`](../../structure/v4/card.md)。
+CLI 对应 [`card create` / `card position`](../../cli/v4/card.md)（显式建卡 / 加答案;读 session 抽卡走 [`session mark`](../../cli/v4/session.md#session-mark) 的 `#…？`;读卡走 [`read`](../../cli/v4/read.md)）。字段语义详见 [`../../structure/v4/card.md`](../../structure/v4/card.md)。
+
+---
+
+## POST /v4/cards
+
+**显式建卡** —— 用于**不从 session `#…？` 来**的卡:比如提一个新问题去 `questions`(质疑)另一张卡,这张卡不是读 session 抽出来的。读 session 抽出的卡走 [mark 写路径](session-marks.md)(`#…？` miss);两条路都落一张卡(同一套 canonical)。
+
+创建一张卡（一个 `issue`）。**只建问题，不带答案**——答案（Position）走 [`POST /v4/cards/{card_id}/positions`](#post-v4cardscard_idpositions)。一张没有任何 Position 的卡是合法的（还在等答案的问题）。自动计算 `issue` 的 embedding 并写向量库。
+
+### 请求体
+
+```json
+{
+  "issue": "用户偏好什么回答风格?",
+  "card_id": "card_01jz8k2m"
+}
+```
+
+| 字段 | 必填 | 说明 |
+|---|---|---|
+| `issue` | 是 | 问题文本，也是 embedding 锚点（检索撞的就是它） |
+| `card_id` | 否 | 不提供则自动生成 `card_<ULID>`；传入必须是 `card_<...>` 形态 |
+
+> 一张卡 = 一个问题（1:1）。`issue` 创建即冻（不可变核）。卡↔卡的边不在这里建，走 [`POST /v4/cards/{card_id}/links`](card-links.md)。
+
+### 响应
+
+```json
+{"status": "ok", "card_id": "card_01jz8k2m"}
+```
+
+返回的 `card_id` 是带前缀裸 id，可直接喂给后续端点（加答案、连边）。
+
+### 副作用
+
+- 校验 `issue` 非空 → 失败整条不落库。
+- 自动计算 `issue` 的 embedding，写向量库（`cards` collection）。
+- 落盘 `cards/<bucket>/<card_id>/card.json`（canonical：`issue` + `created_at`）。
+
+### 错误
+
+| 情况 | 状态 / 消息 |
+|---|---|
+| `issue` 为空 / 非字符串 | 400, `issue required` |
+| 显式传入 `card_id` 前缀错 | 400, `invalid card_id prefix` |
+| 显式传入 `card_id` 已存在 | 409, `card_id already exists` |
+| embedding provider 调用失败 | 500, `embedding failed: <details>` |
 
 ---
 
