@@ -17,7 +17,7 @@ v4 是 **card 的另一代**:一张卡不再是「一句陈述」,而是「**一
 | Review | append-only,对 **Position** 的一次表态(`argument` ±1/0 + 证据 indexes) | [review.md](review.md) |
 | CardLink | card↔card 的 IBIS 有向边(specializes / suggested_by / ...) | [card-link.md](card-link.md) |
 | CardSession | **card→session** 出处(某条 **mark** 的 `#…？` 建/连了这张卡;同一对可多条) | [card-session.md](card-session.md) |
-| PositionSession | **position→session** 出处(答案来自某 session 的哪几轮 `indexes`;**无 mark**) | [position-session.md](position-session.md) |
+| PositionSession | **position→session** 出处(答案来自某 session 的哪几轮 `indexes`;**`mark` 可选**) | [position-session.md](position-session.md) |
 | SessionMark | session 目录下逐 round 注解(`marks/m<n>.yaml` + `session_marks` 表),v4 新增 | [session-mark.md](session-mark.md) |
 
 > **基础设施文档**(下面这些在 v4 大体沿用 v3,只有少量 v4 增量,各页都是指回 v3 的短指针):
