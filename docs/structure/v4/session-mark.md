@@ -37,6 +37,7 @@ issues:                    # 写入时解析 #…？ + 撞库的结果(canonical
   - issue: 为什么 pty 会让用户想到 tmux
     card_id: card_01jz8k2m
     is_new: true
+    indexes: 36-37            # 这条 #…？ 从哪几轮读出来的(可多个)
 created_at: 2026-06-16T08:30:00Z
 ```
 
@@ -45,7 +46,7 @@ created_at: 2026-06-16T08:30:00Z
 | `last_index` | 提交时读到的 session 最新 round index;乐观锁基线(写入时与 session 当前最新 round index 比,不一致拒绝) |
 | `description` | 这次标注的场景(随提交带进每个 mark 文件) |
 | `mark` | 自由文本感悟;`#…？`(`#` 起、`？`/`?` 止)= 就地标的问题 |
-| `issues[]` | 解析 `#…？` + 撞 `cards` 库的结果:`{issue, card_id, is_new}`(新卡 / 关联老卡)。**canonical**——`card_sessions` 由它派生 |
+| `issues[]` | 解析 `#…？` + 撞 `cards` 库的结果:`{issue, card_id, is_new, indexes}`(`indexes` = 这条 issue grounding 的 round〔可多个〕)。**canonical**——`card_sessions` 由它派生 |
 | `created_at` | ISO 8601 |
 
 - **append-only**:写一次不动;改主意 = 加新 `m<n>`。
@@ -84,6 +85,6 @@ CREATE INDEX idx_session_marks_session ON session_marks(session_id);  -- 列 ses
 | 表 | 管什么 |
 |---|---|
 | `session_marks` | mark 自己的元信息(序号 / round / `last_index` / 时间) |
-| [`card_sessions`](card-session.md) | mark → card 的出处边(`card_id` + `session_id` + `mark`;**无 `position`、无 `indexes`**——答案级出处在 [`position_sessions`](position-session.md)) |
+| [`card_sessions`](card-session.md) | mark → card 的出处边(`card_id` + `session_id` + `mark` + `indexes`〔这问题 grounding 的 round〕;**无 `position`**——答案级出处在 [`position_sessions`](position-session.md)) |
 
 `session_marks` 是「有哪些 mark」,`card_sessions` 是「哪条 mark 启发了哪张卡」;两者都从 `marks/*.yaml`(canonical · `issues[]`)派生。

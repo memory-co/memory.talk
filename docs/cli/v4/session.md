@@ -154,6 +154,7 @@ last_index: 41          # 乐观锁:提交时我读到的 session 最新 round i
 description: 在配 pty、用户突然提 tmux 的那几轮——想搞清他到底要什么
 marks:
   - id: m1
+    indexes: 36-37        # 这条的 #…？ 从哪几轮读出来的(含 #…？ 必给)
     mark: |
       配 pty 的时候用户突然提了 tmux。#为什么 pty 会让用户想到 tmux？
       他其实想要的是「可重连的会话」,而不是 pty 本身。
@@ -167,6 +168,7 @@ marks:
 | `description` | 是 | 这次标注的场景;随每条 mark 落盘 |
 | `marks` | 是 | 数组,每条 `{mark: <文本>}`,**非空**。`mark` 里 `#…？`(`#` 起、`？`/`?` 止)就地标问题 |
 | `marks[].id` | **是** | mark id `m<n>`,**每条显式给、不默认分配**;session 内单调、不跳号 / 不复用(续标接着上次最大序号) |
+| `marks[].indexes` | **含 `#…？` 时必给** | 这条 mark 的 `#…？` grounding 的 round(s)(问题从哪几轮读出来的;可多个,`36-37` / `3,7,12`)→ 落 `card_sessions.indexes`。**交互模式自动填当前阅读窗口的 round**;无 `#…？` 的 mark 不需要 |
 
 ### 交互模式
 
@@ -224,7 +226,7 @@ Markdown(默认):
   "session_id": "sess_def456",
   "last_index": 41,
   "marks": [
-    {"mark": "m1", "issues": [{"issue": "为什么 pty 会让用户想到 tmux", "card_id": "card_01jz8k2m", "is_new": true}]},
+    {"mark": "m1", "issues": [{"issue": "为什么 pty 会让用户想到 tmux", "card_id": "card_01jz8k2m", "is_new": true, "indexes": "36-37"}]},
     {"mark": "m2", "issues": []}
   ]
 }

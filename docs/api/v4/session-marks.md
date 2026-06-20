@@ -20,7 +20,7 @@ List     GET   /v4/sessions/{session_id}/marks      列这个 session 的所有 
   "last_index": 41,
   "description": "在配 pty、用户突然提 tmux 的那几轮——想搞清他到底要什么",
   "marks": [
-    {"id": "m1", "mark": "配 pty 时用户突然提了 tmux。#为什么 pty 会让用户想到 tmux？\n他其实想要可重连会话。"},
+    {"id": "m1", "indexes": "36-37", "mark": "配 pty 时用户突然提了 tmux。#为什么 pty 会让用户想到 tmux？\n他其实想要可重连会话。"},
     {"id": "m2", "mark": "这段在排查 EMFILE,跟句柄上限有关。"}
   ]
 }
@@ -30,8 +30,9 @@ List     GET   /v4/sessions/{session_id}/marks      列这个 session 的所有 
 |---|---|---|
 | `last_index` | 是 | 提交时读到的 session 最新 round index(乐观锁基线) |
 | `description` | 是 | 这次标注的场景;随每条 mark 落盘 |
-| `marks[]` | 是 | 非空数组,每条 `{mark: <文本>}`;`mark` 里 `#…？` = 问题 |
+| `marks[]` | 是 | 非空数组,每条 `{id, mark, indexes?}`;`mark` 里 `#…？` = 问题 |
 | `marks[].id` | **是** | mark id `m<n>`,**每条显式给、不默认分配**。session 内单调、不跳号 / 不复用(续标接着上次最大序号往后;不知道当前最大就先 `GET …/marks`) |
+| `marks[].indexes` | **含 `#…？` 时必给** | 这条 mark 的 `#…？` grounding 的 round(s)——问题从哪几轮读出来的;可多个,语法同 `reviews.indexes`(`36-37` / `3,7,12`)。落进 `card_sessions.indexes`(那条 mark 建/连的卡都用它)。无 `#…？` 的 mark 不需要 |
 
 > wire 也接受 YAML（CLI 直接转发);字段同上。
 
@@ -42,7 +43,7 @@ List     GET   /v4/sessions/{session_id}/marks      列这个 session 的所有 
 3. 解析每条 `mark` 的 `#…？` → embed 撞 `cards`(issue)向量库,按三岔:
    - **miss → 建新卡**(这是**唯一的建卡入口**,没有独立 `POST /v4/cards`):`issue` = 该 `#…？` 的问题文本(非空)、自动生成 `card_id` = `card_<ULID>`、embed `issue` 写 `cards` collection、落 `cards/<bucket>/<card_id>/card.json`(canonical:`issue` + `created_at`,**创建即冻**)。
    - **hit → 关联**老卡(不动老卡)。
-   - 两种都各记一条 [`card_sessions`](../../structure/v4/card-session.md),`mark` 列 = `m<n>`(出处指 `(session_id, mark)`)。embedding provider 失败 → 该问题建卡**降级**(见 503),不阻塞整份提交。
+   - 两种都各记一条 [`card_sessions`](../../structure/v4/card-session.md):`mark` = `m<n>` + `indexes` = 这条 `#…？` grounding 的 round(s)(出处指 `(session_id, mark)`,记录它从哪几轮来)。embedding provider 失败 → 该问题建卡**降级**(见 503),不阻塞整份提交。
 
 ### 响应 `200`
 
@@ -51,7 +52,7 @@ List     GET   /v4/sessions/{session_id}/marks      列这个 session 的所有 
   "session_id": "sess_def456",
   "last_index": 41,
   "marks": [
-    {"mark": "m1", "issues": [{"issue": "为什么 pty 会让用户想到 tmux", "card_id": "card_01jz8k2m", "is_new": true}]},
+    {"mark": "m1", "issues": [{"issue": "为什么 pty 会让用户想到 tmux", "card_id": "card_01jz8k2m", "is_new": true, "indexes": "36-37"}]},
     {"mark": "m2", "issues": []}
   ]
 }

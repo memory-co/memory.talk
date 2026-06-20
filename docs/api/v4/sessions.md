@@ -274,7 +274,7 @@ List session 元数据(**不带 rounds**)。CLI 入口 [`memory.talk session lis
 {
   "session_id": "sess_abc123",
   "cards": [
-    {"card_id": "card_01jz8k2m", "mark": "m1", "created_at": "2026-05-24T09:12:03Z"}
+    {"card_id": "card_01jz8k2m", "mark": "m1", "indexes": "36-37", "created_at": "2026-05-24T09:12:03Z"}
   ]
 }
 ```

@@ -156,13 +156,13 @@ CLI 对应 [`card position`](../../cli/v4/card.md)(问题由 [`session mark`](..
 {
   "card_id": "card_01jz8k2m",
   "sessions": [
-    {"session_id": "sess_abc", "mark": "m1", "created_at": "2026-05-24T09:12:03Z"},
-    {"session_id": "sess_def", "mark": "m3", "created_at": "2026-05-24T09:40:00Z"}
+    {"session_id": "sess_abc", "mark": "m1", "indexes": "36-37", "created_at": "2026-05-24T09:12:03Z"},
+    {"session_id": "sess_def", "mark": "m3", "indexes": "12,18", "created_at": "2026-05-24T09:40:00Z"}
   ]
 }
 ```
 
-每行 = 某 session 的某条 mark(`m<n>`,寻址 `session_id#mark`)建 / 连了本卡;同一对可多条(不同 mark)。
+每行 = 某 session 的某条 mark(`m<n>`,寻址 `session_id#mark`)建 / 连了本卡,`indexes` 是这问题从哪几轮读出来的;同一对可多条(不同 mark)。
 
 ### 错误
 
