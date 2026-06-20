@@ -57,7 +57,10 @@ def resolve_port(cfg: Config) -> int:
 
 def _default_client(cfg: Config) -> httpx.Client:
     base = f"http://127.0.0.1:{resolve_port(cfg)}"
-    return httpx.Client(base_url=base, timeout=30.0)
+    # trust_env=False: never route the loopback call to the local daemon
+    # through HTTP(S)_PROXY / NO_PROXY env — a configured proxy would
+    # otherwise intercept 127.0.0.1 and surface as "Server disconnected".
+    return httpx.Client(base_url=base, timeout=30.0, trust_env=False)
 
 
 _make_client: Optional[Callable[[Config], httpx.Client]] = None
