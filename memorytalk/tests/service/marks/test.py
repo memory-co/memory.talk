@@ -217,3 +217,82 @@ async def test_embed_failure_midbatch_persists_nothing(marksvc):
     assert await marksvc.db.card_sessions.list_cards_for_mark(sid, "m2") == []
     assert await marksvc.svc.read_mark(sid, "m1") is None
     assert await marksvc.svc.read_mark(sid, "m2") is None
+
+
+# ────────── integration: interactive walk → real submit ──────────
+
+async def test_interactive_walk_builds_body_that_creates_cards(marksvc, monkeypatch):
+    """The client-side step标注 walk accumulates a submission locally; that
+    SAME body, fed through the real ``submit_marks``, must create cards +
+    card_sessions edges. Proves the interactive path and the file path land
+    identically (no special-casing in the service)."""
+    from memorytalk.cli import _mark as m
+
+    sid = marksvc.session   # seeded round_count == 5
+
+    # Stub the two read-only HTTP calls the walk makes (read rounds + GET
+    # marks for the max seq). The submit goes through the real service.
+    rounds = [
+        {"index": i, "role": "human" if i % 2 else "assistant",
+         "content": [{"type": "text", "text": f"round {i} about pty and tmux"}]}
+        for i in range(1, 6)
+    ]
+
+    def fake_api(method, path, config, json_body=None, **kw):
+        if path == "/v4/read":
+            return {"type": "session", "session": {"rounds": rounds}}
+        if path.endswith("/marks") and method == "GET":
+            return {"marks": []}   # no prior marks → start at m1
+        raise AssertionError(f"unexpected api call {method} {path}")
+
+    monkeypatch.setattr(m, "api", fake_api)
+
+    captured = {}
+
+    def post_fn(cfg, session_id, body, json_out):
+        # Capture the locally-built body; the real (async) submit runs after
+        # the walk so we don't bridge sync→async mid-loop.
+        captured["body"] = body
+        return {"deferred": True}
+
+    def scripted(_answers=iter([
+        "",                          # r1 skip
+        "#why does pty remind the user of tmux？ wants reconnect",  # r2 → m1
+        "",                          # r3 skip
+        "just EMFILE triage, no question.",                        # r4 → m2
+        "",                          # r5 skip
+    ])):
+        return lambda cur: next(_answers, ":q")
+
+    m.run_interactive(
+        cfg=None, session_id=sid, json_out=False, post_fn=post_fn,
+        ask_description=lambda: "reading the pty/tmux stretch",
+        ask_mark=scripted(),
+        echo=lambda *_: None,
+    )
+
+    # The locally-built body: monotonic ids, single-index auto indexes.
+    body = captured["body"]
+    assert body["last_index"] == 5
+    assert [mk["id"] for mk in body["marks"]] == ["m1", "m2"]
+    assert body["marks"][0]["indexes"] == "2"   # current round, not a range
+    assert body["marks"][1]["indexes"] == "4"
+
+    # Feed that exact body through the real submit path.
+    result = await marksvc.svc.submit_marks(
+        sid, body["last_index"], body["description"], body["marks"],
+    )
+
+    # The real submit created a card for m1's #…？ and an edge.
+    m1 = next(mk for mk in result["marks"] if mk["mark"] == "m1")
+    issue = m1["issues"][0]
+    assert issue["is_new"] is True
+    assert issue["card_id"].startswith("card_")
+    assert await marksvc.db.cards.exists(issue["card_id"])
+    edges = await marksvc.db.card_sessions.list_cards_for_mark(sid, "m1")
+    assert edges[0]["card_id"] == issue["card_id"]
+    assert edges[0]["indexes"] == "2"
+    # m2 had no #…？ → no card, no edge.
+    m2 = next(mk for mk in result["marks"] if mk["mark"] == "m2")
+    assert m2["issues"] == []
+    assert await marksvc.db.card_sessions.list_cards_for_mark(sid, "m2") == []

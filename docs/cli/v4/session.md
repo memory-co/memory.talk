@@ -168,7 +168,7 @@ marks:
 | `description` | 是 | 这次标注的场景;随每条 mark 落盘 |
 | `marks` | 是 | 数组,每条 `{mark: <文本>}`,**非空**。`mark` 里 `#…？`(`#` 起、`？`/`?` 止)就地标问题 |
 | `marks[].id` | **是** | mark id `m<n>`,**每条显式给、不默认分配**;session 内单调、不跳号 / 不复用(续标接着上次最大序号) |
-| `marks[].indexes` | **含 `#…？` 时必给** | 这条 mark 的 `#…？` grounding 的 round(s)(问题从哪几轮读出来的;可多个,`36-37` / `3,7,12`)→ 落 `card_sessions.indexes`。**交互模式自动填当前阅读窗口的 round**;无 `#…？` 的 mark 不需要 |
+| `marks[].indexes` | **含 `#…？` 时必给** | 这条 mark 的 `#…？` grounding 的 round(s)(问题从哪几轮读出来的;可多个,`36-37` / `3,7,12`)→ 落 `card_sessions.indexes`。**交互模式自动填当前标注轮的 index**(单轮 `37`,上一轮只作上下文);无 `#…？` 的 mark 不需要 |
 
 ### 交互模式
 

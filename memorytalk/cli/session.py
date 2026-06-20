@@ -228,7 +228,11 @@ def _post_marks(cfg: Config, session_id: str, body: dict, json_out: bool) -> dic
             "POST", f"/v4/sessions/{session_id}/marks", cfg, json_body=body,
         )
     except ApiError as e:
-        _emit_err(json_out, extract_error_message(e.payload))
+        msg = extract_error_message(e.payload)
+        if e.status_code == 409:
+            # Optimistic lock: the session gained rounds since we read it.
+            msg = f"{msg} — session advanced; re-read & re-mark."
+        _emit_err(json_out, msg)
         raise SystemExit(1)
     except Exception as e:
         _emit_err(json_out, f"cannot reach server: {e}")
