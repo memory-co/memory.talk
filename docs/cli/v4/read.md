@@ -10,9 +10,10 @@ memory.talk read <id> [--json]
 |---|---|
 | `card_` | 一张卡:**问题 + 它所有答案**(+ IBIS 边 + 出处) |
 | `card_…#p<n>` 分片 | **单个答案**(Position):`claim` + 顶踩计数 + 现算 credence + scope + 它收到的全部 review |
+| `card_…#l<n>` 分片 | **单条边**(CardLink):`claim` + `type` + `target_id` + 顶踩计数 + 现算 credence + 它收到的全部 review |
 | `sess_` | session(沿用 v3 形态) |
 
-> Position **没有独立 id**——是所属卡的附属,寻址 `card_…#p<n>`。`parse_id` 认出 `card_` id 上的 `#p<n>` 分片就分派到那张卡的第 n 个 Position(跟它认 `sess_…#m<n>` 分派到 mark 一个路子)。
+> Position / CardLink **都没有独立 id**——都是所属卡的附属,寻址 `card_…#p<n>` / `card_…#l<n>`。`parse_id` 认出 `card_` id 上的分片就分派:`#p<n>` → 那张卡的第 n 个 Position、`#l<n>` → 第 n 条 CardLink(跟它认 `sess_…#m<n>` 分派到 mark 一个路子)。
 
 ## `card_` —— 问题 + 它所有答案
 
@@ -103,6 +104,55 @@ memory.talk read <id> [--json]
 ```
 
 `credence` 是响应里现算的字段,不在存储里。字段语义见 [`../../structure/v4/card.md`](../../structure/v4/card.md) / [`review.md`](../../structure/v4/review.md)。
+
+## `card_…#l` —— 单条边 + 它的 review
+
+跟 `card_…#p` 同构,只是读的是一条 CardLink(受治理边):`claim`(这条边为什么成立)+ `type` + `target_id` + 顶踩计数 + 现算 credence + 它收到的全部 review。
+
+### 输出 — Markdown(默认)
+
+`````markdown
+# link `card_01jz8k2m#l1` · `credence +4 · ↑4 ↓0 ·1`
+
+> under card `card_01jz8k2m` — 用户偏好什么回答风格?
+> **specializes** → `card_01jzyyyy`
+
+本卡是它的一个特例 —— 都走同一套 auth,只是把范围收窄到 OAuth 回调这一段。
+
+`created 2026-06-18 15:00`
+
+## reviews (5)
+
+- `+1` `sess_def` #30-34 · 2026-06-18 15:00 — 这条 specializes 边确实成立
+`````
+
+#### 约定
+
+- 标题 `# link card_…#l<n> · \`credence <现算分> · ↑<up> ↓<down> ·<neutral>\``,credence 现算(不是存的);**低于阈值的边在 `read <card_id>` 的 links 段淡出**,但单独 `read card_…#l<n>` 总能读到。
+- 第二行引用所属卡 `card_id` + `issue`;第三行 `**<type>** → <target_id>`。
+- 整段 `claim`(这条边为什么成立)+ 创建时间。
+- `## reviews (N)`:每条 `<argument> <session_id> #<indexes> · 时间 — comment`,按 `created_at` 倒序;无 review 时整段不出。
+
+### 输出 — JSON(`--json`)
+
+```json
+{
+  "card_id": "card_01jz8k2m",
+  "link": "l1",
+  "type": "specializes",
+  "target_id": "card_01jzyyyy",
+  "target_type": "card",
+  "claim": "本卡是它的一个特例 —— 都走同一套 auth,只是把范围收窄到 OAuth 回调这一段。",
+  "up_count": 4, "down_count": 0, "neutral_count": 1, "review_count": 5,
+  "credence": 4,
+  "created_at": "2026-06-18T15:00:00Z",
+  "reviews": [
+    {"review_id": "review_01jzr5kq", "session_id": "sess_def", "indexes": "30-34", "argument": 1, "comment": "这条边确实成立", "created_at": "2026-06-18T15:00:00Z"}
+  ]
+}
+```
+
+`credence` 是响应里现算的字段,不在存储里。字段语义见 [`../../structure/v4/card-link.md`](../../structure/v4/card-link.md) / [`review.md`](../../structure/v4/review.md)。
 
 ## `sess_` —— session
 

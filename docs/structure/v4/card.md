@@ -5,7 +5,9 @@ v4 的核心数据结构 —— 一张卡 = **一个 Card(问题,≡ Issue)+ 它
 - **Card** 是图节点 + 检索单元(embed `issue`)。**不可变核** create 即冻。
 - **Position** 是被顶/踩、按现算 credence 竞争的那个东西。`claim`(答案文本)不可变;顶踩计数 / `scope` / 血缘是 runtime 状态。**Position 没有独立 `pos_` id** —— 它是卡的附属,寻址 `<card_id>#p<n>`(`p` + 卡内递增序号),跟 mark 寻址 `<session_id>#m<n>` 同构(见 [session-mark.md](session-mark.md))。
 
-机制 / 设计推理见 [`../../works/v4/card.md`](../../works/v4/card.md)(§2 问答化、§3 credence、§5 治理)。Review / CardLink / CardSession 各自独立,见 [review.md](review.md) / [card-link.md](card-link.md) / [card-session.md](card-session.md)。
+机制 / 设计推理见 [`../../works/v4/card.md`](../../works/v4/card.md)(§2 问答化、§3 credence、§4 IBIS、§5 治理)。Review / CardLink / CardSession 各自独立,见 [review.md](review.md) / [card-link.md](card-link.md) / [card-session.md](card-session.md)。
+
+> **CardLink 也是受治理对象**:一条 IBIS 边(`card_links`)跟 Position 一样有 `claim` / 顶踩计数 / **现算 credence** / 证据 / append-only,寻址 `<card_id>#l<n>`,可被 review。区别只在**竞争语义**:Position = 择优(credence 选当下答案),Link = 存在即合理(credence 定每条边去留,不竞争)。详见 [card-link.md](card-link.md)。
 
 ## Schema
 
@@ -111,12 +113,15 @@ v4 的核心数据结构 —— 一张卡 = **一个 Card(问题,≡ Issue)+ 它
 ```
 cards/<bucket>/<card_id>/
 ├── card.json                    # canonical:issue + created_at(问题不可变)
-└── positions/
-    ├── p1.json                  # canonical:claim + created_at(答案核不可变),文件名 = p<n>
-    └── p2.json
+├── positions/
+│   ├── p1.json                  # canonical:claim + created_at(答案核不可变),文件名 = p<n>
+│   └── p2.json
+└── links/
+    ├── l1.json                  # canonical:type + target_id + claim + created_at(边核不可变),文件名 = l<n>
+    └── l2.json
 ```
 
-`<bucket>` = `card_id` ULID 部分前 2 字符(代码 `card_id[5:7]`,跳过 `card_` 前缀)。Position 文件放在所属卡目录下、按卡内序号 `p<n>` 命名 —— 一张卡 = 一个问题 + 它的答案们,物理聚在一起(跟 mark 的 `marks/m<n>.yaml` 同构)。
+`<bucket>` = `card_id` ULID 部分前 2 字符(代码 `card_id[5:7]`,跳过 `card_` 前缀)。Position 文件放在所属卡目录下、按卡内序号 `p<n>` 命名;CardLink 文件同构落 `links/l<n>.json`(边核 `type` + `target_id` + `claim` 不可变)—— 一张卡 = 一个问题 + 它的答案们 + 它的边们,物理聚在一起(跟 mark 的 `marks/m<n>.yaml` 同构)。详见 [card-link.md](card-link.md)。
 
 ### Runtime state(SQLite)
 
