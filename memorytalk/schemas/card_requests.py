@@ -16,6 +16,20 @@ class CreateCardRequest(BaseModel):
     card_id: str | None = None
 
 
+class MarkInput(BaseModel):
+    # ``id`` is explicit ``m<n>`` (not server-assigned). ``indexes`` is
+    # required only when ``mark`` carries ``#…？``; the service validates.
+    id: str
+    mark: str
+    indexes: str | None = None
+
+
+class SubmitMarksRequest(BaseModel):
+    last_index: int
+    description: str
+    marks: list[MarkInput]
+
+
 class CreateCardResponse(BaseModel):
     status: Literal["ok"] = "ok"
     card_id: str

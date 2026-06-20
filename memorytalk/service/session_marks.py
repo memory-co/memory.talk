@@ -1,0 +1,226 @@
+"""SessionMarkService — the v4 session-mark write path ("以写代读").
+
+A submission = one optimistic-locked batch of marks for one session. Each
+mark's free text carries ``#…？`` issues; on write every issue is embedded
+and collided against the ``cards`` (issue) vector library:
+
+  miss (relevance < θ)  → create a NEW card        (is_new=True)
+  hit  (relevance >= θ) → link the EXISTING card   (is_new=False)
+
+…and either way a ``card_sessions`` row records the provenance edge
+``(card_id, session_id, mark, indexes)`` — granular to *that mark*. The
+mark body (incl. resolved ``issues[]``) is written canonical to
+``marks/<mark>.yaml``; ``session_marks`` holds its metadata.
+
+Ordering & invariants (docs/works/v4/session-mark.md):
+  1. Optimistic lock: ``last_index`` must equal the session's current max
+     round index (== ``round_count``, rounds are 1-indexed). Mismatch →
+     ``MarkConflict`` (409). Nothing is written.
+  2. Validate every ``id``: explicit ``m<n>``, session-monotonic, no
+     skip/reuse. The next id must equal ``next_seq`` (count+1) at the time
+     that mark is inserted. Bad → ``MarkServiceError`` (400). Validated up
+     front before any write, so a bad batch writes nothing.
+  3. Per mark, in order: insert ``session_marks`` row (mints the same
+     ``m<n>``), parse ``#…？`` → embed/collide each issue → create/link a
+     card + a ``card_sessions`` row, then write ``marks/<mark>.yaml``.
+
+Embedding degradation (503): if searchbase is unavailable the issue can't
+be collided. Rather than silently mis-classify, the submission is rejected
+with ``MarkUnavailable`` *before* any write when a mark carries issues — so
+state never corrupts. A submission whose marks carry no ``#…？`` needs no
+searchbase and always proceeds.
+"""
+from __future__ import annotations
+
+import datetime as _dt
+
+from memorytalk.repository import SQLiteStore
+from memorytalk.schemas.card_requests import CreateCardRequest
+from memorytalk.searchbase import SearchBackend
+from memorytalk.service.cards import CardService
+from memorytalk.service.searchbase_schema import (
+    CARD_ISSUE_HIT_THRESHOLD, V4_CARDS,
+)
+from memorytalk.util.ids import (
+    MARK_SEQ_PREFIX, SESSION_PREFIX, SESSION_PREFIX_LEGACY, mark_seq,
+)
+from memorytalk.util.indexes import IndexesParseError, parse_indexes
+from memorytalk.util.marks import parse_issues
+
+
+def _utc_iso() -> str:
+    return _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _seq_int(seq: str) -> int:
+    """``'m3'`` → ``3`` (the int after the ``m`` seq prefix)."""
+    return int(seq[len(MARK_SEQ_PREFIX):])
+
+
+def _is_session_id(sid: str) -> bool:
+    return sid.startswith(SESSION_PREFIX) or sid.startswith(SESSION_PREFIX_LEGACY)
+
+
+class MarkServiceError(Exception):
+    """400-equivalent: validation failed, submission rejected."""
+
+
+class MarkNotFound(MarkServiceError):
+    """404-equivalent: the session doesn't exist."""
+
+
+class MarkConflict(MarkServiceError):
+    """409-equivalent: optimistic lock failed (session advanced)."""
+
+
+class MarkUnavailable(MarkServiceError):
+    """503-equivalent: searchbase/embedding unavailable; can't collide issues."""
+
+
+class SessionMarkService:
+    def __init__(
+        self, db: SQLiteStore, search: SearchBackend | None, cards: CardService,
+    ):
+        self.db = db
+        self.search = search
+        self.cards = cards
+
+    # ────────── submit ──────────
+
+    async def submit_marks(
+        self, session_id: str, last_index: int, description: str,
+        marks: list[dict],
+    ) -> dict:
+        """Optimistically-locked write of a batch of marks. Returns the
+        per-mark resolved ``issues[]`` (see module docstring)."""
+        session = await self.db.sessions.get(session_id)
+        if session is None:
+            raise MarkNotFound(f"session {session_id} not found")
+        source = session["source"]
+
+        # 1. optimistic lock — last_index must match the current max round
+        #    index (rounds are 1-indexed → max == round_count).
+        current = session.get("round_count") or 0
+        if last_index != current:
+            raise MarkConflict(
+                f"session advanced (last_index {last_index} ≠ current {current}); "
+                "re-read & re-mark",
+            )
+
+        # 2. validate the batch up front — non-empty, explicit monotonic ids,
+        #    and (per mark) parseable issues + indexes. Reject *before* any
+        #    write so a bad batch leaves no partial state.
+        if not marks:
+            raise MarkServiceError("marks required")
+        # The first id this batch must use is the store's next seq (a cheap
+        # COUNT(*) the store mints from); subsequent marks step monotonically
+        # from there. Reusing ``next_seq`` keeps validation and minting in
+        # lockstep.
+        next_n = _seq_int(await self.db.session_marks.next_seq(session_id))
+        parsed: list[dict] = []
+        for m in marks:
+            mid = m.get("id")
+            expected = mark_seq(next_n)
+            if not mid or mid != expected:
+                raise MarkServiceError(
+                    "mark id required and must be monotonic (m<n>); "
+                    f"expected {expected!r}, got {mid!r}",
+                )
+            text = m.get("mark") or ""
+            issues = parse_issues(text)
+            raw_indexes = m.get("indexes")
+            if issues:
+                if not raw_indexes:
+                    raise MarkServiceError(
+                        f"mark {mid}: indexes required when the mark carries #…？",
+                    )
+                try:
+                    parse_indexes(raw_indexes)
+                except IndexesParseError as e:
+                    raise MarkServiceError(f"mark {mid}: {e}") from e
+            parsed.append({
+                "id": mid, "mark": text, "indexes": raw_indexes, "issues": issues,
+            })
+            next_n += 1
+
+        # Degrade cleanly: if any mark carries issues but we can't collide
+        # them, reject the whole batch before writing anything (no corruption).
+        if self.search is None and any(p["issues"] for p in parsed):
+            raise MarkUnavailable("searchbase unavailable; cannot resolve #…？ issues")
+
+        # 3. write, in order.
+        out_marks: list[dict] = []
+        for p in parsed:
+            now = _utc_iso()
+            # The store mints the same ``m<n>`` we validated up front against
+            # ``next_seq`` (the lock above rules out a concurrent writer), so
+            # this equals ``p['id']``.
+            mark = await self.db.session_marks.insert(session_id, last_index, now)
+
+            resolved = []
+            for issue in p["issues"]:
+                card_id, is_new = await self._resolve_issue(issue)
+                await self.db.card_sessions.insert(
+                    card_id, session_id, mark, p["indexes"], now,
+                )
+                resolved.append({
+                    "issue": issue, "card_id": card_id, "is_new": is_new,
+                    "indexes": p["indexes"],
+                })
+
+            body = {
+                "last_index": last_index,
+                "description": description,
+                "mark": p["mark"],
+            }
+            if p["indexes"]:
+                body["indexes"] = p["indexes"]
+            body["issues"] = resolved
+            body["created_at"] = now
+            await self.db.session_mark_files.write_doc(
+                source, session_id, mark, body,
+            )
+            out_marks.append({"mark": mark, "issues": resolved})
+
+        return {
+            "session_id": session_id, "last_index": last_index, "marks": out_marks,
+        }
+
+    async def _resolve_issue(self, issue: str) -> tuple[str, bool]:
+        """Embed + nearest-neighbor an issue against the ``cards`` library.
+        Returns ``(card_id, is_new)``: hit (cosine similarity ≥ θ) → the
+        closest existing card; miss → mint a new card. Uses pure-vector
+        ``nearest`` (not hybrid ``search``) so the score is a thresholdable
+        cosine similarity. Assumes ``self.search`` is set (callers gate)."""
+        hits = await self.search.nearest(V4_CARDS, issue, top_k=1)
+        if hits and hits[0].id and hits[0].score >= CARD_ISSUE_HIT_THRESHOLD:
+            return hits[0].id, False
+        card_id = await self.cards.create_card(CreateCardRequest(issue=issue))
+        return card_id, True
+
+    # ────────── list / read ──────────
+
+    async def list_marks(self, session_id: str) -> dict:
+        """Mark metadata for ``GET …/marks`` (from ``session_marks``)."""
+        if await self.db.sessions.get(session_id) is None:
+            raise MarkNotFound(f"session {session_id} not found")
+        rows = await self.db.session_marks.list_for_session(session_id)
+        return {
+            "session_id": session_id,
+            "marks": [
+                {"mark": r["mark"], "last_index": r["last_index"],
+                 "created_at": r["created_at"]}
+                for r in rows
+            ],
+        }
+
+    async def read_mark(self, session_id: str, mark: str) -> dict | None:
+        """Read one mark's canonical YAML (``read sess_…#m<n>``). Returns the
+        body dict (description / last_index / mark / indexes? / issues /
+        created_at) or None when the session or mark is missing."""
+        session = await self.db.sessions.get(session_id)
+        if session is None:
+            return None
+        return await self.db.session_mark_files.read_doc(
+            session["source"], session_id, mark,
+        )

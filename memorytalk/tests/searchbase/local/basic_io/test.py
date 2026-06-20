@@ -16,6 +16,29 @@ async def test_upsert_then_search_returns_doc(backend):
     assert any(h.id == "c1" for h in hits)
 
 
+async def test_nearest_returns_cosine_similarity(backend):
+    """``nearest`` is pure-vector NN with a true cosine score in [0, 1]:
+    identical text → ~1.0, unrelated text → well below — a thresholdable
+    signal (unlike hybrid ``search``'s rank-fused RRF score)."""
+    await backend.upsert("cards", [
+        Doc(id="c1", text="what is the capital of France"),
+        Doc(id="c2", text="how to debug a segfault in C"),
+    ])
+    same = await backend.nearest("cards", "what is the capital of France", top_k=1)
+    assert same and same[0].id == "c1"
+    assert same[0].score == pytest.approx(1.0, abs=1e-6)
+
+    diff = await backend.nearest("cards", "an entirely unrelated zebra topic", top_k=2)
+    # Closest is still returned, but its similarity is far below the
+    # identical-match score.
+    assert diff[0].score < 0.5
+
+
+async def test_nearest_empty_text_returns_empty(backend):
+    await backend.upsert("cards", [Doc(id="c1", text="x")])
+    assert await backend.nearest("cards", "   ", top_k=1) == []
+
+
 async def test_count_reflects_durable_docs(backend):
     await backend.upsert("cards", [
         Doc(id="c1", text="alpha"),

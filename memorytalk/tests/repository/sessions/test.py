@@ -126,3 +126,31 @@ async def test_session_mark_get_and_list(marks):
     row = await marks.get("sess-a", "m1")
     assert row["last_index"] == 41
     assert len(await marks.list_for_session("sess-a")) == 1
+
+
+# -- mark file canonical (marks/m<n>.yaml round-trip) --
+
+@pytest.fixture
+def markfiles(v4db):
+    from memorytalk.repository.session_mark_files import SessionMarkFileStore
+    return SessionMarkFileStore(v4db.storage)
+
+
+async def test_mark_file_roundtrip(markfiles):
+    body = {
+        "last_index": 41, "description": "scene",
+        "mark": "配 pty 时提了 tmux。#为什么？", "indexes": "36-37",
+        "issues": [{"issue": "为什么", "card_id": "card_x",
+                    "is_new": True, "indexes": "36-37"}],
+        "created_at": "2026-06-16T08:30:00Z",
+    }
+    await markfiles.write_doc("claude-code", "sess_def456", "m1", body)
+    got = await markfiles.read_doc("claude-code", "sess_def456", "m1")
+    assert got == body
+    # bucket = first 2 chars after the sess_ prefix
+    key = markfiles._doc_key("claude-code", "sess_def456", "m1")
+    assert key == "sessions/claude-code/de/sess_def456/marks/m1.yaml"
+
+
+async def test_mark_file_missing_returns_none(markfiles):
+    assert await markfiles.read_doc("claude-code", "sess_x", "m9") is None

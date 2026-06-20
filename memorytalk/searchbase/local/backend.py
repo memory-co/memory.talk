@@ -40,6 +40,24 @@ _ilog = logging.getLogger("memorytalk.searchbase.index")
 _COMPACT_INTERVAL_SECONDS = 1800.0
 
 
+def _cosine(a, b) -> float:
+    """Cosine similarity clamped to [0, 1], robust to un-normalized vectors
+    and a zero vector (→ 0.0). Negative cosines (rare for text embeddings,
+    where unrelated ≈ 0) clamp to 0 so "unrelated" reads as a clean miss.
+    Used by ``nearest`` so its score is a real, thresholdable similarity
+    regardless of the table's distance metric."""
+    import numpy as np
+
+    va = np.asarray(a, dtype="float64")
+    vb = np.asarray(b, dtype="float64")
+    na = float(np.linalg.norm(va))
+    nb = float(np.linalg.norm(vb))
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    cos = float(np.dot(va, vb) / (na * nb))
+    return max(0.0, min(1.0, cos))
+
+
 class LocalSearchBackend:
     def __init__(self, index: CollectionIndex, embedder, max_text_length: int,
                  auto_split: set[str], compact_interval_seconds: float):
@@ -235,3 +253,35 @@ class LocalSearchBackend:
             len(hits), ms,
         )
         return hits
+
+    async def nearest(self, collection: str, text: str, top_k: int = 1) -> list[Hit]:
+        """Pure-vector nearest-neighbour. Unlike :meth:`search` (hybrid
+        FTS+vector with RRF — a rank-based fusion whose absolute score is
+        tiny and NOT comparable to a fixed threshold), this embeds ``text``,
+        retrieves the closest docs by vector distance, and returns a
+        **true cosine similarity** ``score`` in [0, 1] (higher = closer),
+        computed directly from the stored vectors. Computing cosine here
+        (rather than trusting LanceDB's ``_distance``) makes the score
+        metric-independent: the table uses LanceDB's default L2 on
+        un-normalized embeddings, for which the ``1 - dist/2`` projection
+        would NOT be a cosine. This is the thresholdable signal the
+        session-mark write path uses to decide miss (new card) vs hit
+        (link existing) — see ``searchbase_schema.CARD_ISSUE_HIT_THRESHOLD``."""
+        if self._index is None:
+            return []
+        if not text or not text.strip():
+            return []
+        qvec = await self._embedder.embed_one(text)
+        rows = await self._index.search(collection, "", qvec, top_k, None)
+        scored: list[Hit] = []
+        for r in rows:
+            vec = r.get("vector")
+            score = _cosine(qvec, vec) if vec is not None else 0.0
+            scored.append(Hit(
+                id=r["id"],
+                score=score,
+                fields={k: v for k, v in r.items() if k not in NON_DOC_FIELDS},
+            ))
+        # ANN order may not match true-cosine order exactly; sort by it.
+        scored.sort(key=lambda h: h.score, reverse=True)
+        return scored

@@ -33,6 +33,15 @@ async def post_read(payload: ReadRequest, request: Request):
             raise HTTPException(status_code=404, detail=f"position {payload.id} not found")
         return {"type": "position", "position": pos}
 
+    if kind == IdKind.MARK:
+        # sess_…#m<n> → the mark's canonical YAML (description / last_index /
+        # mark text / indexes? / issues / created_at).
+        svc = require(getattr(request.app.state, "session_marks", None), "session marks")
+        mark = await svc.read_mark(base_id, seq)
+        if mark is None:
+            raise HTTPException(status_code=404, detail=f"mark {payload.id} not found")
+        return {"type": "mark", "mark": mark}
+
     if kind == IdKind.LINK:
         svc = require(request.app.state.v4read, "read")
         ln = await svc.read_link(base_id, seq)

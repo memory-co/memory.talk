@@ -32,6 +32,7 @@ from memorytalk.service import (
 )
 from memorytalk.service.backfill import IndexBackfill
 from memorytalk.service.cards import CardService
+from memorytalk.service.session_marks import SessionMarkService
 from memorytalk.service.explores import ExploreService
 from memorytalk.service.search import SearchService
 from memorytalk.service.searchbase_schema import build_search_backend
@@ -144,6 +145,9 @@ def create_app(config: Config | None = None) -> FastAPI:
         app.state.explore = ExploreService(db=db, config=config)
         # v4 card subsystem (governed question graph) — the product.
         app.state.cards = CardService(db=db, search=searchbase, events=events)
+        app.state.session_marks = SessionMarkService(
+            db=db, search=searchbase, cards=app.state.cards,
+        )
         app.state.v4read = V4ReadService(db=db)
         app.state.v4search = V4SearchService(db=db, search=searchbase)
         app.state.v4recall = V4RecallService(db=db, search=searchbase)
@@ -213,7 +217,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     #   cards / positions / card_sessions → v4 card write + reverse lookup
     for name in (
         "sync", "explores", "insights", "search", "recall",
-        "cards", "positions", "card_sessions",
+        "cards", "positions", "card_sessions", "session_marks",
     ):
         try:
             mod = __import__(f"memorytalk.api.{name}", fromlist=["router"])

@@ -22,7 +22,13 @@ class Embedder(ABC):
 
 
 class DummyEmbedder(Embedder):
-    """Deterministic SHA-256-derived vectors. Submillisecond, no I/O."""
+    """Deterministic SHA-256-derived vectors. Submillisecond, no I/O.
+
+    Components are zero-centered (``b/255 - 0.5`` ∈ [-0.5, 0.5]) so unrelated
+    texts land near-orthogonal (cosine ≈ 0) the way real embeddings do —
+    earlier all-positive vectors made every pair highly cosine-similar, which
+    defeated any similarity threshold built on these vectors (e.g. the
+    session-mark issue miss/hit decision)."""
 
     def __init__(self, dim: int = 384):
         self.dim = dim
@@ -31,7 +37,7 @@ class DummyEmbedder(Embedder):
         out: list[list[float]] = []
         for text in texts:
             h = hashlib.sha256(text.encode()).digest()
-            vec = [float(b) / 255.0 for b in h]
+            vec = [float(b) / 255.0 - 0.5 for b in h]
             vec = (vec * ((self.dim // len(vec)) + 1))[: self.dim]
             out.append(vec)
         return out

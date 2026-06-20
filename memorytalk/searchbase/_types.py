@@ -131,6 +131,15 @@ class SearchBackend(Protocol):
     # ─── read ───
     async def search(self, collection: str, query: Query) -> list[Hit]: ...
 
+    async def nearest(
+        self, collection: str, text: str, top_k: int = 1,
+    ) -> list[Hit]:
+        """Pure-vector nearest-neighbour: ``score`` is cosine similarity in
+        [0, 1] (higher = closer), suitable for an absolute threshold —
+        unlike :meth:`search`'s rank-fused hybrid score. Embeds ``text``
+        and returns the closest docs by vector distance only."""
+        ...
+
     async def count(self, collection: str, match: dict | None = None) -> int:
         """Number of durably-indexed docs in ``collection`` whose stored
         fields match every key in ``match``."""

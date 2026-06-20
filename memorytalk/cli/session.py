@@ -18,6 +18,9 @@ import click
 from memorytalk.cli._format import (
     fmt_error, fmt_session_list, fmt_session_tag,
 )
+from memorytalk.cli._mark import (
+    fmt_mark_result, load_submission, run_interactive,
+)
 from memorytalk.cli._http import ApiError, api, extract_error_message
 from memorytalk.cli._render import emit_json, emit_json_err, emit_md, emit_md_err
 from memorytalk.config import Config
@@ -177,6 +180,59 @@ def tag(session_id: str, kv_args: tuple[str, ...], json_out: bool) -> None:
         # ``fmt_session_tag`` switches on the third arg.
         is_query = not (set_ or unset)
         emit_md(fmt_session_tag(result, is_query=is_query))
+
+
+# ────────── session mark ──────────
+
+@session.command("mark")
+@click.option("--session", "session_id", required=True,
+              help="Session to annotate (sess_<...>)")
+@click.option("--mark", "mark_file", type=str, default=None,
+              help="Submission YAML path ('-' = stdin). Given → file mode; "
+                   "omitted → interactive mode.")
+@click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON")
+def mark(session_id: str, mark_file: str | None, json_out: bool) -> None:
+    """Annotate a session round-by-round ("以写代读"); #…？ auto-creates cards.
+
+    --mark <file> (or '-' for stdin) → file mode (POST one submission).
+    No --mark → interactive 2-round sliding-window mode.
+    """
+    cfg = Config()
+
+    if mark_file is not None:
+        # ── file / pipe mode ──
+        try:
+            body = load_submission(mark_file)
+        except (click.BadParameter, ValueError) as e:
+            _emit_err(json_out, str(e))
+            sys.exit(1)
+        result = _post_marks(cfg, session_id, body, json_out)
+    else:
+        # ── interactive mode ──
+        result = run_interactive(cfg, session_id, json_out, _post_marks)
+        if result is None:
+            # nothing marked / user quit before submitting — clean exit
+            return
+
+    if json_out:
+        emit_json(result)
+    else:
+        emit_md(fmt_mark_result(result))
+
+
+def _post_marks(cfg: Config, session_id: str, body: dict, json_out: bool) -> dict:
+    """POST a submission to ``/v4/sessions/{sid}/marks``. Emits + exits on
+    error (so callers get a clean ``dict`` or never return)."""
+    try:
+        return api(
+            "POST", f"/v4/sessions/{session_id}/marks", cfg, json_body=body,
+        )
+    except ApiError as e:
+        _emit_err(json_out, extract_error_message(e.payload))
+        raise SystemExit(1)
+    except Exception as e:
+        _emit_err(json_out, f"cannot reach server: {e}")
+        raise SystemExit(1)
 
 
 # ────────── helpers ──────────

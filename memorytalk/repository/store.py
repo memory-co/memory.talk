@@ -27,6 +27,7 @@ from memorytalk.repository.card_sessions import CardSessionStore
 from memorytalk.repository.position_sessions import PositionSessionStore
 from memorytalk.repository.link_sessions import LinkSessionStore
 from memorytalk.repository.session_marks import SessionMarkStore
+from memorytalk.repository.session_mark_files import SessionMarkFileStore
 
 
 class SQLiteStore:
@@ -49,6 +50,7 @@ class SQLiteStore:
         self.position_sessions = PositionSessionStore(conn)
         self.link_sessions = LinkSessionStore(conn)
         self.session_marks = SessionMarkStore(conn)
+        self.session_mark_files = SessionMarkFileStore(storage)
 
     @classmethod
     async def open_connection(cls, db_path: Path) -> aiosqlite.Connection:

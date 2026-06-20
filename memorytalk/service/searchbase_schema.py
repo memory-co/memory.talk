@@ -31,6 +31,19 @@ V4_POSITIONS = "positions"
 # persist it in settings instead of this hardcoded constant.
 MAX_TEXT_LENGTH = 2000
 
+# θ — the issue-collision miss/hit threshold for the session-mark write path.
+# An ``#…？`` issue is embedded and run against the ``cards`` collection via
+# ``SearchBackend.nearest`` (pure-vector NN whose ``score`` is a true cosine
+# similarity ∈ [0, 1], higher = closer — NOT the hybrid ``search``/``retrieve``
+# RRF score, which is rank-fused and not thresholdable). The top hit decides:
+#   score >= θ  → HIT  (reuse the existing card, "not surprised")
+#   score <  θ  → MISS (mint a new card, "surprised" = a new question)
+# Single home for the threshold (docs §6 "命门 = 惊讶 grounding 在检索"). No
+# prior constant existed; 0.5 is a deliberate sane default — a near-identical
+# issue restate scores well above 0.5 while an unrelated issue scores near 0,
+# cleanly splitting "same question" from "new question" without over-linking.
+CARD_ISSUE_HIT_THRESHOLD = 0.5
+
 
 def cap_text(text: str | None) -> str:
     """Cap text to MAX_TEXT_LENGTH before handing it to searchbase."""

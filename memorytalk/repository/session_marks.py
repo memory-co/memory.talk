@@ -49,8 +49,12 @@ class SessionMarkStore:
         return dict(row) if row else None
 
     async def list_for_session(self, session_id: str) -> list[dict]:
+        # Secondary ``rowid`` (insertion) order breaks ties: a whole batch of
+        # marks shares one second-resolution ``created_at``, so created_at
+        # alone leaves intra-batch order undefined; rowid restores m1,m2,m3…
         async with self.conn.execute(
-            "SELECT * FROM session_marks WHERE session_id = ? ORDER BY created_at ASC",
+            "SELECT * FROM session_marks WHERE session_id = ? "
+            "ORDER BY created_at ASC, rowid ASC",
             (session_id,),
         ) as cur:
             return [dict(r) for r in await cur.fetchall()]
