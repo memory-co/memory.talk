@@ -23,10 +23,37 @@ Cards        POST   /v4/cards                               建卡（只一个 i
 
 Reviews      POST   /v4/positions/{position_id}/reviews     对某个 Position 表态（argument ±1/0）
 
-Sessions     GET    /v4/sessions/{session_id}/cards         反查：这个 session 启发了哪些卡 / 答案
+Sessions     GET    /v4/sessions                            列 session（多维过滤，沿用 v3，前缀 /v4）
+             PATCH  /v4/sessions/{session_id}/tags          改 session kv 标签（合并语义，沿用 v3）
+             POST   /v4/sessions/{session_id}/marks         逐 round 提交 mark（#…？ 自动建 v4 卡）
+             GET    /v4/sessions/{session_id}/marks         列这个 session 的 mark
+             GET    /v4/sessions/{session_id}/cards         反查：这个 session 启发了哪些卡 / 答案
+
+Status       GET    /v4/status                              健康 + 统计（沿用 v3；reviews_total vestigial 0）
+Sync         POST   /v4/sync/{start,stop}                   控制后端 watcher（沿用 v3，前缀 /v4）
+             GET    /v4/sync/status                         watcher 状态（沿用 v3，前缀 /v4）
+Embedding    （沿用 v3，前缀 /v4）                            配置 / 重算 / 健康
 ```
 
 > [`POST /v4/read`](read.md) 按 id 前缀判型（`card_` 整卡 / `pos_` 单答案 / `sess_` session）；session 内容沿用 v3 形态。检索走 [`POST /v4/search`](search.md)（撞问题、无沉浮、DSL 换计数字段）。
+
+## 文档清单
+
+| 端点 | 文档 | v4 状态 |
+|---|---|---|
+| `/v4/recall` | [recall.md](recall.md) | v4 重做 |
+| `/v4/search` | [search.md](search.md) | v4 重做 |
+| `/v4/read` | [read.md](read.md) | v4 重做 |
+| `/v4/cards*` | [cards.md](cards.md) | v4 重做 |
+| `/v4/cards/{id}/links` | [card-links.md](card-links.md) | v4 新增 |
+| `/v4/cards/{id}/sessions`、`/v4/sessions/{id}/cards` | [card-sessions.md](card-sessions.md) | v4 新增 |
+| `/v4/positions/{id}/reviews` | [reviews.md](reviews.md) | v4 重做（target = Position） |
+| `/v4/sessions/{id}/marks` | [session-marks.md](session-marks.md) | v4 新增（逐 round 注解） |
+| `/v4/sessions`、`/tags`、`/ensure`、`/append` | [sessions.md](sessions.md) | 沿用 v3，前缀 /v4 |
+| `/v4/status` | [status.md](status.md) | 沿用 v3，前缀 /v4 |
+| `/v4/sync*` | [sync.md](sync.md) | 沿用 v3，前缀 /v4 |
+| embedding（配置 / 重算 / 健康） | [embedding.md](embedding.md) | 沿用 v3，前缀 /v4 |
+| explore | [explore.md](explore.md) | 下一轮设计，未实施 |
 
 ## 设计要点
 

@@ -134,8 +134,11 @@ memory.talk card review --position pos_OLD --argument -1 --cite sess_xyz:4-9 --c
 | `recall` | [recall.md](recall.md) |
 | `insight`(search / view,只读) | [insight.md](insight.md) |
 | `session`(list / tag 沿用 v3 + **mark v4 新增**) | [session.md](session.md) · [session-mark.md](session-mark.md) |
-| `setup` / `server` / `sync` | 沿用 v3,见 [`../v3/`](../v3/) |
-| `explore`(抽 v4 卡工作台) | v4 版下一轮;现状见 [`../v3/explore.md`](../v3/explore.md) |
+| `setup`(沿用 v3) | [setup.md](setup.md) |
+| `server`(沿用 v3,无独立 doc) | [`../v3/setup.md`](../v3/setup.md) |
+| `sync`(沿用 v3;端点 `/v3`→`/v4`) | [sync.md](sync.md) |
+| `upgrade`(沿用 v3) | [upgrade.md](upgrade.md) |
+| `explore`(抽 v4 卡工作台,下一轮设计) | [explore.md](explore.md) |
 
 > 数据结构 / schema 见 [`../../structure/v4/`](../../structure/v4/);HTTP API 见 [`../../api/v4/`](../../api/v4/);**机制 / 设计决策** 见 [`../../works/v4/card.md`](../../works/v4/card.md)。
 

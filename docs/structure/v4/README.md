@@ -17,8 +17,17 @@ v4 是 **card 的另一代**:一张卡不再是「一句陈述」,而是「**一
 | Review | append-only,对 **Position** 的一次表态(`argument` ±1/0 + 证据 indexes) | [review.md](review.md) |
 | CardLink | card↔card 的 IBIS 有向边(specializes / suggested_by / ...) | [card-link.md](card-link.md) |
 | CardSession | card↔session 出处(哪个 session 启发了这张卡 / 哪个答案) | [card-session.md](card-session.md) |
+| SessionMark | session 目录下逐 round 注解(`marks/` sidecar + `session_marks` 表),v4 新增 | [session-mark.md](session-mark.md) |
 
-> **沿用 v3、本目录不复制**:Session / Search-Result / Recall-Event / Settings 等基础设施在 v4 没变,直接看 [`../../structure/v3/`](../../structure/v3/)。v4 只重写「卡子系统」这一层(上面 5 个对象)。
+> **基础设施文档**(下面这些在 v4 大体沿用 v3,只有少量 v4 增量,各页都是指回 v3 的短指针):
+
+| 对象 | v4 状态 | 文档 |
+|---|---|---|
+| Session(`sessions` 表 + `rounds.jsonl`) | 沿用 v3;v4 旁挂 `marks/` + `session_marks`(见 SessionMark) | [session.md](session.md) |
+| Settings(`settings.json`) | 沿用 v3;向量 collections 增 `cards` / `positions` | [settings.md](settings.md) |
+| Search-Result | **跟 v3 不同**(`top_position` + 现算 credence,无沉浮排序) | [search-result.md](search-result.md) |
+
+> Recall-Event 等其余基础设施在 v4 没变,直接看 [`../../structure/v3/`](../../structure/v3/)。v4 只重写「卡子系统」这一层(上面 6 个对象)。
 
 ## ID 前缀
 
