@@ -7,7 +7,7 @@ Submit   POST  /v4/sessions/{session_id}/marks      提交一份 mark(乐观锁 
 List     GET   /v4/sessions/{session_id}/marks      列这个 session 的所有 mark(元信息)
 ```
 
-> 读单条 mark 走 [`POST /v4/read`](read.md)(`{"id": "sess_…#m1"}`,按 `#` 分片判型);反查「这条 mark 启发了哪些卡」走 [`GET /v4/sessions/{session_id}/cards`](sessions.md#get-v4sessionssession_idcards)。
+> 查看一条 session 的 mark 走 **session 读取**:[`read sess_…`](read.md#响应--sess_) 把这条 session 的 `marks[]` 折进 session 响应里(rounds + marks 一起返回),单条 mark 的全文走 [`read sess_…#m1`](read.md#响应--sess_mn单条-mark)分片读。**没有单独的 mark 列表命令**——下方 `GET …/marks` 仍在(交互式 `session mark` 模式内部用它取下一个 `m<n>`),但不是面向用户的列表入口。反查「这条 mark 启发了哪些卡」走 [`GET /v4/sessions/{session_id}/cards`](sessions.md#get-v4sessionssession_idcards)。
 
 ## POST /v4/sessions/{session_id}/marks
 
@@ -70,7 +70,7 @@ List     GET   /v4/sessions/{session_id}/marks      列这个 session 的所有 
 
 ## GET /v4/sessions/{session_id}/marks
 
-列这个 session 的所有 mark(**元信息**,来自 `session_marks`;正文不回,要看正文走 `read sess_…#m1`)。
+列这个 session 的所有 mark(**元信息**,来自 `session_marks`;正文不回)。这是**内部机制**——交互式 `session mark` 用它续号(下一个 `m<n>`);**不是面向用户的列表入口**。要看一条 session 的 mark,直接 `read sess_…`(session 读取已把 `marks[]` 折进来,见上),要看单条正文走 `read sess_…#m1`。
 
 ### 响应 `200`
 

@@ -46,6 +46,22 @@ class Round(RoundInput):
     index: int
 
 
+class SessionMark(BaseModel):
+    """One mark folded into a session read (``read sess_…`` includes these).
+
+    Sourced from ``session_marks`` (metadata) + the mark's canonical YAML
+    (``marks/<mark>.yaml``) so the full body — including the resolved
+    ``issues[]`` (which #…？ became which new/linked card) — is present.
+    Single-mark detail is still ``read sess_…#m<n>``.
+    """
+    mark: str                       # ``m<n>``
+    description: str = ""
+    text: str = ""                  # the raw free-text annotation (yaml ``mark``)
+    indexes: str | None = None
+    issues: list[dict[str, Any]] = Field(default_factory=list)
+    created_at: str = ""
+
+
 class Session(BaseModel):
     """The shape that ``POST /v3/read`` returns for a session id."""
     session_id: str
@@ -53,6 +69,9 @@ class Session(BaseModel):
     created_at: str
     metadata: dict[str, Any] = Field(default_factory=dict)
     rounds: list[Round] = Field(default_factory=list)
+    # Marks made on this session (``read sess_…`` folds them in). Ordered by
+    # ``m<n>``. Empty for an unmarked session.
+    marks: list[SessionMark] = Field(default_factory=list)
 
 
 class SourceProbe(BaseModel):

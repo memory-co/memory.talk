@@ -260,9 +260,48 @@ def _fmt_read(r: dict) -> str:
                 f"{st.get('recall_count', 0)}_"
             )
         return "\n".join(lines)
+    if t == "mark":
+        return _fmt_read_mark(r)
     if t == "session":
         return _fmt_read_session(r["session"])
     return "（empty）"
+
+
+def _issue_line(iss: dict) -> str:
+    """One resolved ``#…？`` issue: its text + whether it created a new card
+    or linked an existing one. Mirrors the submit-result rendering."""
+    tag = "new card" if iss.get("is_new") else "linked"
+    idx = f" ({iss['indexes']})" if iss.get("indexes") else ""
+    return f"- #{iss.get('issue', '')}？{idx} → {tag} `{iss.get('card_id', '')}`"
+
+
+def _fmt_read_mark(r: dict) -> str:
+    """``read sess_…#m<n>`` — one mark's full body: scenario (description),
+    the mark text, its indexes, and each resolved issue→card. ``r`` is the
+    read envelope ``{id, session_id, mark_seq, mark: <body>}``."""
+    body = r.get("mark") or {}
+    addr = r.get("id")
+    if not addr:
+        sid, seq = r.get("session_id", ""), r.get("mark_seq", "")
+        addr = f"{sid}#{seq}" if sid and seq else (seq or sid)
+    lines = [f"# mark · `{addr}`" if addr else "# mark"]
+    if body.get("description"):
+        lines.append(f"_scenario: {body['description']}_")
+    if body.get("last_index") is not None:
+        lines.append(f"_last_index: {body['last_index']}_")
+    lines.append("")
+    if body.get("mark"):
+        lines.append(str(body["mark"]))   # the raw free-text annotation
+    if body.get("indexes"):
+        lines.append(f"\n_indexes: {body['indexes']}_")
+    issues = body.get("issues") or []
+    lines.append(f"\n## issues ({len(issues)})")
+    if issues:
+        for iss in issues:
+            lines.append(_issue_line(iss))
+    else:
+        lines.append("_(no #…？ issues)_")
+    return "\n".join(lines)
 
 
 # Single round's text is capped so one giant turn doesn't blow up the
@@ -308,6 +347,22 @@ def _fmt_read_session(s: dict) -> str:
         if len(text) > _ROUND_TEXT_CAP:
             text = text[:_ROUND_TEXT_CAP] + " …"
         lines.append(text)
+    marks = s.get("marks") or []
+    if marks:
+        lines.append(f"\n## marks ({len(marks)})")
+        for mk in marks:
+            # Concise line per mark — full single-mark detail is `read sess#m<n>`.
+            idx = f" · idx {mk['indexes']}" if mk.get("indexes") else ""
+            issues = mk.get("issues") or []
+            if issues:
+                cards = " · ".join(
+                    f"#{i.get('issue', '')}？→{'new' if i.get('is_new') else 'linked'} "
+                    f"`{i.get('card_id', '')}`"
+                    for i in issues
+                )
+            else:
+                cards = "_(no issues)_"
+            lines.append(f"- `{mk['mark']}`{idx} · {cards}")
     return "\n".join(lines)
 
 

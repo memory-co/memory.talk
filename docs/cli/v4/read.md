@@ -11,7 +11,8 @@ memory.talk read <id> [--json]
 | `card_` | 一张卡:**问题 + 它所有答案**(+ IBIS 边 + 出处) |
 | `card_…#p<n>` 分片 | **单个答案**(Position):`claim` + 顶踩计数 + 现算 credence + scope + 它收到的全部 review |
 | `card_…#l<n>` 分片 | **单条边**(CardLink):`claim` + `type` + `target_id` + 顶踩计数 + 现算 credence + 它收到的全部 review |
-| `sess_` | session(沿用 v3 形态) |
+| `sess_` | session(沿用 v3 形态)+ 末尾 `## marks (N)`——这条 session 上做过的 mark(每条:`m<n>` · indexes · 它的 `#…？` 建/连了哪些卡);0 条则不出这段 |
+| `sess_…#m<n>` 分片 | **单条 mark**:场景(`description`)+ mark 全文 + `indexes` + `## issues`(每条 `#…？` → new card / linked 哪张卡) |
 
 > Position / CardLink **都没有独立 id**——都是所属卡的附属,寻址 `card_…#p<n>` / `card_…#l<n>`。`parse_id` 认出 `card_` id 上的分片就分派:`#p<n>` → 那张卡的第 n 个 Position、`#l<n>` → 第 n 条 CardLink(跟它认 `sess_…#m<n>` 分派到 mark 一个路子)。
 

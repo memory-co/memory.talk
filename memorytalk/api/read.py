@@ -40,7 +40,10 @@ async def post_read(payload: ReadRequest, request: Request):
         mark = await svc.read_mark(base_id, seq)
         if mark is None:
             raise HTTPException(status_code=404, detail=f"mark {payload.id} not found")
-        return {"type": "mark", "mark": mark}
+        # Echo the address so the renderer can title `sess_…#m<n>` (the YAML
+        # body carries the mark *text* under ``mark`` but not its own id).
+        return {"type": "mark", "id": payload.id, "session_id": base_id,
+                "mark_seq": seq, "mark": mark}
 
     if kind == IdKind.LINK:
         svc = require(request.app.state.v4read, "read")

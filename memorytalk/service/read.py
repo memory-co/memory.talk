@@ -19,6 +19,7 @@ from memorytalk.repository import SQLiteStore
 from memorytalk.schemas import (
     Insight, InsightRound, InsightStats, ContentBlock, Round, Session, SourceInsight,
 )
+from memorytalk.schemas.session import SessionMark
 # InsightNotFound is owned by service.cards (the card service is the canonical
 # place for card lifecycle errors); re-exported here for callers that
 # historically imported it from service.read.
@@ -94,12 +95,38 @@ class ReadService:
             for r in rounds_jsonl
         ]
 
+        # Fold in the session's marks: metadata from session_marks (ordered
+        # m1,m2,…) + each mark's canonical YAML for the full body (description /
+        # mark text / indexes / resolved issues→cards). The reading is pure —
+        # this is just a join over already-written derived state.
+        marks = await self._read_marks(row["source"], session_id)
+
         session = Session(
             session_id=row["session_id"],
             source=row["source"],
             created_at=row["created_at"],
             metadata=row["metadata"],
             rounds=rounds,
+            marks=marks,
         )
         return session, _utc_iso()
+
+    async def _read_marks(self, source: str, session_id: str) -> list[SessionMark]:
+        """Build the session's ``marks[]`` for the session read: ``session_marks``
+        metadata (ordered m1,m2,…) joined with each mark's canonical YAML body."""
+        rows = await self.db.session_marks.list_for_session(session_id)
+        marks: list[SessionMark] = []
+        for r in rows:
+            body = await self.db.session_mark_files.read_doc(
+                source, session_id, r["mark"],
+            ) or {}
+            marks.append(SessionMark(
+                mark=r["mark"],
+                description=body.get("description", ""),
+                text=body.get("mark", ""),
+                indexes=body.get("indexes"),
+                issues=body.get("issues") or [],
+                created_at=body.get("created_at") or r.get("created_at") or "",
+            ))
+        return marks
 

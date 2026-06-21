@@ -242,3 +242,80 @@ def test_fmt_read_session_non_text_block_placeholder():
         ],
     }})
     assert "_(tool_use)_" in out
+
+
+# ────────── read mark fragment (sess_…#m<n>) ──────────
+
+def test_fmt_read_mark_renders_body_and_issues():
+    out = card_mod._fmt_read({
+        "type": "mark", "id": "sess-abc#m1",
+        "session_id": "sess-abc", "mark_seq": "m1",
+        "mark": {
+            "description": "reading the pty/tmux stretch",
+            "last_index": 5,
+            "mark": "user pivoted. #why does pty remind of tmux？",
+            "indexes": "3-4",
+            "issues": [
+                {"issue": "why does pty remind of tmux", "card_id": "card_01",
+                 "is_new": True, "indexes": "3-4"},
+            ],
+            "created_at": "2026-06-19T00:00:00Z",
+        },
+    })
+    # Header carries the address, not the (empty) fallback.
+    assert out != "（empty）"
+    assert "# mark · `sess-abc#m1`" in out
+    assert "reading the pty/tmux stretch" in out          # description/scenario
+    assert "#why does pty remind of tmux？" in out          # the mark text
+    assert "3-4" in out                                    # indexes
+    assert "## issues (1)" in out
+    assert "new card" in out and "card_01" in out          # issue → new card
+
+
+def test_fmt_read_mark_no_issues():
+    out = card_mod._fmt_read({
+        "type": "mark", "id": "sess-abc#m2",
+        "mark": {"description": "triage", "last_index": 5,
+                 "mark": "just EMFILE triage, no question.", "issues": []},
+    })
+    assert "# mark · `sess-abc#m2`" in out
+    assert "## issues (0)" in out
+    assert "no #…？ issues" in out
+
+
+# ────────── session read folds in marks ──────────
+
+def test_fmt_read_session_renders_marks_section():
+    out = card_mod._fmt_read({"type": "session", "session": {
+        "session_id": "sess-abc", "source": "claude-code",
+        "rounds": [
+            {"index": 1, "role": "human",
+             "content": [{"type": "text", "text": "hi"}]},
+        ],
+        "marks": [
+            {"mark": "m1", "description": "scene", "text": "#a question？",
+             "indexes": "1", "issues": [
+                 {"issue": "a question", "card_id": "card_07",
+                  "is_new": True, "indexes": "1"}]},
+            {"mark": "m2", "description": "scene", "text": "no question here",
+             "indexes": None, "issues": []},
+        ],
+    }})
+    assert "## marks (2)" in out
+    assert "`m1`" in out and "`m2`" in out
+    assert "card_07" in out and "new" in out
+    assert "no issues" in out                              # m2 has none
+
+
+def test_fmt_read_session_no_marks_section_when_empty():
+    out = card_mod._fmt_read({"type": "session", "session": {
+        "session_id": "sess-abc", "source": "claude-code",
+        "rounds": [
+            {"index": 1, "role": "human",
+             "content": [{"type": "text", "text": "hi"}]},
+        ],
+        "marks": [],
+    }})
+    # 0 marks → renders fine, no marks section.
+    assert "## marks" not in out
+    assert "hi" in out

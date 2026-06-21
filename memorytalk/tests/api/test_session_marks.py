@@ -69,6 +69,39 @@ async def test_read_mark_fragment(client):
     assert mk["mark"] == "#a fresh question？"
 
 
+async def test_session_read_includes_marks(client):
+    sid = await _session(client)
+    await client.post(f"/v4/sessions/{sid}/marks", json={
+        "last_index": 5, "description": "scene",
+        "marks": [
+            {"id": "m1", "indexes": "3-4",
+             "mark": "user pivoted. #why does pty remind of tmux？"},
+            {"id": "m2", "mark": "just EMFILE triage, no question."},
+        ],
+    })
+    r = await client.post("/v4/read", json={"id": sid})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["type"] == "session"
+    marks = body["session"]["marks"]
+    # Ordered m1, m2; full body folded in (description / text / issues→cards).
+    assert [m["mark"] for m in marks] == ["m1", "m2"]
+    m1, m2 = marks
+    assert m1["description"] == "scene"
+    assert m1["indexes"] == "3-4"
+    assert "#why does pty remind of tmux？" in m1["text"]
+    assert m1["issues"][0]["is_new"] is True
+    assert m1["issues"][0]["card_id"].startswith("card_")
+    assert m2["issues"] == []
+
+
+async def test_session_read_no_marks_field_empty(client):
+    sid = await _session(client)
+    r = await client.post("/v4/read", json={"id": sid})
+    assert r.status_code == 200
+    assert r.json()["session"]["marks"] == []
+
+
 async def test_read_missing_mark_404(client):
     sid = await _session(client)
     r = await client.post("/v4/read", json={"id": f"{sid}#m9"})
