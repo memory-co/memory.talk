@@ -95,6 +95,40 @@ def create(issue: str, card_id: str | None, json_out: bool) -> None:
     _run(json_out, "POST", "/v4/cards", body, _fmt_create)
 
 
+# ────────── card list ──────────
+
+def _fmt_list(r: dict) -> str:
+    cards = r.get("cards", [])
+    lines = [f"# cards ({r.get('returned', len(cards))}/{r.get('total', len(cards))})"]
+    if not cards:
+        lines.append("\n（none）")
+        return "\n".join(lines)
+    for c in cards:
+        issue = " ".join((c.get("issue") or "").split())
+        created = (c.get("created_at") or "")[:10]
+        lines.append(
+            f"- `{c.get('card_id', '')}` · "
+            f"{c.get('position_count', 0)}p {c.get('link_count', 0)}l · "
+            f"{created} — {issue}"
+        )
+    return "\n".join(lines)
+
+
+@card.command("list")
+@click.option("--since", default=None, help="ISO lower bound on created_at")
+@click.option("--until", default=None, help="ISO upper bound on created_at")
+@click.option("--limit", default=20, type=int, help="Max cards (1-200), newest first")
+@click.option("--json", "json_out", is_flag=True, default=False)
+def list_(since: str | None, until: str | None, limit: int, json_out: bool) -> None:
+    """List cards, most recent first."""
+    params: dict[str, str] = {"limit": str(limit)}
+    if since:
+        params["since"] = since
+    if until:
+        params["until"] = until
+    _run(json_out, "GET", "/v4/cards", None, _fmt_list, params=params)
+
+
 # ────────── card position ──────────
 
 @card.command("position")

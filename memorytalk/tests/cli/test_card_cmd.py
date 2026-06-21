@@ -40,14 +40,43 @@ def _invoke(args, input=None):
 def test_card_group_help():
     r = _invoke(["--help"])
     assert r.exit_code == 0
-    for sub in ("create", "position", "review", "link"):
+    for sub in ("create", "list", "position", "review", "link"):
         assert sub in r.output
 
 
-@pytest.mark.parametrize("sub", ["create", "position", "review", "link"])
+@pytest.mark.parametrize("sub", ["create", "list", "position", "review", "link"])
 def test_subcommand_help(sub):
     r = _invoke([sub, "--help"])
     assert r.exit_code == 0
+
+
+# ────────── card list ──────────
+
+def test_list_sends_get_and_renders(captured):
+    captured.responses["/v4/cards"] = {
+        "total": 2, "returned": 2,
+        "cards": [
+            {"card_id": "card_a", "issue": "Which db?",
+             "created_at": "2026-06-20T10:00:00Z",
+             "position_count": 1, "link_count": 0},
+            {"card_id": "card_b", "issue": "Why pty?",
+             "created_at": "2026-06-19T09:00:00Z",
+             "position_count": 0, "link_count": 2},
+        ],
+    }
+    r = _invoke(["list", "--limit", "50"])
+    assert r.exit_code == 0, r.output
+    assert captured.calls[0][:2] == ("GET", "/v4/cards")
+    assert captured.calls[0][2] is None  # GET carries no body
+    assert "card_a" in r.output and "Which db?" in r.output
+    assert "cards (2/2)" in r.output
+
+
+def test_list_empty(captured):
+    captured.responses["/v4/cards"] = {"total": 0, "returned": 0, "cards": []}
+    r = _invoke(["list"])
+    assert r.exit_code == 0
+    assert "cards (0/0)" in r.output
 
 
 # ────────── flag → request body ──────────

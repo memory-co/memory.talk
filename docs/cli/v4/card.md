@@ -31,6 +31,22 @@ memory.talk card create --issue '<问题文本>' [--card_id <id>] [--json]
 
 输出 `{"status":"ok","card_id":"card_…"}`。副作用:落 `cards`(`issue` + `created_at`)+ 写向量库;`cards/<bucket>/<card_id>/card.json`(问题不可变);**不落任何 Position**。错误:`--issue` 缺失 → `--issue required`;`--card_id` 前缀错 / 已存在 → 报错 exit 1。
 
+## card list
+
+**列卡**——按建卡时间**倒序**列出问题(卡),撑「最近建了哪些卡」的速览。读单张卡的全貌(答案 / 边 / 出处)走 [`read <card_id>`](read.md);按语义找卡走 [`search`](search.md)。调 [`GET /v4/cards`](../../api/v4/cards.md)。
+
+```bash
+memory.talk card list [--since <ISO>] [--until <ISO>] [--limit <1-200>] [--json]
+```
+
+| 参数 | 必填 | 说明 |
+|---|---|---|
+| `--limit` | 否 | 最多返回几张(默认 20,1–200),**最新在前** |
+| `--since` / `--until` | 否 | 按 `created_at` 过滤(ISO 日期 / 时间) |
+| `--json` | 否 | 结构化输出 `{total, returned, cards:[…]}`;否则 markdown 列表 |
+
+markdown 每行:`` `card_id` · <答案数>p <边数>l · <日期> — <问题> ``。只读,无副作用。
+
 ## card position
 
 给一张**已存在的卡**加一个答案候选(Position)。同一个问题下可以有多个答案,各自被顶踩、按现算 credence 竞争。
