@@ -28,6 +28,16 @@ class CardSessionStore:
         )
         await self.conn.commit()
 
+    async def delete_for_session(self, session_id: str) -> int:
+        """Delete every card→session provenance edge for a session (mark
+        cleanup). Returns the row count removed. Cards themselves are NOT
+        touched — only the provenance edges go."""
+        cur = await self.conn.execute(
+            "DELETE FROM card_sessions WHERE session_id = ?", (session_id,),
+        )
+        await self.conn.commit()
+        return cur.rowcount
+
     async def list_for_card(self, card_id: str) -> list[dict]:
         async with self.conn.execute(
             "SELECT * FROM card_sessions WHERE card_id = ? ORDER BY created_at ASC",

@@ -1,6 +1,6 @@
 # SessionMark
 
-**对一个 session 打的注解** —— mark 是 session 的附属,不是一等对象。**一份 mark 提交标注的是整个 session**(不绑定单一 round);一条 mark = 一段「以写代读」的感悟,`mark` 文本里 `#…？` 自动建卡。正文落 YAML 文件(canonical),元信息进 `session_marks` 表(派生索引)。
+**对一个 session 打的注解** —— mark 是 session 的附属,不是一等对象。**一份提交 = 一份 mark,标注的是整个 session**:逐 round 走一遍,每条 round 一个 `{index, comment?, issues?}`,`comment` 里 `#…？` 自动建卡。mark id `m<n>` **由服务端自动分配**(用户不填)。正文落 YAML 文件(canonical),元信息进 `session_marks` 表(派生索引)。
 
 机制见 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md);命令见 [`../../cli/v4/session.md#session-mark`](../../cli/v4/session.md#session-mark);出处边 see [CardSession](card-session.md)。
 
@@ -27,30 +27,39 @@ sessions/<source>/<sid[0:2]>/<sid>/
 ```
 
 ```yaml
-# marks/m1.yaml
-last_index: 41                # 标这批 mark 时 session 的最新 round index(乐观锁基线 + 当时情况)
+# marks/m1.yaml — 一份提交 = 一份 mark(服务端给它 m1)
+last_index: 41                # 标这份 mark 时 session 的最新 round index(乐观锁基线 + 当时情况)
 description: 在配 pty、用户突然提 tmux 的那几轮——想搞清他到底要什么
-mark: |                       # 自由感悟正文;#…？ 就地标问题
-  配 pty 时用户突然提了 tmux。#为什么 pty 会让用户想到 tmux？
-  他其实想要可重连会话。
-issues:                    # 写入时解析 #…？ + 撞库的结果(canonical)
-  - issue: 为什么 pty 会让用户想到 tmux
-    card_id: card_01jz8k2m
-    is_new: true
-    indexes: 36-37            # 这条 #…？ 从哪几轮读出来的(可多个)
 created_at: 2026-06-16T08:30:00Z
+rounds:                       # 从 index 1 起逐 round,严格递增,覆盖 ≥90%
+  - index: 1
+  - index: 2
+    comment: 用户要给 pty 配上终端。
+  - index: 37
+    comment: |
+      配 pty 时用户突然提了 tmux。#为什么 pty 会让用户想到 tmux？
+      他其实想要可重连会话。
+    issues:                   # 写入时解析 #…？(或主动声明)+ 撞库的结果(canonical)
+      - issue: 为什么 pty 会让用户想到 tmux
+        card_id: card_01jz8k2m
+        is_new: true
+        indexes: "37"         # 这条 issue grounding 的 round(s);#…？ 默认 = 本轮 index
+  - index: 38                 # 读了没东西标(只占覆盖)
 ```
 
 | 字段 | 说明 |
 |---|---|
 | `last_index` | 提交时读到的 session 最新 round index;乐观锁基线(写入时与 session 当前最新 round index 比,不一致拒绝) |
-| `description` | 这次标注的场景(随提交带进每个 mark 文件) |
-| `mark` | 自由文本感悟;`#…？`(`#` 起、`？`/`?` 止)= 就地标的问题 |
-| `issues[]` | 解析 `#…？` + 撞 `cards` 库的结果:`{issue, card_id, is_new, indexes}`(`indexes` = 这条 issue grounding 的 round〔可多个〕)。**canonical**——`card_sessions` 由它派生 |
+| `description` | 这次标注的场景 |
 | `created_at` | ISO 8601 |
+| `rounds[]` | 逐 round 的标注,每条 `{index, comment?, issues?}`。从 `index: 1` 起、严格递增、覆盖 ≥90%。没东西标的轮也写一条 `{index}`(占覆盖) |
+| `rounds[].index` | 这条标注指向第几轮(1-indexed) |
+| `rounds[].comment` | 这一轮的感悟;`#…？`(`#` 起、`？`/`?` 止)= 就地标的问题,grounding 在本轮 `index` |
+| `rounds[].issues[]` | 解析 `#…？` + 主动声明的 issue 撞 `cards` 库的结果:`{issue, card_id, is_new, indexes}`(`card_id` / `is_new` 服务端回填;`indexes` = grounding 的 round〔可多个〕)。**canonical**——`card_sessions` 由它派生 |
 
-- **append-only**:写一次不动;改主意 = 加新 `m<n>`。
+- **append-only**:写一次不动;改主意 = 加新 `m<n>`(`m<n>` 由服务端 `next_seq` = COUNT+1 自动分配)。清空 session 的 mark = 删整个 `marks/` 目录(`session clear-marks`)。
 - **不进向量库**:mark 本身不检索;进 `cards` 向量库的是它 `#…？` 出来的问题(卡)。
+- **同 mark 内同一卡 MERGE**:一份 mark 里多条 round 命中同一张卡 → `card_sessions` 只一行(PK `(card_id, session_id, mark)`),`indexes` 合并(如 round 37 & 50 → `"37,50"`)。
 
 ## 表(派生索引):`session_marks`
 

@@ -16,22 +16,35 @@ class CreateCardRequest(BaseModel):
     card_id: str | None = None
 
 
-class MarkInput(BaseModel):
-    # ``id`` is explicit ``m<n>`` (not server-assigned). ``indexes`` is now
-    # REQUIRED on every mark — it's what the ≥90% round-coverage check counts
-    # (以写代读: a submission must read the whole session). ``mark`` (the text)
-    # is OPTIONAL: an entry with no/empty ``mark`` is an id-only "read this
-    # round(s), nothing to note" marker that still counts toward coverage via
-    # its ``indexes`` but creates no #…？ issues / cards. The service validates.
-    id: str
-    indexes: str
-    mark: str | None = None
+class IssueDecl(BaseModel):
+    # An explicitly-declared issue on a round. ``issue`` is the question text;
+    # ``indexes`` (optional) is its grounding round(s) — if absent the issue
+    # grounds at the round's own ``index``. ``card_id`` / ``is_new`` are NEVER
+    # read from the request: they're server outputs (embed + collide), written
+    # only into the canonical YAML.
+    issue: str
+    indexes: str | None = None
 
 
-class SubmitMarksRequest(BaseModel):
+class RoundEntry(BaseModel):
+    # One round of a mark. ``index`` is the session round this entry is for
+    # (1-indexed). ``comment`` (optional) is the free-text annotation; ``#…？``
+    # in it is auto-parsed into issues grounded at this round's own ``index``.
+    # ``issues`` (optional) are explicitly-declared issues. A bare ``{index}``
+    # (no comment / issues) is "read this round, nothing to note" — it still
+    # counts toward coverage.
+    index: int
+    comment: str | None = None
+    issues: list[IssueDecl] = []
+
+
+class SubmitMarkRequest(BaseModel):
+    # One submission = one mark. The server AUTO-ASSIGNS the mark id ``m<n>``
+    # (the client does NOT provide it). ``rounds`` walks from index 1, strictly
+    # ascending, covering ≥90% of ``[1, last_index]``.
     last_index: int
     description: str
-    marks: list[MarkInput]
+    rounds: list[RoundEntry]
 
 
 class CreateCardResponse(BaseModel):

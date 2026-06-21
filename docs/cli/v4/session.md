@@ -6,10 +6,11 @@
 memory.talk session
 ├── list [filters...] [--limit N] [--json]              # 按多维过滤列 session(只回元数据)
 ├── tag <sid> [K=V ...] [-K ...] [--json]               # 查 / 加 / 删 session 的 kv 标签
-└── mark --session <sid> [--mark <file>] [--json]       # 打注解(给 --mark=文件 / 不给=交互;#…？ 自动建卡)
+├── mark --session <sid> [--mark <file>] [--json]       # 打注解(给 --mark=文件 / 不给=交互;#…？ 自动建卡)
+└── clear-marks <sid> [--json]                          # 清空这个 session 的所有 mark(+ 出处边)
 ```
 
-需要 server 在跑;CLI 通过 HTTP 调本地端点(`GET /v4/sessions`、`PATCH /v4/sessions/{sid}/tags`、`POST /v4/sessions/{sid}/marks`)。
+需要 server 在跑;CLI 通过 HTTP 调本地端点(`GET /v4/sessions`、`PATCH /v4/sessions/{sid}/tags`、`POST` / `DELETE /v4/sessions/{sid}/marks`)。
 
 ## 设计原则
 
@@ -152,76 +153,81 @@ memory.talk session mark --session <sid>                 [--json]   # 不给 --m
 ```yaml
 last_index: 41          # 乐观锁:提交时我读到的 session 最新 round index
 description: 在配 pty、用户突然提 tmux 的那几轮——想搞清他到底要什么
-marks:
-  - id: m1
-    indexes: 36-37        # 这条覆盖 / grounding 的 round(s)(每条必给)
-    mark: |
+rounds:                 # 从 index 1 起,严格递增,覆盖 ≥90%
+  - index: 1
+  - index: 2
+    comment: 用户要给 pty 配上终端。
+  - index: 37
+    comment: |
       配 pty 的时候用户突然提了 tmux。#为什么 pty 会让用户想到 tmux？
       他其实想要的是「可重连的会话」,而不是 pty 本身。
-  - id: m2
-    indexes: 1-35,38-41   # id-only:这些轮读了、无须记录(只补覆盖率)
+  - index: 38           # 读了、没东西标(只占覆盖)
+    issues:             # 也可主动声明 issue + 指定 grounding 的轮
+      - issue: 可重连会话是不是真需求
+        indexes: 37-38
 ```
 
-> **覆盖率 ≥ 90%(以写代读)**:既然是「以写代读」就得读完整条 session——只标前几轮不算。所有 mark 的 `indexes` 并集(落在 `[1, last_index]`)必须覆盖 **≥ 90%** 的 round 数,不够 → 整份拒绝(`coverage 23% (12/52 rounds) < 90%`)。一条 id-only 用范围(`1-35,38-41`)就能补一整段「无须记录」的轮次。
+> **mark id `m<n>` 由服务端自动分配**——提交体里**不带** id(第一遍 `m1`、第二遍 `m2`…)。
+>
+> **覆盖率 ≥ 90%(以写代读)**:既然是「以写代读」就得读完整条 session。`rounds` 里 distinct `index` 数必须覆盖 **≥ 90%** 的 round(从 `index: 1` 起逐轮往下),不够 → 整份拒绝(`coverage 23% (12/52 rounds) < 90%`)。没东西标的轮也写一条 `{index}` 占覆盖。
 
 | 字段 | 必填 | 说明 |
 |---|---|---|
 | `last_index` | 是 | 提交时读到的 session 最新 round index(乐观锁基线 / 总 round 数)。**乐观锁**:与 session 当前最新 round index 不一致 → 整份拒绝([错误](#错误)) |
-| `description` | 是 | 这次标注的场景;随每条 mark 落盘 |
-| `marks` | 是 | 数组,每条 `{id, indexes, mark?}`,**非空**。`mark` 里 `#…？`(`#` 起、`？`/`?` 止)就地标问题 |
-| `marks[].id` | **是** | mark id `m<n>`,**每条显式给、不默认分配**;session 内单调、不跳号 / 不复用(续标接着上次最大序号) |
-| `marks[].indexes` | **是(每条都给)** | 这条 mark 覆盖 / grounding 的 round(s)(可多个,`36-37` / `3,7,12`)→ 覆盖率数它,含 `#…？` 时同时是问题 grounding,落 `card_sessions.indexes`。**交互模式自动填当前标注轮的 index** |
-| `marks[].mark` | 否 | mark 正文。**省略 / 空 = id-only 标记**:「这几轮读了、没什么可记」——只补覆盖率,不解析 `#…？`、不建卡,但照样落盘(正文空、`issues` 空)。`#…？` 只在**有正文**的 mark 上解析 |
+| `description` | 是 | 这次标注的场景;落进 mark 文件 |
+| `rounds` | 是 | 数组,每条 `{index, comment?, issues?}`,**非空**;从 `index: 1` 起、严格递增、不重复 |
+| `rounds[].index` | **是** | 这条标注指向第几轮(1-indexed)。**首条必须 1**(从中间起 = 偷跳 → 拒绝) |
+| `rounds[].comment` | 否 | 这一轮的感悟。`#…？`(`#` 起、`？`/`?` 止)就地标问题,**grounding 在本轮 `index`**。省略 = 读了没东西标(只占覆盖) |
+| `rounds[].issues` | 否 | 主动声明的 issue 数组,每条 `{issue, indexes?}`:`indexes` 指定 grounding 的轮(默认本轮 `index`)。`card_id` / `is_new` 服务端回填,**提交方不给** |
 
 ### 交互模式
 
-不喂 YAML 时进入。把 session 当对话**回放**着读:一次摆**当前轮 + 它的上一轮(上下文)**,逐轮往前滑、逐轮打标,你边读边把感悟写成 mark(**session 级、不绑单一 round**)。**每个 round 都可标**(含第一轮);上一轮只是给你语境,有就显示、没有(第一轮)就只摆当前轮。
+不喂 YAML 时进入。把 session 当对话**回放**着读:一次摆**当前轮 + 它的上一轮(上下文)**,**从第一轮起**逐轮往前滑、逐轮打标,你边读边把感悟写成 comment。mark id `m<n>` **服务端自动分配**(客户端不配号)。
 
-- 从 `r1` 起逐轮走:第 k 轮渲染**当前轮 `r_k`(标这里)+ 上一轮 `r_{k-1}`(淡色上下文,k=1 时无)**,对当前轮写 mark / 跳过 / `:back` / `:q`。走法 `r1`(无上文)→ `r2`(上文 r1)→ … → `r_N`(上文 r_{N-1});**每轮都能标**。
+- 从 `r1` 起逐轮走:第 k 轮渲染**当前轮 `r_k`(标这里)+ 上一轮 `r_{k-1}`(淡色上下文,k=1 时无)**,对当前轮写 comment / 留空 / `:back` / `:q`。走法 `r1`(无上文)→ `r2`(上文 r1)→ … → `r_N`;**每轮都记一条**(空 comment 也记 `{index}`,占覆盖)。
 
 ```
 $ memory.talk session mark --session sess_def456
-session sess_def456 · 41 rounds · 交互打标(标当前轮 / 回车跳过 / :back 回退 / :q 退出)
+session sess_def456 · 41 rounds · interactive step标注(标当前轮 / 回车留空 / :back 回退 / :q 退出)
 
 ──────── round 36 ·(上下文)────────
 [assistant] 我先帮你把 pty 配上……
 ──────── round 37 ·(当前 · 标这里)────────
 [human] 等等,能不能直接用 tmux?
 
-mark> 配 pty 时用户突然提 tmux。#为什么 pty 会让用户想到 tmux？他其实想要可重连会话。
+comment> 配 pty 时用户突然提 tmux。#为什么 pty 会让用户想到 tmux？他其实想要可重连会话。
 ↵
-✓ sess_def456#m1 · round 37 · → new card card_01jz8k2m  (#为什么 pty 会让用户想到 tmux？)
+✓ marked sess_def456 · m1 · 41 round(s)  …  [#37] → new card card_01jz8k2m
 ```
 
 | 输入 | 作用 |
 |---|---|
-| 写文本后回车 | 为**当前轮**落一条 mark,往前滑一格 |
-| 直接回车(空) | 当前轮「读了、没什么可记」→ 落一条 **id-only 条目**(`{id, indexes:[当前轮]}`,无正文),往前滑一格——**跳过也算覆盖率** |
-| `:back` | 回退一格(看回上一窗口;已落的 mark 不撤,append-only) |
+| 写文本后回车 | 为**当前轮**记一条带 comment 的 round,往前滑一格 |
+| 直接回车(空) | 当前轮「读了、没什么可记」→ 记一条 `{index}`(无 comment),往前滑一格——**空 comment 也记进 rounds、算覆盖率** |
+| `:back` | 回退一格(看回上一窗口;再走到同一轮会覆盖那一条) |
 | `:q` | 退出 |
 
-> **覆盖率门槛**:逐轮走到底(每轮标或跳)自然就是 100% 覆盖;若中途 `:q` 时覆盖率 < 90%,提交被**拦下**并提示还差几轮(走完再交),不会半截提交。
+> **覆盖率门槛**:从第一轮逐轮走到底(每轮写或留空)自然就是 100% 覆盖;若中途 `:q` 时覆盖率 < 90%,提交被**拦下**并提示还差几轮(走完再交),不会半截提交。
 
-`last_index` 进交互时**一次性锁定**;中途 session 又被写了新 round → 下一步提交触发乐观锁、提示退出重进。`description` 进交互时问一次(可空)。两种模式落盘完全一致。
+`last_index` 进交互时**一次性锁定**;中途 session 又被写了新 round → 下一步提交触发乐观锁、提示退出重进。`description` 进交互时问一次(可空)。mark id 由服务端分配。两种模式落盘完全一致。
 
 ### `#…？` → 自动建卡
 
-每条 `mark` 文本里的 `#…？` 在写入时被解析、embed 撞 `cards`(issue)向量库:**miss → 建新卡**(`issue` = 问题文本,还没答案)/ **hit → 关联**老卡;两种都记一条 [`card_sessions`](../../structure/v4/card-session.md),出处 = **`(session_id, mark)`**(即 `sess_<sid>#<mark>`)——精确到那条 mark。判「新 / 老」由**检索**算(miss = 惊讶 = 新卡),不靠 AI 自评。
+每条 round 的 `comment` 里的 `#…？`(以及主动声明的 `issues`)在写入时被解析、embed 撞 `cards`(issue)向量库:**miss → 建新卡**(`issue` = 问题文本,还没答案)/ **hit → 关联**老卡;两种都记一条 [`card_sessions`](../../structure/v4/card-session.md),出处 = **`(session_id, mark)`**(即 `sess_<sid>#<mark>`)+ grounding 的 `indexes`(`#…？` 默认 = 本轮 `index`)——精确到那份 mark。判「新 / 老」由**检索**算(miss = 惊讶 = 新卡),不靠 AI 自评。同份 mark 里多轮命中同一张卡 → `card_sessions` 合并成一条(`indexes` 把那几轮并起来)。
 
 ### 落地
 
-- 每条 mark → `sessions/<source>/<bucket>/<sid>/marks/m<n>.yaml`(canonical · YAML;`last_index` / `description` / `mark` / `issues` / `created_at`)。
+- 一份 mark → `sessions/<source>/<bucket>/<sid>/marks/m<n>.yaml`(canonical · YAML;`last_index` / `description` / `created_at` / `rounds[]`,每条 round 带 `index` + 可选 `comment` + 回填的 `issues`)。`m<n>` 由服务端分配。
 - 元信息 → `session_marks` 表(`session_id` / `mark` / `last_index` / `created_at`),撑乐观锁 + 寻址 + 反查。
-- 查看一条 session 的 mark:直接 `read sess_<sid>` —— **session 读取把这条 session 的 marks 折进来**(rounds 之后跟一段 `## marks (N)`,每条一行:`m<n>` · indexes · 它的 `#…？` 建/连了哪些卡)。读回某条 mark 的全文走 `read sess_<sid>#m1`(按 `#` 分片判型)。**没有单独的 mark 列表命令**(`GET …/marks` 是交互模式续号的内部机制,不是用户列表入口)。
+- 查看一条 session 的 mark:直接 `read sess_<sid>` —— **session 读取把这条 session 的 marks 折进来**(rounds 之后跟一段 `## marks (N)`,每条一行:`m<n>` · N round(s) · 它的 `#…？` 建/连了哪些卡)。读回某条 mark 的全文走 `read sess_<sid>#m1`(按 `#` 分片判型)。
 
 ### 输出
 
 Markdown(默认):
 
 ```
-✓ marked sess_def456 · round 37 · last_index 41
-  m1  #为什么 pty 会让用户想到 tmux？  → new card card_01jz8k2m
-  m2  (无问题)
+✓ marked sess_def456 · m1 · 41 round(s)
+  - [#37] #为什么 pty 会让用户想到 tmux？  → new card card_01jz8k2m
 ```
 
 `--json`:
@@ -229,13 +235,34 @@ Markdown(默认):
 ```json
 {
   "session_id": "sess_def456",
-  "last_index": 41,
-  "marks": [
-    {"mark": "m1", "issues": [{"issue": "为什么 pty 会让用户想到 tmux", "card_id": "card_01jz8k2m", "is_new": true, "indexes": "36-37"}]},
-    {"mark": "m2", "issues": []}
+  "mark": "m1",
+  "rounds": [
+    {"index": 1, "issues": []},
+    {"index": 37, "comment": "配 pty 时用户突然提了 tmux。#为什么 pty 会让用户想到 tmux？",
+     "issues": [{"issue": "为什么 pty 会让用户想到 tmux", "card_id": "card_01jz8k2m", "is_new": true, "indexes": "37"}]}
   ]
 }
 ```
+
+---
+
+## session clear-marks
+
+清空一个 session 的**所有 mark**(`marks/*.yaml` + `session_marks` 行 + `card_sessions` 出处边)。**卡 / Position / review / link 不动**——只走 mark 本身 + 它的出处边。无 mark 删一次是 no-op。
+
+```bash
+memory.talk session clear-marks <session_id> [--json]
+```
+
+| 参数 | 必填 | 说明 |
+|---|---|---|
+| `<session_id>` | 是 | 要清空 mark 的 session;`sess_<...>` |
+| `--json` | 否 | JSON 输出 |
+
+### 输出
+
+Markdown:`cleared N mark(s) for <sid>`(无 mark → `cleared 0 mark(s) for <sid>`)。
+JSON:`{"session_id": "...", "deleted_marks": N}`。
 
 ---
 
@@ -246,6 +273,7 @@ Markdown(默认):
 | 看一条 session 的原始对话 + 它上面的 marks | `memory.talk read <session_id>`(rounds + `## marks` 折在一起) |
 | 看某条 mark 当时标了啥 / 建了哪些卡 | `memory.talk read sess_<sid>#m1` |
 | 给 session 打注解、抽卡 | `memory.talk session mark --session <sid>` |
+| 清空一个 session 的所有 mark | `memory.talk session clear-marks <sid>` |
 | 按项目 / 状态找 session | `memory.talk session list --cwd … --tag …` |
 
 ## 错误
@@ -259,7 +287,8 @@ Markdown(默认):
 | tag key 不合规 / value 太长 / 数量超限 | `error: tag key '<k>' invalid: ...`,exit 1,不动 tag |
 | 同时 `K=V` 和 `-K` | `error: cannot both set and unset 'K' in the same call`,exit 1 |
 | mark:`last_index` ≠ session 当前最新 round index | `error: session advanced (last_index 41 ≠ current 43); re-read & re-mark`,exit 1(乐观锁 / 409) |
-| mark:`marks` 为空 / YAML 非法 | `error: marks required` / `error: invalid YAML`,exit 1 |
-| mark:`id` 缺失 / 跳号 / 复用 | `error: mark id required and must be monotonic (m<n>)`,exit 1 |
+| mark:`rounds` 为空 / YAML 非法 | `error: rounds required` / `error: invalid YAML`,exit 1 |
+| mark:首条 index≠1 / 非严格递增 / 越界 | `error: first round index must be 1 …` / `error: round index must be strictly ascending …`,exit 1 |
+| mark / clear-marks:sid 不存在 | `error: session '<id>' not found`,exit 1 |
 
-> **状态**:`list` / `tag` / `mark` 均**已实现(v1.1.x)**;`mark` 的机制见 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md)。
+> **状态**:`list` / `tag` / `mark` / `clear-marks` 均**已实现(v1.1.x)**;`mark` 的机制见 [`../../works/v4/session-mark.md`](../../works/v4/session-mark.md)。

@@ -220,6 +220,33 @@ def mark(session_id: str, mark_file: str | None, json_out: bool) -> None:
         emit_md(fmt_mark_result(result))
 
 
+# ────────── session clear-marks ──────────
+
+@session.command("clear-marks")
+@click.argument("session_id")
+@click.option("--json", "json_out", is_flag=True, default=False, help="Emit JSON")
+def clear_marks(session_id: str, json_out: bool) -> None:
+    """Clear ALL marks for a session (marks/*.yaml + session_marks +
+    card_sessions). Cards / positions / reviews / links are left untouched."""
+    cfg = Config()
+    try:
+        result = api(
+            "DELETE", f"/v4/sessions/{session_id}/marks", cfg,
+        )
+    except ApiError as e:
+        _emit_err(json_out, extract_error_message(e.payload))
+        sys.exit(1)
+    except Exception as e:
+        _emit_err(json_out, f"cannot reach server: {e}")
+        sys.exit(1)
+
+    if json_out:
+        emit_json(result)
+    else:
+        n = result.get("deleted_marks", 0)
+        emit_md(f"cleared {n} mark(s) for {session_id}")
+
+
 def _post_marks(cfg: Config, session_id: str, body: dict, json_out: bool) -> dict:
     """POST a submission to ``/v4/sessions/{sid}/marks``. Emits + exits on
     error (so callers get a clean ``dict`` or never return)."""

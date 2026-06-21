@@ -50,15 +50,16 @@ class SessionMark(BaseModel):
     """One mark folded into a session read (``read sess_…`` includes these).
 
     Sourced from ``session_marks`` (metadata) + the mark's canonical YAML
-    (``marks/<mark>.yaml``) so the full body — including the resolved
-    ``issues[]`` (which #…？ became which new/linked card) — is present.
-    Single-mark detail is still ``read sess_…#m<n>``.
+    (``marks/<mark>.yaml``) so the full per-round body — including each
+    round's resolved ``issues[]`` (which #…？ became which new/linked card) —
+    is present. Single-mark detail is still ``read sess_…#m<n>``.
     """
     mark: str                       # ``m<n>``
     description: str = ""
-    text: str = ""                  # the raw free-text annotation (yaml ``mark``)
-    indexes: str | None = None
-    issues: list[dict[str, Any]] = Field(default_factory=list)
+    last_index: int = 0
+    # One entry per walked round: ``{index, comment?, issues?: [{issue,
+    # card_id, is_new, indexes}]}``.
+    rounds: list[dict[str, Any]] = Field(default_factory=list)
     created_at: str = ""
 
 

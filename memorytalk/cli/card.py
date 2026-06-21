@@ -272,13 +272,13 @@ def _issue_line(iss: dict) -> str:
     or linked an existing one. Mirrors the submit-result rendering."""
     tag = "new card" if iss.get("is_new") else "linked"
     idx = f" ({iss['indexes']})" if iss.get("indexes") else ""
-    return f"- #{iss.get('issue', '')}？{idx} → {tag} `{iss.get('card_id', '')}`"
+    return f"  - #{iss.get('issue', '')}？{idx} → {tag} `{iss.get('card_id', '')}`"
 
 
 def _fmt_read_mark(r: dict) -> str:
     """``read sess_…#m<n>`` — one mark's full body: scenario (description),
-    the mark text, its indexes, and each resolved issue→card. ``r`` is the
-    read envelope ``{id, session_id, mark_seq, mark: <body>}``."""
+    last_index, and each walked round (comment + resolved issues→cards).
+    ``r`` is the read envelope ``{id, session_id, mark_seq, mark: <body>}``."""
     body = r.get("mark") or {}
     addr = r.get("id")
     if not addr:
@@ -289,18 +289,15 @@ def _fmt_read_mark(r: dict) -> str:
         lines.append(f"_scenario: {body['description']}_")
     if body.get("last_index") is not None:
         lines.append(f"_last_index: {body['last_index']}_")
-    lines.append("")
-    if body.get("mark"):
-        lines.append(str(body["mark"]))   # the raw free-text annotation
-    if body.get("indexes"):
-        lines.append(f"\n_indexes: {body['indexes']}_")
-    issues = body.get("issues") or []
-    lines.append(f"\n## issues ({len(issues)})")
-    if issues:
-        for iss in issues:
+    rounds = body.get("rounds") or []
+    lines.append(f"\n## rounds ({len(rounds)})")
+    for rd in rounds:
+        head = f"### [#{rd.get('index')}]"
+        lines.append(head)
+        if rd.get("comment"):
+            lines.append(str(rd["comment"]))
+        for iss in rd.get("issues") or []:
             lines.append(_issue_line(iss))
-    else:
-        lines.append("_(no #…？ issues)_")
     return "\n".join(lines)
 
 
@@ -352,8 +349,9 @@ def _fmt_read_session(s: dict) -> str:
         lines.append(f"\n## marks ({len(marks)})")
         for mk in marks:
             # Concise line per mark — full single-mark detail is `read sess#m<n>`.
-            idx = f" · idx {mk['indexes']}" if mk.get("indexes") else ""
-            issues = mk.get("issues") or []
+            mk_rounds = mk.get("rounds") or []
+            issues = [iss for rd in mk_rounds for iss in (rd.get("issues") or [])]
+            cov = f"{len(mk_rounds)} round{'s' if len(mk_rounds) != 1 else ''}"
             if issues:
                 cards = " · ".join(
                     f"#{i.get('issue', '')}？→{'new' if i.get('is_new') else 'linked'} "
@@ -362,7 +360,7 @@ def _fmt_read_session(s: dict) -> str:
                 )
             else:
                 cards = "_(no issues)_"
-            lines.append(f"- `{mk['mark']}`{idx} · {cards}")
+            lines.append(f"- `{mk['mark']}` · {cov} · {cards}")
     return "\n".join(lines)
 
 

@@ -8,12 +8,13 @@
 
 把一个已落库的 session 当对话**回放**着读,逐 round 往前走、逐 round 打 mark(以写代读):
 
-- **2-round 滑动窗口**:一次摆**上一轮(上下文)+ 当前轮(要标的)**;每步进一 round、出一 round。
-- **逐轮交互**:对当前轮 —— 写一条 mark 文本(可多行,含 `#…？`)/ 空 = 跳过 / `:back` 回退 / `:q` 退出。
-- **`indexes` 自动填**:当前窗口的 round 区间(这条 `#…？` grounding 的轮次)——交互模式不让用户手填。
-- **`m<n>` 顺序分配**:API 要求 `id` **显式必填、单调不复用**(见 [session-marks.md](../../api/v4/session-marks.md)),所以 CLI 进入时先 `GET …/marks` 拿当前最大序号,逐条 `m<n+1>`。
+- **2-round 滑动窗口**:一次摆**上一轮(上下文)+ 当前轮(要标的)**;**从第一轮起**逐轮走,每步进一 round、出一 round。
+- **逐轮交互**:对当前轮 —— 写一条 comment(可多行,含 `#…？`)/ 空 = 留空(仍记一条 `{index}` 占覆盖)/ `:back` 回退 / `:q` 退出。
+- **`comment` 的 `#…？` grounding 在本轮 `index`**:交互模式不让用户手填 grounding;`#…？` 默认 ground 在它那条 round 的 `index`。
+- **`m<n>` 服务端自动分配**:提交体**不带** id —— 服务端 `next_seq`(COUNT+1)给这份 mark 配号(第一遍 `m1`、续标 `m2`…)。客户端不再 `GET …/marks` 续号、不再本地 mint `m<n>`。
 - **`last_index` 乐观锁**:进入时一次性锁定 = session 当前 round 数;提交时若 session 已被 sync 写了新 round → 409 → 提示退出重进。
-- **批量提交**:窗口走完(或中途 `:q`)后,把收集到的 marks 一次 `POST /v4/sessions/{id}/marks`(文件模式与交互模式落盘完全一致)。
+- **一份提交 = 一份 mark**:窗口走完(或中途 `:q`)后,把收集到的 `rounds[]` 一次 `POST /v4/sessions/{id}/marks`(文件模式与交互模式落盘完全一致)。
+- **覆盖率 ≥ 90%**:从第一轮逐轮走到底自然 100%;中途 `:q` 若覆盖 < 90% → 拦下、提示还差几轮。
 - **健壮**:空 session / 单 round / 超长 round 文本 / 提交期 session 前进,都不能崩。
 
 本质是**引导式的线性 REPL**(走一遍、边走边写),不是多窗格的复杂应用。这一点决定了选型。
@@ -62,34 +63,34 @@ session mark --session <sid>            (无 --mark → 交互)
   │
   ├─ GET /v4/read {id:<sid>}            → 取 rounds(只读)
   ├─ last_index = len(rounds)           乐观锁基线(进入时锁定)
-  ├─ GET /v4/sessions/<sid>/marks       → 当前最大 m<n>,后续 m<n+1> 顺序发
   ├─ description = questionary.text(...) 问一次场景(可空)
   │
-  ├─ 滑窗 loop  k = 0..N-1(每轮可标):
+  ├─ 滑窗 loop  k = 0..N-1(从第一轮起,每轮记一条):
   │     渲染窗口:rich.Panel(prev=r[k-1] 淡色上下文,k=0 时无) + rich.Panel(cur=r[k] 当前·标这里)
-  │     ans = questionary.text("mark>", multiline=True)   # 多行;含 #…？
-  │     · 空        → 跳过当前轮,k++
-  │     · ":back"   → k--(看回上一轮;已收集的 mark 不撤,append-only)
+  │     ans = questionary.text("comment>", multiline=True)   # 多行;含 #…？
+  │     · 空        → 记 {index:当前轮}(无 comment,占覆盖),k++
+  │     · ":back"   → k--(再走到同一轮会覆盖那一条)
   │     · ":q"      → 跳出
-  │     · 文本      → 收集 {id:"m<n+1>", mark:ans, indexes:当前轮 index},k++
+  │     · 文本      → 记 {index:当前轮, comment:ans},k++
   │
-  └─ 收集非空 → POST /v4/sessions/<sid>/marks {last_index, description, marks:[...]}
-        · 200 → fmt_mark_result(哪些 #…？ 建新/连老卡)
+  ├─ 覆盖率 < 90% → 拦下、提示还差几轮,不提交
+  └─ POST /v4/sessions/<sid>/marks {last_index, description, rounds:[...]}   ← 不带 id,服务端配 m<n>
+        · 200 → fmt_mark_result(服务端分配的 m<n> + 哪些 #…？ 建新/连老卡)
         · 409 → "session 期间被写入(last_index 41≠当前 43);退出重进"
 ```
 
 要点:
-- **渲染** `rich`:`Panel` 包每个 round(speaker/role + 文本,超长中截 + 可展开提示);当前轮高亮(标题 `round 37 · 标这里`),上一轮淡色(`round 36 · 上下文`)。复用 `cli/_render.py` 的 round 渲染。
-- **输入** `questionary.text(multiline=True)`:一条 mark 天然多行;命令 `:back`/`:q` 用文本前缀识别(或单独 `questionary.select` 给「写/跳过/回退/退出」再写文本——但纯文本前缀更快)。
-- **`indexes` 自动**:= 当前窗口被标的那 round 的 index(单轮 `"37"`;若设计允许把上下文轮也算进 grounding,则 `"36-37"`——**取当前轮**,跟 doc「自动填当前阅读窗口的 round」一致)。
-- **`m<n>` 显式**:CLI 负责算并填(API 不代劳),保证单调;`:back` 不回收已分配的号(append-only)。
-- **提交时机**:**批量**(走完一次性 POST)——简单、原子(一份提交一个乐观锁);不做逐步提交(逐步会让 `last_index` 语义复杂)。
+- **渲染** `rich`:`Panel` 包每个 round(speaker/role + 文本,超长中截);当前轮高亮(标题 `round 37 · 标这里`),上一轮淡色(`round 36 · 上下文`)。
+- **输入** `questionary.text(multiline=True)`:一条 comment 天然多行;命令 `:back`/`:q` 用文本前缀识别。
+- **`#…？` grounding 自动**:= 它那条 round 的 `index`(comment 里的 `#…？` 默认 ground 在本轮)。想 ground 在别的轮 → 走文件模式的主动声明 `issues: [{issue, indexes}]`。
+- **`m<n>` 服务端分配**:提交体不带 id;`:back` 覆盖同 index 的条目(按 index 去重,提交前升序重排)。
+- **提交时机**:**一份提交 = 一份 mark**(走完一次性 POST)——简单、原子(一份提交一个乐观锁)。
 
 ---
 
 ## 5. 测试策略
 
-- **单元**:喂一串「输入序列」驱动 loop(monkeypatch `questionary.text` 返回预设值 / 用 `prompt_toolkit` 的 `create_pipe_input`),断言**最终构造的提交体**(marks 的 id 单调、indexes 对、空行跳过、`:back` 回退后覆盖)。
+- **单元**:喂一串「输入序列」驱动 loop(注入 `ask_comment` 输入 seam),断言**最终构造的提交体**(`rounds[]` 从 index 1 起、严格递增、**不带 id**、空行也记一条、`:back` 回退后覆盖同 index)。
 - **集成**:把提交体过真 `submit_marks`(已存在),验 `#…？` 建/连卡 + `card_sessions`。
 - **渲染**:rich 输出快照(可选,low 价值)。
 - **边界**:空 session(直接提示无可标)、单 round(无上下文轮)、`:q` 立即退出(空提交不 POST)、提交期 last_index 冲突(mock 409)。

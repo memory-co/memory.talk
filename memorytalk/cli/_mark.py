@@ -7,11 +7,12 @@ Two paths, one endpoint
 =======================
 Both the YAML batch path (``--mark <file>`` / stdin) and the interactive
 step-through ("step 标注") build the SAME submission body and POST it once
-to the existing ``POST /v4/sessions/{sid}/marks``. The interactive path is
-a *client-side* walk: a 2-round sliding window rendered with ``rich.Panel``,
-marks typed via ``questionary.text(multiline=True)``, accumulated locally
-with monotonic ``m<n>`` ids, then batched at the end. No server-side draft
-state, no new endpoint — see ``docs/works/v4/session-mark-tui.md`` §3/§4.
+to ``POST /v4/sessions/{sid}/marks``. One submission = ONE mark; the server
+auto-assigns its id ``m<n>``. The interactive path is a *client-side* walk:
+a 2-round sliding window rendered with ``rich.Panel``, comments typed via
+``questionary.text(multiline=True)``, accumulated as per-round entries from
+index 1, then submitted at the end. No server-side draft state, no new
+endpoint — see ``docs/works/v4/session-mark-tui.md``.
 """
 from __future__ import annotations
 
@@ -26,8 +27,6 @@ import yaml
 from memorytalk.cli._http import ApiError, api, extract_error_message
 from memorytalk.config import Config
 from memorytalk.service.session_marks import MARK_COVERAGE_THRESHOLD
-from memorytalk.util.ids import MARK_SEQ_PREFIX, mark_seq
-from memorytalk.util.indexes import IndexesParseError, parse_indexes
 
 
 # ────────── file / pipe mode ──────────
@@ -36,11 +35,11 @@ def load_submission(path: str) -> dict:
     """Load a submission YAML (``-`` = stdin) into a request body dict.
 
     Validates the wire shape only (``last_index`` / ``description`` /
-    non-empty ``marks`` with ``id``); the server owns the deep rules
-    (optimistic lock, monotonic ids, ``indexes`` required, ≥90% round
-    coverage). ``mark`` text is optional — an entry with just ``{id, indexes}``
-    is an id-only "read this round(s), nothing to note" coverage marker. Raises
-    ``click.BadParameter`` / ``ValueError`` on a malformed file.
+    non-empty ``rounds`` each with an ``index``); the server owns the deep
+    rules (optimistic lock, first index == 1, strictly ascending, ≥90%
+    coverage, #…？ → cards). The mark id ``m<n>`` is server-assigned — the
+    submission never carries it. Raises ``click.BadParameter`` / ``ValueError``
+    on a malformed file.
     """
     if path == "-":
         raw = sys.stdin.read()
@@ -58,41 +57,46 @@ def load_submission(path: str) -> dict:
         raise ValueError("invalid YAML: expected a mapping at the top level")
     if "last_index" not in data:
         raise ValueError("last_index required")
-    marks = data.get("marks")
-    if not isinstance(marks, list) or not marks:
-        raise ValueError("marks required")
+    rounds = data.get("rounds")
+    if not isinstance(rounds, list) or not rounds:
+        raise ValueError("rounds required")
     body = {
         "last_index": data["last_index"],
         "description": data.get("description") or "",
-        "marks": [],
+        "rounds": [],
     }
-    for m in marks:
-        if not isinstance(m, dict) or not m.get("id"):
-            raise ValueError("each mark needs an explicit id (m<n>)")
-        entry = {"id": m["id"], "mark": m.get("mark") or ""}
-        if m.get("indexes") is not None:
-            entry["indexes"] = str(m["indexes"])
-        body["marks"].append(entry)
+    for rd in rounds:
+        if not isinstance(rd, dict) or rd.get("index") is None:
+            raise ValueError("each round needs an integer index")
+        entry: dict = {"index": rd["index"]}
+        if rd.get("comment") is not None:
+            entry["comment"] = str(rd["comment"])
+        if rd.get("issues") is not None:
+            # Pass explicit issues straight through ({issue, indexes?}); the
+            # server fills card_id / is_new.
+            entry["issues"] = rd["issues"]
+        body["rounds"].append(entry)
     return body
 
 
 # ────────── rendering ──────────
 
 def fmt_mark_result(result: dict) -> str:
-    """Render a submit response (which #…？ became new/linked cards)."""
+    """Render a submit response (the auto-assigned mark + which #…？ became
+    new/linked cards, per round)."""
     sid = result.get("session_id", "")
-    last_index = result.get("last_index", "")
-    lines = [f"✓ marked `{sid}` · last_index {last_index}", ""]
-    for m in result.get("marks", []):
-        issues = m.get("issues") or []
-        if not issues:
-            lines.append(f"- `{m['mark']}`  (no issues)")
-            continue
-        for iss in issues:
-            tag = "new card" if iss.get("is_new") else "linked"
-            lines.append(
-                f"- `{m['mark']}`  #{iss['issue']}？  → {tag} `{iss['card_id']}`"
-            )
+    mark = result.get("mark", "")
+    rounds = result.get("rounds") or []
+    issues = [(rd.get("index"), iss)
+              for rd in rounds for iss in (rd.get("issues") or [])]
+    lines = [f"✓ marked `{sid}` · `{mark}` · {len(rounds)} round(s)", ""]
+    if not issues:
+        lines.append("  (no issues)")
+    for idx, iss in issues:
+        tag = "new card" if iss.get("is_new") else "linked"
+        lines.append(
+            f"  - [#{idx}] #{iss['issue']}？  → {tag} `{iss['card_id']}`"
+        )
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -152,9 +156,10 @@ def render_window(prev: Optional[dict], cur: dict) -> str:
 # the loop deterministically without a real terminal. Production uses
 # ``questionary`` (prompt_toolkit under the hood); tests pass a scripted
 # function. ``ask_description`` returns the one-time scene string;
-# ``ask_mark`` returns the per-round mark text / command (blank / :back / :q).
+# ``ask_comment`` returns the per-round comment text / command (blank / :back
+# / :q).
 AskDescription = Callable[[], str]
-AskMark = Callable[[dict], str]
+AskComment = Callable[[dict], str]
 
 
 def _questionary_description() -> str:
@@ -164,55 +169,16 @@ def _questionary_description() -> str:
     return (ans or "").strip()
 
 
-def _questionary_mark(cur: dict) -> str:
+def _questionary_comment(cur: dict) -> str:
     import questionary
     ans = questionary.text(
-        f"mark round {cur['index']} "
-        "(text = mark / blank = skip / :back / :q):",
+        f"comment round {cur['index']} "
+        "(text = comment / blank = no comment / :back / :q):",
         multiline=True,
     ).ask()
     if ans is None:        # Ctrl-C / Ctrl-D → behave like quit
         return ":q"
     return ans
-
-
-def _covered_rounds(collected: list[dict], last_index: int) -> set[int]:
-    """Distinct rounds in ``[1, last_index]`` covered by the union of every
-    collected mark's ``indexes`` (what the ≥90% coverage gate counts)."""
-    covered: set[int] = set()
-    for m in collected:
-        raw = m.get("indexes")
-        if not raw:
-            continue
-        try:
-            rounds = parse_indexes(str(raw))
-        except IndexesParseError:
-            continue
-        covered.update(r for r in rounds if 1 <= r <= last_index)
-    return covered
-
-
-def _max_existing_seq(cfg: Config, session_id: str) -> int:
-    """Return the current max ``m<n>`` seq for the session (0 if none).
-
-    Locally-assigned ids must continue monotonically from this so the
-    server's "no skip / no reuse" rule isn't tripped on submit.
-    """
-    try:
-        listing = api("GET", f"/v4/sessions/{session_id}/marks", cfg)
-    except ApiError:
-        # A fresh / unmarked session may 404 here on some backends; treat
-        # any read failure as "no prior marks" — the server still enforces
-        # monotonicity at submit time, so we fail safe, not silent-wrong.
-        return 0
-    except Exception:
-        return 0
-    best = 0
-    for m in listing.get("marks") or []:
-        mid = str(m.get("mark") or "")
-        if mid.startswith(MARK_SEQ_PREFIX) and mid[len(MARK_SEQ_PREFIX):].isdigit():
-            best = max(best, int(mid[len(MARK_SEQ_PREFIX):]))
-    return best
 
 
 def run_interactive(
@@ -222,29 +188,29 @@ def run_interactive(
     post_fn,
     *,
     ask_description: Optional[AskDescription] = None,
-    ask_mark: Optional[AskMark] = None,
+    ask_comment: Optional[AskComment] = None,
     echo: Callable[[str], None] = click.echo,
 ) -> dict | None:
-    """Client-side step-through ("step 标注") over the batch marks endpoint.
+    """Client-side step-through ("step 标注") over the submit endpoint.
 
-    Walks the session round by round in a 2-round sliding window
-    (``[r1,r2] → mark r2 → [r2,r3] → mark r3 → …``); ``r1`` is context-only.
-    For each *current* round the user types a mark (blank = skip, ``:back``
-    = step back one window, ``:q`` = quit). Marks accumulate client-side
-    with monotonic ``m<n>`` ids (continued from the session's current max)
-    and auto-filled ``indexes`` (the current round's own index). At the end
-    the whole batch is POSTed once. Returns the submit response, or ``None``
-    when nothing was collected / the user quit before submitting.
+    Walks the session round by round from index 1 in a 2-round sliding window
+    (``[r1,r2] → comment r2 → [r2,r3] → comment r3 → …``); ``r1`` is
+    context-only. For each *current* round the user types a comment (blank =
+    no comment but the round is still recorded → coverage; ``:back`` = step
+    back one window, ``:q`` = quit). Rounds accumulate as ``{index, comment?}``
+    entries. The mark id ``m<n>`` is SERVER-assigned (no client minting). At
+    the end the whole submission is POSTed once. Returns the submit response,
+    or ``None`` when nothing was collected / the user quit before submitting.
 
     ``last_index`` is locked once on entry (the round count when we start);
     if the session advanced meanwhile the server's optimistic lock rejects
-    the batch at submit time → we surface a clean "session advanced" message.
+    the submission → we surface a clean "session advanced" message.
 
-    ``ask_description`` / ``ask_mark`` are the input seam (default:
+    ``ask_description`` / ``ask_comment`` are the input seam (default:
     ``questionary``); tests inject scripted callables to drive the loop.
     """
     ask_description = ask_description or _questionary_description
-    ask_mark = ask_mark or _questionary_mark
+    ask_comment = ask_comment or _questionary_comment
 
     # Pull the session's rounds via the read endpoint.
     try:
@@ -263,17 +229,17 @@ def run_interactive(
         return None
 
     last_index = len(rounds)   # rounds are 1-indexed → max idx == count
-    next_n = _max_existing_seq(cfg, session_id) + 1
 
     echo(
         f"session {session_id} · {last_index} rounds · interactive step标注 "
-        "(text = mark / blank = skip / :back = back / :q = quit)"
+        "(text = comment / blank = no comment / :back = back / :q = quit)"
     )
     description = ask_description()
 
-    collected: list[dict] = []
-    # Step k shows window [r_{k-1}, r_k] and marks r_k. We walk r_1..r_N so
-    # every round (including the first, context-less one) is markable.
+    # collected: ordered round entries keyed by index (so :back re-walk
+    # overwrites rather than duplicates). We rebuild the submission body from
+    # this at the end, in ascending index order.
+    collected: dict[int, dict] = {}
     k = 0
     try:
         while k < len(rounds):
@@ -281,34 +247,19 @@ def run_interactive(
             cur = rounds[k]
             echo("")
             echo(render_window(prev, cur))
-            text = ask_mark(cur)
+            text = ask_comment(cur)
             cmd = text.strip()
             if cmd == ":q":
                 break
             if cmd == ":back":
-                # Step back one window; already-collected marks stay
-                # (append-only — :back never un-assigns an id).
                 k = max(0, k - 1)
                 continue
+            idx = int(cur["index"])
             if cmd == "":
-                # A skip is NOT "nothing" — it's an id-only entry that records
-                # "read this round, nothing to note", so it counts toward
-                # coverage (以写代读). No mark text → no #…？ → no card.
-                collected.append({
-                    "id": mark_seq(next_n),
-                    "indexes": str(cur["index"]),
-                })
-                next_n += 1
-                k += 1
-                continue
-            # A non-blank mark for the current round. ``indexes`` is the
-            # current round's own index (auto-filled — no manual entry).
-            collected.append({
-                "id": mark_seq(next_n),
-                "mark": text,
-                "indexes": str(cur["index"]),
-            })
-            next_n += 1
+                # No comment, but the round is still recorded → coverage.
+                collected[idx] = {"index": idx}
+            else:
+                collected[idx] = {"index": idx, "comment": text}
             k += 1
     except (KeyboardInterrupt, EOFError):
         echo("\n(interrupted)")
@@ -318,16 +269,16 @@ def run_interactive(
         return None
 
     # ≥90% round-coverage gate (mirrors the server). The natural flow — step
-    # every round, mark or skip each — reaches 100%; an early :q can leave a
+    # every round from 1 to the end — reaches 100%; an early :q can leave a
     # gap, so block & tell the user how many more rounds to walk.
-    covered = _covered_rounds(collected, last_index)
+    covered = len(collected)
     need = math.ceil(MARK_COVERAGE_THRESHOLD * last_index) if last_index else 0
-    if len(covered) < need:
-        pct = round(100 * len(covered) / last_index) if last_index else 0
+    if covered < need:
+        pct = round(100 * covered / last_index) if last_index else 0
         echo(
-            f"coverage {pct}% ({len(covered)}/{last_index} rounds) "
+            f"coverage {pct}% ({covered}/{last_index} rounds) "
             f"< {round(MARK_COVERAGE_THRESHOLD * 100)}% — "
-            f"walk {need - len(covered)} more round(s) (mark or skip each) "
+            f"walk {need - covered} more round(s) (comment or blank each) "
             "before submitting. Nothing submitted."
         )
         return None
@@ -335,7 +286,7 @@ def run_interactive(
     body = {
         "last_index": last_index,
         "description": description,
-        "marks": collected,
+        "rounds": [collected[i] for i in sorted(collected)],
     }
     # ``post_fn`` (cli.session._post_marks) handles HTTP errors itself —
     # including a dedicated 409 "session advanced; re-enter" message — and

@@ -48,6 +48,15 @@ class SessionMarkStore:
             row = await cur.fetchone()
         return dict(row) if row else None
 
+    async def delete_for_session(self, session_id: str) -> int:
+        """Delete every mark row for a session (cleanup). Returns the row
+        count removed. Leaves the canonical YAML to the file store."""
+        cur = await self.conn.execute(
+            "DELETE FROM session_marks WHERE session_id = ?", (session_id,),
+        )
+        await self.conn.commit()
+        return cur.rowcount
+
     async def list_for_session(self, session_id: str) -> list[dict]:
         # Secondary ``rowid`` (insertion) order breaks ties: a whole batch of
         # marks shares one second-resolution ``created_at``, so created_at

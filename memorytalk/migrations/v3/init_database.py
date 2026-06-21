@@ -137,6 +137,6 @@ async def run(conn: aiosqlite.Connection, *, data_root=None) -> None:
     for stmt in INDEXES:
         await conn.execute(stmt)
     await conn.commit()
-    # + the 5 v4 card tables (single source of truth in repository/).
+    # + the 8 v4 card tables (single source of truth in repository/).
     await create_card_schema(conn)
     await conn.commit()

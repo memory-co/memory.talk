@@ -113,7 +113,8 @@ class ReadService:
 
     async def _read_marks(self, source: str, session_id: str) -> list[SessionMark]:
         """Build the session's ``marks[]`` for the session read: ``session_marks``
-        metadata (ordered m1,m2,…) joined with each mark's canonical YAML body."""
+        metadata (ordered m1,m2,…) joined with each mark's canonical YAML body
+        (per-round ``rounds[]`` with resolved issues→cards)."""
         rows = await self.db.session_marks.list_for_session(session_id)
         marks: list[SessionMark] = []
         for r in rows:
@@ -123,9 +124,8 @@ class ReadService:
             marks.append(SessionMark(
                 mark=r["mark"],
                 description=body.get("description", ""),
-                text=body.get("mark", ""),
-                indexes=body.get("indexes"),
-                issues=body.get("issues") or [],
+                last_index=body.get("last_index") or r.get("last_index") or 0,
+                rounds=body.get("rounds") or [],
                 created_at=body.get("created_at") or r.get("created_at") or "",
             ))
         return marks

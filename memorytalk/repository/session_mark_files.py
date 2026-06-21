@@ -11,14 +11,16 @@ A mark's body is canonical on disk as YAML, alongside the session's rounds:
 Body (docs/structure/v4/session-mark.md):
   last_index    optimistic-lock baseline (session round index when marked)
   description   the annotation scenario (carried from the submission)
-  mark          the raw free-text annotation (#…？ marks issues in place)
-  indexes       the submission's per-mark grounding rounds (may be absent)
-  issues        [{issue, card_id, is_new, indexes}] -- the resolved #…？
   created_at    ISO 8601
+  rounds        [{index, comment?, issues?: [{issue, card_id, is_new, indexes}]}]
+                -- one entry per walked round (from index 1, ≥90% coverage).
+                A bare {index} (no comment/issues) records "read, nothing to
+                note" but still counts toward coverage.
 
 This is the source of truth; ``session_marks`` (metadata) and
-``card_sessions`` (the mark->card edges, from ``issues[]``) are derived
-SQLite indexes. Append-only: a mark file is written once, never mutated.
+``card_sessions`` (the mark->card edges, from each round's ``issues[]``) are
+derived SQLite indexes. Append-only: a mark file is written once, never
+mutated (clearing a session removes the whole ``marks/`` dir).
 
 The on-disk path mirrors ``SessionStore`` exactly (same <source>/<bucket>
 derivation) so a session's whole footprint stays in one directory.
@@ -47,6 +49,12 @@ class SessionMarkFileStore:
             f"/{session_id}/marks/{mark}.yaml"
         )
 
+    def _marks_dir(self, source: str, session_id: str) -> str:
+        return (
+            f"{self.PREFIX}/{source}/{self._bucket(session_id)}"
+            f"/{session_id}/marks"
+        )
+
     async def write_doc(
         self, source: str, session_id: str, mark: str, body: dict,
     ) -> None:
@@ -61,3 +69,10 @@ class SessionMarkFileStore:
     async def read_doc(self, source: str, session_id: str, mark: str) -> dict | None:
         text = await self.storage.read_text(self._doc_key(source, session_id, mark))
         return yaml.safe_load(text) if text else None
+
+    async def delete_all(self, source: str, session_id: str) -> None:
+        """Remove the whole ``marks/`` directory for a session (every
+        ``m<n>.yaml``). Missing dir is a no-op. The session's other files
+        (rounds.jsonl / meta.json / events.jsonl) live one level up and are
+        untouched."""
+        await self.storage.delete_prefix(self._marks_dir(source, session_id))

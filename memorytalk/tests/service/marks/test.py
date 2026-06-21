@@ -1,142 +1,198 @@
 """SessionMarkService.submit_marks — the v4 session-mark write path.
 
-Covers miss→create, hit→link, optimistic lock (409), id monotonicity (400),
-multi-issue marks, no-issue marks, round coverage (≥90%, id-only entries),
-and the marks/m<n>.yaml canonical.
+Covers miss→create, hit→link, optimistic lock (409), rounds validation
+(first index == 1, strictly ascending, no dups), explicit vs comment issues,
+per-card merge across rounds, round coverage (≥90%), DELETE clear, and the
+marks/m<n>.yaml canonical.
 
 The seeded session has round_count==5, so ≥90% coverage means ceil(0.9*5)==5
-rounds — i.e. all 5. Most happy-path tests therefore append an id-only entry
-covering whatever rounds the annotated marks don't, so the batch passes the
-coverage gate while still exercising the behavior under test.
+rounds — i.e. all 5. Happy-path tests therefore walk every round (commented
+or bare) so the submission passes the coverage gate.
 """
 from __future__ import annotations
 
 import pytest
 
 from memorytalk.service.session_marks import (
-    MARK_COVERAGE_THRESHOLD, MarkConflict, MarkNotFound, MarkServiceError,
+    MarkConflict, MarkNotFound, MarkServiceError,
     MarkUnavailable, SessionMarkService,
 )
 
 
-async def _submit(svc, session, marks, last_index=5, description="reading"):
-    return await svc.svc.submit_marks(session, last_index, description, marks)
+async def _submit(svc, session, rounds, last_index=5, description="reading"):
+    return await svc.svc.submit_marks(session, last_index, description, rounds)
+
+
+def _full(n=5, overrides=None):
+    overrides = overrides or {}
+    out = []
+    for i in range(1, n + 1):
+        e = {"index": i}
+        if i in overrides:
+            e.update(overrides[i])
+        out.append(e)
+    return out
 
 
 # ────────── happy path: miss creates, hit links ──────────
 
 async def test_miss_creates_card_session_yaml_and_session_marks(marksvc):
     sid = marksvc.session
-    res = await _submit(marksvc, sid, [
-        {"id": "m1", "indexes": "1-2",
-         "mark": "context. #why does pty remind the user of tmux？ tail"},
-        {"id": "m2", "indexes": "3-5"},   # id-only → covers the rest (≥90%)
-    ])
-    # response shape
+    res = await _submit(marksvc, sid, _full(5, {
+        1: {"comment": "context. #why does pty remind the user of tmux？ tail"},
+    }))
+    # response shape — server auto-assigned m1
     assert res["session_id"] == sid
-    assert res["last_index"] == 5
-    assert len(res["marks"]) == 2
-    issue = res["marks"][0]["issues"][0]
+    assert res["mark"] == "m1"
+    r1 = next(rd for rd in res["rounds"] if rd["index"] == 1)
+    issue = r1["issues"][0]
     assert issue["is_new"] is True
     assert issue["card_id"].startswith("card_")
-    assert issue["indexes"] == "1-2"
+    assert issue["indexes"] == "1"     # grounds at the round's own index
     card_id = issue["card_id"]
 
-    # card row exists
     assert await marksvc.db.cards.exists(card_id)
-    # session_marks row
     rows = await marksvc.db.session_marks.list_for_session(sid)
-    assert [r["mark"] for r in rows] == ["m1", "m2"]
+    assert [r["mark"] for r in rows] == ["m1"]
     assert rows[0]["last_index"] == 5
-    # card_sessions provenance edge (mark + indexes)
     edges = await marksvc.db.card_sessions.list_cards_for_mark(sid, "m1")
     assert len(edges) == 1
     assert edges[0]["card_id"] == card_id
-    assert edges[0]["indexes"] == "1-2"
+    assert edges[0]["indexes"] == "1"
     # marks/m1.yaml canonical
     doc = await marksvc.svc.read_mark(sid, "m1")
     assert doc["description"] == "reading"
     assert doc["last_index"] == 5
-    assert "why does pty remind the user of tmux" in doc["mark"]
-    assert doc["issues"][0]["card_id"] == card_id
-    assert doc["issues"][0]["is_new"] is True
-    assert doc["indexes"] == "1-2"
+    doc_r1 = next(rd for rd in doc["rounds"] if rd["index"] == 1)
+    assert "why does pty remind the user of tmux" in doc_r1["comment"]
+    assert doc_r1["issues"][0]["card_id"] == card_id
+    assert doc_r1["issues"][0]["is_new"] is True
 
 
 async def test_hit_links_existing_card(marksvc):
     sid = marksvc.session
-    # First submission mints a new card for the issue (id-only m2 pads to 100%).
-    r1 = await _submit(marksvc, sid, [
-        {"id": "m1", "indexes": "1", "mark": "#what is the capital of France？"},
-        {"id": "m2", "indexes": "2-5"},
-    ])
-    card_id = r1["marks"][0]["issues"][0]["card_id"]
-    assert r1["marks"][0]["issues"][0]["is_new"] is True
+    r1 = await _submit(marksvc, sid, _full(5, {
+        1: {"comment": "#what is the capital of France？"},
+    }))
+    card_id = next(rd for rd in r1["rounds"] if rd["index"] == 1)["issues"][0]["card_id"]
 
-    # Second submission with the identical issue text → HIT (same card).
-    r2 = await _submit(marksvc, sid, [
-        {"id": "m3", "indexes": "2", "mark": "#what is the capital of France？"},
-        {"id": "m4", "indexes": "1,3-5"},
-    ])
-    iss = r2["marks"][0]["issues"][0]
+    r2 = await _submit(marksvc, sid, _full(5, {
+        2: {"comment": "#what is the capital of France？"},
+    }))
+    iss = next(rd for rd in r2["rounds"] if rd["index"] == 2)["issues"][0]
     assert iss["is_new"] is False
     assert iss["card_id"] == card_id
-    # two provenance edges on the same card (different marks)
     edges = await marksvc.db.card_sessions.list_for_card(card_id)
-    assert {e["mark"] for e in edges} == {"m1", "m3"}
+    assert {e["mark"] for e in edges} == {"m1", "m2"}
 
 
 async def test_mark_without_issue_writes_no_card(marksvc):
     sid = marksvc.session
-    res = await _submit(marksvc, sid, [
-        {"id": "m1", "indexes": "1-5",
-         "mark": "just an observation, no question here."},
-    ])
-    assert res["marks"][0]["issues"] == []
+    res = await _submit(marksvc, sid, _full(5, {
+        1: {"comment": "just an observation, no question here."},
+    }))
+    assert all(rd["issues"] == [] for rd in res["rounds"])
+    assert await marksvc.db.card_sessions.list_cards_for_mark(sid, "m1") == []
+
+
+async def test_bare_round_covers_no_card(marksvc):
+    """Bare rounds (just {index}, no comment) are persisted, contribute
+    coverage, and create no card."""
+    sid = marksvc.session
+    res = await _submit(marksvc, sid, _full(5))   # all bare
+    assert all(rd["issues"] == [] for rd in res["rounds"])
     assert await marksvc.db.card_sessions.list_cards_for_mark(sid, "m1") == []
     doc = await marksvc.svc.read_mark(sid, "m1")
-    assert doc["issues"] == []
-    # indexes is now always written (it's what coverage counts).
-    assert doc["indexes"] == "1-5"
+    assert [rd["index"] for rd in doc["rounds"]] == [1, 2, 3, 4, 5]
 
 
-async def test_id_only_entry_covers_no_card(marksvc):
-    """An id-only entry ({id, indexes} with no mark text) is accepted,
-    persisted, contributes coverage, and creates no card / no issues."""
+# ────────── rounds validation ──────────
+
+async def test_first_index_must_be_1(marksvc):
+    with pytest.raises(MarkServiceError) as ei:
+        await _submit(marksvc, marksvc.session, [{"index": i} for i in range(2, 6)])
+    assert "first round index must be 1" in str(ei.value)
+    assert await marksvc.db.session_marks.list_for_session(marksvc.session) == []
+
+
+async def test_not_strictly_ascending(marksvc):
+    with pytest.raises(MarkServiceError) as ei:
+        await _submit(marksvc, marksvc.session,
+                      [{"index": 1}, {"index": 3}, {"index": 2}, {"index": 4}, {"index": 5}])
+    assert "ascending" in str(ei.value)
+
+
+async def test_duplicate_index(marksvc):
+    with pytest.raises(MarkServiceError):
+        await _submit(marksvc, marksvc.session,
+                      [{"index": 1}, {"index": 2}, {"index": 2}, {"index": 3},
+                       {"index": 4}, {"index": 5}])
+
+
+async def test_index_out_of_range(marksvc):
+    with pytest.raises(MarkServiceError):
+        await _submit(marksvc, marksvc.session,
+                      [{"index": 1}, {"index": 2}, {"index": 3}, {"index": 4}, {"index": 9}])
+
+
+# ────────── explicit issues + per-card merge ──────────
+
+async def test_explicit_issue_grounds_at_given_indexes(marksvc):
     sid = marksvc.session
-    res = await _submit(marksvc, sid, [
-        {"id": "m1", "indexes": "1-5"},   # read whole session, nothing to note
-    ])
-    assert res["marks"][0]["issues"] == []
-    assert await marksvc.db.card_sessions.list_cards_for_mark(sid, "m1") == []
-    doc = await marksvc.svc.read_mark(sid, "m1")
-    assert doc["issues"] == []
-    assert doc["mark"] == ""          # empty text persisted
-    assert doc["indexes"] == "1-5"
+    res = await _submit(marksvc, sid, _full(5, {
+        5: {"issues": [{"issue": "what caused the EMFILE", "indexes": "2-3"}]},
+    }))
+    r5 = next(rd for rd in res["rounds"] if rd["index"] == 5)
+    iss = r5["issues"][0]
+    assert iss["indexes"] == "2-3"
+    edges = await marksvc.db.card_sessions.list_cards_for_mark(sid, "m1")
+    assert edges[0]["card_id"] == iss["card_id"]
+    assert edges[0]["indexes"] == "2-3"
 
 
-async def test_mixed_annotated_and_id_only_reaches_coverage(marksvc):
-    """A mix of an annotated mark (rounds 1-2) + an id-only mark (rounds 3-5)
-    reaches ≥90% and passes; the annotated one makes a card, the id-only doesn't."""
+async def test_explicit_issue_defaults_to_round_index(marksvc):
     sid = marksvc.session
-    res = await _submit(marksvc, sid, [
-        {"id": "m1", "indexes": "1-2", "mark": "#a real question？"},
-        {"id": "m2", "indexes": "3-5"},
-    ])
-    assert res["marks"][0]["issues"][0]["is_new"] is True
-    assert res["marks"][1]["issues"] == []
-    rows = await marksvc.db.session_marks.list_for_session(sid)
-    assert [r["mark"] for r in rows] == ["m1", "m2"]
+    res = await _submit(marksvc, sid, _full(5, {
+        4: {"issues": [{"issue": "some standalone question"}]},   # no indexes
+    }))
+    r4 = next(rd for rd in res["rounds"] if rd["index"] == 4)
+    assert r4["issues"][0]["indexes"] == "4"
 
+
+async def test_same_card_two_rounds_merges_indexes(marksvc):
+    sid = marksvc.session
+    q = "#why does pty remind of tmux？"
+    res = await _submit(marksvc, sid, _full(5, {2: {"comment": q}, 4: {"comment": q}}))
+    card_id = next(rd for rd in res["rounds"] if rd["index"] == 2)["issues"][0]["card_id"]
+    edges = await marksvc.db.card_sessions.list_cards_for_mark(sid, "m1")
+    # ONE row for the card (PK merge), indexes merged "2,4".
+    rows = [e for e in edges if e["card_id"] == card_id]
+    assert len(rows) == 1
+    assert rows[0]["indexes"] == "2,4"
+
+
+async def test_multi_issue_round(marksvc):
+    sid = marksvc.session
+    res = await _submit(marksvc, sid, _full(5, {
+        3: {"comment": "#first distinct question？ and #second distinct question？"},
+    }))
+    issues = next(rd for rd in res["rounds"] if rd["index"] == 3)["issues"]
+    assert len(issues) == 2
+    assert {i["issue"] for i in issues} == {
+        "first distinct question", "second distinct question",
+    }
+    assert issues[0]["card_id"] != issues[1]["card_id"]
+    assert all(i["indexes"] == "3" for i in issues)
+    edges = await marksvc.db.card_sessions.list_cards_for_mark(sid, "m1")
+    assert len(edges) == 2
+
+
+# ────────── coverage ──────────
 
 async def test_coverage_below_threshold_rejected_nothing_persisted(marksvc):
-    """A submission covering only 1/5 rounds (20% < 90%) is rejected with the
-    coverage message; nothing is persisted."""
     sid = marksvc.session
     with pytest.raises(MarkServiceError) as ei:
-        await _submit(marksvc, sid, [
-            {"id": "m1", "indexes": "1", "mark": "#a question？"},
-        ])
+        await _submit(marksvc, sid, [{"index": 1, "comment": "#a question？"}])
     assert "coverage" in str(ei.value)
     assert "1/5" in str(ei.value)
     assert "90%" in str(ei.value)
@@ -147,8 +203,6 @@ async def test_coverage_below_threshold_rejected_nothing_persisted(marksvc):
 async def test_coverage_just_at_threshold_passes_long_session(data_root):
     """A 52-round session: covering 48/52 (~92%) passes; 12/52 (~23%) is
     rejected with the documented 'coverage 23% (12/52 rounds) < 90%' shape."""
-    from types import SimpleNamespace as _NS
-
     from memorytalk.config import Config
     from memorytalk.migrations.v3 import init_database as v4_init
     from memorytalk.provider.storage import LocalStorage
@@ -173,15 +227,15 @@ async def test_coverage_just_at_threshold_passes_long_session(data_root):
         # 48/52 ≈ 92% ≥ 90% → OK (need == ceil(0.9*52) == 47).
         res = await svc.submit_marks(
             "sess-long0001", 52, "long read",
-            [{"id": "m1", "indexes": "1-48"}],
+            [{"index": i} for i in range(1, 49)],
         )
-        assert len(res["marks"]) == 1
+        assert res["mark"] == "m1"
 
         # 12/52 ≈ 23% → rejected with the documented message shape.
         with pytest.raises(MarkServiceError) as ei:
             await svc.submit_marks(
                 "sess-long0001", 52, "stale",
-                [{"id": "m2", "indexes": "1-12"}],
+                [{"index": i} for i in range(1, 13)],
             )
         assert "coverage 23% (12/52 rounds) < 90%" == str(ei.value)
     finally:
@@ -189,89 +243,33 @@ async def test_coverage_just_at_threshold_passes_long_session(data_root):
         await conn.close()
 
 
-async def test_indexes_required_400(marksvc):
-    """indexes is now required on every mark; missing it → 400."""
-    with pytest.raises(MarkServiceError) as ei:
-        await _submit(marksvc, marksvc.session, [
-            {"id": "m1", "mark": "#a question？"},
-        ])
-    assert "indexes required" in str(ei.value)
-
-
-async def test_multi_issue_mark(marksvc):
-    sid = marksvc.session
-    res = await _submit(marksvc, sid, [
-        {"id": "m1", "indexes": "3-4",
-         "mark": "#first distinct question？ and #second distinct question？"},
-        {"id": "m2", "indexes": "1-2,5"},   # id-only pad → ≥90%
-    ])
-    issues = res["marks"][0]["issues"]
-    assert len(issues) == 2
-    assert {i["issue"] for i in issues} == {
-        "first distinct question", "second distinct question",
-    }
-    # two distinct new cards, both grounded on 3-4
-    assert issues[0]["card_id"] != issues[1]["card_id"]
-    assert all(i["indexes"] == "3-4" for i in issues)
-    edges = await marksvc.db.card_sessions.list_cards_for_mark(sid, "m1")
-    assert len(edges) == 2
-
-
-# ────────── optimistic lock ──────────
+# ────────── optimistic lock + auto m<n> ──────────
 
 async def test_optimistic_lock_mismatch_409(marksvc):
     sid = marksvc.session   # round_count == 5
     with pytest.raises(MarkConflict):
-        await _submit(marksvc, sid, [{"id": "m1", "mark": "x"}], last_index=4)
-    # nothing written
+        await _submit(marksvc, sid, _full(4), last_index=4)
     assert await marksvc.db.session_marks.list_for_session(sid) == []
 
 
-# ────────── id validation ──────────
-
-async def test_missing_id_400(marksvc):
-    with pytest.raises(MarkServiceError):
-        await _submit(marksvc, marksvc.session, [{"mark": "x"}])
-
-
-async def test_id_skip_400(marksvc):
-    with pytest.raises(MarkServiceError):
-        await _submit(marksvc, marksvc.session, [{"id": "m2", "mark": "x"}])
-
-
-async def test_id_reuse_400(marksvc):
+async def test_auto_m1_then_m2(marksvc):
     sid = marksvc.session
-    await _submit(marksvc, sid, [{"id": "m1", "indexes": "1-5", "mark": "x"}])
-    with pytest.raises(MarkServiceError):
-        await _submit(marksvc, sid, [{"id": "m1", "indexes": "1-5", "mark": "y"}])
+    r1 = await _submit(marksvc, sid, _full(5))
+    assert r1["mark"] == "m1"
+    r2 = await _submit(marksvc, sid, _full(5))
+    assert r2["mark"] == "m2"
+    rows = await marksvc.db.session_marks.list_for_session(sid)
+    assert [r["mark"] for r in rows] == ["m1", "m2"]
 
 
-async def test_continued_marking_resumes_after_max(marksvc):
-    sid = marksvc.session
-    await _submit(marksvc, sid, [{"id": "m1", "indexes": "1-5", "mark": "a"}])
-    # next batch must start at m2 (each batch independently covers ≥90%)
-    res = await _submit(marksvc, sid, [
-        {"id": "m2", "indexes": "1-3", "mark": "b"},
-        {"id": "m3", "indexes": "4-5", "mark": "c"},
-    ])
-    assert [m["mark"] for m in res["marks"]] == ["m2", "m3"]
-
-
-async def test_empty_marks_400(marksvc):
+async def test_empty_rounds_400(marksvc):
     with pytest.raises(MarkServiceError):
         await _submit(marksvc, marksvc.session, [])
 
 
-async def test_issue_requires_indexes_400(marksvc):
-    with pytest.raises(MarkServiceError):
-        await _submit(marksvc, marksvc.session, [
-            {"id": "m1", "mark": "#an issue with no indexes？"},
-        ])
-
-
 async def test_unknown_session_404(marksvc):
     with pytest.raises(MarkNotFound):
-        await _submit(marksvc, "sess-doesnotexist", [{"id": "m1", "mark": "x"}])
+        await _submit(marksvc, "sess-doesnotexist", [{"index": 1, "comment": "x"}])
 
 
 # ────────── degrade when searchbase missing ──────────
@@ -281,34 +279,30 @@ async def test_issue_without_searchbase_503(marksvc):
     with pytest.raises(MarkUnavailable):
         await degraded.submit_marks(
             marksvc.session, 5, "x",
-            [{"id": "m1", "indexes": "1-5", "mark": "#needs a card？"}],
+            _full(5, {1: {"comment": "#needs a card？"}}),
         )
-    # no partial state
     assert await marksvc.db.session_marks.list_for_session(marksvc.session) == []
 
 
 async def test_no_issue_without_searchbase_ok(marksvc):
     degraded = SessionMarkService(db=marksvc.db, search=None, cards=marksvc.cards)
     res = await degraded.submit_marks(
-        marksvc.session, 5, "x",
-        [{"id": "m1", "indexes": "1-5", "mark": "no question"}],
+        marksvc.session, 5, "x", _full(5, {1: {"comment": "no question"}}),
     )
-    assert res["marks"][0]["issues"] == []
+    assert all(rd["issues"] == [] for rd in res["rounds"])
 
 
-# ────────── atomicity: embed failure mid-batch persists nothing ──────────
+# ────────── atomicity: embed failure mid-resolve persists nothing ──────────
 
-async def test_embed_failure_midbatch_persists_nothing(marksvc):
-    """A runtime embedding failure on the 2nd mark's issue must leave the
-    WHOLE batch unpersisted: no session_marks, no card_sessions, no yaml,
-    no new issue-cards from this batch (整份拒绝 / 不写任何东西)."""
+async def test_embed_failure_midresolve_persists_nothing(marksvc):
+    """A runtime embedding failure on the 2nd issue must leave the WHOLE
+    submission unpersisted: no session_marks, no card_sessions, no yaml."""
     sid = marksvc.session
     real_nearest = marksvc.search.nearest
     calls = {"n": 0}
 
     async def flaky_nearest(*args, **kwargs):
         calls["n"] += 1
-        # m1's issue resolves; m2's issue blows up (provider falls over).
         if calls["n"] >= 2:
             raise RuntimeError("embedding provider down")
         return await real_nearest(*args, **kwargs)
@@ -316,19 +310,44 @@ async def test_embed_failure_midbatch_persists_nothing(marksvc):
     marksvc.search.nearest = flaky_nearest
     try:
         with pytest.raises(MarkUnavailable):
-            await _submit(marksvc, sid, [
-                {"id": "m1", "indexes": "1-3", "mark": "#first question？"},
-                {"id": "m2", "indexes": "4-5", "mark": "#second question？"},
-            ])
+            await _submit(marksvc, sid, _full(5, {
+                1: {"comment": "#first question？"},
+                4: {"comment": "#second question？"},
+            }))
     finally:
         marksvc.search.nearest = real_nearest
 
-    # NOTHING from the batch persisted: no marks, no provenance edges, no yaml.
     assert await marksvc.db.session_marks.list_for_session(sid) == []
     assert await marksvc.db.card_sessions.list_cards_for_mark(sid, "m1") == []
-    assert await marksvc.db.card_sessions.list_cards_for_mark(sid, "m2") == []
     assert await marksvc.svc.read_mark(sid, "m1") is None
-    assert await marksvc.svc.read_mark(sid, "m2") is None
+
+
+# ────────── clear_marks ──────────
+
+async def test_clear_marks_removes_marks_and_edges_keeps_card(marksvc):
+    sid = marksvc.session
+    res = await _submit(marksvc, sid, _full(5, {3: {"comment": "#a brand new question？"}}))
+    card_id = next(rd for rd in res["rounds"] if rd["index"] == 3)["issues"][0]["card_id"]
+    assert await marksvc.db.cards.exists(card_id)
+
+    out = await marksvc.svc.clear_marks(sid)
+    assert out == {"session_id": sid, "deleted_marks": 1}
+
+    assert await marksvc.db.session_marks.list_for_session(sid) == []
+    assert await marksvc.db.card_sessions.list_for_card(card_id) == []
+    assert await marksvc.svc.read_mark(sid, "m1") is None
+    # the card itself survives
+    assert await marksvc.db.cards.exists(card_id)
+
+
+async def test_clear_marks_no_marks_is_noop(marksvc):
+    out = await marksvc.svc.clear_marks(marksvc.session)
+    assert out == {"session_id": marksvc.session, "deleted_marks": 0}
+
+
+async def test_clear_marks_unknown_session_404(marksvc):
+    with pytest.raises(MarkNotFound):
+        await marksvc.svc.clear_marks("sess-doesnotexist")
 
 
 # ────────── integration: interactive walk → real submit ──────────
@@ -342,8 +361,6 @@ async def test_interactive_walk_builds_body_that_creates_cards(marksvc, monkeypa
 
     sid = marksvc.session   # seeded round_count == 5
 
-    # Stub the two read-only HTTP calls the walk makes (read rounds + GET
-    # marks for the max seq). The submit goes through the real service.
     rounds = [
         {"index": i, "role": "human" if i % 2 else "assistant",
          "content": [{"type": "text", "text": f"round {i} about pty and tmux"}]}
@@ -353,8 +370,6 @@ async def test_interactive_walk_builds_body_that_creates_cards(marksvc, monkeypa
     def fake_api(method, path, config, json_body=None, **kw):
         if path == "/v4/read":
             return {"type": "session", "session": {"rounds": rounds}}
-        if path.endswith("/marks") and method == "GET":
-            return {"marks": []}   # no prior marks → start at m1
         raise AssertionError(f"unexpected api call {method} {path}")
 
     monkeypatch.setattr(m, "api", fake_api)
@@ -362,55 +377,42 @@ async def test_interactive_walk_builds_body_that_creates_cards(marksvc, monkeypa
     captured = {}
 
     def post_fn(cfg, session_id, body, json_out):
-        # Capture the locally-built body; the real (async) submit runs after
-        # the walk so we don't bridge sync→async mid-loop.
         captured["body"] = body
         return {"deferred": True}
 
     def scripted(_answers=iter([
-        "",                          # r1 skip
-        "#why does pty remind the user of tmux？ wants reconnect",  # r2 → m1
-        "",                          # r3 skip
-        "just EMFILE triage, no question.",                        # r4 → m2
-        "",                          # r5 skip
+        "",                          # r1 blank
+        "#why does pty remind the user of tmux？ wants reconnect",  # r2
+        "",                          # r3 blank
+        "just EMFILE triage, no question.",                        # r4
+        "",                          # r5 blank
     ])):
         return lambda cur: next(_answers, ":q")
 
     m.run_interactive(
         cfg=None, session_id=sid, json_out=False, post_fn=post_fn,
         ask_description=lambda: "reading the pty/tmux stretch",
-        ask_mark=scripted(),
+        ask_comment=scripted(),
         echo=lambda *_: None,
     )
 
-    # Every round is walked → 5 monotonic marks. Skips (r1/r3/r5) become
-    # id-only entries (no ``mark`` key); annotated rounds (r2/r4) carry text.
-    # Coverage is therefore 100% (rounds 1-5 all present).
     body = captured["body"]
     assert body["last_index"] == 5
-    assert [mk["id"] for mk in body["marks"]] == ["m1", "m2", "m3", "m4", "m5"]
-    assert [mk["indexes"] for mk in body["marks"]] == ["1", "2", "3", "4", "5"]
-    # id-only skips carry no mark text; annotated rounds do.
-    assert "mark" not in body["marks"][0]                       # r1 skip
-    assert "pty" in body["marks"][1]["mark"]                    # r2 annotated
-    assert "mark" not in body["marks"][2]                       # r3 skip
-    assert "EMFILE" in body["marks"][3]["mark"]                 # r4 annotated
-    assert "mark" not in body["marks"][4]                       # r5 skip
+    assert [rd["index"] for rd in body["rounds"]] == [1, 2, 3, 4, 5]
+    # No client-assigned ids — server auto-assigns.
+    assert all("id" not in rd for rd in body["rounds"])
+    assert "comment" not in body["rounds"][0]                   # r1 blank
+    assert "pty" in body["rounds"][1]["comment"]                # r2
+    assert "comment" not in body["rounds"][2]                   # r3 blank
 
     # Feed that exact body through the real submit path.
     result = await marksvc.svc.submit_marks(
-        sid, body["last_index"], body["description"], body["marks"],
+        sid, body["last_index"], body["description"], body["rounds"],
     )
-
-    # The real submit created a card for m2's #…？ and an edge.
-    m2 = next(mk for mk in result["marks"] if mk["mark"] == "m2")
-    issue = m2["issues"][0]
+    assert result["mark"] == "m1"
+    r2 = next(rd for rd in result["rounds"] if rd["index"] == 2)
+    issue = r2["issues"][0]
     assert issue["is_new"] is True
-    assert issue["card_id"].startswith("card_")
     assert await marksvc.db.cards.exists(issue["card_id"])
-    edges = await marksvc.db.card_sessions.list_cards_for_mark(sid, "m2")
-    assert edges[0]["card_id"] == issue["card_id"]
-    assert edges[0]["indexes"] == "2"
-    # m1 (id-only skip) and m4 (no #…？) → no card, no edge.
-    assert await marksvc.db.card_sessions.list_cards_for_mark(sid, "m1") == []
-    assert await marksvc.db.card_sessions.list_cards_for_mark(sid, "m4") == []
+    edges = await marksvc.db.card_sessions.list_cards_for_mark(sid, "m1")
+    assert any(e["card_id"] == issue["card_id"] and e["indexes"] == "2" for e in edges)

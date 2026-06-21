@@ -253,22 +253,23 @@ def test_fmt_read_mark_renders_body_and_issues():
         "mark": {
             "description": "reading the pty/tmux stretch",
             "last_index": 5,
-            "mark": "user pivoted. #why does pty remind of tmux？",
-            "indexes": "3-4",
-            "issues": [
-                {"issue": "why does pty remind of tmux", "card_id": "card_01",
-                 "is_new": True, "indexes": "3-4"},
-            ],
             "created_at": "2026-06-19T00:00:00Z",
+            "rounds": [
+                {"index": 1},
+                {"index": 3, "comment": "user pivoted. #why does pty remind of tmux？",
+                 "issues": [
+                     {"issue": "why does pty remind of tmux", "card_id": "card_01",
+                      "is_new": True, "indexes": "3"}]},
+            ],
         },
     })
     # Header carries the address, not the (empty) fallback.
     assert out != "（empty）"
     assert "# mark · `sess-abc#m1`" in out
     assert "reading the pty/tmux stretch" in out          # description/scenario
-    assert "#why does pty remind of tmux？" in out          # the mark text
-    assert "3-4" in out                                    # indexes
-    assert "## issues (1)" in out
+    assert "#why does pty remind of tmux？" in out          # the round comment
+    assert "## rounds (2)" in out
+    assert "[#3]" in out
     assert "new card" in out and "card_01" in out          # issue → new card
 
 
@@ -276,11 +277,11 @@ def test_fmt_read_mark_no_issues():
     out = card_mod._fmt_read({
         "type": "mark", "id": "sess-abc#m2",
         "mark": {"description": "triage", "last_index": 5,
-                 "mark": "just EMFILE triage, no question.", "issues": []},
+                 "rounds": [{"index": 1, "comment": "just EMFILE triage, no question."}]},
     })
     assert "# mark · `sess-abc#m2`" in out
-    assert "## issues (0)" in out
-    assert "no #…？ issues" in out
+    assert "## rounds (1)" in out
+    assert "just EMFILE triage" in out
 
 
 # ────────── session read folds in marks ──────────
@@ -293,12 +294,14 @@ def test_fmt_read_session_renders_marks_section():
              "content": [{"type": "text", "text": "hi"}]},
         ],
         "marks": [
-            {"mark": "m1", "description": "scene", "text": "#a question？",
-             "indexes": "1", "issues": [
-                 {"issue": "a question", "card_id": "card_07",
-                  "is_new": True, "indexes": "1"}]},
-            {"mark": "m2", "description": "scene", "text": "no question here",
-             "indexes": None, "issues": []},
+            {"mark": "m1", "description": "scene", "last_index": 5, "rounds": [
+                {"index": 1, "comment": "#a question？", "issues": [
+                    {"issue": "a question", "card_id": "card_07",
+                     "is_new": True, "indexes": "1"}]},
+            ]},
+            {"mark": "m2", "description": "scene", "last_index": 5, "rounds": [
+                {"index": 1, "comment": "no question here", "issues": []},
+            ]},
         ],
     }})
     assert "## marks (2)" in out
