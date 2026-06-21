@@ -208,7 +208,7 @@ def walker(monkeypatch):
 
 def test_interactive_collects_and_posts(walker):
     walker.state["read"] = _read_resp("sess-i", n=3)
-    # Walk r1,r2,r3. Skip r1 (context-only intent → blank), mark r2 & r3.
+    # Walk r1,r2,r3. Skip r1 (blank → id-only coverage entry), mark r2 & r3.
     result = walker.run(
         ask_description=lambda: "my scenario",
         ask_mark=_scripted_marks("", "#first question？", "#second question？"),
@@ -217,10 +217,13 @@ def test_interactive_collects_and_posts(walker):
     assert body is not None
     assert body["last_index"] == 3
     assert body["description"] == "my scenario"
-    # monotonic ids + auto current-round indexes
-    assert [mk["id"] for mk in body["marks"]] == ["m1", "m2"]
-    assert body["marks"][0]["indexes"] == "2"   # current round = r2
-    assert body["marks"][1]["indexes"] == "3"   # current round = r3
+    # Every round walked → monotonic ids covering all 3 rounds (100%).
+    assert [mk["id"] for mk in body["marks"]] == ["m1", "m2", "m3"]
+    assert [mk["indexes"] for mk in body["marks"]] == ["1", "2", "3"]
+    # r1 was a skip → id-only entry (no mark text); r2/r3 carry text.
+    assert "mark" not in body["marks"][0]
+    assert body["marks"][1]["mark"] == "#first question？"
+    assert body["marks"][2]["mark"] == "#second question？"
     assert result == walker.state["submit_resp"]
 
 
@@ -241,24 +244,52 @@ def test_interactive_quit_marks_nothing(walker):
     assert any("nothing marked" in e for e in walker.echoes)
 
 
+def test_interactive_early_quit_below_coverage_blocked(walker):
+    walker.state["read"] = _read_resp("sess-i", n=5)
+    # Mark r1, then :q — only 1/5 covered (20% < 90%) → blocked, not POSTed.
+    result = walker.run(ask_mark=_scripted_marks("only r1", ":q"))
+    assert result is None
+    assert walker.state["posted"] is None
+    assert any("coverage" in e and "90%" in e for e in walker.echoes)
+
+
+def test_interactive_full_walk_with_skips_reaches_coverage(walker):
+    walker.state["read"] = _read_resp("sess-i", n=5)
+    # Step every round: mark some, skip others → 100% coverage → POSTs.
+    walker.run(ask_mark=_scripted_marks("", "#q？", "", "", "note"))
+    body = walker.state["posted"]
+    assert body is not None
+    assert [mk["indexes"] for mk in body["marks"]] == ["1", "2", "3", "4", "5"]
+    # 3 id-only skips + 2 annotated.
+    assert sum("mark" not in mk for mk in body["marks"]) == 3
+
+
 def test_interactive_skip_then_mark(walker):
     walker.state["read"] = _read_resp("sess-i", n=3)
-    # blank skips r1 & r2, then mark r3.
+    # blank "skips" r1 & r2 → id-only coverage entries, then mark r3.
     walker.run(ask_mark=_scripted_marks("", "", "#a question？"))
     body = walker.state["posted"]
-    assert [mk["id"] for mk in body["marks"]] == ["m1"]
-    assert body["marks"][0]["indexes"] == "3"   # current round = r3
+    assert [mk["id"] for mk in body["marks"]] == ["m1", "m2", "m3"]
+    assert [mk["indexes"] for mk in body["marks"]] == ["1", "2", "3"]
+    # r1/r2 id-only (no text), r3 carries the question.
+    assert "mark" not in body["marks"][0]
+    assert "mark" not in body["marks"][1]
+    assert body["marks"][2]["mark"] == "#a question？"
 
 
 def test_interactive_back_rewalks_without_unassigning(walker):
     walker.state["read"] = _read_resp("sess-i", n=3)
-    # r1: mark (m1) → r2: :back (re-show r1) → r2: skip blank → r3: mark (m2).
-    # :back must NOT drop the already-assigned m1; the next mark is m2.
+    # r1: mark (m1) → r2: :back (re-show r1) → r1: skip → r2: skip → r3: mark.
+    # :back must NOT drop the already-assigned m1; later steps append-only.
+    # Each blank skip now mints an id-only coverage entry, so we collect m1..m4.
     walker.run(ask_mark=_scripted_marks("mark r1", ":back", "", "", "mark r3"))
     body = walker.state["posted"]
-    assert [mk["id"] for mk in body["marks"]] == ["m1", "m2"]
-    assert body["marks"][0]["indexes"] == "1"   # r1
-    assert body["marks"][1]["indexes"] == "3"   # r3
+    assert [mk["id"] for mk in body["marks"]] == ["m1", "m2", "m3", "m4"]
+    assert [mk["indexes"] for mk in body["marks"]] == ["1", "1", "2", "3"]
+    assert body["marks"][0]["mark"] == "mark r1"
+    assert "mark" not in body["marks"][1]   # id-only skip of r1
+    assert "mark" not in body["marks"][2]   # id-only skip of r2
+    assert body["marks"][3]["mark"] == "mark r3"
 
 
 def test_interactive_empty_session(walker):
@@ -315,7 +346,8 @@ def test_interactive_409_clean_message(walker, monkeypatch):
         walker.mark_mod.run_interactive(
             cfg=None, session_id="sess-i", json_out=False, post_fn=boom_post,
             ask_description=lambda: "scene",
-            ask_mark=_scripted_marks("a mark"),
+            # Walk all 3 rounds (mark + 2 skips) → 100% coverage → it POSTs.
+            ask_mark=_scripted_marks("a mark", "", ""),
             echo=walker.echoes.append,
         )
     assert any("session advanced" in e for e in errs)

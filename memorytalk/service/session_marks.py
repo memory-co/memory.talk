@@ -19,7 +19,12 @@ Ordering & invariants (docs/works/v4/session-mark.md):
   2. Validate every ``id``: explicit ``m<n>``, session-monotonic, no
      skip/reuse. The next id must equal ``next_seq`` (count+1) at the time
      that mark is inserted. Bad → ``MarkServiceError`` (400). Validated up
-     front before any write, so a bad batch writes nothing.
+     front before any write, so a bad batch writes nothing. ``indexes`` is
+     required on EVERY mark; ``mark`` text is optional (an id-only entry
+     records coverage but carries no #…？ → no issues / cards).
+  2b. Round coverage (以写代读): the union of every mark's ``indexes`` over
+     ``[1, last_index]`` must cover ≥ ``MARK_COVERAGE_THRESHOLD`` (90%) of the
+     session's rounds. Under → ``MarkServiceError`` (400) before any write.
   3. Atomic write, in two phases. (a) RESOLUTION: embed/collide every
      ``#…？`` issue of every mark and create/link its card UP FRONT — before
      any submission-level write. (b) WRITE: only then, per mark in order,
@@ -40,6 +45,7 @@ proceeds.
 from __future__ import annotations
 
 import datetime as _dt
+import math
 
 from memorytalk.repository import SQLiteStore
 from memorytalk.schemas.card_requests import CreateCardRequest
@@ -84,6 +90,13 @@ class MarkUnavailable(MarkServiceError):
     """503-equivalent: searchbase/embedding unavailable; can't collide issues."""
 
 
+# 以写代读 means you must read the WHOLE session — submitting marks for only the
+# first few rounds of a long session defeats it. A submission must therefore
+# cover ≥90% of the session's rounds (the union of every mark's ``indexes``
+# over ``[1, last_index]``). Tune here.
+MARK_COVERAGE_THRESHOLD = 0.9
+
+
 class SessionMarkService:
     def __init__(
         self, db: SQLiteStore, search: SearchBackend | None, cards: CardService,
@@ -125,6 +138,7 @@ class SessionMarkService:
         # lockstep.
         next_n = _seq_int(await self.db.session_marks.next_seq(session_id))
         parsed: list[dict] = []
+        covered: set[int] = set()
         for m in marks:
             mid = m.get("id")
             expected = mark_seq(next_n)
@@ -134,21 +148,37 @@ class SessionMarkService:
                     f"expected {expected!r}, got {mid!r}",
                 )
             text = m.get("mark") or ""
-            issues = parse_issues(text)
+            # #…？ → cards runs ONLY on entries that carry mark text. An id-only
+            # entry (no/empty ``mark``) records coverage but creates no issues.
+            issues = parse_issues(text) if text else []
             raw_indexes = m.get("indexes")
-            if issues:
-                if not raw_indexes:
-                    raise MarkServiceError(
-                        f"mark {mid}: indexes required when the mark carries #…？",
-                    )
-                try:
-                    parse_indexes(raw_indexes)
-                except IndexesParseError as e:
-                    raise MarkServiceError(f"mark {mid}: {e}") from e
+            # ``indexes`` is now required on EVERY mark — it's what coverage
+            # counts (id-only entries record "read but nothing to note").
+            if not raw_indexes:
+                raise MarkServiceError(f"mark {mid}: indexes required")
+            try:
+                rounds = parse_indexes(raw_indexes)
+            except IndexesParseError as e:
+                raise MarkServiceError(f"mark {mid}: {e}") from e
+            covered.update(rounds)
             parsed.append({
                 "id": mid, "mark": text, "indexes": raw_indexes, "issues": issues,
             })
             next_n += 1
+
+        # 2b. ROUND-COVERAGE — the union of every mark's ``indexes`` must cover
+        #     ≥90% of the session's rounds (以写代读: read the whole session).
+        #     Count only rounds in ``[1, last_index]``. Reject the WHOLE
+        #     submission BEFORE any write if under threshold.
+        if last_index > 0:
+            in_range = {r for r in covered if 1 <= r <= last_index}
+            need = math.ceil(MARK_COVERAGE_THRESHOLD * last_index)
+            if len(in_range) < need:
+                pct = round(100 * len(in_range) / last_index)
+                raise MarkServiceError(
+                    f"coverage {pct}% ({len(in_range)}/{last_index} rounds) "
+                    f"< {round(MARK_COVERAGE_THRESHOLD * 100)}%",
+                )
 
         # Degrade cleanly: if any mark carries issues but we can't collide
         # them, reject the whole batch before writing anything (no corruption).

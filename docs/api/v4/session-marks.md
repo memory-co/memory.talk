@@ -11,7 +11,9 @@ List     GET   /v4/sessions/{session_id}/marks      列这个 session 的所有 
 
 ## POST /v4/sessions/{session_id}/marks
 
-提交一个 round 的一份 mark。**乐观锁**:`last_index` 与 session 当前最新 round index 不一致 → 整份拒绝(409)。
+提交一份 mark。**乐观锁**:`last_index` 与 session 当前最新 round index 不一致 → 整份拒绝(409)。
+
+**round 覆盖率(以写代读)**:既然是「以写代读」,就得读完整条 session——只标前几轮等于没读完。所有 mark 的 `indexes` 并集(落在 `[1, last_index]` 内的 distinct round 数)必须 **≥ 90%** 的 session round 数(`ceil(0.9 × last_index)`)。不够 → 整份拒绝(400),消息形如 `coverage 23% (12/52 rounds) < 90%`。阈值常量 `MARK_COVERAGE_THRESHOLD = 0.9`。
 
 ### 请求体
 
@@ -21,25 +23,30 @@ List     GET   /v4/sessions/{session_id}/marks      列这个 session 的所有 
   "description": "在配 pty、用户突然提 tmux 的那几轮——想搞清他到底要什么",
   "marks": [
     {"id": "m1", "indexes": "36-37", "mark": "配 pty 时用户突然提了 tmux。#为什么 pty 会让用户想到 tmux？\n他其实想要可重连会话。"},
-    {"id": "m2", "mark": "这段在排查 EMFILE,跟句柄上限有关。"}
+    {"id": "m2", "indexes": "1-35,38-41"}
   ]
 }
 ```
 
 | 字段 | 必填 | 说明 |
 |---|---|---|
-| `last_index` | 是 | 提交时读到的 session 最新 round index(乐观锁基线) |
+| `last_index` | 是 | 提交时读到的 session 最新 round index(乐观锁基线 / 总 round 数) |
 | `description` | 是 | 这次标注的场景;随每条 mark 落盘 |
-| `marks[]` | 是 | 非空数组,每条 `{id, mark, indexes?}`;`mark` 里 `#…？` = 问题 |
+| `marks[]` | 是 | 非空数组,每条 `{id, indexes, mark?}`;`mark` 里 `#…？` = 问题 |
 | `marks[].id` | **是** | mark id `m<n>`,**每条显式给、不默认分配**。session 内单调、不跳号 / 不复用(续标接着上次最大序号往后;不知道当前最大就先 `GET …/marks`) |
-| `marks[].indexes` | **含 `#…？` 时必给** | 这条 mark 的 `#…？` grounding 的 round(s)——问题从哪几轮读出来的;可多个,语法同 `reviews.indexes`(`36-37` / `3,7,12`)。落进 `card_sessions.indexes`(那条 mark 建/连的卡都用它)。无 `#…？` 的 mark 不需要 |
+| `marks[].indexes` | **是(每条都给)** | 这条 mark 覆盖 / grounding 的 round(s)——覆盖率就是数它;可多个,语法同 `reviews.indexes`(`36-37` / `3,7,12`)。含 `#…？` 时它同时是问题的 grounding,落进 `card_sessions.indexes` |
+| `marks[].mark` | 否 | mark 正文。**省略 / 为空 = id-only 标记**:「这几轮读了,没什么可记」——只贡献覆盖率,不解析 `#…？`、不建卡/连卡,但照样落盘(`marks/m<n>.yaml` + `session_marks` 行,正文空、`issues` 空)。`#…？` 只在**有正文**的 mark 上解析 |
+
+> 一条 id-only 的 `indexes` 可以是一段范围(`"1-35,38-41"`),用一条就能覆盖一整段「无须记录」的轮次,不必每轮一条。
 
 > wire 也接受 YAML（CLI 直接转发);字段同上。
 
 ### 副作用(写入顺序)
 
 1. **乐观锁校验**:`last_index` == session `max(round_index)`?否 → 409,不写任何东西。
-2. 按提交里每条的 `id`(`m<n>`)→ 落 `marks/<id>.yaml`(canonical · YAML)+ 插一行 `session_marks`(`id` 缺失 / 跳号 / 复用 → 400,整份拒绝)。
+2. **id + indexes 校验**:每条 `id`(`m<n>`)单调、不跳号 / 不复用,`indexes` 必给且合法(缺失 / 跳号 / 复用 / 缺 `indexes` → 400,整份拒绝)。
+2b. **覆盖率校验**:所有 mark 的 `indexes` 并集覆盖 `[1, last_index]` 的 round 数 < 90% → 400,**在任何写入之前**整份拒绝。
+3. 按提交里每条的 `id`(`m<n>`)→ 落 `marks/<id>.yaml`(canonical · YAML)+ 插一行 `session_marks`(含 id-only 条目)。
 3. 解析每条 `mark` 的 `#…？` → embed 撞 `cards`(issue)向量库,按三岔:
    - **miss → 建新卡**(读 session 抽卡的入口;**另有**显式 [`POST /v4/cards`](cards.md) 用于不从 session 来的卡,如质疑另一问题):`issue` = 该 `#…？` 的问题文本(非空)、自动生成 `card_id` = `card_<ULID>`、embed `issue` 写 `cards` collection、落 `cards/<bucket>/<card_id>/card.json`(canonical:`issue` + `created_at`,**创建即冻**)。
    - **hit → 关联**老卡(不动老卡)。
@@ -63,7 +70,7 @@ List     GET   /v4/sessions/{session_id}/marks      列这个 session 的所有 
 | 码 | 情况 |
 |---|---|
 | `200` | 提交成功 |
-| `400` | `marks` 为空 / body 非法 / `id` 缺失 / 跳号 / 复用 |
+| `400` | `marks` 为空 / body 非法 / `id` 缺失 / 跳号 / 复用 / `indexes` 缺失 / **覆盖率 < 90%** |
 | `404` | `session_id` 不存在 |
 | `409` | `last_index` ≠ session 当前最新 round index(标注期间来了新 round;重读再标) |
 | `503` | 服务未就绪(searchbase 缺失时 `#…？` 建卡降级,详见 [cards.md](cards.md) 的 best-effort 约定) |

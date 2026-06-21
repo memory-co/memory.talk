@@ -18,12 +18,16 @@ from __future__ import annotations
 import sys
 from typing import Callable, Optional
 
+import math
+
 import click
 import yaml
 
 from memorytalk.cli._http import ApiError, api, extract_error_message
 from memorytalk.config import Config
+from memorytalk.service.session_marks import MARK_COVERAGE_THRESHOLD
 from memorytalk.util.ids import MARK_SEQ_PREFIX, mark_seq
+from memorytalk.util.indexes import IndexesParseError, parse_indexes
 
 
 # ────────── file / pipe mode ──────────
@@ -33,7 +37,9 @@ def load_submission(path: str) -> dict:
 
     Validates the wire shape only (``last_index`` / ``description`` /
     non-empty ``marks`` with ``id``); the server owns the deep rules
-    (optimistic lock, monotonic ids, #…？ → indexes). Raises
+    (optimistic lock, monotonic ids, ``indexes`` required, ≥90% round
+    coverage). ``mark`` text is optional — an entry with just ``{id, indexes}``
+    is an id-only "read this round(s), nothing to note" coverage marker. Raises
     ``click.BadParameter`` / ``ValueError`` on a malformed file.
     """
     if path == "-":
@@ -170,6 +176,22 @@ def _questionary_mark(cur: dict) -> str:
     return ans
 
 
+def _covered_rounds(collected: list[dict], last_index: int) -> set[int]:
+    """Distinct rounds in ``[1, last_index]`` covered by the union of every
+    collected mark's ``indexes`` (what the ≥90% coverage gate counts)."""
+    covered: set[int] = set()
+    for m in collected:
+        raw = m.get("indexes")
+        if not raw:
+            continue
+        try:
+            rounds = parse_indexes(str(raw))
+        except IndexesParseError:
+            continue
+        covered.update(r for r in rounds if 1 <= r <= last_index)
+    return covered
+
+
 def _max_existing_seq(cfg: Config, session_id: str) -> int:
     """Return the current max ``m<n>`` seq for the session (0 if none).
 
@@ -269,6 +291,14 @@ def run_interactive(
                 k = max(0, k - 1)
                 continue
             if cmd == "":
+                # A skip is NOT "nothing" — it's an id-only entry that records
+                # "read this round, nothing to note", so it counts toward
+                # coverage (以写代读). No mark text → no #…？ → no card.
+                collected.append({
+                    "id": mark_seq(next_n),
+                    "indexes": str(cur["index"]),
+                })
+                next_n += 1
                 k += 1
                 continue
             # A non-blank mark for the current round. ``indexes`` is the
@@ -285,6 +315,21 @@ def run_interactive(
 
     if not collected:
         echo("(nothing marked)")
+        return None
+
+    # ≥90% round-coverage gate (mirrors the server). The natural flow — step
+    # every round, mark or skip each — reaches 100%; an early :q can leave a
+    # gap, so block & tell the user how many more rounds to walk.
+    covered = _covered_rounds(collected, last_index)
+    need = math.ceil(MARK_COVERAGE_THRESHOLD * last_index) if last_index else 0
+    if len(covered) < need:
+        pct = round(100 * len(covered) / last_index) if last_index else 0
+        echo(
+            f"coverage {pct}% ({len(covered)}/{last_index} rounds) "
+            f"< {round(MARK_COVERAGE_THRESHOLD * 100)}% — "
+            f"walk {need - len(covered)} more round(s) (mark or skip each) "
+            "before submitting. Nothing submitted."
+        )
         return None
 
     body = {

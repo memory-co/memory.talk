@@ -27,7 +27,8 @@ async def test_submit_marks_creates_card_and_lists(client):
         "marks": [
             {"id": "m1", "indexes": "3-4",
              "mark": "user pivoted. #why does pty remind the user of tmux？ wants reconnect"},
-            {"id": "m2", "mark": "this part is just EMFILE triage, no question."},
+            {"id": "m2", "indexes": "1-2,5",
+             "mark": "this part is just EMFILE triage, no question."},
         ],
     }
     r = await client.post(f"/v4/sessions/{sid}/marks", json=body)
@@ -55,7 +56,10 @@ async def test_read_mark_fragment(client):
     sid = await _session(client)
     await client.post(f"/v4/sessions/{sid}/marks", json={
         "last_index": 5, "description": "scene",
-        "marks": [{"id": "m1", "indexes": "1-2", "mark": "#a fresh question？"}],
+        "marks": [
+            {"id": "m1", "indexes": "1-2", "mark": "#a fresh question？"},
+            {"id": "m2", "indexes": "3-5"},   # id-only pad → ≥90%
+        ],
     })
     r = await client.post("/v4/read", json={"id": f"{sid}#m1"})
     assert r.status_code == 200, r.text
@@ -76,7 +80,8 @@ async def test_session_read_includes_marks(client):
         "marks": [
             {"id": "m1", "indexes": "3-4",
              "mark": "user pivoted. #why does pty remind of tmux？"},
-            {"id": "m2", "mark": "just EMFILE triage, no question."},
+            {"id": "m2", "indexes": "1-2,5",
+             "mark": "just EMFILE triage, no question."},
         ],
     })
     r = await client.post("/v4/read", json={"id": sid})
@@ -112,7 +117,7 @@ async def test_optimistic_lock_409(client):
     sid = await _session(client)   # round_count == 5
     r = await client.post(f"/v4/sessions/{sid}/marks", json={
         "last_index": 4, "description": "stale",
-        "marks": [{"id": "m1", "mark": "x"}],
+        "marks": [{"id": "m1", "indexes": "1-5", "mark": "x"}],
     })
     assert r.status_code == 409
 
@@ -121,7 +126,7 @@ async def test_id_not_monotonic_400(client):
     sid = await _session(client)
     r = await client.post(f"/v4/sessions/{sid}/marks", json={
         "last_index": 5, "description": "x",
-        "marks": [{"id": "m2", "mark": "skips m1"}],
+        "marks": [{"id": "m2", "indexes": "1-5", "mark": "skips m1"}],
     })
     assert r.status_code == 400
 
@@ -134,9 +139,33 @@ async def test_empty_marks_400(client):
     assert r.status_code == 400
 
 
+async def test_coverage_below_threshold_400(client):
+    sid = await _session(client)   # round_count == 5
+    r = await client.post(f"/v4/sessions/{sid}/marks", json={
+        "last_index": 5, "description": "skimmed",
+        "marks": [{"id": "m1", "indexes": "1", "mark": "#a question？"}],
+    })
+    assert r.status_code == 400
+    assert "coverage" in r.text and "90%" in r.text
+    # nothing persisted
+    g = await client.get(f"/v4/sessions/{sid}/marks")
+    assert g.json()["marks"] == []
+
+
+async def test_id_only_entry_accepted_no_card(client):
+    sid = await _session(client)
+    r = await client.post(f"/v4/sessions/{sid}/marks", json={
+        "last_index": 5, "description": "read all, nothing to note",
+        "marks": [{"id": "m1", "indexes": "1-5"}],   # id-only, no mark text
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["marks"][0]["issues"] == []
+
+
 async def test_unknown_session_404(client):
     r = await client.post("/v4/sessions/sess-nope0000/marks", json={
-        "last_index": 0, "description": "x", "marks": [{"id": "m1", "mark": "x"}],
+        "last_index": 0, "description": "x",
+        "marks": [{"id": "m1", "indexes": "1", "mark": "x"}],
     })
     assert r.status_code == 404
 
@@ -145,12 +174,18 @@ async def test_hit_links_on_second_submit(client):
     sid = await _session(client)
     r1 = await client.post(f"/v4/sessions/{sid}/marks", json={
         "last_index": 5, "description": "first",
-        "marks": [{"id": "m1", "indexes": "1", "mark": "#what is the capital of France？"}],
+        "marks": [
+            {"id": "m1", "indexes": "1", "mark": "#what is the capital of France？"},
+            {"id": "m2", "indexes": "2-5"},
+        ],
     })
     card_id = r1.json()["marks"][0]["issues"][0]["card_id"]
     r2 = await client.post(f"/v4/sessions/{sid}/marks", json={
         "last_index": 5, "description": "second",
-        "marks": [{"id": "m2", "indexes": "2", "mark": "#what is the capital of France？"}],
+        "marks": [
+            {"id": "m3", "indexes": "2", "mark": "#what is the capital of France？"},
+            {"id": "m4", "indexes": "1,3-5"},
+        ],
     })
     iss = r2.json()["marks"][0]["issues"][0]
     assert iss["is_new"] is False
@@ -159,4 +194,4 @@ async def test_hit_links_on_second_submit(client):
     # The card's reverse provenance shows both marks.
     cr = await client.post("/v4/read", json={"id": card_id})
     sessions = cr.json()["card"]["sessions"]
-    assert {s["mark"] for s in sessions} == {"m1", "m2"}
+    assert {s["mark"] for s in sessions} == {"m1", "m3"}

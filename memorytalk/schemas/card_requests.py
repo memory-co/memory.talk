@@ -17,11 +17,15 @@ class CreateCardRequest(BaseModel):
 
 
 class MarkInput(BaseModel):
-    # ``id`` is explicit ``m<n>`` (not server-assigned). ``indexes`` is
-    # required only when ``mark`` carries ``#…？``; the service validates.
+    # ``id`` is explicit ``m<n>`` (not server-assigned). ``indexes`` is now
+    # REQUIRED on every mark — it's what the ≥90% round-coverage check counts
+    # (以写代读: a submission must read the whole session). ``mark`` (the text)
+    # is OPTIONAL: an entry with no/empty ``mark`` is an id-only "read this
+    # round(s), nothing to note" marker that still counts toward coverage via
+    # its ``indexes`` but creates no #…？ issues / cards. The service validates.
     id: str
-    mark: str
-    indexes: str | None = None
+    indexes: str
+    mark: str | None = None
 
 
 class SubmitMarksRequest(BaseModel):
