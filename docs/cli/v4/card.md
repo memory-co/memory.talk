@@ -9,7 +9,8 @@ memory.talk card
 ├── create --issue '<问题>' [--card_id <id>] [--json]
 ├── position --card <cid> --claim '<答案>' [--source <sid>:<idx> ...] [--scope '<场景>'] [--json]
 ├── review --target <card#p<n> | card#l<n>> --argument <+1|0|-1> --cite <sid>:<idx> [--comment '<一句话>'] [--review_id <id>] [--json]
-└── link --card <cid> --type <type> --target <id> --claim '<这条边为什么成立>' [--source <sid>:<idx> ...] [--json]   # 卡间 IBIS 边(受治理);看边走 read
+├── link --card <cid> --type <type> --target <id> --claim '<这条边为什么成立>' [--source <sid>:<idx> ...] [--json]   # 卡间 IBIS 边(受治理);看边走 read
+└── delete <card_id> [--yes] [--json]   # 硬删除一张卡 + 全部关联(逃生口);默认先预览再确认
 ```
 
 **读**一张卡(问题 + 它所有答案 + 边 + 出处)走 [`read <card_id>`](read.md),读单条边走 [`read card_xxx#l1`](read.md);找卡走 [`search`](search.md);hook 召回走 [`recall`](recall.md);**建问题(卡):`card create`(显式)或 [`session mark`](session.md#session-mark) 的 `#…？`(从读 session)**。
@@ -178,6 +179,29 @@ memory.talk card link --card <card_id> --type <type> --target <target_id> --clai
 输出 `{"status":"ok","card_id":…,"link":"l1","type":…,"target_id":…,"target_type":…}`(`link` = `l<n>`,就是以后 `card review --target card_xxx#l<n>` 的对象)。副作用:落一条 CardLink(`claim` 内联,`up/down/neutral_count` 初始化 0;**不算 credence**,读时现算)+ 每个 `--source` 落一条 `link_sessions` + `links/l<n>.json`(文件名 = 卡内序号,边核不可变);`cards.link_count++`。
 
 错误:`--card` 卡不存在 / `--type` 不在五类型 / `--target` 非 `card_…`/`card_…#p`(或 `#p` 分片用在非 `suggested_by`)/ `--claim` 空 / 同边已存在(违反 UNIQUE)/ `--source` 越界·非单调 → 报错 exit 1。
+
+## card delete
+
+**硬删除**一张卡 + 它**全部关联数据**(级联),连别的卡指向它的边也一并清掉,不留悬挂。**这是逃生口**——给手滑 / 测试数据 / 清理用;常规「改主意」**不删卡**,走 `card review --argument -1` 踩掉 + 反向 `replaces` 边(见本页末「改主意 ≠ 改卡」)。调 [`DELETE /v4/cards/{card_id}`](../../api/v4/cards.md#delete-v4cardscard_id)。
+
+```bash
+memory.talk card delete <card_id> [--yes] [--json]
+```
+
+| 参数 | 必填 | 说明 |
+|---|---|---|
+| `card_id` | 是 | 要删的卡(位置参数,裸 `card_<…>`) |
+| `--yes` / `-y` | 否 | 跳过确认,直接删(非交互) |
+| `--json` | 否 | 结构化输出删除结果。`--json` **隐含非交互**,必须配 `--yes`,否则报错 exit 1 |
+
+**级联范围(原子:先算计划 → 删文件 → 删行 → 删向量)**:
+
+1. **出边 + 自身状态**:整个卡目录(`card.json` + `positions/` + `links/`),SQLite `cards` / `positions` / `reviews` / `card_links`(本卡为主体) / `card_sessions` / `position_sessions` / `link_sessions`,向量库 `cards`[card_id] + 本卡所有 `positions` 文档。
+2. **入边**:每条**别的卡**指向本卡的 `card_links`(`target_id == card_id` 或以 `card_id#` 开头)—— 删该行、删源卡的 `links/l<n>.json` 文件、删该边的 `link_sessions`(这样源卡不再挂一条悬空边)。源卡的其它数据**原样保留**。
+
+**确认流程**:不带 `--yes` 时,先调 dry-run 打印一屏预览(card_id + issue + 各项计数:positions / reviews / links_out / links_in / provenance / vectors)→ `继续删除?`(默认 No)→ 选 yes 才真删并打印结果;选 no 打印「已取消」、exit 0。带 `--yes` 跳过提问直接删。
+
+> `provenance` = card_sessions + position_sessions + link_sessions(含入边那些 link_sessions)总数;`vectors` = 1(卡)+ position 文档数。删除不可撤销,**优先用 dry-run 看清再删**。
 
 ## 跟其他命令的边界
 

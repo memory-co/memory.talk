@@ -46,6 +46,15 @@ class ReviewStore:
         ) as cur:
             return await cur.fetchone() is not None
 
+    async def delete_for_card(self, card_id: str) -> int:
+        """Delete every review of a card's positions/links (cascade on card
+        delete). Returns the row count removed."""
+        cur = await self.conn.execute(
+            "DELETE FROM reviews WHERE card_id = ?", (card_id,),
+        )
+        await self.conn.commit()
+        return cur.rowcount
+
     async def list_for_target(self, card_id: str, target: str) -> list[dict]:
         async with self.conn.execute(
             "SELECT * FROM reviews WHERE card_id = ? AND target = ? "

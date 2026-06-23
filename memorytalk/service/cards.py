@@ -265,6 +265,86 @@ class CardService:
             "target_id": tgt, "target_type": _target_type(tgt), "claim": req.claim,
         }
 
+    # ────────── delete card (hard-delete escape hatch) ──────────
+
+    async def delete_card(self, card_id: str, *, dry_run: bool) -> dict:
+        """Hard-delete a card and ALL associated data (escape hatch — the
+        governed model normally prefers ``review -1`` + counter-edge, NOT
+        delete). Computes the cascade plan first; on a real run executes it
+        atomically (files → rows → vectors). Returns the affected counts.
+
+        Cascade scope:
+          • OUTgoing + own state: the card dir (card.json + positions/ +
+            links/), and SQLite ``cards`` / ``positions`` / ``reviews`` /
+            ``card_links``(subject) / ``card_sessions`` / ``position_sessions``
+            / ``link_sessions``; vector ``cards``[card_id] + ``positions``
+            docs of this card.
+          • INcoming edges: each ``card_links`` row from ANOTHER card whose
+            ``target_id`` is this card (or ``card_id#…``) — drop the row,
+            the source card's link file, and that link's ``link_sessions``
+            (so the other card no longer dangles). The source card's other
+            data is left intact.
+        """
+        if not await self.db.cards.exists(card_id):
+            raise CardNotFound(f"card {card_id} not found")
+
+        # ── gather the plan (read-only) ──
+        positions = await self.db.positions.list_for_card(card_id)
+        reviews = await self.db.reviews.list_for_card(card_id)
+        out_links = await self.db.card_links.list_out(card_id)
+        in_links = await self.db.card_links.list_incoming(card_id)
+        card_sessions = await self.db.card_sessions.list_for_card(card_id)
+        # position_sessions / link_sessions provenance totals (own state).
+        own_provenance = len(card_sessions)
+        for p in positions:
+            own_provenance += len(
+                await self.db.position_sessions.list_for_position(card_id, p["position"]))
+        for l in out_links:
+            own_provenance += len(
+                await self.db.link_sessions.list_for_link(card_id, l["link"]))
+        in_provenance = 0
+        for l in in_links:
+            in_provenance += len(
+                await self.db.link_sessions.list_for_link(l["card_id"], l["link"]))
+
+        counts = {
+            "positions": len(positions),
+            "reviews": len(reviews),
+            "links_out": len(out_links),
+            "links_in": len(in_links),
+            "provenance": own_provenance + in_provenance,
+            "vectors": 1 + len(positions),
+        }
+        issue = (await self.db.cards.get(card_id) or {}).get("issue", "")
+
+        if dry_run:
+            return {"card_id": card_id, "issue": issue, "counts": counts}
+
+        # ── execute the cascade: incoming edges first (other cards), then
+        #    own files (the whole card dir), then own rows, then vectors. ──
+        for l in in_links:
+            await self.db.link_sessions.delete_for_link(l["card_id"], l["link"])
+            await self.db.card_links.delete_link(l["card_id"], l["link"])
+
+        # Own card dir (card.json + positions/ + links/) + cards row.
+        await self.db.cards.delete(card_id)
+        # Own subordinate rows.
+        await self.db.positions.delete_for_card(card_id)
+        await self.db.reviews.delete_for_card(card_id)
+        await self.db.card_links.delete_outgoing(card_id)
+        await self.db.card_sessions.delete_for_card(card_id)
+        await self.db.position_sessions.delete_for_card(card_id)
+        await self.db.link_sessions.delete_for_card(card_id)
+        # Vectors (best-effort): the issue doc + every position claim doc.
+        if self.search is not None:
+            try:
+                await self.search.delete(V4_CARDS, [card_id])
+                await self.search.delete_where(V4_POSITIONS, {"card_id": card_id})
+            except Exception as e:   # best-effort: a rebuild reconciles later
+                _log.warning("vector delete failed for %s: %s", card_id, e)
+
+        return {"card_id": card_id, "deleted": counts}
+
     # ────────── internal: best-effort vector upsert ──────────
 
     async def _index(self, collection: str, doc_id: str, text: str, fields: dict, card_id: str) -> None:

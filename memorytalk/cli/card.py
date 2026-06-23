@@ -129,6 +129,70 @@ def list_(since: str | None, until: str | None, limit: int, json_out: bool) -> N
     _run(json_out, "GET", "/v4/cards", None, _fmt_list, params=params)
 
 
+# ────────── card delete ──────────
+
+def _fmt_delete_preview(r: dict) -> str:
+    """Dry-run summary: card_id + issue + the cascade counts."""
+    c = r.get("counts", {})
+    issue = " ".join((r.get("issue") or "").split())
+    return (
+        f"# 将硬删除 `{r.get('card_id', '')}`\n"
+        f"**Q:** {issue}\n\n"
+        f"- positions: {c.get('positions', 0)}\n"
+        f"- reviews: {c.get('reviews', 0)}\n"
+        f"- links out: {c.get('links_out', 0)}\n"
+        f"- links in (别卡指向本卡的边): {c.get('links_in', 0)}\n"
+        f"- provenance (card/position/link_sessions): {c.get('provenance', 0)}\n"
+        f"- vectors: {c.get('vectors', 0)}\n\n"
+        f"_硬删除是逃生口;常规「改主意」走 review -1 / 反向边,不删。_"
+    )
+
+
+def _fmt_delete_result(r: dict) -> str:
+    c = r.get("deleted", {})
+    return (
+        f"✓ card deleted · `{r.get('card_id', '')}` · "
+        f"{c.get('positions', 0)}p {c.get('reviews', 0)}rv "
+        f"{c.get('links_out', 0)}→ {c.get('links_in', 0)}← · "
+        f"{c.get('provenance', 0)} prov · {c.get('vectors', 0)} vec"
+    )
+
+
+@card.command("delete")
+@click.argument("card_id")
+@click.option("--yes", "-y", "assume_yes", is_flag=True, default=False,
+              help="Skip the confirm prompt (non-interactive)")
+@click.option("--json", "json_out", is_flag=True, default=False)
+def delete(card_id: str, assume_yes: bool, json_out: bool) -> None:
+    """Hard-delete a card and ALL associated data (cascade).
+
+    Escape hatch for mistakes / test data / cleanup. The governed model
+    normally prefers ``card review --argument -1`` + a counter-edge, NOT
+    delete. Cascade removes: the card dir + its positions / reviews /
+    outgoing links / provenance / vectors, AND every incoming edge from
+    other cards (so nothing dangles).
+
+    Without ``--yes``: previews the counts, then asks for confirmation
+    (default No). With ``--yes``: deletes straight away. ``--json`` is
+    non-interactive — it requires ``--yes``.
+    """
+    if json_out and not assume_yes:
+        emit_md_err("error: --json 需配合 --yes(非交互)")
+        sys.exit(1)
+
+    if assume_yes:
+        _run(json_out, "DELETE", f"/v4/cards/{card_id}", None, _fmt_delete_result)
+        return
+
+    # Dry-run preview → confirm → real delete (markdown path only).
+    preview = _run(False, "DELETE", f"/v4/cards/{card_id}", None,
+                   _fmt_delete_preview, params={"dry_run": "true"})
+    if not click.confirm("继续删除?", default=False):
+        emit_md("已取消")
+        return
+    _run(False, "DELETE", f"/v4/cards/{card_id}", None, _fmt_delete_result)
+
+
 # ────────── card position ──────────
 
 @card.command("position")

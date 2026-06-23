@@ -38,6 +38,15 @@ class CardSessionStore:
         await self.conn.commit()
         return cur.rowcount
 
+    async def delete_for_card(self, card_id: str) -> int:
+        """Delete every card→session provenance edge for a card (cascade on
+        card delete). Returns the row count removed."""
+        cur = await self.conn.execute(
+            "DELETE FROM card_sessions WHERE card_id = ?", (card_id,),
+        )
+        await self.conn.commit()
+        return cur.rowcount
+
     async def list_for_card(self, card_id: str) -> list[dict]:
         async with self.conn.execute(
             "SELECT * FROM card_sessions WHERE card_id = ? ORDER BY created_at ASC",

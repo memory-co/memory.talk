@@ -181,6 +181,70 @@ async def test_link_unknown_card_404(client):
     assert r.status_code == 404
 
 
+# ────────── delete (cascade hard-delete) ──────────
+
+async def test_delete_dry_run_previews_and_keeps_card(client):
+    sid = await _session(client)
+    cid = await _card(client)
+    await client.post(f"/v4/cards/{cid}/positions", json={
+        "claim": "LanceDB", "source": {"session_id": sid, "indexes": "1"}})
+    r = await client.request("DELETE", f"/v4/cards/{cid}", params={"dry_run": "true"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["card_id"] == cid
+    assert body["counts"]["positions"] == 1
+    assert body["counts"]["vectors"] == 2   # card + 1 position
+    assert "deleted" not in body
+    # nothing removed
+    assert (await client.get(f"/v4/cards/{cid}/positions")).status_code == 200
+
+
+async def test_delete_cascades_rows_and_vectors(client, app):
+    sid = await _session(client)
+    cid = await _card(client, issue="vector database choice for the memory layer")
+    pos = (await client.post(f"/v4/cards/{cid}/positions", json={
+        "claim": "LanceDB is embedded"})).json()["position"]
+    await client.post(f"/v4/cards/{cid}/positions/{pos}/reviews", json={
+        "session_id": sid, "indexes": "1", "argument": 1})
+    search = app.state.searchbase
+    # vectors indexed before delete
+    assert await search.count("cards", {}) >= 1
+    assert await search.count("positions", {"card_id": cid}) == 1
+
+    r = await client.request("DELETE", f"/v4/cards/{cid}")
+    assert r.status_code == 200, r.text
+    assert r.json()["deleted"]["positions"] == 1
+    assert r.json()["deleted"]["reviews"] == 1
+
+    # card gone everywhere
+    assert (await client.get(f"/v4/cards/{cid}/positions")).status_code == 404
+    assert await app.state.db.cards.read_doc(cid) is None
+    assert await app.state.db.reviews.list_for_card(cid) == []
+    assert await search.count("positions", {"card_id": cid}) == 0
+
+
+async def test_delete_incoming_edge_removes_other_cards_link(client, app):
+    a = await _card(client, issue="A?")
+    b = await _card(client, issue="B?")
+    r = await client.post(f"/v4/cards/{b}/links", json={
+        "type": "questions", "target_id": a, "claim": "why a"})
+    assert r.status_code == 200, r.text
+    blink = r.json()["link"]
+    # delete A → B's incoming edge gone, B intact
+    d = await client.request("DELETE", f"/v4/cards/{a}")
+    assert d.status_code == 200 and d.json()["deleted"]["links_in"] == 1
+    assert await app.state.db.card_links.get(b, blink) is None
+    assert await app.state.db.card_links.read_doc(b, blink) is None
+    assert (await client.get(f"/v4/cards/{b}/links")).status_code == 200
+
+
+async def test_delete_unknown_card_404(client):
+    r = await client.request("DELETE", "/v4/cards/card_nope")
+    assert r.status_code == 404
+    r2 = await client.request("DELETE", "/v4/cards/card_nope", params={"dry_run": "true"})
+    assert r2.status_code == 404
+
+
 # ────────── read-path retrieval (real dummy-embedder backend) ──────────
 
 async def test_search_finds_card_by_issue(client):

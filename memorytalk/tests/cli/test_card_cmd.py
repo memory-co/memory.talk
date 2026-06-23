@@ -40,11 +40,11 @@ def _invoke(args, input=None):
 def test_card_group_help():
     r = _invoke(["--help"])
     assert r.exit_code == 0
-    for sub in ("create", "list", "position", "review", "link"):
+    for sub in ("create", "list", "position", "review", "link", "delete"):
         assert sub in r.output
 
 
-@pytest.mark.parametrize("sub", ["create", "list", "position", "review", "link"])
+@pytest.mark.parametrize("sub", ["create", "list", "position", "review", "link", "delete"])
 def test_subcommand_help(sub):
     r = _invoke([sub, "--help"])
     assert r.exit_code == 0
@@ -77,6 +77,77 @@ def test_list_empty(captured):
     r = _invoke(["list"])
     assert r.exit_code == 0
     assert "cards (0/0)" in r.output
+
+
+# ────────── card delete ──────────
+
+_DRY_RUN_RESP = {
+    "card_id": "card_a", "issue": "Which db?",
+    "counts": {"positions": 2, "reviews": 1, "links_out": 1,
+               "links_in": 1, "provenance": 3, "vectors": 3},
+}
+_DELETE_RESP = {
+    "card_id": "card_a",
+    "deleted": {"positions": 2, "reviews": 1, "links_out": 1,
+                "links_in": 1, "provenance": 3, "vectors": 3},
+}
+
+
+@pytest.fixture
+def del_captured(monkeypatch):
+    """Stub the HTTP layer for delete: the dry-run call (params dry_run) gets
+    the preview; the real call gets the delete result. Records every call."""
+    calls = []
+
+    def fake_api(method, path, config, json_body=None, params=None, **kw):
+        calls.append((method, path, params))
+        if params and params.get("dry_run") == "true":
+            return _DRY_RUN_RESP
+        return _DELETE_RESP
+
+    monkeypatch.setattr(card_mod, "api", fake_api)
+    return type("C", (), {"calls": calls})()
+
+
+def test_delete_yes_skips_prompt(del_captured):
+    r = _invoke(["delete", "card_a", "--yes"])
+    assert r.exit_code == 0, r.output
+    # single DELETE, no dry_run preview
+    assert len(del_captured.calls) == 1
+    assert del_captured.calls[0][:2] == ("DELETE", "/v4/cards/card_a")
+    assert del_captured.calls[0][2] is None
+    assert "card deleted" in r.output and "card_a" in r.output
+
+
+def test_delete_confirm_yes_runs_after_preview(del_captured):
+    r = _invoke(["delete", "card_a"], input="y\n")
+    assert r.exit_code == 0, r.output
+    # dry-run preview first, then the real delete
+    assert del_captured.calls[0][2] == {"dry_run": "true"}
+    assert del_captured.calls[1][2] is None
+    assert "将硬删除" in r.output and "card deleted" in r.output
+
+
+def test_delete_confirm_no_cancels(del_captured):
+    r = _invoke(["delete", "card_a"], input="n\n")
+    assert r.exit_code == 0, r.output
+    # only the dry-run preview happened — no real delete
+    assert len(del_captured.calls) == 1
+    assert del_captured.calls[0][2] == {"dry_run": "true"}
+    assert "已取消" in r.output
+
+
+def test_delete_json_requires_yes(del_captured):
+    r = _invoke(["delete", "card_a", "--json"])
+    assert r.exit_code == 1
+    assert not del_captured.calls   # errored before any HTTP call
+
+
+def test_delete_json_yes_emits_result(del_captured):
+    r = _invoke(["delete", "card_a", "--json", "--yes"])
+    assert r.exit_code == 0, r.output
+    assert len(del_captured.calls) == 1
+    assert '"deleted"' in r.output
 
 
 # ────────── flag → request body ──────────

@@ -52,6 +52,19 @@ async def get_cards(
     return {"total": total, "returned": len(rows), "cards": rows}
 
 
+@router.delete("/cards/{card_id}")
+async def delete_card(card_id: str, request: Request, dry_run: bool = Query(False)):
+    """Hard-delete a card and ALL associated data (escape hatch — the
+    governed model normally prefers ``review -1`` + counter-edge). With
+    ``?dry_run=true`` nothing is deleted; the response previews the counts.
+    404 when the card doesn't exist."""
+    svc = require(request.app.state.cards, "cards")
+    try:
+        return await svc.delete_card(card_id, dry_run=dry_run)
+    except CardServiceError as e:
+        raise http_from_service_error(e)
+
+
 @router.post("/cards/{card_id}/positions", response_model=CreatePositionResponse)
 async def post_position(card_id: str, payload: CreatePositionRequest, request: Request) -> CreatePositionResponse:
     svc = require(request.app.state.cards, "cards")

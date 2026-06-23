@@ -27,6 +27,15 @@ class PositionSessionStore:
         )
         await self.conn.commit()
 
+    async def delete_for_card(self, card_id: str) -> int:
+        """Delete every position→session provenance edge for a card (cascade
+        on card delete). Returns the row count removed."""
+        cur = await self.conn.execute(
+            "DELETE FROM position_sessions WHERE card_id = ?", (card_id,),
+        )
+        await self.conn.commit()
+        return cur.rowcount
+
     async def list_for_position(self, card_id: str, position: str) -> list[dict]:
         async with self.conn.execute(
             "SELECT * FROM position_sessions WHERE card_id = ? AND position = ? "

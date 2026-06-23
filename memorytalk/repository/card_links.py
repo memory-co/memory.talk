@@ -24,6 +24,15 @@ from memorytalk.provider.storage import Storage
 from memorytalk.util.ids import FRAGMENT_SEP, POSITION_SEQ_PREFIX, link_seq
 
 
+def _like_prefix(prefix: str) -> str:
+    """Escape LIKE wildcards in ``prefix`` and append ``%`` so a
+    ``target_id LIKE _like_prefix('card_x#')`` matches ``card_x#p1`` /
+    ``card_x#l2`` but treats any ``%``/``_``/``\\`` in the id literally
+    (paired with ``ESCAPE '\\'`` in the query)."""
+    escaped = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"{escaped}%"
+
+
 def _target_type(target_id: str) -> str:
     base, sep, seq = target_id.partition(FRAGMENT_SEP)
     if sep and seq.startswith(POSITION_SEQ_PREFIX):
@@ -124,6 +133,48 @@ class CardLinkStore:
             (target_id,),
         ) as cur:
             return [dict(r) for r in await cur.fetchall()]
+
+    async def delete_outgoing(self, card_id: str) -> int:
+        """Delete every edge where this card is the subject (cascade on card
+        delete). The file docs live under the card dir, removed wholesale by
+        ``CardStore.delete``. Returns the row count removed."""
+        cur = await self.conn.execute(
+            "DELETE FROM card_links WHERE card_id = ?", (card_id,),
+        )
+        await self.conn.commit()
+        return cur.rowcount
+
+    async def list_incoming(self, card_id: str) -> list[dict]:
+        """Rows targeting this card from ANOTHER card — either the card
+        itself (``target_id == card_id``) or one of its subordinate
+        addresses (``target_id`` starts with ``card_id#``). Returns the full
+        rows so the caller can locate each source card's link file
+        (``cards/<bucket>/<subject>/links/<link>.json``) + its link_sessions.
+        Self-edges (subject == card_id) are excluded — those go via
+        ``delete_outgoing`` and the card dir."""
+        prefix = f"{card_id}{FRAGMENT_SEP}"
+        async with self.conn.execute(
+            "SELECT * FROM card_links "
+            "WHERE (target_id = ? OR target_id LIKE ? ESCAPE '\\') "
+            "AND card_id != ? "
+            "ORDER BY card_id ASC, link ASC",
+            (card_id, _like_prefix(prefix), card_id),
+        ) as cur:
+            return [dict(r) for r in await cur.fetchall()]
+
+    async def delete_link(self, card_id: str, link: str) -> int:
+        """Delete ONE edge row (subject=card_id, seq=link) + remove its file
+        doc. Used to drop an incoming edge whose target card is being
+        deleted, leaving the source card's other data intact. Returns 1 if a
+        row was removed, else 0."""
+        cur = await self.conn.execute(
+            "DELETE FROM card_links WHERE card_id = ? AND link = ?",
+            (card_id, link),
+        )
+        await self.conn.commit()
+        if self.storage is not None:
+            await self.storage.delete(self._doc_key(card_id, link))
+        return cur.rowcount
 
     async def bump_argument(self, card_id: str, link: str, argument: int) -> None:
         """Increment the argument-specific bucket + review_count on a link."""

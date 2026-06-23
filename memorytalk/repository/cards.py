@@ -35,6 +35,10 @@ class CardStore:
     def _events_key(self, card_id: str) -> str:
         return f"{self.PREFIX}/{self._bucket(card_id)}/{card_id}/events.jsonl"
 
+    def _dir_key(self, card_id: str) -> str:
+        """The whole card directory (card.json + positions/ + links/ + events)."""
+        return f"{self.PREFIX}/{self._bucket(card_id)}/{card_id}"
+
     # -- file layer --
     async def write_doc(self, card: dict) -> None:
         await self.storage.write_text(
@@ -60,6 +64,15 @@ class CardStore:
             (card_id, issue, created_at),
         )
         await self.conn.commit()
+
+    async def delete(self, card_id: str) -> None:
+        """Hard-delete the card: drop the ``cards`` row AND remove the whole
+        card directory (card.json + positions/ + links/ + events.jsonl).
+        Escape hatch — the governed model prefers ``review -1`` + counter-edge.
+        Caller is responsible for cascading the subordinate rows/vectors."""
+        await self.conn.execute("DELETE FROM cards WHERE card_id = ?", (card_id,))
+        await self.conn.commit()
+        await self.storage.delete_prefix(self._dir_key(card_id))
 
     async def get(self, card_id: str) -> dict | None:
         async with self.conn.execute(

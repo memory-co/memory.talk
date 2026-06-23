@@ -89,6 +89,16 @@ class PositionStore:
         ) as cur:
             return await cur.fetchone() is not None
 
+    async def delete_for_card(self, card_id: str) -> int:
+        """Delete every position row of a card (cascade on card delete).
+        Returns the row count removed. File docs live under the card dir,
+        removed wholesale by ``CardStore.delete``."""
+        cur = await self.conn.execute(
+            "DELETE FROM positions WHERE card_id = ?", (card_id,),
+        )
+        await self.conn.commit()
+        return cur.rowcount
+
     async def list_for_card(self, card_id: str) -> list[dict]:
         async with self.conn.execute(
             "SELECT * FROM positions WHERE card_id = ? ORDER BY created_at ASC, position ASC",
