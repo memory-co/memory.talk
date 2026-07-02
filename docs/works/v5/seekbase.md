@@ -5,7 +5,7 @@
 相关:
 - searchbase(它的前身与被吸收对象): [../v3/searchbase-extraction.md](../v3/searchbase-extraction.md) · [`memorytalk/searchbase/`](../../../memorytalk/searchbase/)
 - v5 立意(memory system,seekbase 是它的数据层): [README.md](README.md)
-- file-canonical 模式(与本层的关系见 §6): [../v3/file-canonical-pattern.md](../v3/file-canonical-pattern.md)
+- file-canonical 模式(与本层的关系见 §7): [../v3/file-canonical-pattern.md](../v3/file-canonical-pattern.md)
 
 ---
 
@@ -90,7 +90,7 @@ SCHEMA = {
 ```
 
 - **DuckDB 承接 SQLite 的位置**(结构化引擎):同样嵌入式单文件、零运维,换来**列存 + 真分析能力**(聚合 / 窗口 / join 快得多——治理与巩固要在 corpus 上跑统计,这正是 memory system 的日常),且**原生读 Parquet / JSON**,和 LanceDB 的 Arrow 生态同宗。
-- **LanceDB 原位保留**(向量引擎):searchbase 现在管的那摊(embed、ANN、集合)整体**下沉为 seekbase 的 search 引擎**;searchbase 作为独立端口**被吸收**——对外只剩 seekbase 一个端口(见 §7)。
+- **LanceDB 原位保留**(向量引擎):searchbase 现在管的那摊(embed、ANN、集合)整体**下沉为 seekbase 的 search 引擎**;searchbase 作为独立端口**被吸收**——对外只剩 seekbase 一个端口(见 §8)。
 - **双引擎同步是 seekbase 的内政**:`insert` 一行 → DuckDB 写行 + (有 `searchable` 列则)LanceDB upsert 向量;`delete` → 两边一起删;id 对齐、批量、重试都在端口后面。**上层从此没有「双写」这个概念。**
 
 ---
@@ -108,7 +108,36 @@ SCHEMA = {
 
 ---
 
-## 5. 为什么像 supabase、又不是 supabase
+## 5. 写入原子性:内建消息队列(outbox)
+
+**跨引擎没有事务**(DuckDB 的事务包不住 LanceDB 的写),这是 §3 双引擎的原罪。seekbase 用**内建消息队列**解决——经典 **transactional outbox**,而且有个巧处:**队列本身就放在 DuckDB 里**,于是「业务写 + 入队」天然是**同一个 DuckDB 事务**,原子性不出引擎就拿到了。
+
+```
+insert/update/delete(带 searchable 列)
+        │
+        ▼ 一个 DuckDB 事务(原子)
+┌────────────────────────────────┐
+│ ① 写业务行(cards …)           │
+│ ② 追加 _outbox 一行(向量作业)  │   _outbox(seq, table, op, id, text, state)
+└────────────────────────────────┘
+        │ commit 后
+        ▼ 后台 consumer(单个,进程内)
+   逐条取 pending → embed → LanceDB upsert/delete → 标 done
+   失败 → 退避重试;崩溃 → 重启后从 pending 续跑(replay)
+```
+
+- **写路径永不碰 LanceDB**:调用方 `insert()` 返回时,DuckDB 行 + outbox 作业**要么都在、要么都不在**。向量侧由 consumer 异步兑现。
+- **at-least-once + 幂等 = 收敛**:consumer 可能重放(标 done 前崩溃),但向量写是**按 id upsert / delete**——天然幂等,重放无害。**不需要恰好一次。**
+- **一致性语义:向量侧最终一致。** `search()` 可能滞后于刚写入的行(通常毫秒级)。要读己之写的场合(如 mark 写路径「先撞库再建卡」)给 `await db.flush()`——排干 outbox 再继续。结构化查询(不带 `search()`)永远强一致。
+- **顺序**:outbox 按 `seq` 单 consumer 串行消费,同一 id 的 upsert/delete 不会乱序。
+- **崩溃恢复 = 重放,不需对账**:任何时刻崩,pending 作业都还在 DuckDB 里(和业务行同一事务落的),重启接着跑。彻底丢了也不怕——派生层照旧可从 canonical 文件整体重建(§7)。
+- **delete 同路**:级联删(如 `card delete`)在一个 DuckDB 事务里删行 + 入队向量删除作业,两边终归一致。
+
+> 这个队列是 **seekbase 的内政**:上层看不见 outbox、consumer、重试——只看见「写完就返回、search 最终能搜到、要强读就 flush」。也不引入外部组件(不是 Redis / Kafka),就是 DuckDB 里一张表 + 进程内一个协程,和「嵌入式、零运维」的形态一致。
+
+---
+
+## 6. 为什么像 supabase、又不是 supabase
 
 | | supabase | seekbase |
 |---|---|---|
@@ -121,7 +150,7 @@ SCHEMA = {
 
 ---
 
-## 6. 与 file-canonical 的关系:canonical 不变,派生层升级
+## 7. 与 file-canonical 的关系:canonical 不变,派生层升级
 
 [file-canonical 模式](../v3/file-canonical-pattern.md)**不动**:文件(YAML / JSON / JSONL)仍是权威,数据库仍是**派生索引、可重建**。变的只是派生层的实现:
 
@@ -136,7 +165,7 @@ v5:     files(canonical) → seekbase(DuckDB + LanceDB,一个端口)
 
 ---
 
-## 7. 与 searchbase 的关系:接棒并吸收
+## 8. 与 searchbase 的关系:接棒并吸收
 
 - searchbase 的**纪律全部继承**:业务无关(不认识 card / round)、调用方不见向量、embedder 注入、集合/文档抽象。
 - searchbase 的**实现下沉**:`LocalSearchBackend` 那摊(LanceDB 管理、auto_split、超长截断、维护协程)成为 seekbase 向量侧的内部实现。
@@ -145,11 +174,11 @@ v5:     files(canonical) → seekbase(DuckDB + LanceDB,一个端口)
 
 ---
 
-## 8. 待定
+## 9. 待定
 
-- **ORM API 定形**:链式构建器的完整算子表;返回 dict 还是可选 pydantic 绑定;事务边界(DuckDB 内事务易,**跨引擎无原子性**——写顺序 + 对账兜底,策略要定)。
+- **ORM API 定形**:链式构建器的完整算子表;返回 dict 还是可选 pydantic 绑定;事务边界(跨引擎原子性已由 §5 outbox 解决;剩 API 上要不要暴露多语句事务)。
 - **hybrid search**:`mode="hybrid"`(向量 + BM25)何时做、怎么融分(RRF?)。
-- **DuckDB 并发模型**:单写者;daemon 内单连接串行化够不够,要不要写队列。
+- **DuckDB 并发模型**:单写者;daemon 内单连接串行化够不够(outbox consumer 与前台写共用连接怎么调度)。
 - **`searchable` 进阶**:多列 search、跨表 search(v4 unified search 那种 cards+insights+rounds 合并按相关排,在 seekbase 里怎么表达——`db.search("…", tables=[…])`?)。
 - **迁移节奏**:v5 全新起 or 兼容期双跑;DuckDB 文件放哪、要不要和 LanceDB 同目录成一个「seekbase 实例目录」(像 searchbase 的 `name="v1"` 实例化路数)。
 
