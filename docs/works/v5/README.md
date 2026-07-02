@@ -1,15 +1,18 @@
 # Works (v5) — memory harness
 
-> **v5 重新定位 memory.talk:它不是「会记事的 executor」,而是一个专职的 memory harness。**
-> 今天所有 agent harness 都是 **executor harness**(为「把任务做完」而生);记忆在它们里是贴上去的副产物。v5 把 **memory harness** 单独立出来——一个**唯一职责是管理记忆**的 harness。
+> **v5 重新定位 memory.talk:定位上,记忆管理该有自己的 harness(memory harness),而不是 executor 里贴的一块。**
+> 今天所有 agent harness 都是 **executor harness**(为「把任务做完」而生);记忆在它们里是贴上去的副产物。
+>
+> **但这版不手搓 harness。** v5 交付的是一个 **memory system**——记忆管理的完整能力(结晶 / 治理 / 召回 + 数据 + 接口),设计成**可被不同 harness 嵌入**:**当前嵌 CC(Claude Code)当宿主**;未来实现专职 **memory harness** 时,同一套 system 原样嵌进去。memory harness 是**北极星定位,本版不实现**(见 §7)。
 
-> 状态:**设计中**。本篇是 v5 的立意文(positioning),只定方向、不定实现。机制 / 数据 / 接口细节由后续 v5 文档展开。v5 是一次**彻底重做**,会大幅改写 v4 的表层;但 v4 的**底料**(被治理的问题图 + 以写代读)保留(见 §7)。
+> 状态:**设计中**。本篇是 v5 的立意文(positioning),只定方向、不定实现。机制 / 数据 / 接口细节由后续 v5 文档展开。v5 是一次**彻底重做**,会大幅改写 v4 的表层;但 v4 的**底料**(被治理的问题图 + 以写代读)保留(见 §8)。
 
 ---
 
 ## 0. 一句话
 
-> **executor harness 的 loop 为「任务做完了吗」而转;memory harness 的 loop 为「这套记忆还真不真、精不精、新不新、召得回吗」而转。** v5 做后者。
+> **executor harness 的 loop 为「任务做完了吗」而转;memory harness 的 loop 为「这套记忆还真不真、精不精、新不新、召得回吗」而转。**
+> v5 立后者这个定位,但落地为一个**可嵌入的 memory system**(先嵌 CC 用起来);专职 memory harness 留待未来(§7)。
 
 ---
 
@@ -78,7 +81,7 @@
 | loop 为何而转 | 把这个任务做完 | 让这套记忆真 / 精 / 新 / 可召回 |
 | 时间尺度 | 一次任务 / 一次会话(episodic) | 跨会话、持续(corpus 级) |
 | 读什么 / 写什么 | 读文件、写代码、跑命令 | 读经验、写信念(distill / merge / decay / link) |
-| 成功指标 | 任务闭环 | 记忆质量(后续定义,见 §8) |
+| 成功指标 | 任务闭环 | 记忆质量(后续定义,见 §9) |
 | 记忆是 | 配角(读的缓存) | 主角(要养的花园) |
 
 ---
@@ -96,7 +99,7 @@
 
 ---
 
-## 5. memory harness 是什么
+## 5. memory harness 是什么(北极星;本版不实现,落地见 §7)
 
 一个 harness,**唯一职责是管理记忆**。它**不是**「也会记事的 agent」——它的主 loop **本身就是**记忆管理。
 
@@ -134,19 +137,39 @@ executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus
 
 ---
 
-## 7. 跟 v4 的关系:承接底料,重做 harness
+## 7. 落地策略:memory system 先行,harness 后置
 
-- **v4 造的是底料**:被治理的**问题图**(card = 问题、position = 答案、credence 现算、IBIS 边)+ **写路径**(以写代读的 mark)+ 读 / 搜 / 召回 + file-canonical 存储。**这些留着**——它们是 memory harness 要管理的**材料**。
-- **v5 造的是 harness**:那个**自主 loop + 激励 + 权属**,把上面那套底料当成一个**一等的 memory harness** 来运转;以及「认真把这个定位当真」之后引出的**重新架构**(所以 v5「完全不同」,会大改 v4 表层)。
+**不直接手搓 memory harness。** §5 的那个自主 loop 是**北极星**;v5 实际造的是它的**内核**——一个 **memory system**:
 
-一句话:**v4 = 那套记忆;v5 = 「本身就是记忆管理」的那个 harness。**
+- **memory system = 记忆管理的完整能力,harness 无关**:结晶(摄入 / 提炼)、治理(去重 / 合并 / 调和 / 衰减)、巩固、召回,加上数据(问题图)与接口(CLI / API / hooks)。**「做什么」全在 system 里;「何时做、谁驱动」留给宿主 harness。**
+- **可被不同 harness 嵌入**:同一套 system,谁嵌它,谁就获得记忆管理能力。嵌入面是一份**明确契约**(system 暴露哪些动作 / 事件 / 查询,宿主怎么驱动它们——后续文档)。
+- **当前宿主 = CC(Claude Code)**:经 CLI / hooks / skills 嵌进 CC——CC 的会话产生经验、CC 驱动结晶与治理动作、CC 的 hook 做召回。**用现成的 executor harness 当宿主,先把 system 用起来、磨出契约。**
+- **未来宿主 = 专职 memory harness**:等它实现时(**本版不做**),同一套 system 原样嵌入——harness 补的只是 §5 那个自主 loop(何时摄入 / 何时巩固 / 预算 / 权属),**system 不用重写**。
+
+| | memory system(v5 造) | 宿主 harness(嵌它的) |
+|---|---|---|
+| 管什么 | 记忆的**能力与数据**:结晶 / 治理 / 召回、问题图、接口 | **驱动**:何时做、做多少、谁授权 |
+| 当前 | 本版交付 | **CC**(现成,经 CLI / hooks / skills) |
+| 未来 | 原样复用 | **memory harness**(§5 的自主 loop,本版不实现) |
+
+> 这样分层的赌注:**记忆管理的难点在能力(system),不在驱动(harness)。** 先在 CC 里把能力磨真,harness 到时候只是换一个更专职的驱动器;反过来先手搓 harness、能力却是空的,就是空转的 loop。
 
 ---
 
-## 8. 待定(后续 v5 文档展开)
+## 8. 跟 v4 的关系:承接底料,重做 system
 
-- **loop 与触发**:事件驱动(session 关闭即提炼)?定时巩固?预算上限?三者怎么配。
-- **自主与权属**:哪些它可以无人监督地做(合并 / 衰减 / 修剪),哪些要 human / executor 在环。
+- **v4 造的是底料**:被治理的**问题图**(card = 问题、position = 答案、credence 现算、IBIS 边)+ **写路径**(以写代读的 mark)+ 读 / 搜 / 召回 + file-canonical 存储。**这些留着**——它们是 memory harness 要管理的**材料**。
+- **v5 造的是 memory system**:把上面那套底料重组成**一套完整、可嵌入的记忆管理能力**(结晶 / 治理 / 召回 + 嵌入契约),先嵌 CC 运转;以及「认真把这个定位当真」之后引出的**重新架构**(所以 v5「完全不同」,会大改 v4 表层)。§5 的专职 harness 是它未来的宿主之一,**本版不实现**。
+
+一句话:**v4 = 那套记忆;v5 = 把「记忆管理」做成完整 system(先嵌 CC);memory harness = 北极星宿主(未来)。**
+
+---
+
+## 9. 待定(后续 v5 文档展开)
+
+- **嵌入契约**:memory system 暴露哪些动作 / 事件 / 查询;宿主怎么驱动。CC 宿主怎么嵌(CLI / hooks / skills 的分工)。
+- **loop 与触发**:事件驱动(session 关闭即提炼)?定时巩固?预算上限?三者怎么配——**在 CC 宿主里先用 hooks / 手动命令近似,专职 harness 的自主 loop 后置**。
+- **自主与权属**:哪些 system 动作可以无人监督地做(合并 / 衰减 / 修剪),哪些要 human / 宿主在环。
 - **executor ↔ memory 协议**:交接经验 + 请求召回的契约;边界面。
 - **自主下的治理**:v4 的纪律是「别让 AI 自评惊讶、交给检索」;v5 要把同样的纪律**用在 curator 自己身上**——别让一个自主的管家**把 corpus 越管越烂**。
 - **指标**:「好记忆」量什么(真实性 / 精简度 / 召回命中率 / 矛盾数 / 陈旧度)。
@@ -156,7 +179,7 @@ executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus
 
 | 主题 | 文档 |
 |---|---|
-| v5 立意:memory harness vs executor harness(本篇) | README.md |
-| _（loop 与触发 / 协议 / 自主治理 / 指标……陆续补)_ | _待写_ |
+| v5 立意:memory harness 定位 + memory system 落地策略(本篇) | README.md |
+| _（嵌入契约(CC 宿主)/ loop 与触发 / 协议 / 自主治理 / 指标……陆续补)_ | _待写_ |
 
 > 接口层 `docs/{cli,api,structure}/v5/` 待 v5 机制定型后再起;本目录(works)先立**定位与设计推理**。v4 的 works 见 [../v4/README.md](../v4/README.md)。
