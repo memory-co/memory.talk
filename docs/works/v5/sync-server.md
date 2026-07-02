@@ -1,6 +1,6 @@
 # sync-server — 把 sync 剥成独立服务,一源一 worker(v5 设计)
 
-> **状态:设计中。** 把现在进程内的 sync(`service/sync.py` 的 SyncWatcher + adapters)**整个剥离出去**,变成一个**独立服务**,与 [seekbase](seekbase.md) **平级**(v5 的两个基础服务:seekbase 管数据,sync-server 管摄入边界)。内部按**数据来源**拆成一个个 **worker**:每个来源一个 worker,各自**监听**自己的上游、把新数据**发**进 memory system。
+> **状态:设计中。** 把现在进程内的 sync(`service/sync.py` 的 SyncWatcher + adapters)**整个剥离出去**,变成一个**独立服务**,与 [seekbase](seekbase.md) **平级**(v5 的两个基础服务:seekbase 管数据,sync-server 管摄入边界)。内部按**数据来源**拆成一个个 **worker**:每个来源一个 worker,各自**监听**自己的上游、把上游私有格式**整理成标准 session 格式**、再**发**进 memory system。
 
 相关:
 - 数据层(sync-server 不直接碰它,见 §4): [seekbase.md](seekbase.md)
@@ -41,11 +41,15 @@
 **worker = adapter + 监听方式 + 推送循环**,一个来源一个,声明式注册:
 
 ```
-worker 契约(每个 worker 实现三件事):
-  listen()      怎么发现「有新数据了」——fs watch / 定时 poll / webhook,来源自己选
-  pull(cursor)  从游标之后增量读(probe sha → read_after),读成统一的 rounds 形状
-  push(rounds)  发进 ingest 接口(幂等:乐观并发冲突就按服务端游标重拉重试)
+worker 契约(每个 worker 实现四件事):
+  listen()         怎么发现「有新数据了」——fs watch / 定时 poll / webhook,来源自己选
+  pull(cursor)     从游标之后增量读上游的私有格式(probe sha → read_after)
+  normalize(raw)   ★ worker 的核心加工:把上游私有格式整理成标准 session 格式
+                     (统一的 session / rounds 形状:index、role、text、时间戳、来源元数据)
+  push(session)    发进 ingest 接口(幂等:乐观并发冲突就按服务端游标重拉重试)
 ```
+
+**normalize 是 worker 存在的核心理由**:每个来源的原始格式都不一样(claude-code 的 jsonl 结构、codex 的会话文件、将来的浏览器 / 聊天记录更是千奇百怪)——**上游的花样死在 worker 这一层**,ingest 接口只认一种标准格式。加来源不会污染 memory 侧的 schema:标准格式不动,新来源自己写自己的 normalize。
 
 - **现有三个 adapter 原地变身三个 worker**:claude-code / codex / openclaw(probe / list_sources / read_after 的 adapter 契约保留,套上 worker 的生命周期);
 - **worker 之间完全隔离**:各自的队列、退避重试、熔断——一个来源坏了(格式变更、目录消失)只熄它自己的灯,别的照跑;
@@ -54,7 +58,7 @@ worker 契约(每个 worker 实现三件事):
 
 ## 4. 边界
 
-- **只搬运,不加工**:sync-server 把**原始经验**(数据 session 的 rounds)如实搬进 memory,**不结晶、不治理、不总结**——那是 memory system / harness 的活([README](README.md) 的分工);
+- **只做格式加工,不做语义加工**:worker 的加工止于 **normalize**(私有格式 → 标准 session 格式,内容如实、不增删语义);**不结晶、不治理、不总结**——那是 memory system / harness 的活([README](README.md) 的分工);
 - **不碰 seekbase**:永远只走 ingest 接口,不知道底下是 DuckDB 还是别的——接口层是它与 memory 的唯一接触面;
 - **单向**:外部 → memory。它不替 executor 拉召回(那是宿主/嵌入契约的事);
 - **不认识 card**:它的世界里只有「来源、游标、rounds」。
