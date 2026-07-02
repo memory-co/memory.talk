@@ -142,6 +142,7 @@ executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus
 **不直接手搓 memory harness。** §5 的那个自主 loop 是**北极星**;v5 实际造的是它的**内核**——一个 **memory system**:
 
 - **memory system = 记忆管理的完整能力,harness 无关**:结晶(摄入 / 提炼)、治理(去重 / 合并 / 调和 / 衰减)、巩固、召回,加上数据(问题图)与接口(CLI / API / hooks)。**「做什么」全在 system 里;「何时做、谁驱动」留给宿主 harness。**
+- **system 自身分三层**(自底向上):**① 数据层 = [seekbase](seekbase.md)**(数据库抽象:类 supabase 通用 ORM + `search()` 一等语义算子,DuckDB + LanceDB 双引擎一个端口,outbox 保写入原子;**设计已成篇**)→ **② 能力层**(结晶 / 治理 / 巩固 / 召回,全部翻译成 seekbase 上的读写)→ **③ 接口层 / 嵌入契约**(宿主经它驱动能力,永远不直接碰 seekbase)。
 - **可被不同 harness 嵌入**:同一套 system,谁嵌它,谁就获得记忆管理能力。嵌入面是一份**明确契约**(system 暴露哪些动作 / 事件 / 查询,宿主怎么驱动它们——后续文档)。
 - **当前宿主 = CC(Claude Code)**:经 CLI / hooks / skills 嵌进 CC——CC 的会话产生经验、CC 驱动结晶与治理动作、CC 的 hook 做召回。**用现成的 executor harness 当宿主,先把 system 用起来、磨出契约。**
 - **未来宿主 = 专职 memory harness**:等它实现时(**本版不做**),同一套 system 原样嵌入——harness 补的只是 §5 那个自主 loop(何时摄入 / 何时巩固 / 预算 / 权属),**system 不用重写**。
@@ -160,6 +161,7 @@ executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus
 
 - **v4 造的是底料**:被治理的**问题图**(card = 问题、position = 答案、credence 现算、IBIS 边)+ **写路径**(以写代读的 mark)+ 读 / 搜 / 召回 + file-canonical 存储。**这些留着**——它们是 memory harness 要管理的**材料**。
 - **v5 造的是 memory system**:把上面那套底料重组成**一套完整、可嵌入的记忆管理能力**(结晶 / 治理 / 召回 + 嵌入契约),先嵌 CC 运转;以及「认真把这个定位当真」之后引出的**重新架构**(所以 v5「完全不同」,会大改 v4 表层)。§5 的专职 harness 是它未来的宿主之一,**本版不实现**。
+- **数据层同步换代**:v4 的「手写 SQL 的 SQLite + searchbase 端口」两条栈,v5 合并为 **[seekbase](seekbase.md)** 一个端口(DuckDB + LanceDB);file-canonical 不变,seekbase 只是**升级版的派生索引**。
 
 一句话:**v4 = 那套记忆;v5 = 把「记忆管理」做成完整 system(先嵌 CC);memory harness = 北极星宿主(未来)。**
 
@@ -167,7 +169,8 @@ executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus
 
 ## 9. 待定(后续 v5 文档展开)
 
-- **嵌入契约**:memory system 暴露哪些动作 / 事件 / 查询;宿主怎么驱动。CC 宿主怎么嵌(CLI / hooks / skills 的分工)。
+- **嵌入契约(接口层)**:memory system 暴露哪些动作 / 事件 / 查询;宿主怎么驱动。CC 宿主怎么嵌(CLI / hooks / skills 的分工)。
+- **能力层设计**:结晶 / 治理 / 巩固 / 召回各自的机制文档(v4 的 mark / card 写读路径如何在 seekbase 上重铸)。
 - **loop 与触发**:事件驱动(session 关闭即提炼)?定时巩固?预算上限?三者怎么配——**在 CC 宿主里先用 hooks / 手动命令近似,专职 harness 的自主 loop 后置**。
 - **自主与权属**:哪些 system 动作可以无人监督地做(合并 / 衰减 / 修剪),哪些要 human / 宿主在环。
 - **executor ↔ memory 协议**:交接经验 + 请求召回的契约;边界面。
@@ -180,7 +183,7 @@ executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus
 | 主题 | 文档 |
 |---|---|
 | v5 立意:memory harness 定位 + memory system 落地策略(本篇) | README.md |
-| seekbase 数据库抽象层(searchbase 的接棒者:类 supabase 通用 ORM + `search()` 一等模糊查询,DuckDB + LanceDB 双引擎一个端口) | [seekbase.md](seekbase.md) |
-| _（嵌入契约(CC 宿主)/ loop 与触发 / 协议 / 自主治理 / 指标……陆续补)_ | _待写_ |
+| seekbase 数据库抽象层 = system 的数据层(searchbase 接棒者:类 supabase 通用 ORM + `search()` 一等模糊查询;DuckDB + LanceDB 双引擎一个端口;内建 outbox 队列保跨引擎写入原子;file-canonical 不变。**设计已成篇**) | [seekbase.md](seekbase.md) |
+| _（能力层(结晶 / 治理 / 巩固 / 召回)/ 嵌入契约(CC 宿主)/ loop 与触发 / 协议 / 自主治理 / 指标……陆续补)_ | _待写_ |
 
 > 接口层 `docs/{cli,api,structure}/v5/` 待 v5 机制定型后再起;本目录(works)先立**定位与设计推理**。v4 的 works 见 [../v4/README.md](../v4/README.md)。
