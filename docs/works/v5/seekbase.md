@@ -5,7 +5,7 @@
 相关:
 - searchbase(它的前身与被吸收对象): [../v3/searchbase-extraction.md](../v3/searchbase-extraction.md) · [`memorytalk/searchbase/`](../../../memorytalk/searchbase/)
 - v5 立意(memory system,seekbase 是它的数据层): [README.md](README.md)
-- file-canonical 模式(与本层的关系见 §7): [../v3/file-canonical-pattern.md](../v3/file-canonical-pattern.md)
+- file-canonical 模式(与本层的关系见 §8): [../v3/file-canonical-pattern.md](../v3/file-canonical-pattern.md)
 
 ---
 
@@ -66,10 +66,12 @@ SCHEMA = {
         "columns": {"card_id": "str primary", "issue": "str",
                     "kind": "str", "created_at": "str"},
         "searchable": ["issue"],     # ← 声明这列可 search():写入自动 embed,search() 自动查
+        "files": "cards/{card_id}.json",         # ← 声明本地 JSON 镜像:写入自动落文件(可 grep,§6)
     },
     "rounds": {
         "columns": {"session_id": "str", "idx": "int", "text": "str"},
         "searchable": ["text"],
+        "files": {"path": "sessions/{session_id}/rounds.jsonl", "mode": "jsonl"},  # 追加型大表用 JSONL
     },
 }
 ```
@@ -78,7 +80,7 @@ SCHEMA = {
 
 ---
 
-## 3. 底层:DuckDB + LanceDB,一个端口两个引擎
+## 3. 底层:一个端口 = 两个引擎 + 一份文件镜像
 
 ```
                     Seekbase(端口:ORM + search 算子)
@@ -90,7 +92,7 @@ SCHEMA = {
 ```
 
 - **DuckDB 承接 SQLite 的位置**(结构化引擎):同样嵌入式单文件、零运维,换来**列存 + 真分析能力**(聚合 / 窗口 / join 快得多——治理与巩固要在 corpus 上跑统计,这正是 memory system 的日常),且**原生读 Parquet / JSON**,和 LanceDB 的 Arrow 生态同宗。
-- **LanceDB 原位保留**(向量引擎):searchbase 现在管的那摊(embed、ANN、集合)整体**下沉为 seekbase 的 search 引擎**;searchbase 作为独立端口**被吸收**——对外只剩 seekbase 一个端口(见 §8)。
+- **LanceDB 原位保留**(向量引擎):searchbase 现在管的那摊(embed、ANN、集合)整体**下沉为 seekbase 的 search 引擎**;searchbase 作为独立端口**被吸收**——对外只剩 seekbase 一个端口(见 §9)。
 - **双引擎同步是 seekbase 的内政**:`insert` 一行 → DuckDB 写行 + (有 `searchable` 列则)LanceDB upsert 向量;`delete` → 两边一起删;id 对齐、批量、重试都在端口后面。**上层从此没有「双写」这个概念。**
 
 ---
@@ -130,14 +132,28 @@ insert/update/delete(带 searchable 列)
 - **at-least-once + 幂等 = 收敛**:consumer 可能重放(标 done 前崩溃),但向量写是**按 id upsert / delete**——天然幂等,重放无害。**不需要恰好一次。**
 - **一致性语义:向量侧最终一致。** `search()` 可能滞后于刚写入的行(通常毫秒级)。要读己之写的场合(如 mark 写路径「先撞库再建卡」)给 `await db.flush()`——排干 outbox 再继续。结构化查询(不带 `search()`)永远强一致。
 - **顺序**:outbox 按 `seq` 单 consumer 串行消费,同一 id 的 upsert/delete 不会乱序。
-- **崩溃恢复 = 重放,不需对账**:任何时刻崩,pending 作业都还在 DuckDB 里(和业务行同一事务落的),重启接着跑。彻底丢了也不怕——派生层照旧可从 canonical 文件整体重建(§7)。
+- **崩溃恢复 = 重放,不需对账**:任何时刻崩,pending 作业都还在 DuckDB 里(和业务行同一事务落的),重启接着跑。彻底丢了也不怕——派生层照旧可从 canonical 文件整体重建(§8)。
 - **delete 同路**:级联删(如 `card delete`)在一个 DuckDB 事务里删行 + 入队向量删除作业,两边终归一致。
 
 > 这个队列是 **seekbase 的内政**:上层看不见 outbox、consumer、重试——只看见「写完就返回、search 最终能搜到、要强读就 flush」。也不引入外部组件(不是 Redis / Kafka),就是 DuckDB 里一张表 + 进程内一个协程,和「嵌入式、零运维」的形态一致。
 
 ---
 
-## 6. 为什么像 supabase、又不是 supabase
+## 6. 本地 JSON 镜像:可 grep 的第三份写入
+
+DuckDB 是二进制单文件、LanceDB 是列存目录——**都没法 grep**。记忆这种东西,能被最朴素的工具(`grep` / `cat` / `diff` / git)直接看,是可审计、可信任的底线。所以 seekbase 在双引擎之外做**第三份写入:本地 JSON 文件**。
+
+- **声明式,跟 `searchable` 同一路数**:表声明 `files: "cards/{card_id}.json"`(路径模板,列值填充)→ `insert / upsert` 自动落一份 **pretty-printed、键序稳定**的 JSON;`update` 重写该文件;`delete` 删它。**一行一文件、目录按 id 可导航**——人和 grep 都找得到。
+- **追加型大表给 JSONL 模式**:`files: {path: "sessions/{session_id}/rounds.jsonl", mode: "jsonl"}`——append-only 的流水(rounds)一行一条追加,不炸成十万个小文件(v3 的 `rounds.jsonl` 形态原样归位)。
+- **写入顺序:文件最先**。`insert()` = ① 写 JSON 文件(canonical 先落地)→ ② 一个 DuckDB 事务(业务行 + outbox 作业,§5)→ ③ consumer 异步兑现向量。任何一步之后崩,**文件都是真相**:行没写上 → 从文件 repair;向量没写上 → outbox replay(§5)。
+- **`db.rebuild()`**:通读 files 声明的全部文件 → 重灌 DuckDB + LanceDB。派生层「表丢了能从文件重建」这条不变性,从「各 store 手工兑现」变成 **seekbase 一个内建动作**。
+- **没声明 `files` 的表就没有镜像**(纯派生的中间表、日志表不必落盘为文件)。
+
+> 这一步之后,**file-canonical 的「文件」由 seekbase 亲自维护**(v3/v4 是每个 store 手写文件 ops):声明一次,**文件 + 行 + 向量三写全自动**,谁也不会忘了哪一边(§8)。
+
+---
+
+## 7. 为什么像 supabase、又不是 supabase
 
 | | supabase | seekbase |
 |---|---|---|
@@ -150,22 +166,22 @@ insert/update/delete(带 searchable 列)
 
 ---
 
-## 7. 与 file-canonical 的关系:canonical 不变,派生层升级
+## 8. 与 file-canonical 的关系:canonical 不变,派生层升级
 
-[file-canonical 模式](../v3/file-canonical-pattern.md)**不动**:文件(YAML / JSON / JSONL)仍是权威,数据库仍是**派生索引、可重建**。变的只是派生层的实现:
+[file-canonical 模式](../v3/file-canonical-pattern.md)**不动,且更彻底**:文件仍是权威,数据库仍是**派生索引、可重建**。变的是**谁维护文件**:
 
 ```
-v3/v4:  files(canonical) → SQLite(手写 store)+ LanceDB(searchbase 端口)
-v5:     files(canonical) → seekbase(DuckDB + LanceDB,一个端口)
+v3/v4:  files(canonical,各 store 手写文件 ops) → SQLite(手写 SQL)+ LanceDB(searchbase 端口)
+v5:     files(canonical,seekbase 经 files 声明自动维护) → DuckDB + LanceDB(同一端口的派生侧)
 ```
 
-- 重建(reindex)= 读文件 → 灌 seekbase,一条路;
-- 无 FOREIGN KEY、容忍悬空、表丢了能从文件重建——这些不变性照旧,由 seekbase 统一兑现;
-- **seekbase 自己不读写 canonical 文件**(那是 Storage/repository 的事)——它只是那个「更好的派生索引」。
+- **文件维护收进 seekbase**(§6):schema 里 `files` 声明一次,写路径自动「文件 → 行 → 向量」三写;各 store 手写的文件 ops 退役;
+- 重建 = `db.rebuild()`(读 files → 重灌双引擎),一个内建动作;
+- 无 FOREIGN KEY、容忍悬空、表丢了能从文件重建——不变性照旧,统一由 seekbase 兑现。
 
 ---
 
-## 8. 与 searchbase 的关系:接棒并吸收
+## 9. 与 searchbase 的关系:接棒并吸收
 
 - searchbase 的**纪律全部继承**:业务无关(不认识 card / round)、调用方不见向量、embedder 注入、集合/文档抽象。
 - searchbase 的**实现下沉**:`LocalSearchBackend` 那摊(LanceDB 管理、auto_split、超长截断、维护协程)成为 seekbase 向量侧的内部实现。
@@ -174,7 +190,7 @@ v5:     files(canonical) → seekbase(DuckDB + LanceDB,一个端口)
 
 ---
 
-## 9. 待定
+## 10. 待定
 
 - **ORM API 定形**:链式构建器的完整算子表;返回 dict 还是可选 pydantic 绑定;事务边界(跨引擎原子性已由 §5 outbox 解决;剩 API 上要不要暴露多语句事务)。
 - **hybrid search**:`mode="hybrid"`(向量 + BM25)何时做、怎么融分(RRF?)。

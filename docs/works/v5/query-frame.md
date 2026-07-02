@@ -144,7 +144,7 @@ memory.talk query "SELECT … FROM v_card_best WHERE credence < 0 LIMIT 20"   # 
 - **mark_issues 与 card_sessions 的重叠**:两者都记「mark→card」,前者带轮级细节、后者是聚合出处——留双份还是视图化其一;
 - **rounds 全量进表的体积**(66k+ 轮):全灌 or 按需(DuckDB 直读 JSONL 外部表也是路);
 - **跨表语义检索**(v4 unified search)在 frame 里的表达:`semantic()` 多集合版 or 一个 `v_search_all`;
-- 写路径的 ORM 面(seekbase §9)与本 frame 的读面怎么共用 schema 声明,别声明两遍。
+- 写路径的 ORM 面(seekbase §10)与本 frame 的读面怎么共用 schema 声明,别声明两遍。
 
 ## 与其他 v5 文档的关系
 

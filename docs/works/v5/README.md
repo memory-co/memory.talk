@@ -183,7 +183,7 @@ executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus
 | 主题 | 文档 |
 |---|---|
 | v5 立意:memory harness 定位 + memory system 落地策略(本篇) | README.md |
-| seekbase 数据库抽象层 = system 的数据层(searchbase 接棒者:类 supabase 通用 ORM + `search()` 一等模糊查询;DuckDB + LanceDB 双引擎一个端口;内建 outbox 队列保跨引擎写入原子;file-canonical 不变。**设计已成篇**) | [seekbase.md](seekbase.md) |
+| seekbase 数据库抽象层 = system 的数据层(searchbase 接棒者:类 supabase 通用 ORM + `search()` 一等模糊查询;DuckDB + LanceDB 双引擎一个端口;内建 outbox 队列保跨引擎写入原子;第三份写入 = 本地 JSON 镜像(可 grep,file-canonical 的文件由 seekbase 亲自维护)。**设计已成篇**) | [seekbase.md](seekbase.md) |
 | query-frame 查询层(把 card / session 以 **SQL 直接暴露**:表结构即 API——继承 IBIS 的关系框架 + credence 等派生进视图 + `semantic()` 表函数;SQL 只读,写仍走受治理写路径) | [query-frame.md](query-frame.md) |
 | _（能力层其余(结晶 / 治理 / 巩固 / 召回写侧)/ 嵌入契约(CC 宿主)/ loop 与触发 / 协议 / 自主治理 / 指标……陆续补)_ | _待写_ |
 
