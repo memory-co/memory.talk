@@ -4,7 +4,7 @@
 
 相关:
 - v5 立意(harness 为何存在、与 executor 的两分): [README.md](README.md)
-- 查询接口(本篇唯一放行的能力面): [query-frame.md](query-frame.md)
+- 查询接口(本篇唯一放行的能力面): [query-interface.md](query-interface.md)
 - 数据层(引擎状态与自进化代码的落点): [seekbase.md](seekbase.md)
 
 ---
@@ -49,7 +49,7 @@ memory harness 的**循环体**(谁在跑「摄入 → 提炼 → 治理 → 巩
 
 ```
 可用:
-  query(sql)            ← query-frame 的只读 SQL(含 semantic() / as-of)
+  query(sql)            ← query-interface 的只读 SQL(含 semantic() / as-of)
   受治理写动作           ← mark 提交 / position / review / link / merge / decay …(system 的动作集)
   llm(prompt)           ← 判断类工作调模型(Lua 引擎;CC 引擎自带)
 没有:
@@ -99,7 +99,7 @@ session 切分(什么算一段工作、上下文在哪断、断了之后带什�
    单一 harness session            无 session;可自进化(§3)
           └───────────────┬────────────────┘
                 能力面 = memory interface(§2,唯一的手)
-        query(sql,只读,query-frame)+ 受治理写动作(system)
+        query(sql,只读,query-interface)+ 受治理写动作(system)
                            │
                        seekbase(数据层;engine_versions 也在这)
 ```
@@ -115,5 +115,5 @@ session 切分(什么算一段工作、上下文在哪断、断了之后带什�
 ## 与其他 v5 文档的关系
 
 - [README.md](README.md):本篇是 §5 北极星的机制展开;「本版不实现」的节奏不变,设计先立。
-- [query-frame.md](query-frame.md):§2 能力面的读侧就是它;harness 的一切「问」都走这份 SQL frame。
+- [query-interface.md](query-interface.md):§2 能力面的读侧就是它;harness 的一切「问」都走这份 SQL frame。
 - [seekbase.md](seekbase.md):harness 的动作最终都是 seekbase 读写;引擎自身代码(`engine_versions`)、工作状态也落在它上面,时光机顺带覆盖「harness 的进化史」。

@@ -169,7 +169,7 @@ hits = await db.table("cards").search("pty tmux")   # 语义检索也只撞 6/1 
 - **行级两列,seekbase 自动维护**:`created_at`(写入时间,已有)+ **`deleted_at`(墓碑)**——`delete()` 从物理删改为**打墓碑**(soft delete;向量 doc 同步带上这两个字段)。
 - **as-of 连接把每张表换成同名 as-of 视图**:`created_at <= T AND (deleted_at IS NULL OR deleted_at > T)`。用户的 SQL / ORM 一个字不用改,世界自动回到 T。
 - **`search()` 同样回溯**:两列进 LanceDB 的 fields,as-of 作为 pre-filter 下推(§4 的机制复用)——检索的是「当时存在的向量」。
-- **会 update 的值不保真 → 事件化**:as-of 只对 append-only 的事实精确;计数列(`up_count` 这类)是就地 update 的聚合,回溯会失真。**纪律:凡要经得起时光机的值,落成 append-only 事件表 + 视图现算**(reviews 本来就是事件,credence 本来就现算——query-frame 已经这么干;counters 在 as-of 视图里从事件重算)。
+- **会 update 的值不保真 → 事件化**:as-of 只对 append-only 的事实精确;计数列(`up_count` 这类)是就地 update 的聚合,回溯会失真。**纪律:凡要经得起时光机的值,落成 append-only 事件表 + 视图现算**(reviews 本来就是事件,credence 本来就现算——query-interface 已经这么干;counters 在 as-of 视图里从事件重算)。
 - **只读**:时光机连接里不能写(往过去写没有意义);正常连接(不带 `as_of`)行为不变、看到的就是当前态(墓碑行自动滤掉)。
 
 **为什么 memory system 特别需要它**:记忆的**演化本身是一等对象**——「上个月它信什么」(audit)、「这轮治理前后 corpus 差了什么」(回归 diff)、「当时那次召回看到的是哪个世界」(复现)、「记忆质量随时间的曲线」(指标)。没有时光机,这些都只能靠事先留备份。

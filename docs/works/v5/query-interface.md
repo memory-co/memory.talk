@@ -1,10 +1,10 @@
-# query-frame — 把 card / session 以 SQL 直接暴露(v5 设计)
+# query-interface — 把 card / session 以 SQL 直接暴露:两库分治(v5 设计)
 
-> **状态:设计中。** query-frame 是 [seekbase](seekbase.md) 之上的**查询层**:把 card / session / mark 这些业务对象的查询能力提供出来——但跟 v4 不一样,**不再一个问题开一个端点**,而是**直接把 seekbase 的 SQL 暴露给使用者**。于是它的重心不是「设计接口」,而是**设计表结构**:一套既**继承 IBIS 设计**、又**让使用者自由写 SQL** 的关系框架(frame)。
+> **状态:设计中。** query-interface 是 [seekbase](seekbase.md) 之上的**查询层**:把 card / session / mark 这些业务对象的查询能力提供出来——但跟 v4 不一样,**不再一个问题开一个端点**,而是**直接把 seekbase 的 SQL 暴露给使用者**。于是它的重心不是「设计接口」,而是**设计表结构**:一套既**继承 IBIS 设计**、又**让使用者自由写 SQL** 的关系框架。且 **session 和 card 拆成两个不同的库**:**session 库对 harness 只读**(全部由 [sync-server](sync-server.md) 从外面同步进来),**card 库是 IBIS 的基石,harness 可读可写**(§2)。
 
 相关:
 - 数据层(双引擎一个端口,SQL 引擎 = DuckDB): [seekbase.md](seekbase.md)
-- v5 立意(query-frame 属于 system 的能力层读侧): [README.md](README.md)
+- v5 立意(query-interface 属于 system 的能力层读侧): [README.md](README.md)
 - IBIS 底料(card / position / review / link 的语义): [../v4/card.md](../v4/card.md) · [../v4/session-mark.md](../v4/session-mark.md)
 
 ---
@@ -19,18 +19,26 @@ v4 的教训:**每一种新问法都要新开一个端点**。「列最近的卡
 
 这些**天然是 SQL**(join / 聚合 / 窗口),而 AI **本来就流利 SQL**——比教它一套自造查询 DSL 便宜得多。seekbase 底下就是 DuckDB(真 SQL 引擎),挡在中间只是折损。所以:
 
-> **表结构就是 API。** query-frame 的契约不是一组端点,而是**一套稳定、文档化的表 / 视图**。schema 设计得好,一切问法都免费;schema 设计得差,再多端点也堵不住。
+> **表结构就是 API。** query-interface 的契约不是一组端点,而是**一套稳定、文档化的表 / 视图**。schema 设计得好,一切问法都免费;schema 设计得差,再多端点也堵不住。
 
 ---
 
-## 2. 边界:SQL 只读;写仍走受治理写路径
+## 2. 两个库:session(harness 只读)与 card(harness 可读写)
 
-**暴露的 SQL 面是只读的**(SELECT-only;无 INSERT / UPDATE / DELETE / DDL)。原因是 IBIS 那套不变性:
+**session 和 card 不是一个库里的两组表,是两个不同的库**(两个 seekbase 实例 / 两个 DuckDB 文件),写权属完全不同:
 
-- append-only(card / review / mark 只增不改)、credence 不落库、`#…？` 撞库判新——这些**写侧纪律**靠受治理的写路径(system 的动作:mark 提交 / position / review / link / delete)兑现;
-- 放开自由写 = 任何一条 `UPDATE` 都能击穿不变性。
+| | **session 库**(经验) | **card 库**(信念,IBIS 基石) |
+|---|---|---|
+| 里面是什么 | `sessions` / `rounds` —— 外部世界发生过什么 | `cards` / `positions` / `reviews` / `card_links` / 出处 / `marks` —— 从经验结晶出的问题图 |
+| 谁写 | **只有 [sync-server](sync-server.md)**(ingest 接口,worker 归一后推入) | **只有 harness**(经受治理写动作:mark 提交 / position / review / link / merge / decay) |
+| harness 权限 | **只读**——经验是**证据**,证据不可被管理者改写 | **可读可写**——信念归它治理,这正是它的本职 |
+| 性格 | 事实、append-only、来源在外 | 判断、受治理、来源在内 |
 
-所以分工:**问(读)自由,改(写)受治理。** 写路径照走 seekbase 的 ORM(outbox 保原子);query-frame 只管把「问」这半边彻底放开。防护:语句白名单(仅 SELECT / WITH)、行数上限、超时、单只读连接。
+为什么这么切:**经验与信念的分界就是「谁有权写」的分界。** session 是外部世界的如实记录(sync-server 搬进来的证据)——harness 若能改证据,整个「以写代读、grounding 在出处」的可信链就断了;card 是 harness 对经验的判断与组织——治理它恰是 harness 的唯一职责。两库物理分开,把这条线焊死在架构上,而不是靠约定。
+
+> **mark 归 card 库**:mark 是 harness **写**的(对 session 的逐 round 标注、结晶写路径的前端),虽然它**引用** session 库的 `(session_id, index)`,但它是判断不是事实——落 card 库,session 库保持零 harness 写入。跨库引用(mark → session、card_sessions → session)是**软引用**(无 FK,继承 file-canonical 的容忍悬空)。
+
+**SQL 查询面照旧全只读**(两个库都是 SELECT-only;无 INSERT / UPDATE / DELETE / DDL)——写各走各的门:session 库走 ingest,card 库走受治理写动作(append-only、credence 不落库、`#…？` 撞库判新这些不变性都在写路径里兑现)。**查询时两库同时可见**:query() 底下把两库 ATTACH 进同一条只读连接,跨库 join 照打(`rounds` ⋈ `mark_rounds` ⋈ `cards` 一条 SQL 打通)。防护照旧:语句白名单(仅 SELECT / WITH)、行数上限、超时。
 
 ---
 
@@ -46,6 +54,7 @@ v4 的教训:**每一种新问法都要新开一个端点**。「列最近的卡
 ### 3.1 核心表(继承 v4,列名即契约)
 
 ```sql
+-- ══ card 库(harness 可读写,经受治理写动作)══
 -- 问题图
 cards          (card_id PK, issue, created_at, position_count, link_count)
 positions      (card_id, position, claim, scope, forked_from,
@@ -63,14 +72,16 @@ card_sessions     (card_id, session_id, mark, indexes, created_at,
 position_sessions (card_id, position, session_id, indexes, mark, created_at)
 link_sessions     (card_id, link, session_id, indexes, created_at)
 
--- 经验侧
-sessions       (session_id PK, source, round_count, created_at, …)
-rounds         (session_id, idx, role, text, created_at, PK (session_id, idx))
+-- 结晶标注(mark:harness 写的判断,引用 session 库,见 §2)
 marks          (session_id, mark, last_index, description, created_at,
                 PK (session_id, mark))                       -- sess_y#m2
 mark_rounds    (session_id, mark, idx, comment,              -- 一次 mark 的逐 round 标注
                 PK (session_id, mark, idx))
 mark_issues    (session_id, mark, idx, issue, card_id, is_new, indexes)
+
+-- ══ session 库(harness 只读;只有 sync-server 经 ingest 写)══
+sessions       (session_id PK, source, round_count, created_at, …)
+rounds         (session_id, idx, role, text, created_at, PK (session_id, idx))
 ```
 
 对 v4 的两个升级(为 SQL 而做):
@@ -124,16 +135,16 @@ memory.talk query "SELECT … FROM v_card_best WHERE credence < 0 LIMIT 20"   # 
 ```
 
 - API:`POST /v5/query {sql}` → 行集(只读校验后直通 DuckDB);
-- **schema 自描述**:`memory.talk query --schema`(或 `query "DESCRIBE …"`)把 frame 的表 / 视图 / 列 + 注释吐出来——AI 拿到这份就能自己写一切查询,**这份 schema 文档就是 query-frame 的「API 文档」**;
+- **schema 自描述**:`memory.talk query --schema`(或 `query "DESCRIBE …"`)把 frame 的表 / 视图 / 列 + 注释吐出来——AI 拿到这份就能自己写一切查询,**这份 schema 文档就是 query-interface 的「API 文档」**;
 - v4 的 `read / search / card list` 这类固定问法**降级为 sugar**:内部就是 frame 上的一条预制 SQL(+渲染),不再是独立实现。
 
 ---
 
 ## 5. 与 file-canonical / seekbase 的关系
 
-- canonical 仍是文件(YAML / JSON / JSONL),**query-frame 的所有表都是派生的**、可从文件重建——这没变;
+- canonical 仍是文件(YAML / JSON / JSONL),**query-interface 的所有表都是派生的**、可从文件重建——这没变;
 - 变的是派生层的**完整度**:v4 只派生「够端点用」的瘦索引,v5 派生「够自由 SQL 用」的**全量摊平**(rounds 正文、mark 三表);
-- seekbase 管引擎(双引擎、outbox、search 算子),query-frame 管 **schema 契约**(表 / 视图 / 表函数的形状与稳定性)——一个是库,一个是库里的**框架**。
+- seekbase 管引擎(双引擎、outbox、search 算子),query-interface 管 **schema 契约**(表 / 视图 / 表函数的形状与稳定性)——一个是库,一个是库里的**框架**。
 
 ---
 
@@ -148,6 +159,6 @@ memory.talk query "SELECT … FROM v_card_best WHERE credence < 0 LIMIT 20"   # 
 
 ## 与其他 v5 文档的关系
 
-- [seekbase.md](seekbase.md):引擎与端口;query-frame 是它 SQL 面的**业务 schema**。
+- [seekbase.md](seekbase.md):引擎与端口;query-interface 是它 SQL 面的**业务 schema**。
 - [README.md](README.md):能力层的读侧;治理 / 巩固 / 指标那些「corpus 级的问题」,将来都用这套 frame 的 SQL 来问。
 - 嵌入契约(待写):宿主(CC)能直接用 `memory.talk query`——这是嵌入面里最通用的一个动作。

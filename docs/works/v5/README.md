@@ -139,7 +139,7 @@ executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus
 **不直接手搓 memory harness。** §5 的那个自主 loop 是**北极星**;v5 实际造的是它的**内核**——一个 **memory system**:
 
 - **memory system = 记忆管理的完整能力,harness 无关**:结晶(摄入 / 提炼)、治理(去重 / 合并 / 调和 / 衰减)、巩固、召回,加上数据(问题图)与接口(CLI / API / hooks)。**「做什么」全在 system 里;「何时做、谁驱动」留给宿主 harness。**
-- **system 自身分三层**(自底向上):**① 数据层 = [seekbase](seekbase.md)**(已成篇)→ **② 能力层**(结晶 / 治理 / 巩固 / 召回,全部翻译成 seekbase 读写;**读侧查询已成篇 = [query-frame](query-frame.md)**)→ **③ 接口层 / 嵌入契约**(宿主经它驱动能力,永远不直接碰 seekbase;待写)。各层细节在分篇,此处不重复。
+- **system 自身分三层**(自底向上):**① 数据层 = [seekbase](seekbase.md)**(已成篇)→ **② 能力层**(结晶 / 治理 / 巩固 / 召回,全部翻译成 seekbase 读写;**读侧查询已成篇 = [query-interface](query-interface.md)**)→ **③ 接口层 / 嵌入契约**(宿主经它驱动能力,永远不直接碰 seekbase;待写)。各层细节在分篇,此处不重复。
 - **可被不同 harness 嵌入**:同一套 system,谁嵌它,谁就获得记忆管理能力。嵌入面是一份**明确契约**(system 暴露哪些动作 / 事件 / 查询,宿主怎么驱动它们——后续文档)。
 - **当前宿主 = CC(Claude Code)**:经 CLI / hooks / skills 嵌进 CC——CC 的会话产生经验、CC 驱动结晶与治理动作、CC 的 hook 做召回。**用现成的 executor harness 当宿主,先把 system 用起来、磨出契约。**
 - **未来宿主 = 专职 memory harness**:等它实现时(**本版不做**),同一套 system 原样嵌入——harness 补的只是 §5 那个自主 loop 的驱动(何时 / 多少 / 谁授权),**system 不用重写**。核心机制设计见 [memory-harness.md](memory-harness.md)。
@@ -169,7 +169,7 @@ executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus
 ## 9. 待定(后续 v5 文档展开)
 
 - **嵌入契约(接口层)**:memory system 暴露哪些动作 / 事件 / 查询;宿主怎么驱动。CC 宿主怎么嵌(CLI / hooks / skills 的分工)。
-- **能力层设计(写侧)**:结晶 / 治理 / 巩固 / 召回的机制文档(v4 的 mark / card 写路径如何在 seekbase 上重铸;**读侧已定 → [query-frame.md](query-frame.md)**)。
+- **能力层设计(写侧)**:结晶 / 治理 / 巩固 / 召回的机制文档(v4 的 mark / card 写路径如何在 seekbase 上重铸;**读侧已定 → [query-interface.md](query-interface.md)**)。
 - **loop 与触发**:事件驱动 / 定时 / 预算怎么配——CC 宿主先用 hooks / 手动近似;开放项归并在 [memory-harness.md](memory-harness.md) §6。
 - **自主与权属**:哪些 system 动作可以无人监督地做(合并 / 衰减 / 修剪),哪些要 human / 宿主在环。
 - **executor ↔ memory 协议**:交接经验 + 请求召回的契约;边界面。
@@ -183,7 +183,7 @@ executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus
 |---|---|
 | v5 立意:memory harness 定位 + memory system 落地策略(本篇) | README.md |
 | seekbase 数据库抽象层 = system 的数据层(searchbase 接棒者:类 supabase 通用 ORM + `search()` 一等模糊查询;DuckDB + LanceDB 双引擎一个端口;内建 outbox 队列保跨引擎写入原子;第三份写入 = 本地 JSON 镜像(可 grep,file-canonical 的文件由 seekbase 亲自维护)。**设计已成篇**) | [seekbase.md](seekbase.md) |
-| query-frame 查询层(把 card / session 以 **SQL 直接暴露**:表结构即 API——继承 IBIS 的关系框架 + credence 等派生进视图 + `semantic()` 表函数;SQL 只读,写仍走受治理写路径) | [query-frame.md](query-frame.md) |
+| query-interface 查询层(把 card / session 以 **SQL 直接暴露**:表结构即 API——继承 IBIS 的关系框架 + credence 等派生进视图 + `semantic()` 表函数;**两库分治:session 库 harness 只读(sync-server 写)、card 库 harness 可读写(IBIS 基石)**;SQL 查询面全只读,查询时两库 ATTACH 可跨库 join) | [query-interface.md](query-interface.md) |
 | memory harness 核心设计(双引擎:**CC 引擎**(租 loop、剥基础工具、单 harness session)+ **自研 Lua 引擎**(沙箱 VM、无 session、可自进化);能力面只有 memory interface;session 不硬切分、让 harness 自进化;harness session ≠ 数据 session) | [memory-harness.md](memory-harness.md) |
 | sync-server 摄入服务(sync 整体剥离为与 seekbase 平级的独立服务;**一个数据来源一个 worker**(监听 → 增量拉 → **normalize 成标准 session 格式** → 推 ingest),现有 claude-code / codex / openclaw adapter 变身 worker;只做格式加工不做语义加工、不碰 seekbase) | [sync-server.md](sync-server.md) |
 | _（能力层其余(结晶 / 治理 / 巩固 / 召回写侧)/ 嵌入契约(CC 宿主)/ loop 与触发 / 协议 / 自主治理 / 指标……陆续补)_ | _待写_ |
