@@ -25,93 +25,27 @@ v4 的教训:**每一种新问法都要新开一个端点**。「列最近的卡
 
 ## 2. 两个库:session(harness 只读)与 card(harness 可读写)
 
-**session 和 card 不是一个库里的两组表,是两个不同的库**(两个 seekbase 实例 / 两个 DuckDB 文件),写权属完全不同:
+session 和 card **是两个不同的库**(两个 seekbase 实例),写权属完全不同——**经验与信念的分界就是「谁有权写」的分界**:
 
-| | **session 库**(经验) | **card 库**(信念,IBIS 基石) |
+| | **[reality 库](reality-data.md)**(session,经验) | **[mind 库](mind-data.md)**(card,信念 / IBIS 基石) |
 |---|---|---|
-| 里面是什么 | `sessions` / `rounds` —— 外部世界发生过什么 | `cards` / `positions` / `reviews` / `card_links` / 出处 / `marks` —— 从经验结晶出的问题图 |
-| 谁写 | **只有 [sync-server](sync-server.md)**(ingest 接口,worker 归一后推入) | **只有 harness**(经受治理写动作:mark 提交 / position / review / link / merge / decay) |
-| harness 权限 | **只读**——经验是**证据**,证据不可被管理者改写 | **可读可写**——信念归它治理,这正是它的本职 |
-| 性格 | 事实、append-only、来源在外 | 判断、受治理、来源在内 |
+| 谁写 | 只有 [sync-server](sync-server.md)(ingest) | 只有 harness(受治理写动作) |
+| harness 权限 | **只读**(证据不可被管理者改写) | **可读可写**(治理信念是本职) |
 
-为什么这么切:**经验与信念的分界就是「谁有权写」的分界。** session 是外部世界的如实记录(sync-server 搬进来的证据)——harness 若能改证据,整个「以写代读、grounding 在出处」的可信链就断了;card 是 harness 对经验的判断与组织——治理它恰是 harness 的唯一职责。两库物理分开,把这条线焊死在架构上,而不是靠约定。
-
-> **mark 归 card 库**:mark 是 harness **写**的(对 session 的逐 round 标注、结晶写路径的前端),虽然它**引用** session 库的 `(session_id, index)`,但它是判断不是事实——落 card 库,session 库保持零 harness 写入。跨库引用(mark → session、card_sessions → session)是**软引用**(无 FK,继承 file-canonical 的容忍悬空)。
-
-**SQL 查询面照旧全只读**(两个库都是 SELECT-only;无 INSERT / UPDATE / DELETE / DDL)——写各走各的门:session 库走 ingest,card 库走受治理写动作(append-only、credence 不落库、`#…？` 撞库判新这些不变性都在写路径里兑现)。**查询时两库同时可见**:query() 底下把两库 ATTACH 进同一条只读连接,跨库 join 照打(`rounds` ⋈ `mark_rounds` ⋈ `cards` 一条 SQL 打通)。防护照旧:语句白名单(仅 SELECT / WITH)、行数上限、超时。
+两库的定位、不变性、**具体表设计**分别见 [reality-data.md](reality-data.md) 与 [mind-data.md](mind-data.md),本篇不再重复。对查询面而言只需知道:**SQL 全只读**(两库都 SELECT-only,写各走各的门),**查询时两库同时可见**——query() 底下把两库 ATTACH 进同一条只读连接,跨库 join 照打(`rounds ⋈ mark_rounds ⋈ cards` 一条 SQL 打通)。防护:语句白名单(仅 SELECT / WITH)、行数上限、超时。
 
 ---
 
-## 3. 表结构:继承 IBIS 的关系框架
+## 3. schema 契约:原则在此,表在两篇数据文档
 
-**设计原则**:
+表 / 视图的**具体设计**在 [mind-data.md](mind-data.md)(问题图 / 出处 / mark 三表 + 视图)与 [reality-data.md](reality-data.md)(sessions / rounds)。本篇只立**共同原则**:
 
-1. **一等名词一张表,名词间关系一张表**——不塞 JSON 列,能 join 的都摊平(自由 SQL 的前提);
-2. **继承 v4 IBIS 语义不走样**:card=Issue、position=答案(卡内 `p<n>`)、review=表态、link=受治理的边、mark=一次读的逐 round 标注;
-3. **派生值进视图不进表**(credence 现算的纪律,SQL 化为 VIEW);
-4. **寻址可翻译**:`card_x#p1` / `sess_y#m2` 这种分片寻址,在关系世界就是复合键 `(card_id, position)` / `(session_id, mark)`——两套寻址一一对应。
+1. **一等名词一张表,关系一张表**——不塞 JSON 列,能 join 的都摊平(自由 SQL 的前提);
+2. **继承 v4 IBIS 语义不走样**;寻址 ↔ 复合键一一对应(`card_x#p1` ↔ `(card_id,'p1')`,`sess_y#m2` ↔ `(session_id,'m2')`);
+3. **派生值进视图不进表**(credence / 计数现算——视图是「口径的唯一出处」,见 mind-data §3);
+4. **表 + 视图就是对外契约**:列名、视图名的稳定性同 API 对待(演进见 §6)。
 
-### 3.1 核心表(继承 v4,列名即契约)
-
-```sql
--- ══ card 库(harness 可读写,经受治理写动作)══
--- 问题图
-cards          (card_id PK, issue, created_at, position_count, link_count)
-positions      (card_id, position, claim, scope, forked_from,
-                up_count, down_count, neutral_count, review_count, created_at,
-                PK (card_id, position))                      -- card_x#p1 ↔ ('card_x','p1')
-reviews        (review_id PK, card_id, target, target_kind,  -- 'p1'/'l2' + position|link
-                session_id, indexes, argument, comment, created_at)
-card_links     (card_id, link, type, target_id, target_type, claim,
-                up_count, down_count, neutral_count, review_count, created_at,
-                PK (card_id, link))                          -- card_x#l1
-
--- 出处(provenance)
-card_sessions     (card_id, session_id, mark, indexes, created_at,
-                   PK (card_id, session_id, mark))
-position_sessions (card_id, position, session_id, indexes, mark, created_at)
-link_sessions     (card_id, link, session_id, indexes, created_at)
-
--- 结晶标注(mark:harness 写的判断,引用 session 库,见 §2)
-marks          (session_id, mark, last_index, description, created_at,
-                PK (session_id, mark))                       -- sess_y#m2
-mark_rounds    (session_id, mark, idx, comment,              -- 一次 mark 的逐 round 标注
-                PK (session_id, mark, idx))
-mark_issues    (session_id, mark, idx, issue, card_id, is_new, indexes)
-
--- ══ session 库(harness 只读;只有 sync-server 经 ingest 写)══
-sessions       (session_id PK, source, round_count, created_at, …)
-rounds         (session_id, idx, role, text, created_at, PK (session_id, idx))
-```
-
-对 v4 的两个升级(为 SQL 而做):
-
-- **`rounds` 进表**:v4 里 round 正文只在 `rounds.jsonl`(文件),SQL 摸不到;v5 把 rounds 作为派生表灌进 seekbase(canonical 仍是文件,§5)——于是「session ↔ 卡 ↔ 轮次正文」能一条 join 打通。
-- **mark 摊平成三张表**:v4 的 `marks/m<n>.yaml` 是嵌套 YAML(rounds 里挂 issues);v5 派生层把它摊成 `marks / mark_rounds / mark_issues`——「哪次 mark 的哪一轮产了哪张卡」直接 join,不用读文件解析。
-
-### 3.2 视图:把「现算」和「常用 join」固化
-
-```sql
--- credence 永不落库 → 视图现算(继承 v4 纪律)
-CREATE VIEW v_positions AS
-  SELECT *, up_count - down_count AS credence FROM positions;
-CREATE VIEW v_links AS
-  SELECT *, up_count - down_count AS credence FROM card_links;
-
--- 常用形态预 join,降低长尾查询的门槛
-CREATE VIEW v_card_best AS        -- 每卡当前最优答案
-  SELECT * FROM v_positions
-  QUALIFY row_number() OVER (PARTITION BY card_id ORDER BY credence DESC, created_at) = 1;
-CREATE VIEW v_links_in AS         -- 入边反查(target 侧视角)
-  SELECT target_id AS card_id, card_id AS from_card, link, type, claim FROM card_links;
-CREATE VIEW v_card_provenance AS  -- 卡 ← mark ← session 一步到位
-  SELECT cs.card_id, cs.session_id, cs.mark, cs.indexes, m.description, m.created_at
-  FROM card_sessions cs JOIN marks m USING (session_id, mark);
-```
-
-视图是 frame 的**第二层契约**:表保「摊平的事实」,视图保「别人不该重复推导的口径」(credence 怎么算、最优怎么取、入边怎么反查——口径变了改视图,一处生效)。
-
-### 3.3 语义检索进 SQL:`semantic()` 表函数
+### 语义检索进 SQL:`semantic()` 表函数
 
 seekbase 的 `search()` 算子在 SQL 面以**表函数**出现(DuckDB 注册),返回 `(id, score)` 供 join:
 
@@ -152,13 +86,12 @@ memory.talk query "SELECT … FROM v_card_best WHERE credence < 0 LIMIT 20"   # 
 
 - **schema 版本化**:表 / 视图是对外契约,怎么演进(加列宽松、改名/删列要 deprecation 期?`frame_version` 表?);
 - **只读防护细节**:白名单解析(仅 SELECT / WITH)、`semantic()` 的 embedding 开销限流、行数 / 超时默认值;
-- **mark_issues 与 card_sessions 的重叠**:两者都记「mark→card」,前者带轮级细节、后者是聚合出处——留双份还是视图化其一;
-- **rounds 全量进表的体积**(66k+ 轮):全灌 or 按需(DuckDB 直读 JSONL 外部表也是路);
 - **跨表语义检索**(v4 unified search)在 frame 里的表达:`semantic()` 多集合版 or 一个 `v_search_all`;
 - 写路径的 ORM 面(seekbase §12)与本 frame 的读面怎么共用 schema 声明,别声明两遍。
 
 ## 与其他 v5 文档的关系
 
+- [mind-data.md](mind-data.md) / [reality-data.md](reality-data.md):两库的定位与**具体表设计**;本篇是它们之上的查询契约(原则 + 暴露面)。
 - [seekbase.md](seekbase.md):引擎与端口;query-interface 是它 SQL 面的**业务 schema**。
 - [README.md](README.md):能力层的读侧;治理 / 巩固 / 指标那些「corpus 级的问题」,将来都用这套 frame 的 SQL 来问。
 - 嵌入契约(待写):宿主(CC)能直接用 `memory.talk query`——这是嵌入面里最通用的一个动作。

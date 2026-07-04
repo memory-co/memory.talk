@@ -183,7 +183,9 @@ executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus
 |---|---|
 | v5 立意:memory harness 定位 + memory system 落地策略(本篇) | README.md |
 | seekbase 数据库抽象层 = system 的数据层(searchbase 接棒者:类 supabase 通用 ORM + `search()` 一等模糊查询;DuckDB + LanceDB 双引擎一个端口;内建 outbox 队列保跨引擎写入原子;第三份写入 = 本地 JSON 镜像(可 grep,file-canonical 的文件由 seekbase 亲自维护)。**设计已成篇**) | [seekbase.md](seekbase.md) |
-| query-interface 查询层(把 card / session 以 **SQL 直接暴露**:表结构即 API——继承 IBIS 的关系框架 + credence 等派生进视图 + `semantic()` 表函数;**两库分治:session 库 harness 只读(sync-server 写)、card 库 harness 可读写(IBIS 基石)**;SQL 查询面全只读,查询时两库 ATTACH 可跨库 join) | [query-interface.md](query-interface.md) |
+| query-interface 查询层(把 card / session 以 **SQL 直接暴露**:表结构即 API;两库分治总述 + schema 原则 + `semantic()` 表函数 + 暴露面;SQL 全只读,两库 ATTACH 跨库 join) | [query-interface.md](query-interface.md) |
+| mind-data:**card 库**(信念 / IBIS 基石,harness 可读写)的具体表设计——问题图 / 出处 / mark 三表 + 视图;**计数列退役**,credence / 计数全从 reviews 事件现算 | [mind-data.md](mind-data.md) |
+| reality-data:**session 库**(经验事实,只有 sync-server 可写、harness 只读)的具体表设计——sessions / rounds 两张表,标准格式的列即表列 | [reality-data.md](reality-data.md) |
 | memory harness 核心设计(双引擎:**CC 引擎**(租 loop、剥基础工具、单 harness session)+ **自研 Lua 引擎**(沙箱 VM、无 session、可自进化);能力面只有 memory interface;session 不硬切分、让 harness 自进化;harness session ≠ 数据 session) | [memory-harness.md](memory-harness.md) |
 | sync-server 摄入服务(sync 整体剥离为与 seekbase 平级的独立服务;**一个数据来源一个 worker**(监听 → 增量拉 → **normalize 成标准 session 格式** → 推 ingest),现有 claude-code / codex / openclaw adapter 变身 worker;只做格式加工不做语义加工、不碰 seekbase) | [sync-server.md](sync-server.md) |
 | _（能力层其余(结晶 / 治理 / 巩固 / 召回写侧)/ 嵌入契约(CC 宿主)/ loop 与触发 / 协议 / 自主治理 / 指标……陆续补)_ | _待写_ |
