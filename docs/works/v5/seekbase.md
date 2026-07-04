@@ -42,8 +42,8 @@ rows = await (db.table("cards")
                 .limit(20))
 
 await db.table("cards").insert({"card_id": "card_x", "issue": "…"})
-await db.table("cards").update({"scope": "…"}).eq("card_id", "card_x")
-await db.table("cards").delete().eq("card_id", "card_x")
+await db.table("cards").delete().eq("card_id", "card_x")   # ← 仅打墓碑(deleted_at),永不物理删
+# 没有 update:「改」= 追加新行 / 追加事件 + 旧行墓碑(见下「焊死的不变性」)
 
 # ── 超越 supabase:search() 就地模糊查询 ──────────────────
 hits = await (db.table("cards")
@@ -56,7 +56,8 @@ hits = await (db.table("cards")
 
 要点:
 
-- **通用 ORM(supabase 的那部分)**:`select / insert / upsert / update / delete` + `eq / neq / gt / gte / lt / lte / in_ / like / is_ / order / limit / offset / count`。链式构建、返回普通 dict 行。**上层(repository / service)不再手写 SQL。**
+- **通用 ORM(supabase 的那部分,砍掉修改类)**:`select / insert / delete` + `eq / neq / gt / gte / lt / lte / in_ / like / is_ / order / limit / offset / count`。链式构建、返回普通 dict 行。**上层(repository / service)不再手写 SQL。**
+- **焊死的不变性:只能增、不能改、不能物理删。** 端口**没有 `update` / `upsert`**;`delete()` 的唯一语义是**打墓碑**(`deleted_at`,引擎代管的元数据列);物理删除在端口上不存在(仅 `vacuum` 这个显式丢历史的管理动作,§7)。「改」在 seekbase 的世界里 = **追加**:新行取代旧行(旧行墓碑)、会变的值落成事件表 + 视图现算。这条**不是调用方纪律,是引擎强制**——收益在 §7:时光机因此对**所有列**严谨,不存在「被后来 update 污染的历史」。
 - **`search()`(supabase 没有的那部分)**:查询链里的一个**算子**,不是另一条 API。出现 `search(text)` 时,seekbase 自动:① 用注入的 embedder 把 `text` 变向量;② 到 LanceDB 检索;③ 与链上其余结构化谓词**组合**(过滤下推,见 §4);④ 返回带 `_score` 的行,按相关性排序。**调用方永远不见向量、不算 embedding**——这条纪律直接从 searchbase 继承。
 - **schema 声明式**:表结构 + 哪些列可搜,声明一次,DDL / 迁移 / 双引擎同步全由 seekbase 管:
 
@@ -76,7 +77,7 @@ SCHEMA = {
 }
 ```
 
-**`searchable` 就是「search 函数自动模糊查询」的机制**:声明了它,`insert / update` 时该列文本自动 embed 进向量侧,`search()` 时自动查——写入方和查询方都不用碰第二条栈。没有 `searchable` 列的表就是纯 DuckDB 表,零向量开销。
+**`searchable` 就是「search 函数自动模糊查询」的机制**:声明了它,`insert` 时该列文本自动 embed 进向量侧,`search()` 时自动查——写入方和查询方都不用碰第二条栈。没有 `searchable` 列的表就是纯 DuckDB 表,零向量开销。
 
 ---
 
@@ -93,7 +94,7 @@ SCHEMA = {
 
 - **DuckDB 承接 SQLite 的位置**(结构化引擎):同样嵌入式单文件、零运维,换来**列存 + 真分析能力**(聚合 / 窗口 / join 快得多——治理与巩固要在 corpus 上跑统计,这正是 memory system 的日常),且**原生读 Parquet / JSON**,和 LanceDB 的 Arrow 生态同宗。
 - **LanceDB 原位保留**(向量引擎):searchbase 现在管的那摊(embed、ANN、集合)整体**下沉为 seekbase 的 search 引擎**;searchbase 作为独立端口**被吸收**——对外只剩 seekbase 一个端口(见 §11)。
-- **双引擎同步是 seekbase 的内政**:`insert` 一行 → DuckDB 写行 + (有 `searchable` 列则)LanceDB upsert 向量;`delete` → 两边一起删;id 对齐、批量、重试都在端口后面。**上层从此没有「双写」这个概念。**
+- **双引擎同步是 seekbase 的内政**:`insert` 一行 → DuckDB 写行 + (有 `searchable` 列则)LanceDB upsert 向量;`delete` → 两边同步打墓碑(向量 doc 的 `deleted_at` 字段,正常检索 pre-filter 掉);id 对齐、批量、重试都在端口后面。**上层从此没有「双写」这个概念。**
 
 ---
 
@@ -115,7 +116,7 @@ SCHEMA = {
 **跨引擎没有事务**(DuckDB 的事务包不住 LanceDB 的写),这是 §3 双引擎的原罪。seekbase 用**内建消息队列**解决——经典 **transactional outbox**,而且有个巧处:**队列本身就放在 DuckDB 里**,于是「业务写 + 入队」天然是**同一个 DuckDB 事务**,原子性不出引擎就拿到了。
 
 ```
-insert/update/delete(带 searchable 列)
+insert / delete=墓碑(带 searchable 列)
         │
         ▼ 一个 DuckDB 事务(原子)
 ┌────────────────────────────────┐
@@ -143,7 +144,7 @@ insert/update/delete(带 searchable 列)
 
 DuckDB 是二进制单文件、LanceDB 是列存目录——**都没法 grep**。记忆这种东西,能被最朴素的工具(`grep` / `cat` / `diff` / git)直接看,是可审计、可信任的底线。所以 seekbase 在双引擎之外做**第三份写入:本地 JSON 文件**。
 
-- **声明式,跟 `searchable` 同一路数**:表声明 `files: "cards/{card_id}.json"`(路径模板,列值填充)→ `insert / upsert` 自动落一份 **pretty-printed、键序稳定**的 JSON;`update` 重写该文件;`delete` 删它。**一行一文件、目录按 id 可导航**——人和 grep 都找得到。
+- **声明式,跟 `searchable` 同一路数**:表声明 `files: "cards/{card_id}.json"`(路径模板,列值填充)→ `insert` 自动落一份 **pretty-printed、键序稳定**的 JSON——**写一次就不动**(引擎没有 update);`delete()` 不删文件,把墓碑 `deleted_at` 写进该 JSON(唯一一次引擎代管的重写)。**一行一文件、目录按 id 可导航**——人和 grep 都找得到。
 - **追加型大表给 JSONL 模式**:`files: {path: "sessions/{session_id}/rounds.jsonl", mode: "jsonl"}`——append-only 的流水(rounds)一行一条追加,不炸成十万个小文件(v3 的 `rounds.jsonl` 形态原样归位)。
 - **写入顺序:文件最先**。`insert()` = ① 写 JSON 文件(canonical 先落地)→ ② 一个 DuckDB 事务(业务行 + outbox 作业,§5)→ ③ consumer 异步兑现向量。任何一步之后崩,**文件都是真相**:行没写上 → 从文件 repair;向量没写上 → outbox replay(§5)。
 - **`db.rebuild()`**:通读 files 声明的全部文件 → 重灌 DuckDB + LanceDB。派生层「表丢了能从文件重建」这条不变性,从「各 store 手工兑现」变成 **seekbase 一个内建动作**。
@@ -166,10 +167,10 @@ hits = await db.table("cards").search("pty tmux")   # 语义检索也只撞 6/1 
 
 **机制:谓词改写,不是快照拷贝。**
 
-- **行级两列,seekbase 自动维护**:`created_at`(写入时间,已有)+ **`deleted_at`(墓碑)**——`delete()` 从物理删改为**打墓碑**(soft delete;向量 doc 同步带上这两个字段)。
+- **行级两列,seekbase 自动维护**:`created_at`(写入时间,已有)+ **`deleted_at`(墓碑)**——`delete()` 的唯一语义就是**打墓碑**(§2 焊死;向量 doc 同步带上这两个字段)。
 - **as-of 连接把每张表换成同名 as-of 视图**:`created_at <= T AND (deleted_at IS NULL OR deleted_at > T)`。用户的 SQL / ORM 一个字不用改,世界自动回到 T。
 - **`search()` 同样回溯**:两列进 LanceDB 的 fields,as-of 作为 pre-filter 下推(§4 的机制复用)——检索的是「当时存在的向量」。
-- **会 update 的值不保真 → 事件化**:as-of 只对 append-only 的事实精确;计数列(`up_count` 这类)是就地 update 的聚合,回溯会失真。**纪律:凡要经得起时光机的值,落成 append-only 事件表 + 视图现算**(reviews 本来就是事件,credence 本来就现算——query-interface 已经这么干;counters 在 as-of 视图里从事件重算)。
+- **没有 update,所以 as-of 对所有列严谨**:引擎焊死 insert-only(§2),**不存在「被后来改写污染的历史」**——这正是时光机严谨性的来源,靠结构保证、不靠调用方自觉。会变的值本来就只能落成 append-only 事件表 + 视图现算(reviews 是事件、credence 现算、[mind-data](mind-data.md) 已把计数列整体退役);as-of 视图下从事件重算,任何时刻的值都是当时真值。
 - **只读**:时光机连接里不能写(往过去写没有意义);正常连接(不带 `as_of`)行为不变、看到的就是当前态(墓碑行自动滤掉)。
 
 **为什么 memory system 特别需要它**:记忆的**演化本身是一等对象**——「上个月它信什么」(audit)、「这轮治理前后 corpus 差了什么」(回归 diff)、「当时那次召回看到的是哪个世界」(复现)、「记忆质量随时间的曲线」(指标)。没有时光机,这些都只能靠事先留备份。

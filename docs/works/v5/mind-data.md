@@ -153,7 +153,7 @@ mind 库**只接受受治理写动作**(SQL 面只读,见 query-interface §2):`
 
 - **mark_issues 与 card_sessions 的重叠**:都记「mark→card」,前者带轮级细节、后者聚合出处——留双份还是视图化其一;
 - **credence 公式演进**:up−down 之外(Wilson / 时间衰减)——好在只改视图;
-- **merge / decay 的表达**:合并卡是新对象 + `replaces` 边,还是引入 `merged_into` 列;衰减是否需要落事件;
+- **merge / decay 的表达**:seekbase 焊死 insert-only 后基本定向——合并 = 新对象 + `replaces` 边 + 旧卡墓碑(`merged_into` 列那种就地改写不存在了);衰减若要留痕,落事件表;
 - **计数视图性能**:corpus 大后 v_positions 的聚合要不要物化(DuckDB 物化视图 / 增量表)——先现算,量到了再说。
 
 ## 与其他 v5 文档的关系

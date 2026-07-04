@@ -14,24 +14,28 @@
 **reality 库里是事实,不是判断**:哪些 session 发生过、每一轮谁说了什么。四条不变性:
 
 1. **单写入方**:只有 sync-server 的 ingest(`ensure_session` + `append_rounds`)能写——这是**架构上焊死的**(harness 的能力面里根本没有写 reality 的动作),不是约定;
-2. **append-only**:round 只追加(`idx` 从 1 起严格 +1),session 行只有 `round_count` / `updated_at` 随追加前进;不改写历史轮;
-3. **乐观游标**:`round_count` 就是并发控制的基线(追加带期望游标,冲突则按服务端游标重拉——sync-server §3 的 push 契约);
+2. **append-only(引擎焊死)**:round 只追加(`idx` 从 1 起严格 +1);session 行**写一次就不动**——`round_count` / `updated_at` 是**派生值**(从 rounds 现算,`v_sessions` 视图),不落列(seekbase 端口没有 update,见 [seekbase §2](seekbase.md));
+3. **乐观游标**:游标 = 当前轮数(`max(rounds.idx)` 现算,`v_sessions.round_count`);追加带期望游标,冲突则按服务端游标重拉(sync-server §3 的 push 契约);mark 的 `last_index` 对的也是它;
 4. **内容如实**:落的是 worker `normalize` 后的**标准格式**——格式统一、语义不增删;这里没有总结、没有标注(mark 是判断,在 [mind 库](mind-data.md))。
 
 ## 2. 表设计
 
 ```sql
-CREATE TABLE sessions (
+CREATE TABLE sessions (              -- 写一次就不动(insert-only,seekbase 焊死)
   session_id  TEXT PRIMARY KEY,      -- sess_<…>(worker 归一时从上游会话派生,全局稳定)
   source      TEXT NOT NULL,         -- 哪个 worker:claude-code / codex / openclaw / …
   source_ref  TEXT NOT NULL,         -- 上游定位(原文件路径 / 上游会话 id,溯源用)
   title       TEXT,                  -- 归一时提取(可空)
-  round_count INTEGER NOT NULL DEFAULT 0,  -- 乐观游标(= max(rounds.idx);mark 的 last_index 对的就是它)
   started_at  TEXT,                  -- 上游首轮时间
-  updated_at  TEXT,                  -- 最后追加时间
   created_at  TEXT NOT NULL,         -- 首次入库时间
   deleted_at  TEXT                   -- 墓碑(seekbase 时光机;正常不删经验)
 );
+-- round_count / updated_at 不落列(那是会变的值)→ 视图现算:
+CREATE VIEW v_sessions AS
+  SELECT s.*, count(r.idx) AS round_count, max(r.created_at) AS updated_at
+  FROM sessions s LEFT JOIN rounds r ON r.session_id = s.session_id
+                                    AND r.deleted_at IS NULL
+  WHERE s.deleted_at IS NULL GROUP BY ALL;
 
 CREATE TABLE rounds (
   session_id  TEXT NOT NULL,
