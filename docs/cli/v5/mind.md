@@ -2,7 +2,7 @@
 
 进 **mind 库**(cards / positions / reviews / links / proofs + 视图,[字段契约](../../structure/v5/mind.md))的查询命令。类 mysql 双形态:带 SQL 单发,不带进 REPL。调 [`POST /v5/query`](../../api/v5/query.md)(`library: "mind"`)。
 
-> **可见性:mind 连接附带 reality(只读)**——判断建立在证据上,查信念天然要引用经验(`card_proofs ⋈ rounds`),所以**跨库 join 在这个命令里做**。反向不成立(见 [reality](reality.md))。
+> **可见性:只有 mind**——两库完全分开,互不 ATTACH。mind 里指向证据的只有**指针**(`(type, ref, indexes)`,proofs / reviews 引证);要看证据原文,按 type 去对应的面解析(session 型 → [reality](reality.md);file 型 → 文件)——**两步取证**,mind 不偏爱任何一种证据存储(这正是 `(type, ref)` 泛化的意义:file 型证据根本不在库里,join 本来就不可能对所有型成立)。
 
 ## 单发
 
@@ -15,10 +15,12 @@ memory.talk mind "SELECT c.card_id, c.issue, s.score
                   JOIN cards c ON c.card_id = s.id
                   WHERE c.position_count = 0 ORDER BY s.score DESC LIMIT 10"
 
-# 跨库:这张卡的证据轮原文(reality 在 mind 连接里可见)
-memory.talk mind "SELECT r.idx, r.role, r.text
-                  FROM card_proofs p JOIN rounds r ON r.session_id = p.ref
-                  WHERE p.card_id = 'card_01j…' AND p.type = 'session'"
+# 两步取证:① mind 查证据指针
+memory.talk mind "SELECT type, ref, indexes FROM card_proofs WHERE card_id = 'card_01j…'"
+#   → session | sess_9f2… | 36-41
+# ② 按 type 解析:session 型 → reality 查原文
+memory.talk reality "SELECT idx, role, text FROM rounds
+                     WHERE session_id = 'sess_9f2…' AND idx BETWEEN 36 AND 41"
 
 memory.talk mind --as-of 2026-06-01 "SELECT * FROM v_card_best WHERE credence > 0"   # 时光机
 memory.talk mind --schema                                                            # mind 侧自描述
@@ -28,14 +30,14 @@ memory.talk mind --schema                                                       
 |---|---|
 | `"<SQL>"` | 仅 `SELECT` / `WITH`;表 / 视图 / `semantic()` 见 `--schema` |
 | `--as-of <ISO>` | 时光机([seekbase §7](../../works/v5/seekbase.md)) |
-| `--schema` | mind 的表 / 视图 / 列 + 注释(+ 附带可见的 reality 表) |
+| `--schema` | mind 的表 / 视图 / 列 + 注释 |
 | `--json` | `{columns, rows, row_count, truncated}`;默认 markdown 表格 |
 
 ## 交互模式(REPL,类 mysql)
 
 ```
 $ memory.talk mind
-memory.talk · mind (+reality attached, read-only; as-of: now)
+memory.talk · mind (read-only; as-of: now)
 mind> SELECT count(*) FROM v_cards;
 …
 mind> \as-of 2026-06-01      -- 会话级时光机(\as-of now 回当前)

@@ -3,7 +3,7 @@
 > **状态:设计中。** [query-interface](query-interface.md) 两库分治里的 **card 库**——**mind(信念)侧**:harness 从经验里结晶出的问题图(IBIS),**只有 harness 经受治理写动作可写**,是它治理的本职对象。本篇给出**具体表设计**;对应的经验侧见 [reality-data.md](reality-data.md)。
 
 相关:
-- 两库分治的总述(谁读谁写、跨库 join): [query-interface.md](query-interface.md)
+- 两库分治的总述(谁读谁写、两步取证): [query-interface.md](query-interface.md)
 - 引擎(表声明 / searchable / files 镜像 / 时光机都由它兑现): [seekbase.md](seekbase.md)
 - IBIS 语义的来处(v4 设计,本篇是它的 v5 关系化): [../v4/card.md](../v4/card.md) · [../v4/session-mark.md](../v4/session-mark.md)
 

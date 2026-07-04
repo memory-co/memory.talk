@@ -32,7 +32,7 @@ session 和 card **是两个不同的库**(两个 seekbase 实例),写权属完�
 | 谁写 | 只有 [sync-server](sync-server.md)(ingest) | 只有 harness(受治理写动作) |
 | harness 权限 | **只读**(证据不可被管理者改写) | **可读可写**(治理信念是本职) |
 
-两库的定位、不变性、**具体表设计**分别见 [reality-data.md](reality-data.md) 与 [mind-data.md](mind-data.md),本篇不再重复。对查询面而言只需知道:**SQL 全只读**(两库都 SELECT-only,写各走各的门),**入口按库分、可见性不对称**——进 **mind** 的连接附带 ATTACH reality(只读):判断建立在证据上,跨库 join(`rounds ⋈ card_proofs ⋈ cards`)天然发生在信念侧;进 **reality** 的连接只有 reality(经验独立,不见 mind)。可见性不对称与写权属不对称同构。防护:语句白名单(仅 SELECT / WITH)、行数上限、超时。
+两库的定位、不变性、**具体表设计**分别见 [reality-data.md](reality-data.md) 与 [mind-data.md](mind-data.md),本篇不再重复。对查询面而言只需知道:**SQL 全只读**(两库都 SELECT-only,写各走各的门),**入口按库分、完全隔离**——一次连接只见一个库,不 ATTACH、不跨库 join。mind → 证据的关联是 `(type, ref, indexes)` **指针,两步解析**:mind 查指针 → 按 type 去对应的面取原文(session 型 → reality;file 型 → 文件)。这是证据泛化的必然:join 只对「恰好也在库里」的证据型成立,与其偏爱 session 型,不如统一走指针。防护:语句白名单(仅 SELECT / WITH)、行数上限、超时。
 
 ---
 

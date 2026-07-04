@@ -4,8 +4,8 @@ v5 的命令面——**跟 v4 完全不同的结构,只有四个命令**:
 
 ```
 memory.talk
-├── mind    [<SQL>]                # 问信念库(cards…;附带 reality,跨库 join 在这)→ mind.md
-├── reality [<SQL>]                # 问经验库(sessions/rounds;独立,不见 mind)→ reality.md
+├── mind    [<SQL>]                # 问信念库(cards / proofs …)→ mind.md
+├── reality [<SQL>]                # 问经验库(sessions / rounds)→ reality.md
 │                                   #   两者都类 mysql:带 SQL 单发,不带进交互 REPL
 ├── sync    <status|…>             # 看/管:sync-server 的状态与操作 → sync.md
 └── harness <start|stop|status|chat>   # 养:启动 CC 或 Lua 引擎跑 memory harness;
@@ -16,7 +16,7 @@ memory.talk
 
 人对一套记忆的合法动作就三种:**问它**(mind / reality,两库各一个门)、**看经验进没进来**(sync)、**跟养它的管家说话**(harness)。
 
-问拆成两个命令 = 两库分治在命令面上的直接映射:**mind 附带 reality**(判断建立在证据上,跨库 join 天然发生在信念侧);**reality 独立**(经验不知道判断的存在)——可见性不对称与写权属不对称同构。
+问拆成两个命令 = 两库分治在命令面上的直接映射:**两库完全分开、互不可见**(不 ATTACH、不跨库 join)。mind 里指向证据的是 `(type, ref, indexes)` **指针**,取证据 = **两步**(mind 查指针 → 按 type 去 reality / 文件解析)——泛化证据类型的必然:file 型证据不在库里,join 对它不可能成立,所以干脆谁也不特殊。
 
 - **没有 `card` 等写命令**:写 mind 是 **harness 经受治理写动作([API](../../api/v5/cards.md))干的活**,不是人的手工活。人想影响记忆(「这条不对」「多关注 X」),**对话告诉 harness**(`harness chat`),让它去落——而不是绕过管家直接改库。
 - **没有 `read` / `search` / `recall` / `list`**:全是 [mind](mind.md) / [reality](reality.md) 上的一条 SQL([表结构即 API](../../structure/v5/README.md))。

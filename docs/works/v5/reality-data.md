@@ -3,7 +3,7 @@
 > **状态:设计中。** [query-interface](query-interface.md) 两库分治里的 **session 库**——**reality(现实)侧**:外部世界如实发生过什么。**只有 [sync-server](sync-server.md) 经 ingest 接口可写**(worker normalize 成标准格式后推入);**对 harness 只读**——经验是证据,证据不可被管理者改写。本篇给出**具体表设计**;对应的信念侧见 [mind-data.md](mind-data.md)。
 
 相关:
-- 两库分治的总述(谁读谁写、跨库 join): [query-interface.md](query-interface.md)
+- 两库分治的总述(谁读谁写、两步取证): [query-interface.md](query-interface.md)
 - 唯一的写入方(worker → normalize → ingest): [sync-server.md](sync-server.md)
 - 引擎(searchable / files 镜像 / 时光机): [seekbase.md](seekbase.md)
 
@@ -63,12 +63,12 @@ CREATE TABLE rounds (
 
 > 文件镜像(`files` 声明)、墓碑、时光机是 **seekbase 的通用机制**([seekbase §6/§7](seekbase.md)),不在业务数据篇重复;路径模板到实现时在 schema 声明里给。
 
-体积注意:rounds 是最大的表(现存 6 万+ 轮、还在长)。全量进表换来「session ⋈ proofs ⋈ card 一条 SQL 打通」(query-interface 的核心收益);若将来体积成负担,DuckDB 直读 JSONL 外部表是现成退路(表变视图,查询面不变)。
+体积注意:rounds 是最大的表(现存 6 万+ 轮、还在长)。全量进表换来经验侧的自由 SQL(过滤 / 聚合 / 窗口 / 语义搜整段历史);若将来体积成负担,DuckDB 直读 JSONL 外部表是现成退路(表变视图,查询面不变)。
 
 ## 4. 读它的人
 
 - **harness**:结晶时逐 round 读、review 引证时核对 `indexes`——全部经 query-interface 的只读 SQL;
-- **query-interface 使用者**:跨库 join(`rounds ⋈ card_proofs ⋈ cards`)、语义搜 rounds;
+- **query-interface 使用者**:经验侧自由 SQL(过滤 / 聚合 / 语义搜 rounds);「哪些轮成了证据」在 mind 侧按指针反查;
 - **时光机**(seekbase §7):as-of 连接下,「当时 session 长到哪」精确可答(`created_at` 界定每轮的入库时刻)。
 
 ## 5. 待定
