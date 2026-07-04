@@ -27,4 +27,4 @@ memory.talk
 
 - CLI 是薄壳:mind / reality → [`POST /v5/query`](../../api/v5/query.md)(`library` 参数定库);sync → sync-server 控制面;harness → harness server 控制面 + 对话通道;
 - `--json` 全命令可用(AI / 脚本消费);默认输出是人读的 markdown / 表格;
-- 嵌入契约(CC **宿主**场景怎么用 mind / reality——区别于 harness 的 CC **引擎**)另篇(works 待写)。
+- 嵌入契约(CC **宿主**怎么嵌:hooks 无意识召回 / skills 有意识检索 + chat 转发 / CLAUDE.md 行为指引)已成篇 → [works/v5/embed-contract.md](../../works/v5/embed-contract.md)。
