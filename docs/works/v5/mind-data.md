@@ -135,19 +135,19 @@ CREATE VIEW v_card_provenance AS     -- 卡 ← mark ← session 一步到位
 
 视图是 mind 库的**第二层契约**:表保「摊平的事实性记录」,视图保「不该被重复推导的口径」(credence 怎么算、最优怎么取、入边怎么反查)——口径变了改视图,一处生效。
 
-## 4. seekbase 声明(searchable / files)
+## 4. seekbase 声明(searchable)
 
-| 表 | searchable(自动 embed) | files(JSON 镜像,可 grep) |
-|---|---|---|
-| cards | `issue`(`#…？` 撞库判新撞的就是它) | `cards/{card_id}/card.json` |
-| positions | `claim` | `cards/{card_id}/positions/{position}.json` |
-| card_links | — | `cards/{card_id}/links/{link}.json` |
-| reviews / 出处 | — | `cards/{card_id}/reviews.jsonl`(jsonl 模式)等 |
-| marks 三表 | — | `sessions/{session_id}/marks/{mark}.json`(一次 mark 一份,含 rounds/issues) |
+| 表 | searchable(自动 embed) |
+|---|---|
+| cards | `issue`(`#…？` 撞库判新撞的就是它) |
+| positions | `claim` |
+| 其余(reviews / links / 出处 / marks 三表) | — |
+
+> 文件镜像(`files` 声明)、墓碑、时光机是 **seekbase 的通用机制**([seekbase §6/§7](seekbase.md)),不在业务数据篇重复;路径模板到实现时在 schema 声明里给。
 
 ## 5. 写动作面(唯一的写门)
 
-mind 库**只接受受治理写动作**(SQL 面只读,见 query-interface §2):`create_card` / `add_position` / `review` / `link` / `submit_mark`(逐 round、≥90% 覆盖、`#…？` 撞库)/ `merge` / `decay` / `delete`(墓碑级联)。每个动作 = seekbase 一次事务写(文件 + 行 + outbox,原子),不变性(append-only、撞库判新、id 单调)全部在动作里兑现。
+mind 库**只接受受治理写动作**(SQL 面只读,见 query-interface §2):`create_card` / `add_position` / `review` / `link` / `submit_mark`(逐 round、≥90% 覆盖、`#…？` 撞库)/ `merge` / `decay` / `delete`(墓碑级联)。每个动作 = seekbase 一次原子写(引擎内政),不变性(append-only、撞库判新、id 单调)全部在动作里兑现。
 
 ## 6. 待定
 

@@ -54,12 +54,14 @@ CREATE TABLE rounds (
 
 **被 mind 库软引用的锚点**(无 FK,容忍悬空):`session_id`(reviews / marks / 三张出处表)和 `(session_id, idx)`(mark_rounds、各处 `indexes` 展开后的轮号)。reality 不知道也不关心谁引用它。
 
-## 3. seekbase 声明(searchable / files)
+## 3. seekbase 声明(searchable)
 
-| 表 | searchable(自动 embed) | files(镜像,可 grep) |
-|---|---|---|
-| sessions | — | `sessions/{source}/{sid[0:2]}/{session_id}/session.json` |
-| rounds | `text`(语义搜「当时说过什么」;unified search 的 session 命中源) | `sessions/{source}/{sid[0:2]}/{session_id}/rounds.jsonl`(**jsonl 模式**——v3 的 rounds.jsonl 形态原样归位) |
+| 表 | searchable(自动 embed) |
+|---|---|
+| sessions | — |
+| rounds | `text`(语义搜「当时说过什么」;unified search 的 session 命中源) |
+
+> 文件镜像(`files` 声明)、墓碑、时光机是 **seekbase 的通用机制**([seekbase §6/§7](seekbase.md)),不在业务数据篇重复;路径模板到实现时在 schema 声明里给。
 
 体积注意:rounds 是最大的表(现存 6 万+ 轮、还在长)。全量进表换来「session ⋈ mark ⋈ card 一条 SQL 打通」(query-interface 的核心收益);若将来体积成负担,DuckDB 直读 JSONL 外部表是现成退路(表变视图,查询面不变)。
 
