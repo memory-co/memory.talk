@@ -1,6 +1,6 @@
 # mind-data — card 库:IBIS 信念数据(v5 设计)
 
-> **状态:设计中。** [query-interface](query-interface.md) 两库分治里的 **card 库**——**mind(信念)侧**:harness 从经验里结晶出的问题图(IBIS),**只有 harness 经受治理写动作可写**,是它治理的本职对象。本篇给出**具体表设计**;对应的经验侧见 [reality-data.md](reality-data.md)。
+> **状态:设计中。** [query-interface](query-interface.md) 库版图里的 **card 库**——**mind(信念)侧**:agent 从经验里结晶出的问题图(IBIS)。**每个 [agent](agent.md) 实例一个独立的 mind 库**(信念有主人),**只有所属 agent 经受治理写动作可写**。本篇给出**具体表设计**(每实例照此建库);对应的经验侧见 [reality-data.md](reality-data.md)。
 
 相关:
 - 两库分治的总述(谁读谁写、两步取证): [query-interface.md](query-interface.md)
@@ -90,7 +90,7 @@ CREATE TABLE link_proofs (           -- 边的证据
 
 ```
 
-> **为什么没有 mark 表**:v4 把「以写代读」固化成 mark 三表(marks / mark_rounds / mark_issues)。v5 **不预制**——mark 是 harness 的**工作结构**,跟 harness session 一个道理([memory-harness §4](memory-harness.md)):「怎么逐轮读、读到哪、记什么工作痕迹」该由 harness **自己在 corpus 里长出来**(它需要的话,自己建卡 / 自己的记录形态),框架焊死一套三表反而把结晶流程锁死在 v4 的形状上。框架保证的只有**证据链**:结晶产物(card / position / review / link)必须带 `(type, ref)` + `indexes` 的 grounding(proofs / 引证)——**「以写代读」作为纪律仍在,载体不预制。**
+> **为什么没有 mark 表**:v4 把「以写代读」固化成 mark 三表(marks / mark_rounds / mark_issues)。v5 **不预制**——mark 是 agent 的**工作结构**,跟 harness session 一个道理([agent §4](agent.md)):「怎么逐轮读、读到哪、记什么工作痕迹」该由 agent **自己在 mind 里长出来**(它需要的话,自己建卡 / 自己的记录形态),框架焊死一套三表反而把结晶流程锁死在 v4 的形状上。框架保证的只有**证据链**:结晶产物(card / position / review / link)必须带 `(type, ref)` + `indexes` 的 grounding(proofs / 引证)——**「以写代读」作为纪律仍在,载体不预制。**
 
 **计数列退役**是本篇对 v4 最大的结构改动:`reviews` 本来就是 append-only 事件,计数与 credence **全部从它现算**(§3)——写路径不再 bump 任何计数(v4 的原子 upsert 消失),as-of 时光机下的历史值天然精确(seekbase §7 的「事件化」纪律),`p<n>`/`l<n>` 的 mint 改为 `max(seq)+1`(墓碑不复用号)。
 
@@ -149,4 +149,4 @@ mind 库**只接受受治理写动作**(SQL 面只读,见 query-interface §2):`
 
 - [reality-data.md](reality-data.md):它是证据、我是判断;我软引用它,永不写它。
 - [query-interface.md](query-interface.md):我的表 + 视图就是它 SQL 契约的 mind 半边。
-- [memory-harness.md](memory-harness.md):harness 的受治理写动作全部落在本库;它对 reality 只读。
+- [agent.md](agent.md):agent 的受治理写动作全部落在**它自己的**这套库上;lua harness 的 `engine_versions` 也在这;它对 reality 只读。

@@ -1,6 +1,6 @@
 # reality-data — session 库:经验事实数据(v5 设计)
 
-> **状态:设计中。** [query-interface](query-interface.md) 两库分治里的 **session 库**——**reality(现实)侧**:外部世界如实发生过什么。**只有 [sync-server](sync-server.md) 经 ingest 接口可写**(worker normalize 成标准格式后推入);**对 harness 只读**——经验是证据,证据不可被管理者改写。本篇给出**具体表设计**;对应的信念侧见 [mind-data.md](mind-data.md)。
+> **状态:设计中。** [query-interface](query-interface.md) 库版图里的 **session 库**——**reality(现实)侧**:外部世界如实发生过什么。**全局一份,所有 [agent](agent.md) 共享、对它们只读**——经验是客观事实,不因观察者而异,也不可被管理者改写;sessions / rounds 只有 [sync-server](sync-server.md) 经 ingest 可写。本篇给出**具体表设计**;对应的信念侧见 [mind-data.md](mind-data.md)。
 
 相关:
 - 两库分治的总述(谁读谁写、两步取证): [query-interface.md](query-interface.md)
@@ -11,12 +11,12 @@
 
 ## 1. 定位与不变性
 
-**reality 库里是事实,不是判断**:哪些 session 发生过、每一轮谁说了什么、人和 harness 之间说过什么(conversations)。四条不变性:
+**reality 库里是事实,不是判断**:哪些 session 发生过、每一轮谁说了什么、人和各 agent 之间说过什么(conversations)。四条不变性:
 
-1. **写门唯一(ingest),客户端按表分**:sessions / rounds 只有 sync-server 推;`conversations` 只有 harness server 推(记录自己的对话,[api/harness](../../api/v5/harness.md))——harness **没有**写 sessions / rounds 的任何路径,经验证据依旧不可被管理者改写;
+1. **写门唯一(ingest),客户端按表分**:sessions / rounds 只有 sync-server 推;`conversations` 只有各 agent server 推(记录自己的对话,[api/agent](../../api/v5/agent.md))——agent **没有**写 sessions / rounds 的任何路径,经验证据不可被管理者改写;
 2. **append-only(引擎焊死)**:round 只追加(`idx` 从 1 起严格 +1);session 行**写一次就不动**——`round_count` / `updated_at` 是**派生值**(从 rounds 现算,`v_sessions` 视图),不落列(seekbase 端口没有 update,见 [seekbase §2](seekbase.md));
 3. **乐观游标**:游标 = 当前轮数(`max(rounds.idx)` 现算,`v_sessions.round_count`);追加带期望游标,冲突则按服务端游标重拉(sync-server §3 的 push 契约);
-4. **内容如实**:落的是 worker `normalize` 后的**标准格式**——格式统一、语义不增删;这里没有总结、没有标注——那些是判断,在 [mind 侧](mind-data.md)(且其工作结构由 harness 自己长,不预制)。
+4. **内容如实**:落的是 worker `normalize` 后的**标准格式**——格式统一、语义不增删;这里没有总结、没有标注——那些是判断,在 [mind 侧](mind-data.md)(且其工作结构由 agent 自己长,不预制)。
 
 ## 2. 表设计
 
@@ -51,12 +51,13 @@ CREATE TABLE rounds (
 ```
 
 ```sql
-CREATE TABLE conversations (         -- 人 ↔ harness 的对话记录(chat 的双向落盘)
+CREATE TABLE conversations (         -- 人 ↔ agent 的对话记录(chat 的双向落盘)
   conv_id     TEXT NOT NULL,         -- conv_<ULID>:一段对话流(纯传输分组,不承载语义分段——
-                                     --   语义上的「一段」让 harness 自己长,同 harness session 的道理)
+                                     --   语义上的「一段」让 agent 自己长,同 harness session 的道理)
   idx         INTEGER NOT NULL,      -- 流内序号,1 起严格 +1
-  speaker     TEXT NOT NULL,         -- 'human' | 'harness'
-  engine      TEXT NOT NULL,         -- 说话时的引擎:'cc' | 'lua'(出处)
+  agent       TEXT NOT NULL,         -- 哪个 agent 实例的对话(name)
+  speaker     TEXT NOT NULL,         -- 'human' | 'agent'
+  harness     TEXT NOT NULL,         -- 说话时该实例的底座:'claude-code' | 'codex' | 'lua'(出处)
   text        TEXT NOT NULL,
   created_at  TEXT NOT NULL,
   deleted_at  TEXT,
@@ -64,7 +65,7 @@ CREATE TABLE conversations (         -- 人 ↔ harness 的对话记录(chat 的
 );
 ```
 
-三张表——reality 刻意简单:sessions / rounds 是**标准格式的字段就是表的列**(worker normalize 产出什么,这里就存什么,上游花样死在 worker 层);conversations 是 harness 对话的如实记录(**对话也是经验**:可回放、可语义搜、将来可作证据源 `(type='conversation', ref=conv_id)`——mind 的 `(type, ref)` 泛化天然接得住)。
+三张表——reality 刻意简单:sessions / rounds 是**标准格式的字段就是表的列**(worker normalize 产出什么,这里就存什么,上游花样死在 worker 层);conversations 是各 agent 对话的如实记录(**对话也是经验**:可回放、可语义搜、将来可作证据源 `(type='conversation', ref=conv_id)`——mind 的 `(type, ref)` 泛化天然接得住)。
 
 **被 mind 库软引用的锚点**(无 FK,容忍悬空):mind 侧统一用 `(type='session', ref=session_id)` 的证据模式指过来(proofs / reviews 引证),轮级则是 `(session_id, idx)`(各处 `indexes` 展开后的轮号)。reality 不知道也不关心谁引用它。
 
@@ -82,7 +83,7 @@ CREATE TABLE conversations (         -- 人 ↔ harness 的对话记录(chat 的
 
 ## 4. 读它的人
 
-- **harness**:结晶时逐 round 读、review 引证时核对 `indexes`——全部经 query-interface 的只读 SQL;
+- **agent(们)**:结晶时逐 round 读、review 引证时核对 `indexes`——全部经 query-interface 的只读 SQL;
 - **query-interface 使用者**:经验侧自由 SQL(过滤 / 聚合 / 语义搜 rounds);「哪些轮成了证据」在 mind 侧按指针反查;
 - **时光机**(seekbase §7):as-of 连接下,「当时 session 长到哪」精确可答(`created_at` 界定每轮的入库时刻)。
 

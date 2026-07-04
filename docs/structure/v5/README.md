@@ -4,14 +4,14 @@ v5 的数据模型。**在 v5,表结构就是对外契约**([query-interface](..
 
 - CLI 契约见 [`../../cli/v5/`](../../cli/v5/README.md) · HTTP 契约见 [`../../api/v5/`](../../api/v5/README.md)
 
-## 两个库(分治)
+## 库的版图:一个 reality,多个 mind
 
-| 库 | 内容 | 谁写 | harness 权限 | 文档 |
-|---|---|---|---|---|
-| **mind**(信念) | card / position / review / link / proofs + 视图 | 只有 harness(受治理写动作) | 可读可写 | [mind.md](mind.md) |
-| **reality**(经验) | sessions / rounds | 只有 sync-server(ingest) | **只读** | [reality.md](reality.md) |
+| 库 | 份数 | 内容 | 谁写 | agent 权限 | 文档 |
+|---|---|---|---|---|---|
+| **mind**(信念) | **每 [agent](../../works/v5/agent.md) 实例一个** | card / position / review / link / proofs + 视图 | 只有所属 agent(受治理写动作) | 读写自己的;别人的不可见 | [mind.md](mind.md) |
+| **reality**(经验) | **全局一份共享** | sessions / rounds / conversations | sync-server(ingest;conversations 门给 agent server) | **只读** | [reality.md](reality.md) |
 
-查询面**完全隔离**:一次连接只见一个库(不 ATTACH、不跨库 join);mind → 证据的关联靠 `(type, ref, indexes)` 指针**两步解析**(session 型去 reality,file 型去文件)。
+查询面**完全隔离**:一次连接只见一个库(reality 或某个 agent 的 mind;不 ATTACH、不跨库 join、mind 之间互不可见);mind → 证据的关联靠 `(type, ref, indexes)` 指针**两步解析**(session 型去 reality,file 型去文件)。
 
 ## 引擎通用列与不变性(seekbase 焊死,所有表适用)
 

@@ -1,6 +1,6 @@
 # reality 库 — 字段契约(v5)
 
-经验侧:外部世界如实发生过什么。**写门唯一 = [ingest](../../api/v5/ingest.md),客户端按表分**:sessions / rounds 只有 [sync-server](../../works/v5/sync-server.md) 推,conversations 只有 harness server 推(记录自己的对话);**harness 对经验证据(sessions / rounds)只读**。设计推理与 DDL 出处:[works/v5/reality-data.md](../../works/v5/reality-data.md)。引擎通用列与不变性见 [README](README.md)。
+经验侧:外部世界如实发生过什么。**写门唯一 = [ingest](../../api/v5/ingest.md),客户端按表分**:sessions / rounds 只有 [sync-server](../../works/v5/sync-server.md) 推,conversations 只有各 agent server 推(记录自己的对话);**reality 全局一份、所有 agent 共享只读**。设计推理与 DDL 出处:[works/v5/reality-data.md](../../works/v5/reality-data.md)。引擎通用列与不变性见 [README](README.md)。
 
 ## sessions — 会话(写一次就不动)
 
@@ -24,16 +24,17 @@
 | `ts` | TEXT? | 上游时间戳(尽力而为) |
 | `meta` | TEXT? | 极少量来源侧结构(JSON 字符串;能摊平的别塞这) |
 
-## conversations — 人 ↔ harness 对话(chat 落盘)
+## conversations — 人 ↔ agent 对话(chat 落盘)
 
 | 列 | 类型 | 语义 |
 |---|---|---|
 | `conv_id`, `idx` | TEXT, INTEGER · PK | `conv_<ULID>` 对话流(纯传输分组,不承载语义分段)+ 流内序号(1 起 +1) |
-| `speaker` | TEXT | `human` / `harness` |
-| `engine` | TEXT | 说话时的引擎:`cc` / `lua`(出处) |
+| `agent` | TEXT | 哪个 agent 实例的对话(name) |
+| `speaker` | TEXT | `human` / `agent` |
+| `harness` | TEXT | 说话时该实例的底座:`claude-code` / `codex` / `lua`(出处) |
 | `text` | TEXT | 消息正文;**searchable**(语义搜「跟管家聊过什么」) |
 
-写入方 = harness server(经 ingest 的 conversations 门,[api/harness](../../api/v5/harness.md));将来可作 mind 的证据源(`type='conversation'`)。
+写入方 = 各 agent server(经 ingest 的 conversations 门,[api/agent](../../api/v5/agent.md));将来可作 mind 的证据源(`type='conversation'`)。
 
 ## 视图
 

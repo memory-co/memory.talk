@@ -1,9 +1,9 @@
 # metrics — 记忆质量指标:「真 / 精 / 新 / 召得回」怎么量(v5 设计)
 
-> **状态:设计中。** [README §0](README.md) 说 memory harness 的 loop 为「这套记忆**真不真、精不精、新不新、召得回吗**」而转——这四个词必须可量,否则:自主治理没法验收([memory-harness §3](memory-harness.md) 的影子对照比什么?)、巩固不知道有没有变好、「成功指标 = 记忆质量」是空话。本篇把四维定成**一组 SQL 可算的指标**。
+> **状态:设计中。** [README §0](README.md) 说记忆管家(落地实体 = [agent](agent.md))的 loop 为「这套记忆**真不真、精不精、新不新、召得回吗**」而转——这四个词必须可量,否则:自主治理没法验收([agent §3](agent.md) 的影子对照比什么?)、巩固不知道有没有变好、「成功指标 = 记忆质量」是空话。本篇把四维定成**一组 SQL 可算的指标**。
 
 相关:
-- 指标的消费者(影子对照 / 回滚判定 / 治理排程): [memory-harness.md](memory-harness.md)
+- 指标的消费者(影子对照 / 回滚判定 / 治理排程): [agent.md](agent.md)
 - 指标的载体(全部是预制 SQL / 视图,不是新子系统): [query-interface.md](query-interface.md) · [seekbase.md](seekbase.md)(时光机给曲线)
 
 ---
@@ -53,16 +53,16 @@
 
 ## 3. 影子对照怎么用它(自主治理的验收)
 
-[memory-harness §3](memory-harness.md) 的「引擎自改 → 影子运行 → 达标才切换」,验收就定在这组指标上:
+[agent §3](agent.md) 的「引擎自改 → 影子对照 → 达标才切换」,验收就定在这组指标上。**指标按 agent 实例算**(mind 库每实例一个;真/精/新按各自的 mind,召得回按各自的检索日志),影子对照 = 两个实例在同一 reality 上比:
 
-- **护栏线(不许变坏)**:真类全组 + 悬空率 + 只长不剪斜率——candidate 引擎在 as-of 快照上干跑,任何护栏劣化 = 直接否;
+- **护栏线(不许变坏)**:真类全组 + 悬空率 + 只长不剪斜率——candidate(影子 agent 实例)在同一 reality 上干跑,任何护栏劣化 = 直接否;
 - **目标线(要变好)**:本次进化声明要改善哪一两个指标(如重复度),对照组不降 = 不切换;
 - **不许比「LLM 觉得好」**(§1 原则 2)。
 
 ## 4. 落地形态
 
-- 一组 `v_metric_*` 视图 + 一条汇总(`memory.talk mind "SELECT * FROM v_metrics"`);
-- **曲线靠时光机**,不靠常驻埋点:`--as-of` 按周扫一遍就是趋势;若 as-of 全扫太贵,harness 巩固轮顺手往 `metric_snapshots`(append-only 事件表)落一行——快照是**缓存**,真相仍是现算;
+- 一组 `v_metric_*` 视图 + 一条汇总(`memory.talk agent mind <name> "SELECT * FROM v_metrics"`);
+- **曲线靠时光机**,不靠常驻埋点:`--as-of` 按周扫一遍就是趋势;若 as-of 全扫太贵,agent 巩固轮顺手往 `metric_snapshots`(append-only 事件表)落一行——快照是**缓存**,真相仍是现算;
 - 阈值(相似度 / 分数 / 时滞)全部集中一处声明,好调。
 
 ## 5. 待定
@@ -74,6 +74,6 @@
 
 ## 与其他 v5 文档的关系
 
-- [memory-harness.md](memory-harness.md):§3 影子对照的验收线 = 本篇 §3;loop 的「治理先干什么」= 各指标挂的队列;
+- [agent.md](agent.md):§3 影子对照的验收线 = 本篇 §3;loop 的「治理先干什么」= 各指标挂的队列;
 - [query-interface.md](query-interface.md) / [seekbase.md](seekbase.md):指标全是 SQL + 时光机,零新端点;
 - [README.md](README.md):§3 对照表里「成功指标 = 记忆质量」的兑现。

@@ -1,6 +1,6 @@
-# query-interface — 把 card / session 以 SQL 直接暴露:两库分治(v5 设计)
+# query-interface — 把 card / session 以 SQL 直接暴露:一个 reality,多个 mind(v5 设计)
 
-> **状态:设计中。** query-interface 是 [seekbase](seekbase.md) 之上的**查询层**:把 card / session 这些业务对象的查询能力提供出来——但跟 v4 不一样,**不再一个问题开一个端点**,而是**直接把 seekbase 的 SQL 暴露给使用者**。于是它的重心不是「设计接口」,而是**设计表结构**:一套既**继承 IBIS 设计**、又**让使用者自由写 SQL** 的关系框架。且 **session 和 card 拆成两个不同的库**:**session 库对 harness 只读**(全部由 [sync-server](sync-server.md) 从外面同步进来),**card 库是 IBIS 的基石,harness 可读可写**(§2)。
+> **状态:设计中。** query-interface 是 [seekbase](seekbase.md) 之上的**查询层**:把 card / session 这些业务对象的查询能力提供出来——但跟 v4 不一样,**不再一个问题开一个端点**,而是**直接把 seekbase 的 SQL 暴露给使用者**。于是它的重心不是「设计接口」,而是**设计表结构**:一套既**继承 IBIS 设计**、又**让使用者自由写 SQL** 的关系框架。且 **session 和 card 拆成不同的库**:**reality(session 库)全局一份共享、对 agent 只读**(全部由 [sync-server](sync-server.md) 同步进来);**mind(card 库)是 IBIS 的基石,每个 [agent](agent.md) 实例一个独立库**,只有所属 agent 可读可写(§2)。
 
 相关:
 - 数据层(双引擎一个端口,SQL 引擎 = DuckDB): [seekbase.md](seekbase.md)
@@ -23,16 +23,17 @@ v4 的教训:**每一种新问法都要新开一个端点**。「列最近的卡
 
 ---
 
-## 2. 两个库:session(harness 只读)与 card(harness 可读写)
+## 2. 库的版图:一个 reality(共享),多个 mind(每 agent 一个)
 
-session 和 card **是两个不同的库**(两个 seekbase 实例),写权属完全不同——**经验与信念的分界就是「谁有权写」的分界**:
+session 和 card **是不同的库**(各自独立的 seekbase 实例),写权属完全不同——**经验与信念的分界就是「谁有权写」的分界**;且 mind **按 agent 实例化**(信念有主人,[agent §1](agent.md)):
 
 | | **[reality 库](reality-data.md)**(session,经验) | **[mind 库](mind-data.md)**(card,信念 / IBIS 基石) |
 |---|---|---|
-| 谁写 | 只有 [sync-server](sync-server.md)(ingest) | 只有 harness(受治理写动作) |
-| harness 权限 | **只读**(证据不可被管理者改写) | **可读可写**(治理信念是本职) |
+| 份数 | **一份,所有 agent 共享** | **每个 agent 实例一个** |
+| 谁写 | 只有 [sync-server](sync-server.md)(ingest;conversations 门给 agent server) | 只有**所属 agent**(受治理写动作) |
+| agent 权限 | **只读**(证据不可被管理者改写) | 读写**自己的**;别人的不可见 |
 
-两库的定位、不变性、**具体表设计**分别见 [reality-data.md](reality-data.md) 与 [mind-data.md](mind-data.md),本篇不再重复。对查询面而言只需知道:**SQL 全只读**(两库都 SELECT-only,写各走各的门),**入口按库分、完全隔离**——一次连接只见一个库,不 ATTACH、不跨库 join。mind → 证据的关联是 `(type, ref, indexes)` **指针,两步解析**:mind 查指针 → 按 type 去对应的面取原文(session 型 → reality;file 型 → 文件)。这是证据泛化的必然:join 只对「恰好也在库里」的证据型成立,与其偏爱 session 型,不如统一走指针。防护:语句白名单(仅 SELECT / WITH)、行数上限、超时。
+库的定位、不变性、**具体表设计**分别见 [reality-data.md](reality-data.md) 与 [mind-data.md](mind-data.md),本篇不再重复。对查询面而言只需知道:**SQL 全只读**(全部 SELECT-only,写各走各的门),**入口按库分、完全隔离**——一次连接只见一个库(reality 或某个 agent 的 mind),不 ATTACH、不跨库 join、mind 之间互不可见。mind → 证据的关联是 `(type, ref, indexes)` **指针,两步解析**:mind 查指针 → 按 type 去对应的面取原文(session 型 → reality;file 型 → 文件)。这是证据泛化的必然:join 只对「恰好也在库里」的证据型成立,与其偏爱 session 型,不如统一走指针。防护:语句白名单(仅 SELECT / WITH)、行数上限、超时。
 
 ---
 
@@ -91,7 +92,7 @@ memory.talk query "SELECT … FROM v_card_best WHERE credence < 0 LIMIT 20"   # 
 
 ## 与其他 v5 文档的关系
 
-- [mind-data.md](mind-data.md) / [reality-data.md](reality-data.md):两库的定位与**具体表设计**;本篇是它们之上的查询契约(原则 + 暴露面)。
+- [mind-data.md](mind-data.md) / [reality-data.md](reality-data.md):库的定位与**具体表设计**;本篇是它们之上的查询契约(原则 + 暴露面)。
 - [seekbase.md](seekbase.md):引擎与端口;query-interface 是它 SQL 面的**业务 schema**。
 - [README.md](README.md):能力层的读侧;治理 / 巩固 / 指标那些「corpus 级的问题」,将来都用这套 frame 的 SQL 来问。
 - 嵌入契约(待写):宿主(CC)能直接用 `memory.talk query`——这是嵌入面里最通用的一个动作。

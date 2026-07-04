@@ -1,6 +1,6 @@
 # sync — sync-server 的状态与操作(v5 CLI)
 
-[sync-server](../../works/v5/sync-server.md)(独立摄入服务,一源一 worker)的控制面。**看经验有没有进来、卡在哪、推一把**——不碰记忆本身(那是 mind / reality / harness 的事)。
+[sync-server](../../works/v5/sync-server.md)(独立摄入服务,一源一 worker)的控制面。**看经验有没有进来、卡在哪、推一把**——不碰记忆本身(那是 reality / agent 的事)。
 
 ```bash
 memory.talk sync status [--json]        # 总览:服务在不在 + 每个 worker 一行
@@ -27,4 +27,4 @@ openclaw      poll/5m     3d ago            2 sessions   backoff (dir missing)
 
 - `trigger` 只是「现在就跑一轮该源的同步」(冷扫同一条路),**不能改数据**——ingest 是唯一写门,且只有 sync-server 会调它;
 - 上游配置(开哪些 worker、路径、poll 间隔)在 sync-server 的声明配置里(works §5 待定),CLI 不塞配置编辑;
-- memory daemon 不归它管(`harness status` 顺带报 daemon 健康)。
+- memory daemon 不归它管(`agent status` 顺带报 daemon 健康)。

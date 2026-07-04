@@ -1,6 +1,6 @@
 # mind 库 — 字段契约(v5)
 
-信念侧:harness 结晶出的 IBIS 问题图。**只有 harness 经[受治理写动作](../../api/v5/cards.md)可写**;SQL 面只读。设计推理与 DDL 出处:[works/v5/mind-data.md](../../works/v5/mind-data.md)。引擎通用列(`created_at` / `deleted_at`)与不变性见 [README](README.md),下面不重复。
+信念侧:agent 结晶出的 IBIS 问题图。**每个 [agent](../../works/v5/agent.md) 实例一个独立的 mind 库**(按本契约各建一套);**只有所属 agent 经[受治理写动作](../../api/v5/cards.md)可写**;SQL 面只读。设计推理与 DDL 出处:[works/v5/mind-data.md](../../works/v5/mind-data.md)。引擎通用列(`created_at` / `deleted_at`)与不变性见 [README](README.md),下面不重复。
 
 ## cards — 问题
 
@@ -52,7 +52,7 @@
 | `position_proofs (card_id, position, type, ref, indexes)` | — | 答案从哪长出来(`indexes` 必填) |
 | `link_proofs (card_id, link, type, ref, indexes)` | — | 边的出处 |
 
-> **没有 mark 表**:逐轮标注是 harness 的工作结构,由它自己长([mind-data](../../works/v5/mind-data.md));框架只保证证据链(本节)。
+> **没有 mark 表**:逐轮标注是 agent 的工作结构,由它自己长([mind-data](../../works/v5/mind-data.md));框架只保证证据链(本节)。lua harness 的 `engine_versions` 也落本库(实现时随 schema 声明)。
 
 ## 视图(口径的唯一出处)
 

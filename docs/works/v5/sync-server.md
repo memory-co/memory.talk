@@ -58,7 +58,7 @@ worker 契约(每个 worker 实现四件事):
 
 ## 4. 边界
 
-- **只做格式加工,不做语义加工**:worker 的加工止于 **normalize**(私有格式 → 标准 session 格式,内容如实、不增删语义);**不结晶、不治理、不总结**——那是 memory system / harness 的活([README](README.md) 的分工);
+- **只做格式加工,不做语义加工**:worker 的加工止于 **normalize**(私有格式 → 标准 session 格式,内容如实、不增删语义);**不结晶、不治理、不总结**——那是 memory system / agent 的活([README](README.md) 的分工);
 - **不碰 seekbase**:永远只走 ingest 接口,不知道底下是 DuckDB 还是别的——接口层是它与 memory 的唯一接触面;
 - **单向**:外部 → memory。它不替 executor 拉召回(那是宿主/嵌入契约的事);
 - **不认识 card**:它的世界里只有「来源、游标、rounds」。
@@ -75,4 +75,4 @@ worker 契约(每个 worker 实现四件事):
 
 - [README.md](README.md):sync-server 是 memory system **外**的平级基础服务——system 管能力,sync-server 管「经验进门」;
 - [seekbase.md](seekbase.md):平级关系——经验经 ingest 接口落库后才见 seekbase;sync-server 自己的 checkpoint 不放 seekbase(connector 状态,跟着服务走);
-- [memory-harness.md](memory-harness.md):harness 的「摄入(Ingest)」消费的就是 sync-server 搬进来的数据 session;两者以「数据 session 落库」为交接点(harness 不管怎么搬来的)。
+- [agent.md](agent.md):agent 的「摄入(Ingest)」消费的就是 sync-server 搬进来的数据 session;两者以「数据 session 落库」为交接点(agent 不管怎么搬来的)。

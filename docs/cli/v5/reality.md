@@ -1,8 +1,8 @@
 # reality — 问经验库(v5 CLI)
 
-进 **reality 库**(sessions / rounds + `v_sessions`,[字段契约](../../structure/v5/reality.md))的查询命令。形态与 [mind](mind.md) 完全同构(单发 / REPL / `--as-of` / `--schema` / `--json`、`;` 结束、`\d` 元命令),不重复;调 [`POST /v5/query`](../../api/v5/query.md)(`library: "reality"`)。
+进 **reality 库**(sessions / rounds + `v_sessions`,[字段契约](../../structure/v5/reality.md))的查询命令。形态与 [`agent mind`](agent.md) 完全同构(单发 / REPL / `--as-of` / `--schema` / `--json`、`;` 结束、`\d` 元命令),不重复;调 [`POST /v5/query`](../../api/v5/query.md)(`library: "reality"`)。
 
-> **可见性:只有 reality**——两库完全分开,互不 ATTACH。想知道「这段经验产出了什么信念」,去 [mind](mind.md) 查指针:`SELECT card_id FROM card_proofs WHERE type='session' AND ref='sess_…'`(两步取证的反向)。
+> **可见性:只有 reality**——库之间完全分开,互不 ATTACH。想知道「这段经验产出了什么信念」,去 [`agent mind <name>`](agent.md) 查指针:`SELECT card_id FROM card_proofs WHERE type='session' AND ref='sess_…'`(两步取证的反向;哪个 agent 的信念就问哪个)。
 
 ## 用法
 
@@ -28,6 +28,6 @@ reality>
 
 ## 边界
 
-- **只读**(库本身对人 / harness 都只读——唯一写入方是 [sync-server 的 ingest](../../api/v5/ingest.md));
+- **只读**(库本身对人 / agent 都只读——sessions / rounds 唯一写入方是 [sync-server 的 ingest](../../api/v5/ingest.md),conversations 由 agent server 经专用门追加);
 - 经验有没有进来、卡在哪 → [`sync status`](sync.md);
-- 想知道「这段经验产出了什么信念」→ [mind](mind.md) 按 `(type='session', ref)` 查 proofs(两步取证)。
+- 想知道「这段经验产出了什么信念」→ [`agent mind <name>`](agent.md) 按 `(type='session', ref)` 查 proofs(两步取证)。
