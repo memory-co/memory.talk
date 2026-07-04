@@ -43,6 +43,8 @@ memory harness 的**循环体**(谁在跑「摄入 → 提炼 → 治理 → 巩
 - 解释执行、代码即数据:引擎读自己的源码、生成新版、加载运行,天然顺手;
 - 单文件可嵌进 daemon,不引庞大运行时。
 
+**运行形态:常驻 server,可对话。** 无论哪个引擎,harness 起来都是一个**常驻 server**:自己的 loop 按触发跑,同时开着**对话通道**(`memory.talk harness chat`,[cli/v5/harness.md](../../cli/v5/harness.md))。对话是**人影响记忆的正门**——你说的话是给 harness 的输入,落不落、怎么落由它经受治理写动作决定;人不绕过管家直接写库(所以 CLI 没有 card 写命令)。
+
 ## 2. 能力面:只有 interface,别的一概没有
 
 **两个引擎共用同一条纪律:能触到的只有 memory system 的 interface。**

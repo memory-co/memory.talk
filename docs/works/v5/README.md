@@ -190,4 +190,4 @@ executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus
 | sync-server 摄入服务(sync 整体剥离为与 seekbase 平级的独立服务;**一个数据来源一个 worker**(监听 → 增量拉 → **normalize 成标准 session 格式** → 推 ingest),现有 claude-code / codex / openclaw adapter 变身 worker;只做格式加工不做语义加工、不碰 seekbase) | [sync-server.md](sync-server.md) |
 | _（能力层其余(结晶 / 治理 / 巩固 / 召回写侧)/ 嵌入契约(CC 宿主)/ loop 与触发 / 协议 / 自主治理 / 指标……陆续补)_ | _待写_ |
 
-> 接口层已起:[`docs/structure/v5/`](../../structure/v5/README.md)(字段契约——**表结构即 API**)· [`docs/api/v5/`](../../api/v5/README.md)(query 唯一读面 + mind 写动作 + ingest)· [`docs/cli/v5/`](../../cli/v5/README.md)(query / card 命令)。本目录(works)立**定位与设计推理**。v4 的 works 见 [../v4/README.md](../v4/README.md)。
+> 接口层已起:[`docs/structure/v5/`](../../structure/v5/README.md)(字段契约——**表结构即 API**)· [`docs/api/v5/`](../../api/v5/README.md)(query 唯一读面 + mind 写动作 + ingest)· [`docs/cli/v5/`](../../cli/v5/README.md)(只有三命令:query 单发+交互 / sync / harness——写 mind 不是人的手工活,人经 harness chat 影响记忆)。本目录(works)立**定位与设计推理**。v4 的 works 见 [../v4/README.md](../v4/README.md)。

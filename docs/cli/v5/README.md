@@ -1,31 +1,26 @@
 # CLI (v5)
 
-v5 的命令面。**读收敛成一个 `query`**(自由 SQL,[表结构即 API](../../structure/v5/README.md));写是一组受治理的 `card` 动作;经验摄入不在这(归独立的 [sync-server](../../works/v5/sync-server.md) 自己的控制面)。
+v5 的命令面——**跟 v4 完全不同的结构,只有三个命令**:
 
 ```
 memory.talk
-├── query "<SQL>" [--as-of <ISO>] [--schema] [--json]     # 唯一读面 → query.md
-├── card                                                   # mind 写动作 → card.md
-│   ├── create --issue '<问题>' [--proof <type>:<ref>:<indexes> ...]
-│   ├── position --card <cid> --claim '<答案>' --proof ...
-│   ├── review --target <card#p|l n> --argument <+1|0|-1> --proof ... [--comment]
-│   ├── link --card <cid> --type <t> --target <id> --claim '<为什么>' [--proof ...]
-│   └── delete <card_id> [--yes] [--json]                 # 墓碑级联,先预览后确认
-├── server  start | stop | restart | status               # memory daemon(形态沿 v4)
-└── setup                                                  # 初始化(形态沿 v4)
+├── query   [<SQL>]                # 问:唯一读面;不带 SQL 进交互模式(类 mysql CLI)→ query.md
+├── sync    <status|…>             # 看/管:sync-server 的状态与操作 → sync.md
+└── harness <start|stop|status|chat>   # 养:启动 CC 或 Lua 引擎跑 memory harness;
+                                        #    harness 是个常驻 server,可对话 → harness.md
 ```
 
-## 跟 v4 命令面的对应
+## 为什么只有这三个
 
-| v4 | v5 |
-|---|---|
-| `read` / `search` / `recall` / `card list` / `session list` … | **都进 `query`**(一条 SQL / 一份预制 SQL)。常用问法后续以 **sugar 子命令**回归(如 `recall`,= 预制 SQL + 渲染,能力层文档定型后补) |
-| `session mark`(交互标注) | **不预制**(mark 载体由 harness 自己长,[mind-data](../../works/v5/mind-data.md)) |
-| `sync` | 剥离为 **sync-server** 独立服务(自带 `sync-server status` 等控制面,契约见其 works 篇) |
-| `card create/position/review/link/delete` | 保留,证据参数统一 `--proof <type>:<ref>:<indexes>`([card.md](card.md)) |
+人对一套记忆的合法动作就三种:**问它**(query)、**看经验进没进来**(sync)、**跟养它的管家说话**(harness)。
+
+- **没有 `card` 等写命令**:写 mind 是 **harness 经受治理写动作([API](../../api/v5/cards.md))干的活**,不是人的手工活。人想影响记忆(「这条不对」「多关注 X」),**对话告诉 harness**(`harness chat`),让它去落——而不是绕过管家直接改库。
+- **没有 `read` / `search` / `recall` / `list`**:全是 [query](query.md) 上的一条 SQL([表结构即 API](../../structure/v5/README.md))。
+- **没有 `session mark`**:mark 载体不预制([mind-data](../../works/v5/mind-data.md)),harness 自己长。
+- **没有 `server` 命令**:memory daemon 的生命周期收进使用它的命令(query / harness 按需拉起、`harness status` 里带 daemon 健康);sync-server 的生命周期在 `sync` 下。**人面对的是三件事,不是五个进程。**
 
 ## 纪律
 
-- CLI 是 [API](../../api/v5/README.md) 的薄壳:query → `POST /v5/query`,card → 写动作端点;不在 CLI 层藏逻辑;
-- `--json` 全命令可用(AI 主消费者);markdown 是人读的默认渲染;
-- 嵌入契约(CC 宿主怎么用这套命令)另篇(works 待写)。
+- CLI 是薄壳:query → [`POST /v5/query`](../../api/v5/query.md);sync → sync-server 控制面;harness → harness server 控制面 + 对话通道;
+- `--json` 全命令可用(AI / 脚本消费);默认输出是人读的 markdown / 表格;
+- 嵌入契约(CC **宿主**场景怎么用 query——区别于 harness 的 CC **引擎**)另篇(works 待写)。
