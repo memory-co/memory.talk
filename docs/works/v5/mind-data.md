@@ -65,12 +65,19 @@ CREATE TABLE card_links (            -- 受治理的 IBIS 边,本身是主张
   PRIMARY KEY (card_id, link)        -- ↔ card_x#l1;UNIQUE (card_id, type, target_id) 幂等
 );
 
--- ═══ 出处(provenance;session_id 均软引用 reality)═══
-CREATE TABLE card_sessions (         -- 卡 ← 哪次 mark 的 #…？(grounding indexes)
-  card_id TEXT NOT NULL, session_id TEXT NOT NULL, mark TEXT NOT NULL,
-  indexes TEXT NOT NULL, created_at TEXT NOT NULL,
-  PRIMARY KEY (card_id, session_id, mark)
+-- ═══ 出处(provenance;session 型的 ref 软引用 reality)═══
+CREATE TABLE card_proofs (           -- 卡的证据(泛化出处):这张卡因何被建 / 被连
+  card_id    TEXT NOT NULL,
+  type       TEXT NOT NULL,          -- 证据类型:'session'(当前唯一)| 'file' | …(为进化预留)
+  ref        TEXT NOT NULL,          -- 证据定位:type=session → session_id;type=file → 路径(未来)
+  mark       TEXT NOT NULL DEFAULT '', -- type=session 必填('m<n>',哪次 mark);其他型空串
+  indexes    TEXT,                   -- type=session:#…？ grounding 的 round(s)
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (card_id, type, ref, mark)
 );
+-- 泛化的用意:卡的证据不该被焊死为「只能来自 session」。当前只有 session 型
+-- (mark 写路径产生,mark/indexes 由写动作按型校验必填);将来 harness 进化出
+-- 新的证据源(file、外部引用…)时,加一个 type 值即可,表结构与查询面不动。
 CREATE TABLE position_sessions (     -- 答案从哪几轮长出来(indexes 必填,mark 可选)
   card_id TEXT NOT NULL, position TEXT NOT NULL, session_id TEXT NOT NULL,
   indexes TEXT NOT NULL, mark TEXT, created_at TEXT NOT NULL
@@ -128,9 +135,10 @@ CREATE VIEW v_card_best AS           -- 每卡当前最优答案
 CREATE VIEW v_links_in AS            -- 入边反查(target 侧视角)
   SELECT target_id AS card_id, card_id AS from_card, link, type, claim
   FROM card_links WHERE deleted_at IS NULL;
-CREATE VIEW v_card_provenance AS     -- 卡 ← mark ← session 一步到位
-  SELECT cs.card_id, cs.session_id, cs.mark, cs.indexes, m.description, m.created_at
-  FROM card_sessions cs JOIN marks m USING (session_id, mark);
+CREATE VIEW v_card_provenance AS     -- 卡 ← mark ← session 一步到位(session 型证据)
+  SELECT p.card_id, p.ref AS session_id, p.mark, p.indexes, m.description, m.created_at
+  FROM card_proofs p JOIN marks m ON m.session_id = p.ref AND m.mark = p.mark
+  WHERE p.type = 'session';
 ```
 
 视图是 mind 库的**第二层契约**:表保「摊平的事实性记录」,视图保「不该被重复推导的口径」(credence 怎么算、最优怎么取、入边怎么反查)——口径变了改视图,一处生效。
@@ -151,7 +159,8 @@ mind 库**只接受受治理写动作**(SQL 面只读,见 query-interface §2):`
 
 ## 6. 待定
 
-- **mark_issues 与 card_sessions 的重叠**:都记「mark→card」,前者带轮级细节、后者聚合出处——留双份还是视图化其一;
+- **mark_issues 与 card_proofs(session 型)的重叠**:都记「mark→card」,前者带轮级细节、后者聚合出处——留双份还是视图化其一;
+- **position_sessions / link_sessions 是否同样泛化**成 `position_proofs` / `link_proofs`(同一 type/ref 模式)——倾向跟进,等 card_proofs 用顺再动;
 - **credence 公式演进**:up−down 之外(Wilson / 时间衰减)——好在只改视图;
 - **merge / decay 的表达**:seekbase 焊死 insert-only 后基本定向——合并 = 新对象 + `replaces` 边 + 旧卡墓碑(`merged_into` 列那种就地改写不存在了);衰减若要留痕,落事件表;
 - **计数视图性能**:corpus 大后 v_positions 的聚合要不要物化(DuckDB 物化视图 / 增量表)——先现算,量到了再说。
