@@ -52,7 +52,7 @@ CREATE TABLE rounds (
 
 就两张表——reality 刻意简单:**标准格式的字段就是表的列**(worker normalize 产出什么,这里就存什么),上游的花样在 sync-server 的 worker 层已经死掉了,这里不需要为任何来源特化。
 
-**被 mind 库软引用的锚点**(无 FK,容忍悬空):`session_id`(reviews / marks / 三张出处表)和 `(session_id, idx)`(mark_rounds、各处 `indexes` 展开后的轮号)。reality 不知道也不关心谁引用它。
+**被 mind 库软引用的锚点**(无 FK,容忍悬空):mind 侧统一用 `(type='session', ref=session_id)` 的证据模式指过来(proofs 三表 / reviews 引证 / marks 标注对象),轮级则是 `(session_id, idx)`(mark_rounds、各处 `indexes` 展开后的轮号)。reality 不知道也不关心谁引用它。
 
 ## 3. seekbase 声明(searchable)
 
