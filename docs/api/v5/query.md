@@ -6,6 +6,7 @@
 
 ```json
 {
+  "library": "mind",                   // 进哪个库:"mind" | "reality"
   "sql":   "SELECT c.card_id, c.issue, s.score FROM semantic('cards', '为什么 pty 会想到 tmux') s JOIN cards c ON c.card_id = s.id WHERE c.position_count = 0 ORDER BY s.score DESC LIMIT 10",
   "as_of": "2026-06-01T00:00:00Z"     // 可选:时光机(seekbase §7),回放该时刻的世界
 }
@@ -23,7 +24,7 @@
 ```
 
 - **只读**:语句白名单(仅 `SELECT` / `WITH`);无 INSERT / UPDATE / DELETE / DDL → 400;
-- **两库同见**:mind + reality ATTACH 在同一条只读连接,跨库 join 直接写表名;
+- **`library` 定库,可见性不对称**:`"mind"` → mind 为主、**附带 ATTACH reality(只读)**——判断建立在证据上,跨库 join(`card_proofs ⋈ rounds`)在这;`"reality"` → **只有 reality**(经验独立,不见 mind)。CLI 的 [mind](../../cli/v5/mind.md) / [reality](../../cli/v5/reality.md) 命令各对一个取值;
 - **`semantic(collection, text)`**:语义检索表函数,返回 `(id, score)` 供 join(embedding 服务端算);
 - **`as_of`**:整条查询回到该时刻(墓碑 / created_at 谓词自动改写;不带 = 当前世界);
 - 防护:默认行数上限(如 1000,`truncated` 标记)、超时、`semantic()` 每语句次数限流 → 超限 400/408。

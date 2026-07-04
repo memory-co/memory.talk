@@ -32,7 +32,7 @@ session 和 card **是两个不同的库**(两个 seekbase 实例),写权属完�
 | 谁写 | 只有 [sync-server](sync-server.md)(ingest) | 只有 harness(受治理写动作) |
 | harness 权限 | **只读**(证据不可被管理者改写) | **可读可写**(治理信念是本职) |
 
-两库的定位、不变性、**具体表设计**分别见 [reality-data.md](reality-data.md) 与 [mind-data.md](mind-data.md),本篇不再重复。对查询面而言只需知道:**SQL 全只读**(两库都 SELECT-only,写各走各的门),**查询时两库同时可见**——query() 底下把两库 ATTACH 进同一条只读连接,跨库 join 照打(`rounds ⋈ card_proofs ⋈ cards` 一条 SQL 打通)。防护:语句白名单(仅 SELECT / WITH)、行数上限、超时。
+两库的定位、不变性、**具体表设计**分别见 [reality-data.md](reality-data.md) 与 [mind-data.md](mind-data.md),本篇不再重复。对查询面而言只需知道:**SQL 全只读**(两库都 SELECT-only,写各走各的门),**入口按库分、可见性不对称**——进 **mind** 的连接附带 ATTACH reality(只读):判断建立在证据上,跨库 join(`rounds ⋈ card_proofs ⋈ cards`)天然发生在信念侧;进 **reality** 的连接只有 reality(经验独立,不见 mind)。可见性不对称与写权属不对称同构。防护:语句白名单(仅 SELECT / WITH)、行数上限、超时。
 
 ---
 

@@ -11,7 +11,7 @@ v5 的数据模型。**在 v5,表结构就是对外契约**([query-interface](..
 | **mind**(信念) | card / position / review / link / proofs + 视图 | 只有 harness(受治理写动作) | 可读可写 | [mind.md](mind.md) |
 | **reality**(经验) | sessions / rounds | 只有 sync-server(ingest) | **只读** | [reality.md](reality.md) |
 
-查询时两库 ATTACH 进同一条只读连接,跨库 join 照打。
+查询可见性**不对称**:mind 连接附带 reality(只读,跨库 join 在信念侧);reality 连接独立、不见 mind——与写权属的不对称同构。
 
 ## 引擎通用列与不变性(seekbase 焊死,所有表适用)
 

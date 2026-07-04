@@ -1,6 +1,6 @@
 # sync — sync-server 的状态与操作(v5 CLI)
 
-[sync-server](../../works/v5/sync-server.md)(独立摄入服务,一源一 worker)的控制面。**看经验有没有进来、卡在哪、推一把**——不碰记忆本身(那是 query / harness 的事)。
+[sync-server](../../works/v5/sync-server.md)(独立摄入服务,一源一 worker)的控制面。**看经验有没有进来、卡在哪、推一把**——不碰记忆本身(那是 mind / reality / harness 的事)。
 
 ```bash
 memory.talk sync status [--json]        # 总览:服务在不在 + 每个 worker 一行
