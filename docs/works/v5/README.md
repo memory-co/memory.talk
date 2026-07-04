@@ -172,8 +172,7 @@ executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus
 - **loop 与触发**:事件驱动 / 定时 / 预算怎么配——CC 宿主先用 hooks / 手动近似;开放项归并在 [memory-harness.md](memory-harness.md) §6。
 - **自主与权属**:哪些 system 动作可以无人监督地做(合并 / 衰减 / 修剪),哪些要 human / 宿主在环。
 - **executor ↔ memory 协议**:交接经验 + 请求召回的契约;边界面。
-- **自主下的治理**:核心纪律已定(**影子对照 + 可回滚**,见 [memory-harness.md](memory-harness.md) §3);剩验收比什么指标、切换谁拍板(依赖下面「指标」条)。
-- **指标**:「好记忆」量什么(真实性 / 精简度 / 召回命中率 / 矛盾数 / 陈旧度)。
+- **自主下的治理**:核心纪律已定(**影子对照 + 可回滚**,见 [memory-harness.md](memory-harness.md) §3);验收线已定(**护栏组 + 目标线**,见 [metrics.md](metrics.md) §3);剩切换谁拍板(初期 human-in-loop)。
 - **多 executor / 多源**:不同来源的经验怎么调和。
 
 ## 文档清单
@@ -188,6 +187,7 @@ executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus
 | memory harness 核心设计(双引擎:**CC 引擎**(租 loop、剥基础工具、单 harness session)+ **自研 Lua 引擎**(沙箱 VM、无 session、可自进化);能力面只有 memory interface;session 不硬切分、让 harness 自进化;harness session ≠ 数据 session) | [memory-harness.md](memory-harness.md) |
 | sync-server 摄入服务(sync 整体剥离为与 seekbase 平级的独立服务;**一个数据来源一个 worker**(监听 → 增量拉 → **normalize 成标准 session 格式** → 推 ingest),现有 claude-code / codex / openclaw adapter 变身 worker;只做格式加工不做语义加工、不碰 seekbase) | [sync-server.md](sync-server.md) |
 | embed-contract 嵌入契约(第③层:**两个 profile**——executor 宿主〔CC,只读+chat,无写权是立场〕vs harness 宿主〔读+受治理写〕;四通道 query/chat/status/actions;CC 三件套分工 hooks/skills/CLAUDE.md;**交经验零动作**〔sync-server 侦听〕;召回两种都是一条 SQL、不加端点) | [embed-contract.md](embed-contract.md) |
-| _（能力层其余(结晶 / 治理 / 巩固 / 召回写侧)/ loop 与触发 / 协议 / 自主治理 / 指标……陆续补)_ | _待写_ |
+| metrics 记忆质量指标(「真 / 精 / 新 / 召得回」四维全 SQL 现算;每个指标挂一个决策〔治理队列 / 影子对照验收 / 告警〕;曲线靠时光机;**LLM 打分可诊断、永不验收**) | [metrics.md](metrics.md) |
+| _（能力层其余(结晶 / 治理 / 巩固 / 召回写侧)/ loop 与触发 / 协议 / 多源调和……陆续补)_ | _待写_ |
 
 > 接口层已起:[`docs/structure/v5/`](../../structure/v5/README.md)(字段契约——**表结构即 API**)· [`docs/api/v5/`](../../api/v5/README.md)(query 唯一读面 + mind 写动作 + ingest)· [`docs/cli/v5/`](../../cli/v5/README.md)(四命令:mind / reality 两库各一个查询门〔单发+交互〕/ sync / harness——写 mind 不是人的手工活,人经 harness chat 影响记忆)。本目录(works)立**定位与设计推理**。v4 的 works 见 [../v4/README.md](../v4/README.md)。
