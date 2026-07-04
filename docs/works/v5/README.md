@@ -105,7 +105,7 @@
 
 **它的活(provisional loop):**
 - **摄入(Ingest)** —— 把 executor 跑完的 session / 经验拉进来。
-- **提炼(Distill)** —— **以写代读**:逐 round 读经验,就地标出问题 / 答案(v4 的 card / mark)。
+- **提炼(Distill)** —— **以写代读**:逐 round 读经验,就地提出问题 / 答案(纪律保留;v4 的 mark 载体**不预制**,标注结构由 harness 自己长——同 harness session 的道理,见 [memory-harness.md](memory-harness.md) / [mind-data.md](mind-data.md))。
 - **治理(Govern)** —— 去重、合并、连边、调和矛盾、给过时信念踩票 / 衰减、修剪。让图**又真又精**。
 - **巩固 / 反思(Consolidate)** —— 周期性重组:聚类、归纳、提出更高阶的问题。
 - **召回(Recall)** —— 按需把相关记忆喂回 executor(无意识召回 + 有意识检索)。
@@ -158,7 +158,7 @@ executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus
 
 ## 8. 跟 v4 的关系:承接底料,重做 system
 
-- **v4 造的是底料**:被治理的**问题图**(card = 问题、position = 答案、credence 现算、IBIS 边)+ **写路径**(以写代读的 mark)+ 读 / 搜 / 召回 + file-canonical 存储。**这些留着**——它们是 memory harness 要管理的**材料**。
+- **v4 造的是底料**:被治理的**问题图**(card = 问题、position = 答案、credence 现算、IBIS 边)+ **以写代读**的写纪律 + 读 / 搜 / 召回 + file-canonical 存储。**问题图与纪律留着**;v4 的 mark 三表载体在 v5 **不再预制**(由 harness 自己长,见 [mind-data.md](mind-data.md))。
 - **v5 造的是 memory system**:把上面那套底料重组成**一套完整、可嵌入的记忆管理能力**(结晶 / 治理 / 召回 + 嵌入契约),先嵌 CC 运转;以及「认真把这个定位当真」之后引出的**重新架构**(所以 v5「完全不同」,会大改 v4 表层)。§5 的专职 harness 是它未来的宿主之一,**本版不实现**。
 - **数据层同步换代**:v4 的「手写 SQL 的 SQLite + searchbase 端口」两条栈,v5 合并为 **[seekbase](seekbase.md)** 一个端口;file-canonical 不变(细节见该篇)。
 
@@ -169,7 +169,7 @@ executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus
 ## 9. 待定(后续 v5 文档展开)
 
 - **嵌入契约(接口层)**:memory system 暴露哪些动作 / 事件 / 查询;宿主怎么驱动。CC 宿主怎么嵌(CLI / hooks / skills 的分工)。
-- **能力层设计(写侧)**:结晶 / 治理 / 巩固 / 召回的机制文档(v4 的 mark / card 写路径如何在 seekbase 上重铸;**读侧已定 → [query-interface.md](query-interface.md)**)。
+- **能力层设计(写侧)**:结晶 / 治理 / 巩固 / 召回的机制文档(card 写动作如何在 seekbase 上重铸;**读侧已定 → [query-interface.md](query-interface.md)**)。
 - **loop 与触发**:事件驱动 / 定时 / 预算怎么配——CC 宿主先用 hooks / 手动近似;开放项归并在 [memory-harness.md](memory-harness.md) §6。
 - **自主与权属**:哪些 system 动作可以无人监督地做(合并 / 衰减 / 修剪),哪些要 human / 宿主在环。
 - **executor ↔ memory 协议**:交接经验 + 请求召回的契约;边界面。
@@ -184,7 +184,7 @@ executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus
 | v5 立意:memory harness 定位 + memory system 落地策略(本篇) | README.md |
 | seekbase 数据库抽象层 = system 的数据层(searchbase 接棒者:类 supabase 通用 ORM + `search()` 一等模糊查询;DuckDB + LanceDB 双引擎一个端口;内建 outbox 队列保跨引擎写入原子;第三份写入 = 本地 JSON 镜像(可 grep,也是与 SQL 并行的**第二查询面**;file-canonical 的文件由 seekbase 亲自维护);**整库焊死 insert-only**(不能改、删=墓碑)→ 时光机对所有列严谨。**设计已成篇**) | [seekbase.md](seekbase.md) |
 | query-interface 查询层(把 card / session 以 **SQL 直接暴露**:表结构即 API;两库分治总述 + schema 原则 + `semantic()` 表函数 + 暴露面;SQL 全只读,两库 ATTACH 跨库 join) | [query-interface.md](query-interface.md) |
-| mind-data:**card 库**(信念 / IBIS 基石,harness 可读写)的具体表设计——问题图 / proofs 出处 / mark 三表 + 视图;**计数列退役**(credence / 计数全从 reviews 事件现算);**证据统一 `(type, ref)` 泛化模式**(session 当前唯一,file 等为进化预留) | [mind-data.md](mind-data.md) |
+| mind-data:**card 库**(信念 / IBIS 基石,harness 可读写)的具体表设计——问题图 / proofs 出处 + 视图(**mark 三表不预制**——harness 的工作结构让它自己长);**计数列退役**(credence / 计数全从 reviews 事件现算);**证据统一 `(type, ref)` 泛化模式**(session 当前唯一,file 等为进化预留) | [mind-data.md](mind-data.md) |
 | reality-data:**session 库**(经验事实,只有 sync-server 可写、harness 只读)的具体表设计——sessions / rounds 两张表,标准格式的列即表列 | [reality-data.md](reality-data.md) |
 | memory harness 核心设计(双引擎:**CC 引擎**(租 loop、剥基础工具、单 harness session)+ **自研 Lua 引擎**(沙箱 VM、无 session、可自进化);能力面只有 memory interface;session 不硬切分、让 harness 自进化;harness session ≠ 数据 session) | [memory-harness.md](memory-harness.md) |
 | sync-server 摄入服务(sync 整体剥离为与 seekbase 平级的独立服务;**一个数据来源一个 worker**(监听 → 增量拉 → **normalize 成标准 session 格式** → 推 ingest),现有 claude-code / codex / openclaw adapter 变身 worker;只做格式加工不做语义加工、不碰 seekbase) | [sync-server.md](sync-server.md) |

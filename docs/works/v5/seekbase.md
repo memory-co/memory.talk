@@ -131,7 +131,7 @@ insert / delete=墓碑(带 searchable 列)
 
 - **写路径永不碰 LanceDB**:调用方 `insert()` 返回时,DuckDB 行 + outbox 作业**要么都在、要么都不在**。向量侧由 consumer 异步兑现。
 - **at-least-once + 幂等 = 收敛**:consumer 可能重放(标 done 前崩溃),但向量写是**按 id upsert / delete**——天然幂等,重放无害。**不需要恰好一次。**
-- **一致性语义:向量侧最终一致。** `search()` 可能滞后于刚写入的行(通常毫秒级)。要读己之写的场合(如 mark 写路径「先撞库再建卡」)给 `await db.flush()`——排干 outbox 再继续。结构化查询(不带 `search()`)永远强一致。
+- **一致性语义:向量侧最终一致。** `search()` 可能滞后于刚写入的行(通常毫秒级)。要读己之写的场合(如 create_card 的「先撞库判新再建卡」)给 `await db.flush()`——排干 outbox 再继续。结构化查询(不带 `search()`)永远强一致。
 - **顺序**:outbox 按 `seq` 单 consumer 串行消费,同一 id 的 upsert/delete 不会乱序。
 - **崩溃恢复 = 重放,不需对账**:任何时刻崩,pending 作业都还在 DuckDB 里(和业务行同一事务落的),重启接着跑。彻底丢了也不怕——派生层照旧可从 canonical 文件整体重建(§10)。
 - **delete 同路**:级联删(如 `card delete`)在一个 DuckDB 事务里删行 + 入队向量删除作业,两边终归一致。

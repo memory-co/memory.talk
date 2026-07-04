@@ -1,6 +1,6 @@
 # query-interface — 把 card / session 以 SQL 直接暴露:两库分治(v5 设计)
 
-> **状态:设计中。** query-interface 是 [seekbase](seekbase.md) 之上的**查询层**:把 card / session / mark 这些业务对象的查询能力提供出来——但跟 v4 不一样,**不再一个问题开一个端点**,而是**直接把 seekbase 的 SQL 暴露给使用者**。于是它的重心不是「设计接口」,而是**设计表结构**:一套既**继承 IBIS 设计**、又**让使用者自由写 SQL** 的关系框架。且 **session 和 card 拆成两个不同的库**:**session 库对 harness 只读**(全部由 [sync-server](sync-server.md) 从外面同步进来),**card 库是 IBIS 的基石,harness 可读可写**(§2)。
+> **状态:设计中。** query-interface 是 [seekbase](seekbase.md) 之上的**查询层**:把 card / session 这些业务对象的查询能力提供出来——但跟 v4 不一样,**不再一个问题开一个端点**,而是**直接把 seekbase 的 SQL 暴露给使用者**。于是它的重心不是「设计接口」,而是**设计表结构**:一套既**继承 IBIS 设计**、又**让使用者自由写 SQL** 的关系框架。且 **session 和 card 拆成两个不同的库**:**session 库对 harness 只读**(全部由 [sync-server](sync-server.md) 从外面同步进来),**card 库是 IBIS 的基石,harness 可读可写**(§2)。
 
 相关:
 - 数据层(双引擎一个端口,SQL 引擎 = DuckDB): [seekbase.md](seekbase.md)
@@ -32,13 +32,13 @@ session 和 card **是两个不同的库**(两个 seekbase 实例),写权属完�
 | 谁写 | 只有 [sync-server](sync-server.md)(ingest) | 只有 harness(受治理写动作) |
 | harness 权限 | **只读**(证据不可被管理者改写) | **可读可写**(治理信念是本职) |
 
-两库的定位、不变性、**具体表设计**分别见 [reality-data.md](reality-data.md) 与 [mind-data.md](mind-data.md),本篇不再重复。对查询面而言只需知道:**SQL 全只读**(两库都 SELECT-only,写各走各的门),**查询时两库同时可见**——query() 底下把两库 ATTACH 进同一条只读连接,跨库 join 照打(`rounds ⋈ mark_rounds ⋈ cards` 一条 SQL 打通)。防护:语句白名单(仅 SELECT / WITH)、行数上限、超时。
+两库的定位、不变性、**具体表设计**分别见 [reality-data.md](reality-data.md) 与 [mind-data.md](mind-data.md),本篇不再重复。对查询面而言只需知道:**SQL 全只读**(两库都 SELECT-only,写各走各的门),**查询时两库同时可见**——query() 底下把两库 ATTACH 进同一条只读连接,跨库 join 照打(`rounds ⋈ card_proofs ⋈ cards` 一条 SQL 打通)。防护:语句白名单(仅 SELECT / WITH)、行数上限、超时。
 
 ---
 
 ## 3. schema 契约:原则在此,表在两篇数据文档
 
-表 / 视图的**具体设计**在 [mind-data.md](mind-data.md)(问题图 / 出处 / mark 三表 + 视图)与 [reality-data.md](reality-data.md)(sessions / rounds)。本篇只立**共同原则**:
+表 / 视图的**具体设计**在 [mind-data.md](mind-data.md)(问题图 / proofs 出处 + 视图)与 [reality-data.md](reality-data.md)(sessions / rounds)。本篇只立**共同原则**:
 
 1. **一等名词一张表,关系一张表**——不塞 JSON 列,能 join 的都摊平(自由 SQL 的前提);
 2. **继承 v4 IBIS 语义不走样**;寻址 ↔ 复合键一一对应(`card_x#p1` ↔ `(card_id,'p1')`,`sess_y#m2` ↔ `(session_id,'m2')`);
@@ -77,7 +77,7 @@ memory.talk query "SELECT … FROM v_card_best WHERE credence < 0 LIMIT 20"   # 
 ## 5. 与 file-canonical / seekbase 的关系
 
 - canonical 仍是文件(YAML / JSON / JSONL),**query-interface 的所有表都是派生的**、可从文件重建——这没变;
-- 变的是派生层的**完整度**:v4 只派生「够端点用」的瘦索引,v5 派生「够自由 SQL 用」的**全量摊平**(rounds 正文、mark 三表);
+- 变的是派生层的**完整度**:v4 只派生「够端点用」的瘦索引,v5 派生「够自由 SQL 用」的**全量摊平**(rounds 正文、proofs 出处);
 - seekbase 管引擎(双引擎、outbox、search 算子),query-interface 管 **schema 契约**(表 / 视图 / 表函数的形状与稳定性)——一个是库,一个是库里的**框架**。
 
 ---

@@ -11,13 +11,13 @@
 
 ## 1. 定位与不变性
 
-**mind 库里是判断,不是事实**:card(问题)、position(答案)、review(表态)、link(边)、mark(读经验时的标注)。继承 v4 的 IBIS 不变性,并按 v5 的引擎能力收紧:
+**mind 库里是判断,不是事实**:card(问题)、position(答案)、review(表态)、link(边)。继承 v4 的 IBIS 不变性,并按 v5 的引擎能力收紧:
 
 1. **append-only**:一切对象只增不改;「改主意」= 加新对象 + 踩旧的;删除 = 墓碑(`deleted_at`,seekbase 时光机 §7),不物理删;
 2. **派生值不落表**(比 v4 更彻底,§3):credence、各计数一律视图现算——v4 的 `up_count` 等物化计数列**退役**;
 3. **寻址 ↔ 复合键**:`card_x#p1` ↔ `(card_id,'p1')`、`card_x#l2` ↔ `(card_id,'l2')`、`sess_y#m2` ↔ `('session','sess_y','m2')`;
 4. **对 reality 只有软引用**:证据定位(`ref` / `indexes`)指向 [reality 库](reality-data.md),无 FK、容忍悬空,mind 永远不写 reality;
-5. **证据统一 `(type, ref)` 模式**:凡指向证据源的地方(proofs / reviews 引证 / marks 标注对象)都用 `type`(`'session'` 当前唯一,`'file'` 等为进化预留)+ `ref`(该型的定位;session 型 = `session_id`)——**mind 不焊死「证据只能来自 session」**,新证据源 = 加一个 type 值,表结构与查询面不动。
+5. **证据统一 `(type, ref)` 模式**:凡指向证据源的地方(proofs / reviews 引证)都用 `type`(`'session'` 当前唯一,`'file'` 等为进化预留)+ `ref`(该型的定位;session 型 = `session_id`)——**mind 不焊死「证据只能来自 session」**,新证据源 = 加一个 type 值,表结构与查询面不动。
 
 ## 2. 表设计
 
@@ -72,16 +72,15 @@ CREATE TABLE card_proofs (           -- 卡的证据(泛化出处):这张卡因�
   card_id    TEXT NOT NULL,
   type       TEXT NOT NULL,          -- 证据类型:'session'(当前唯一)| 'file' | …(为进化预留)
   ref        TEXT NOT NULL,          -- 证据定位:type=session → session_id;type=file → 路径(未来)
-  mark       TEXT NOT NULL DEFAULT '', -- type=session 必填('m<n>',哪次 mark);其他型空串
-  indexes    TEXT,                   -- type=session:#…？ grounding 的 round(s)
+  indexes    TEXT,                   -- type=session:grounding 的 round(s)
   created_at TEXT NOT NULL,
-  PRIMARY KEY (card_id, type, ref, mark)
+  PRIMARY KEY (card_id, type, ref)
 );
--- (type, ref) 统一证据模式见 §1.5;session 型由 mark 写路径产生,mark/indexes 按型校验必填。
-CREATE TABLE position_proofs (       -- 答案的证据:从哪长出来(indexes 必填,mark 可选)
+-- (type, ref) 统一证据模式见 §1.5;由结晶动作写入(同一证据源多次 grounding 合并进 indexes)。
+CREATE TABLE position_proofs (       -- 答案的证据:从哪长出来(indexes 必填)
   card_id TEXT NOT NULL, position TEXT NOT NULL,
   type TEXT NOT NULL, ref TEXT NOT NULL,        -- (type, ref) 同 §1.5
-  indexes TEXT NOT NULL, mark TEXT, created_at TEXT NOT NULL
+  indexes TEXT NOT NULL, created_at TEXT NOT NULL
 );
 CREATE TABLE link_proofs (           -- 边的证据
   card_id TEXT NOT NULL, link TEXT NOT NULL,
@@ -89,28 +88,9 @@ CREATE TABLE link_proofs (           -- 边的证据
   indexes TEXT NOT NULL, created_at TEXT NOT NULL
 );
 
--- ═══ 结晶标注(mark:一次「读完整个证据源」的逐单元判断;源当前只有 session)═══
-CREATE TABLE marks (
-  type        TEXT NOT NULL,         -- 被标注的证据源类型:'session'(当前唯一)| …(§1.5)
-  ref         TEXT NOT NULL,         -- 证据源定位:session 型 = session_id(软引用 reality)
-  mark        TEXT NOT NULL,         -- 'm<n>',服务端分配,(type, ref) 内递增
-  last_index  INTEGER NOT NULL,      -- 乐观锁基线(标注时源有几个单元;session 型 = 轮数)
-  description TEXT NOT NULL,
-  created_at  TEXT NOT NULL,
-  deleted_at  TEXT,
-  PRIMARY KEY (type, ref, mark)      -- ↔ sess_y#m2(session 型)
-);
-CREATE TABLE mark_rounds (           -- 逐单元:idx 从 1 起严格递增,覆盖 ≥90%(session 型 = round)
-  type TEXT NOT NULL, ref TEXT NOT NULL, mark TEXT NOT NULL, idx INTEGER NOT NULL,
-  comment TEXT,                      -- 可空 = 读了没东西标(只占覆盖)
-  PRIMARY KEY (type, ref, mark, idx)
-);
-CREATE TABLE mark_issues (           -- #…？/ 主动声明 issue 的撞库结果(card_id/is_new 服务端回填)
-  type TEXT NOT NULL, ref TEXT NOT NULL, mark TEXT NOT NULL, idx INTEGER NOT NULL,
-  issue TEXT NOT NULL, card_id TEXT NOT NULL, is_new BOOLEAN NOT NULL,
-  indexes TEXT NOT NULL
-);
 ```
+
+> **为什么没有 mark 表**:v4 把「以写代读」固化成 mark 三表(marks / mark_rounds / mark_issues)。v5 **不预制**——mark 是 harness 的**工作结构**,跟 harness session 一个道理([memory-harness §4](memory-harness.md)):「怎么逐轮读、读到哪、记什么工作痕迹」该由 harness **自己在 corpus 里长出来**(它需要的话,自己建卡 / 自己的记录形态),框架焊死一套三表反而把结晶流程锁死在 v4 的形状上。框架保证的只有**证据链**:结晶产物(card / position / review / link)必须带 `(type, ref)` + `indexes` 的 grounding(proofs / 引证)——**「以写代读」作为纪律仍在,载体不预制。**
 
 **计数列退役**是本篇对 v4 最大的结构改动:`reviews` 本来就是 append-only 事件,计数与 credence **全部从它现算**(§3)——写路径不再 bump 任何计数(v4 的原子 upsert 消失),as-of 时光机下的历史值天然精确(seekbase §7 的「事件化」纪律),`p<n>`/`l<n>` 的 mint 改为 `max(seq)+1`(墓碑不复用号)。
 
@@ -138,9 +118,8 @@ CREATE VIEW v_card_best AS           -- 每卡当前最优答案
 CREATE VIEW v_links_in AS            -- 入边反查(target 侧视角)
   SELECT target_id AS card_id, card_id AS from_card, link, type, claim
   FROM card_links WHERE deleted_at IS NULL;
-CREATE VIEW v_card_provenance AS     -- 卡 ← mark ← 证据源 一步到位(全型通用)
-  SELECT p.card_id, p.type, p.ref, p.mark, p.indexes, m.description, m.created_at
-  FROM card_proofs p JOIN marks m USING (type, ref, mark);
+CREATE VIEW v_card_provenance AS     -- 卡 ← 证据源(全型通用)
+  SELECT card_id, type, ref, indexes, created_at FROM card_proofs;
 ```
 
 视图是 mind 库的**第二层契约**:表保「摊平的事实性记录」,视图保「不该被重复推导的口径」(credence 怎么算、最优怎么取、入边怎么反查)——口径变了改视图,一处生效。
@@ -151,18 +130,17 @@ CREATE VIEW v_card_provenance AS     -- 卡 ← mark ← 证据源 一步到位(
 |---|---|
 | cards | `issue`(`#…？` 撞库判新撞的就是它) |
 | positions | `claim` |
-| 其余(reviews / links / 出处 / marks 三表) | — |
+| 其余(reviews / links / proofs) | — |
 
 > 文件镜像(`files` 声明)、墓碑、时光机是 **seekbase 的通用机制**([seekbase §6/§7](seekbase.md)),不在业务数据篇重复;路径模板到实现时在 schema 声明里给。
 
 ## 5. 写动作面(唯一的写门)
 
-mind 库**只接受受治理写动作**(SQL 面只读,见 query-interface §2):`create_card` / `add_position` / `review` / `link` / `submit_mark`(逐 round、≥90% 覆盖、`#…？` 撞库)/ `merge` / `decay` / `delete`(墓碑级联)。每个动作 = seekbase 一次原子写(引擎内政),不变性(append-only、撞库判新、id 单调)全部在动作里兑现。
+mind 库**只接受受治理写动作**(SQL 面只读,见 query-interface §2):`create_card`(**撞库判新内建**:issue 先 embed 撞库,miss 建新 / hit 返回既有卡——「新不新交给检索、不让 AI 自评」的纪律在动作里兑现,不随 v4 的 mark 载体退场)/ `add_position` / `review` / `link` / `merge` / `decay` / `delete`(墓碑级联)。每个动作 = seekbase 一次原子写(引擎内政),不变性(append-only、撞库判新、id 单调)全部在动作里兑现。
 
 ## 6. 待定
 
-- **mark_issues 与 card_proofs(session 型)的重叠**:都记「mark→card」,前者带轮级细节、后者聚合出处——留双份还是视图化其一;
-- **file 型证据的语义**:idx / indexes 在 file 型下指什么(行号?段落?),`last_index` 怎么取——等第一个非 session 证据源出现时定;
+- **file 型证据的语义**:`indexes` 在 file 型下指什么(行号?段落?)——等第一个非 session 证据源出现时定;
 - **credence 公式演进**:up−down 之外(Wilson / 时间衰减)——好在只改视图;
 - **merge / decay 的表达**:seekbase 焊死 insert-only 后基本定向——合并 = 新对象 + `replaces` 边 + 旧卡墓碑(`merged_into` 列那种就地改写不存在了);衰减若要留痕,落事件表;
 - **计数视图性能**:corpus 大后 v_positions 的聚合要不要物化(DuckDB 物化视图 / 增量表)——先现算,量到了再说。

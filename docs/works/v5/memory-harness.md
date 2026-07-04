@@ -16,7 +16,7 @@
 | | **数据 session**(机器上已有的) | **harness session**(本篇讨论的) |
 |---|---|---|
 | 是什么 | executor 跑出来的**对话历史**(`sessions` / `rounds` 表,`sess_…`) | harness **自己运行时**的上下文分段方式 |
-| 属于 | **数据**——被摄入、被 mark、被抽卡的**对象** | **运行时结构**——harness 工作时的「一段」怎么算 |
+| 属于 | **数据**——被摄入、被结晶的**对象** | **运行时结构**——harness 工作时的「一段」怎么算 |
 | 本篇立场 | 不动,照旧是记忆的原料 | **不预制**:CC 引擎单 session、Lua 引擎无 session,让 harness 自己进化出分段(§4) |
 
 下文凡不加限定的「session」都指 **harness session**;数据 session 一律写全称。
@@ -50,7 +50,7 @@ memory harness 的**循环体**(谁在跑「摄入 → 提炼 → 治理 → 巩
 ```
 可用:
   query(sql)            ← query-interface 的只读 SQL(含 semantic() / as-of)
-  受治理写动作           ← mark 提交 / position / review / link / merge / decay …(system 的动作集)
+  受治理写动作           ← card(撞库判新)/ position / review / link / merge / decay …(system 的动作集)
   llm(prompt)           ← 判断类工作调模型(Lua 引擎;CC 引擎自带)
 没有:
   WebSearch / WebFetch  ← 记忆管理不需要外部世界;需要的知识在模型和 corpus 里

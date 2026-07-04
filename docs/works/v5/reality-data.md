@@ -15,8 +15,8 @@
 
 1. **单写入方**:只有 sync-server 的 ingest(`ensure_session` + `append_rounds`)能写——这是**架构上焊死的**(harness 的能力面里根本没有写 reality 的动作),不是约定;
 2. **append-only(引擎焊死)**:round 只追加(`idx` 从 1 起严格 +1);session 行**写一次就不动**——`round_count` / `updated_at` 是**派生值**(从 rounds 现算,`v_sessions` 视图),不落列(seekbase 端口没有 update,见 [seekbase §2](seekbase.md));
-3. **乐观游标**:游标 = 当前轮数(`max(rounds.idx)` 现算,`v_sessions.round_count`);追加带期望游标,冲突则按服务端游标重拉(sync-server §3 的 push 契约);mark 的 `last_index` 对的也是它;
-4. **内容如实**:落的是 worker `normalize` 后的**标准格式**——格式统一、语义不增删;这里没有总结、没有标注(mark 是判断,在 [mind 库](mind-data.md))。
+3. **乐观游标**:游标 = 当前轮数(`max(rounds.idx)` 现算,`v_sessions.round_count`);追加带期望游标,冲突则按服务端游标重拉(sync-server §3 的 push 契约);
+4. **内容如实**:落的是 worker `normalize` 后的**标准格式**——格式统一、语义不增删;这里没有总结、没有标注——那些是判断,在 [mind 侧](mind-data.md)(且其工作结构由 harness 自己长,不预制)。
 
 ## 2. 表设计
 
@@ -52,7 +52,7 @@ CREATE TABLE rounds (
 
 就两张表——reality 刻意简单:**标准格式的字段就是表的列**(worker normalize 产出什么,这里就存什么),上游的花样在 sync-server 的 worker 层已经死掉了,这里不需要为任何来源特化。
 
-**被 mind 库软引用的锚点**(无 FK,容忍悬空):mind 侧统一用 `(type='session', ref=session_id)` 的证据模式指过来(proofs 三表 / reviews 引证 / marks 标注对象),轮级则是 `(session_id, idx)`(mark_rounds、各处 `indexes` 展开后的轮号)。reality 不知道也不关心谁引用它。
+**被 mind 库软引用的锚点**(无 FK,容忍悬空):mind 侧统一用 `(type='session', ref=session_id)` 的证据模式指过来(proofs / reviews 引证),轮级则是 `(session_id, idx)`(各处 `indexes` 展开后的轮号)。reality 不知道也不关心谁引用它。
 
 ## 3. seekbase 声明(searchable)
 
@@ -63,12 +63,12 @@ CREATE TABLE rounds (
 
 > 文件镜像(`files` 声明)、墓碑、时光机是 **seekbase 的通用机制**([seekbase §6/§7](seekbase.md)),不在业务数据篇重复;路径模板到实现时在 schema 声明里给。
 
-体积注意:rounds 是最大的表(现存 6 万+ 轮、还在长)。全量进表换来「session ⋈ mark ⋈ card 一条 SQL 打通」(query-interface 的核心收益);若将来体积成负担,DuckDB 直读 JSONL 外部表是现成退路(表变视图,查询面不变)。
+体积注意:rounds 是最大的表(现存 6 万+ 轮、还在长)。全量进表换来「session ⋈ proofs ⋈ card 一条 SQL 打通」(query-interface 的核心收益);若将来体积成负担,DuckDB 直读 JSONL 外部表是现成退路(表变视图,查询面不变)。
 
 ## 4. 读它的人
 
-- **harness**:结晶时逐 round 读(mark 写路径的输入)、review 引证时核对 `indexes`——全部经 query-interface 的只读 SQL;
-- **query-interface 使用者**:跨库 join(`rounds ⋈ mark_rounds ⋈ cards`)、语义搜 rounds;
+- **harness**:结晶时逐 round 读、review 引证时核对 `indexes`——全部经 query-interface 的只读 SQL;
+- **query-interface 使用者**:跨库 join(`rounds ⋈ card_proofs ⋈ cards`)、语义搜 rounds;
 - **时光机**(seekbase §7):as-of 连接下,「当时 session 长到哪」精确可答(`created_at` 界定每轮的入库时刻)。
 
 ## 5. 待定
