@@ -1,6 +1,6 @@
 # harness — 启动引擎、跟管家对话(v5 CLI)
 
-[memory harness](../../works/v5/memory-harness.md) 的控制面:**选一个引擎(CC / Lua)把 harness 跑起来;它是个常驻 server,人可以跟它对话**。
+[memory harness](../../works/v5/memory-harness.md) 的控制面:**选一个引擎(CC / Lua)把 harness 跑起来;它是个常驻 server,人可以跟它对话**。server 的 HTTP 契约(chat / status,**引擎无关的同一套**)见 [api/v5/harness.md](../../api/v5/harness.md),本命令是它的薄壳。
 
 ```bash
 memory.talk harness start [--engine cc|lua]   # 起 harness server(引擎二选一;默认 cc)
@@ -33,7 +33,8 @@ harness> 本周 12 张里 9 张来自 sess_8ab…(你在重构 auth)。其中 4 
          我准备今晚的巩固轮里合并成 2 张,可以吗?
 ```
 
-- **对话是「跟管家说话」,不是「改库快捷键」**:你说的话是**给 harness 的输入**,落不落、怎么落由它经受治理写动作决定(它会告诉你它做了什么、引证在哪);
+- **对话是「跟管家说话」,不是「改库快捷键」**:你说的话是**给 harness 的输入**,落不落、怎么落由它经受治理写动作决定(响应的 `actions` 字段列明它做了什么、引证在哪);
+- **对话本身也落库**:每条消息(双向)进 reality 的 [`conversations` 表](../../structure/v5/reality.md)——可回放、可语义搜(`semantic('conversations', …)`)、将来可作证据源;
 - **这就是为什么 CLI 没有 `card` 写命令**:人绕过管家直接写库,corpus 的一致治理就破了——要影响记忆,说给它听;
 - 单发形态给脚本 / hooks:`memory.talk harness chat "今天优先消化 sess_9f2…" --json`。
 
@@ -48,5 +49,4 @@ harness: running (engine=cc, up 6h)   memory daemon: ok   outbox: 0 pending
 ## 边界与待定
 
 - harness server 的**动作面永远只有 memory interface**(能力收窄是引擎无关的纪律,[memory-harness §2](../../works/v5/memory-harness.md));chat 不给它开新口子;
-- 对话历史本身也是经验:harness 可把 chat 记录当 `(type, ref)` 证据源之一(待定,连着 mind-data 的 file 型问题);
-- start 触发的引擎细节(CC headless 形态 / Lua VM 配额)、chat 的传输(本地 socket / HTTP)——[memory-harness §6 待定](../../works/v5/memory-harness.md)。
+- start 触发的引擎细节(CC headless 形态 / Lua VM 配额)——[memory-harness §6 待定](../../works/v5/memory-harness.md);chat 的传输已定:harness server 自己的 HTTP([api/v5/harness.md](../../api/v5/harness.md))。

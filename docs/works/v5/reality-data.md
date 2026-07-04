@@ -11,9 +11,9 @@
 
 ## 1. 定位与不变性
 
-**reality 库里是事实,不是判断**:哪些 session 发生过、每一轮谁说了什么。四条不变性:
+**reality 库里是事实,不是判断**:哪些 session 发生过、每一轮谁说了什么、人和 harness 之间说过什么(conversations)。四条不变性:
 
-1. **单写入方**:只有 sync-server 的 ingest(`ensure_session` + `append_rounds`)能写——这是**架构上焊死的**(harness 的能力面里根本没有写 reality 的动作),不是约定;
+1. **写门唯一(ingest),客户端按表分**:sessions / rounds 只有 sync-server 推;`conversations` 只有 harness server 推(记录自己的对话,[api/harness](../../api/v5/harness.md))——harness **没有**写 sessions / rounds 的任何路径,经验证据依旧不可被管理者改写;
 2. **append-only(引擎焊死)**:round 只追加(`idx` 从 1 起严格 +1);session 行**写一次就不动**——`round_count` / `updated_at` 是**派生值**(从 rounds 现算,`v_sessions` 视图),不落列(seekbase 端口没有 update,见 [seekbase §2](seekbase.md));
 3. **乐观游标**:游标 = 当前轮数(`max(rounds.idx)` 现算,`v_sessions.round_count`);追加带期望游标,冲突则按服务端游标重拉(sync-server §3 的 push 契约);
 4. **内容如实**:落的是 worker `normalize` 后的**标准格式**——格式统一、语义不增删;这里没有总结、没有标注——那些是判断,在 [mind 侧](mind-data.md)(且其工作结构由 harness 自己长,不预制)。
@@ -50,7 +50,21 @@ CREATE TABLE rounds (
 );
 ```
 
-就两张表——reality 刻意简单:**标准格式的字段就是表的列**(worker normalize 产出什么,这里就存什么),上游的花样在 sync-server 的 worker 层已经死掉了,这里不需要为任何来源特化。
+```sql
+CREATE TABLE conversations (         -- 人 ↔ harness 的对话记录(chat 的双向落盘)
+  conv_id     TEXT NOT NULL,         -- conv_<ULID>:一段对话流(纯传输分组,不承载语义分段——
+                                     --   语义上的「一段」让 harness 自己长,同 harness session 的道理)
+  idx         INTEGER NOT NULL,      -- 流内序号,1 起严格 +1
+  speaker     TEXT NOT NULL,         -- 'human' | 'harness'
+  engine      TEXT NOT NULL,         -- 说话时的引擎:'cc' | 'lua'(出处)
+  text        TEXT NOT NULL,
+  created_at  TEXT NOT NULL,
+  deleted_at  TEXT,
+  PRIMARY KEY (conv_id, idx)
+);
+```
+
+三张表——reality 刻意简单:sessions / rounds 是**标准格式的字段就是表的列**(worker normalize 产出什么,这里就存什么,上游花样死在 worker 层);conversations 是 harness 对话的如实记录(**对话也是经验**:可回放、可语义搜、将来可作证据源 `(type='conversation', ref=conv_id)`——mind 的 `(type, ref)` 泛化天然接得住)。
 
 **被 mind 库软引用的锚点**(无 FK,容忍悬空):mind 侧统一用 `(type='session', ref=session_id)` 的证据模式指过来(proofs / reviews 引证),轮级则是 `(session_id, idx)`(各处 `indexes` 展开后的轮号)。reality 不知道也不关心谁引用它。
 
@@ -60,6 +74,7 @@ CREATE TABLE rounds (
 |---|---|
 | sessions | — |
 | rounds | `text`(语义搜「当时说过什么」;unified search 的 session 命中源) |
+| conversations | `text`(语义搜「跟管家聊过什么」) |
 
 > 文件镜像(`files` 声明)、墓碑、时光机是 **seekbase 的通用机制**([seekbase §6/§7](seekbase.md)),不在业务数据篇重复;路径模板到实现时在 schema 声明里给。
 

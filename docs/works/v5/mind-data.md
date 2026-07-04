@@ -17,7 +17,7 @@
 2. **派生值不落表**(比 v4 更彻底,§3):credence、各计数一律视图现算——v4 的 `up_count` 等物化计数列**退役**;
 3. **寻址 ↔ 复合键**:`card_x#p1` ↔ `(card_id,'p1')`、`card_x#l2` ↔ `(card_id,'l2')`、`sess_y#m2` ↔ `('session','sess_y','m2')`;
 4. **对 reality 只有软引用**:证据定位(`ref` / `indexes`)指向 [reality 库](reality-data.md),无 FK、容忍悬空,mind 永远不写 reality;
-5. **证据统一 `(type, ref)` 模式**:凡指向证据源的地方(proofs / reviews 引证)都用 `type`(`'session'` 当前唯一,`'file'` 等为进化预留)+ `ref`(该型的定位;session 型 = `session_id`)——**mind 不焊死「证据只能来自 session」**,新证据源 = 加一个 type 值,表结构与查询面不动。
+5. **证据统一 `(type, ref)` 模式**:凡指向证据源的地方(proofs / reviews 引证)都用 `type`(`'session'` 当前唯一;`'conversation'`〔reality 的对话表〕/ `'file'` 等为进化预留)+ `ref`(该型的定位;session 型 = `session_id`)——**mind 不焊死「证据只能来自 session」**,新证据源 = 加一个 type 值,表结构与查询面不动。
 
 ## 2. 表设计
 

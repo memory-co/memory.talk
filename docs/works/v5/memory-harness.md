@@ -43,7 +43,7 @@ memory harness 的**循环体**(谁在跑「摄入 → 提炼 → 治理 → 巩
 - 解释执行、代码即数据:引擎读自己的源码、生成新版、加载运行,天然顺手;
 - 单文件可嵌进 daemon,不引庞大运行时。
 
-**运行形态:常驻 server,可对话。** 无论哪个引擎,harness 起来都是一个**常驻 server**:自己的 loop 按触发跑,同时开着**对话通道**(`memory.talk harness chat`,[cli/v5/harness.md](../../cli/v5/harness.md))。对话是**人影响记忆的正门**——你说的话是给 harness 的输入,落不落、怎么落由它经受治理写动作决定;人不绕过管家直接写库(所以 CLI 没有 card 写命令)。
+**运行形态:常驻 server,可对话;两引擎一套 API。** 无论哪个引擎,harness 起来都是一个**常驻 server**:自己的 loop 按触发跑,同时开着**对话通道**。**API 钉在 server 层**(chat / status,[api/v5/harness.md](../../api/v5/harness.md)):CC 和 Lua 只是后面的引擎,换引擎不换契约(引擎细节只在 `status.engine` 可见,不漏进请求/响应结构)。对话是**人影响记忆的正门**——你说的话是给 harness 的输入,落不落、怎么落由它经受治理写动作决定(响应的 `actions` 带引证,可审计);人不绕过管家直接写库(所以 CLI 没有 card 写命令)。**对话本身也是经验**:每条消息(双向)落 reality 库的 `conversations` 表(经 ingest 的专用门,[reality-data](reality-data.md))——可回放、可语义搜、将来可作 `(type='conversation')` 证据源。
 
 ## 2. 能力面:只有 interface,别的一概没有
 

@@ -1,6 +1,6 @@
 # ingest — reality 库的唯一写门(v5 API)
 
-**只给 [sync-server](../../works/v5/sync-server.md) 用**(worker normalize 成标准格式后推入);harness / 宿主都不该碰。这套契约就是 sync 剥离的边界面——语义从 v4 的 `ensure_session` / `append_rounds` 平移,按 v5 两库分治收编到 `/v5/ingest`。
+**客户端按表分**:sessions / rounds 只给 [sync-server](../../works/v5/sync-server.md)(worker normalize 后推入);`conversations` 只给 harness server(记录自己的对话,[harness API](harness.md))。宿主谁都不该碰。这套契约就是 sync 剥离的边界面——语义从 v4 的 `ensure_session` / `append_rounds` 平移,按 v5 两库分治收编到 `/v5/ingest`。
 
 ## POST /v5/ingest/sessions — ensure(建或对游标)
 
@@ -32,8 +32,22 @@
 - `expected_cursor ≠ 当前` → **409** + 服务端游标(worker 按它重拉重推,幂等收敛——[sync-server §3](../../works/v5/sync-server.md) 的 push 契约);
 - 成功 → `{"session_id": …, "cursor": 43, "appended": 2}`。
 
+## POST /v5/ingest/conversations — 追加对话消息(harness server 专用)
+
+```json
+{ "conv_id": "conv_01k…",              // 对话流 id(harness server 起流时 mint)
+  "messages": [
+    { "speaker": "human",   "engine": "cc", "text": "card_01j… 那张卡过时了…" },
+    { "speaker": "harness", "engine": "cc", "text": "收到。我读了 sess_9f2…,加了 #p3…" }
+  ] }
+```
+
+- `idx` 服务端 mint(流内 1 起严格 +1),追加语义同 rounds;
+- 成功 → `{"conv_id": …, "cursor": 8, "appended": 2}`;
+- **这不是 harness 写 reality 的口子**:它只能追加**自己的对话记录**;sessions / rounds 对它依旧无门。
+
 ## 边界
 
 - **只进不出**:ingest 没有读端点(读走 [query](query.md));没有改、没有删(reality append-only,引擎焊死);
-- **权属**:本地形态靠「只有 sync-server 知道这条路」+ loopback;云端形态 ingest 走独立 token(与查询 token 分权);
+- **权属**:本地形态靠 loopback;云端形态 ingest 走独立 token(与查询 token 分权),且 sessions 门与 conversations 门**各自发 token**(sync-server / harness server 互不越权);
 - 上游洪峰的限流 / 断线缓冲在 sync-server 侧(它攒批重试),ingest 只管单次请求的原子追加。

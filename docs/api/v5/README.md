@@ -6,7 +6,8 @@ v5 的 HTTP 契约,prefix `/v5`。**跟 v4 的根本区别:读不再每问法一
 |---|---|---|---|
 | **查**(唯一读面) | `POST /v5/query`(`library: mind\|reality`)· `GET /v5/schema` | 所有人(harness / 宿主 / 人) | [query.md](query.md) |
 | **写 mind**(受治理动作) | `POST /v5/cards…` · `POST /v5/reviews` · `DELETE /v5/cards/{id}` | 只有 harness | [cards.md](cards.md) |
-| **写 reality**(摄入) | `POST /v5/ingest/…` | 只有 sync-server | [ingest.md](ingest.md) |
+| **写 reality**(摄入) | `POST /v5/ingest/…` | sync-server(sessions/rounds)+ harness server(conversations) | [ingest.md](ingest.md) |
+| **harness server**(独立进程,自己的端口) | `POST /harness/chat` · `GET /harness/status` | 人 / 宿主(CLI 薄壳) | [harness.md](harness.md) |
 
 另有 `GET /v5/status`(daemon 健康 / 两库计数 / outbox 深度,形态从 v4 status 平移,不单开文档)。
 
