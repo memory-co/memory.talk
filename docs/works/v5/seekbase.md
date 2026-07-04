@@ -140,7 +140,7 @@ insert / delete=墓碑(带 searchable 列)
 
 ---
 
-## 6. 本地 JSON 镜像:可 grep 的第三份写入
+## 6. 本地 JSON 镜像:第三份写入,也是第二查询面
 
 DuckDB 是二进制单文件、LanceDB 是列存目录——**都没法 grep**。记忆这种东西,能被最朴素的工具(`grep` / `cat` / `diff` / git)直接看,是可审计、可信任的底线。所以 seekbase 在双引擎之外做**第三份写入:本地 JSON 文件**。
 
@@ -149,6 +149,15 @@ DuckDB 是二进制单文件、LanceDB 是列存目录——**都没法 grep**�
 - **写入顺序:文件最先**。`insert()` = ① 写 JSON 文件(canonical 先落地)→ ② 一个 DuckDB 事务(业务行 + outbox 作业,§5)→ ③ consumer 异步兑现向量。任何一步之后崩,**文件都是真相**:行没写上 → 从文件 repair;向量没写上 → outbox replay(§5)。
 - **`db.rebuild()`**:通读 files 声明的全部文件 → 重灌 DuckDB + LanceDB。派生层「表丢了能从文件重建」这条不变性,从「各 store 手工兑现」变成 **seekbase 一个内建动作**。
 - **没声明 `files` 的表就没有镜像**(纯派生的中间表、日志表不必落盘为文件)。
+
+### 文件是第二查询面:与 SQL 同时进行
+
+镜像不只是「可审计的备份」——它是和 SQL **并行可用的另一个查询面**,两个面随时同查、互不打扰:
+
+- **file 查询无锁、不经 daemon**:`grep` / `cat` / `diff` / git / 任何脚本直接在文件树上跑——daemon 挂着也行、没起也行,**不占 SQL 连接、不被写入阻塞**。这靠两条已焊死的性质兜底:**insert-only** ⇒ 已存在的文件不再变(墓碑那一次除外),读者拿到的结果稳定、可缓存;**原子落盘**(temp + rename)⇒ 并发读永远看到完整文件,不存在半截 JSON。
+- **一致性关系明确:文件面 ≥ 行面**。写入顺序文件最先(上面第三条),所以 file 查询**永不缺数据**,至多瞬时超前 DuckDB 一步(crash 后由 repair 收敛);SQL 面强一致、向量面最终一致(§5)——三个面的新旧关系是**固定可推理的**:file ≥ row ≥ vector。
+- **两个面能在一条 SQL 里汇合**:DuckDB 原生 `read_json` / glob 外部表——SQL 可以**直接把文件当表查**(`SELECT * FROM read_json('cards/**/*.json')`),用于对账(file 面 vs row 面 diff)、rebuild(§上)、以及派生表还没灌全时的兜底查询。file 即表,不是两个世界。
+- **分工**:SQL 面管 join / 聚合 / `search()` / 时光机;file 面管 grep / diff / git 版本化 / 离线拷走整个记忆(目录即备份)。**同一份数据,两种手感,随时并用。**
 
 > 这一步之后,**file-canonical 的「文件」由 seekbase 亲自维护**(v3/v4 是每个 store 手写文件 ops):声明一次,**文件 + 行 + 向量三写全自动**,谁也不会忘了哪一边(§10)。
 
