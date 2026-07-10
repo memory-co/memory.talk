@@ -48,9 +48,20 @@ mind 库唯一的写门([mind-data §5](../../works/v5/mind-data.md)):每个动�
 
 `?dry_run=true` 先预览计数(positions / reviews / links 出入边 / proofs / vectors),真删 = **全部打墓碑**(insert-only,无物理删;时光机可回放)。响应 `{card_id, deleted:{…}}` / dry-run `{card_id, issue, counts:{…}}`;404 卡不存在。
 
-## 保留动作(语义待能力层文档细化)
+## POST …/cards/{survivor}/merge — 合并(B 级动作,默认在环)
 
-- `POST …/cards/{card_id}/merge` —— 合并:新对象 + `replaces` 边 + 旧卡墓碑(insert-only 定向,[mind-data 待定](../../works/v5/mind-data.md));
-- `decay` —— 衰减:若要留痕落事件表。
+```json
+{ "absorbed": "card_09a…", "claim": "两问实为同一个:pty 可重连的本质诉求" }
+```
 
-两者列入动作集但**本篇不定形**,避免先于机制拍板。
+三步机械语义([actions §2](../../works/v5/actions.md)):`replaces` 边(claim 必填,受治理)→ absorbed 的 proofs 并入 survivor → absorbed 及其 positions / links 级联墓碑。**答案不自动搬**(要留的答案 merge 前自行 `add_position(forked_from=…)`)。幂等;时光机可回放合并前。→ `{survivor, absorbed, merged: true}`。
+
+## POST …/decay — 衰减(append 事件)
+
+```json
+{ "target": "card_01j…#p1", "amount": 1, "reason": "180 天无新证据" }
+```
+
+append 一条 `decay_events`;credence 视图口径 = `up − down − Σ decay`(**不碰 reviews**,表态史干净);反悔用负 `amount` 冲销([actions §3](../../works/v5/actions.md))。→ `{target, decay_total}`。
+
+> **权属分级**([actions §4](../../works/v5/actions.md)):create/position/review/link/decay 为 **A 级(自主)**;merge / delete 为 **B 级(在环)**——初期须经 chat 请示确认,放权按实例配置。

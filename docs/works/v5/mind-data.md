@@ -136,13 +136,13 @@ CREATE VIEW v_card_provenance AS     -- 卡 ← 证据源(全型通用)
 
 ## 5. 写动作面(唯一的写门)
 
-mind 库**只接受受治理写动作**(SQL 面只读,见 query-interface §2):`create_card`(**撞库判新内建**:issue 先 embed 撞库,miss 建新 / hit 返回既有卡——「新不新交给检索、不让 AI 自评」的纪律在动作里兑现,不随 v4 的 mark 载体退场)/ `add_position` / `review` / `link` / `merge` / `decay` / `delete`(墓碑级联)。每个动作 = seekbase 一次原子写(引擎内政),不变性(append-only、撞库判新、id 单调)全部在动作里兑现。
+mind 库**只接受受治理写动作**(SQL 面只读,见 query-interface §2):`create_card`(**撞库判新内建**:issue 先 embed 撞库,miss 建新 / hit 返回既有卡——「新不新交给检索、不让 AI 自评」的纪律在动作里兑现,不随 v4 的 mark 载体退场)/ `add_position` / `review` / `link` / `merge` / `decay` / `delete`(墓碑级联)。动作的完整语义、merge / decay 定形与**权属分级(A 自主 / B 在环)**见 [actions.md](actions.md);每个动作 = seekbase 的 ticket 写(引擎内政),不变性(append-only、撞库判新、id 单调)全部在动作里兑现。另有 `decay_events (card_id, target, amount, reason, created_at)` 事件表(actions §3)。
 
 ## 6. 待定
 
 - **file 型证据的语义**:`indexes` 在 file 型下指什么(行号?段落?)——等第一个非 session 证据源出现时定;
-- **credence 公式演进**:up−down 之外(Wilson / 时间衰减)——好在只改视图;
-- **merge / decay 的表达**:seekbase 焊死 insert-only 后基本定向——合并 = 新对象 + `replaces` 边 + 旧卡墓碑(`merged_into` 列那种就地改写不存在了);衰减若要留痕,落事件表;
+- **credence 公式演进**:up−down−Σdecay 之外(Wilson 加权)——好在只改视图;
+- ~~merge / decay 的表达~~ **已定形 → [actions.md](actions.md)**:merge = `replaces` 边 + proofs 并入 + 级联墓碑(答案不自动搬,判断留给 agent);decay = `decay_events` 事件表(append-only),credence 视图口径收编 `up − down − Σ decay`;
 - **计数视图性能**:corpus 大后 v_positions 的聚合要不要物化(DuckDB 物化视图 / 增量表)——先现算,量到了再说。
 
 ## 与其他 v5 文档的关系
