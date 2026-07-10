@@ -180,8 +180,8 @@ executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus
 | 主题 | 文档 |
 |---|---|
 | v5 立意:memory harness 定位 + memory system 落地策略(本篇) | README.md |
-| seekbase 数据库抽象层 = system 的数据层(searchbase 接棒者:类 supabase 通用 ORM + `search()` 一等模糊查询;DuckDB + LanceDB 双引擎一个端口;内建 outbox 队列保跨引擎写入原子;第三份写入 = 本地 JSON 镜像(可 grep,也是与 SQL 并行的**第二查询面**;file-canonical 的文件由 seekbase 亲自维护);**整库焊死 insert-only**(不能改、删=墓碑)→ 时光机对所有列严谨。**设计已成篇**) | [seekbase.md](seekbase.md) |
-| query-interface 查询层(把 card / session 以 **SQL 直接暴露**:表结构即 API;两库分治总述 + schema 原则 + `semantic()` 表函数 + 暴露面;SQL 全只读;入口按库分、**完全隔离**,mind→证据靠 (type,ref) 指针两步解析) | [query-interface.md](query-interface.md) |
+| seekbase 数据库抽象层 = system 的数据层(searchbase 接棒者:**SQL 端口** + `search(列,…)` 一等语义函数;三写 files(canonical,每表每天 jsonl,可 grep)/ DuckDB / LanceDB;异步 ticket 写 + outbox;**焊死 insert-only**(无 update / 无物理删 / 无 vacuum);`ds` 日分区**事件重放时光机**;嵌入 + server 双形态同一套调用。**已实现为独立 pip 包 `seekbase`**) | [seekbase.md](seekbase.md) |
+| query-interface 查询层(把 card / session 以 **SQL 直接暴露**:表结构即 API;库版图总述 + schema 原则 + `search(列,…)` SQL 函数 + 暴露面;SQL 全只读;入口按库分、**完全隔离**,mind→证据靠 (type,ref) 指针两步解析) | [query-interface.md](query-interface.md) |
 | mind-data:**card 库**(信念 / IBIS 基石,harness 可读写)的具体表设计——问题图 / proofs 出处 + 视图(**mark 三表不预制**——harness 的工作结构让它自己长);**计数列退役**(credence / 计数全从 reviews 事件现算);**证据统一 `(type, ref)` 泛化模式**(session 当前唯一,file 等为进化预留) | [mind-data.md](mind-data.md) |
 | reality-data:**session 库**(经验事实,只有 sync-server 可写、harness 只读)的具体表设计——sessions / rounds 两张表,标准格式的列即表列 | [reality-data.md](reality-data.md) |
 | agent 核心设计(**实例化**:name + **harness 底座字段**〔claude-code / codex 租 loop、剥工具、单会话;lua 沙箱可自进化、无会话〕+ **每实例独立 mind 库**〔一个 reality 多个 mind〕+ 常驻 server 可对话;能力面只有 memory interface;session 不硬切分、让它自己长) | [agent.md](agent.md) |

@@ -1,6 +1,6 @@
 # reality — 问经验库(v5 CLI)
 
-进 **reality 库**(sessions / rounds + `v_sessions`,[字段契约](../../structure/v5/reality.md))的查询命令。形态与 [`agent mind`](agent.md) 完全同构(单发 / REPL / `--as-of` / `--schema` / `--json`、`;` 结束、`\d` 元命令),不重复;调 [`POST /v5/query`](../../api/v5/query.md)(`library: "reality"`)。
+进 **reality 库**(sessions / rounds + `v_sessions`,[字段契约](../../structure/v5/reality.md))的查询命令。形态与 [`agent mind`](agent.md) 完全同构(单发 / REPL / `--ds-end` 时光机 / `--schema` / `--json`、`;` 结束、`\d` 元命令),不重复;调 [`POST /v5/query`](../../api/v5/query.md)(`library: "reality"`)。
 
 > **可见性:只有 reality**——库之间完全分开,互不 ATTACH。想知道「这段经验产出了什么信念」,去 [`agent mind <name>`](agent.md) 查指针:`SELECT card_id FROM card_proofs WHERE type='session' AND ref='sess_…'`(两步取证的反向;哪个 agent 的信念就问哪个)。
 
@@ -12,17 +12,16 @@ memory.talk reality "SELECT session_id, source, title, round_count, updated_at
                      FROM v_sessions ORDER BY updated_at DESC LIMIT 20"
 
 # 语义搜「当时说过什么」(rounds.text 是 searchable)
-memory.talk reality "SELECT r.session_id, r.idx, r.text, s.score
-                     FROM semantic('rounds', '配 pty 提到 tmux') s
-                     JOIN rounds r ON r.session_id || ':' || r.idx = s.id
-                     ORDER BY s.score DESC LIMIT 10"
+memory.talk reality "SELECT session_id, idx, text, _score FROM rounds
+                     WHERE search(text, '配 pty 提到 tmux')
+                     ORDER BY _score DESC LIMIT 10"
 
 # 某个 session 的完整对话
 memory.talk reality "SELECT idx, role, text FROM rounds
                      WHERE session_id = 'sess_9f2…' ORDER BY idx"
 
 $ memory.talk reality          # REPL
-memory.talk · reality (read-only; as-of: now)
+memory.talk · reality (read-only; ds: now)
 reality>
 ```
 

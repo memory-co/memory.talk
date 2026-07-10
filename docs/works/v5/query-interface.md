@@ -46,20 +46,19 @@ session 和 card **是不同的库**(各自独立的 seekbase 实例),写权属�
 3. **派生值进视图不进表**(credence / 计数现算——视图是「口径的唯一出处」,见 mind-data §3);
 4. **表 + 视图就是对外契约**:列名、视图名的稳定性同 API 对待(演进见 §6)。
 
-### 语义检索进 SQL:`semantic()` 表函数
+### 语义检索进 SQL:`search(列, '文本')` 函数
 
-seekbase 的 `search()` 算子在 SQL 面以**表函数**出现(DuckDB 注册),返回 `(id, score)` 供 join:
+seekbase 的语义检索就是 SQL 里的一个**函数**(按列;每个 `searchable` 列各自一个向量索引),命中分数以 `_score_<列>` 列暴露(单个 search 时附便捷别名 `_score`):
 
 ```sql
--- 「语义像这句、且没有任何答案的卡」——ORM 的 search() 在 SQL 里的等价物
-SELECT c.card_id, c.issue, s.score
-FROM semantic('cards', '为什么 pty 会让用户想到 tmux') s
-JOIN cards c ON c.card_id = s.id
-WHERE c.position_count = 0
-ORDER BY s.score DESC LIMIT 10;
+-- 「语义像这句、且没有任何答案的卡」
+SELECT c.card_id, c.issue, _score
+FROM v_cards c
+WHERE search(issue, '为什么 pty 会让用户想到 tmux') AND c.position_count = 0
+ORDER BY _score DESC LIMIT 10;
 ```
 
-于是两个入口一份能力:**ORM 链**(`db.table("cards").search(…)`,程序用)与 **SQL**(`semantic()` join,自由问)底下同一个 LanceDB 检索。
+一条 SQL 可有多个 `search()`(搜不同列,各自 `_score_<列>`);结构化谓词下推到向量检索(先过滤后 top-k)。**只有一个入口 = SQL**(seekbase 落地时砍掉了 ORM 链,见 [seekbase §2](seekbase.md))。
 
 ---
 
@@ -86,9 +85,9 @@ memory.talk query "SELECT … FROM v_card_best WHERE credence < 0 LIMIT 20"   # 
 ## 6. 待定
 
 - **schema 版本化**:表 / 视图是对外契约,怎么演进(加列宽松、改名/删列要 deprecation 期?`frame_version` 表?);
-- **只读防护细节**:白名单解析(仅 SELECT / WITH)、`semantic()` 的 embedding 开销限流、行数 / 超时默认值;
-- **跨表语义检索**(v4 unified search)在 frame 里的表达:`semantic()` 多集合版 or 一个 `v_search_all`;
-- 写路径的 ORM 面(seekbase §12)与本 frame 的读面怎么共用 schema 声明,别声明两遍。
+- **只读防护细节**:白名单解析(仅 SELECT / WITH)、`search()` 的 embedding 开销限流、行数 / 超时默认值;
+- **跨表语义检索**(v4 unified search)在 frame 里的表达:多表 `search()` 结果 UNION 的预制 SQL or 一个 `v_search_all`;
+- 写动作(insert/delete + 业务校验)与本 frame 的读面共用同一份 seekbase SCHEMA 声明——业务层不再有第二份表结构。
 
 ## 与其他 v5 文档的关系
 

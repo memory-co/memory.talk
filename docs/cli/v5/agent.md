@@ -17,8 +17,8 @@ memory.talk agent mind <name> [<SQL>]                              # 查该实�
 
 ```bash
 memory.talk agent mind curator "SELECT card_id, issue FROM v_cards ORDER BY created_at DESC LIMIT 20"
-memory.talk agent mind curator --as-of 2026-06-01 "SELECT * FROM v_card_best"
-memory.talk agent mind curator          # REPL(形态同 reality 命令:多行+`;`、\d、\as-of、\json)
+memory.talk agent mind curator --ds-end 20260601 "SELECT * FROM v_card_best"   # 时光机(天粒度)
+memory.talk agent mind curator          # REPL(形态同 reality 命令:多行+`;`、\d、\ds、\json)
 ```
 
 两步取证照旧:`agent mind <name>` 查证据指针 `(type, ref, indexes)` → session 型去 [`reality`](reality.md) 查原文。

@@ -77,7 +77,7 @@ CREATE TABLE conversations (         -- 人 ↔ agent 的对话记录(chat 的�
 | rounds | `text`(语义搜「当时说过什么」;unified search 的 session 命中源) |
 | conversations | `text`(语义搜「跟管家聊过什么」) |
 
-> 文件镜像(`files` 声明)、墓碑、时光机是 **seekbase 的通用机制**([seekbase §6/§7](seekbase.md)),不在业务数据篇重复;路径模板到实现时在 schema 声明里给。
+> 文件镜像(每表每天自动一个 jsonl,无需声明)、墓碑、时光机四字段(`ds`/`created_at`/`deleted_ds`/`deleted_at`,引擎代管、DDL 里不写)是 **seekbase 的通用机制**([seekbase §6/§7](seekbase.md)),不在业务数据篇重复。
 
 体积注意:rounds 是最大的表(现存 6 万+ 轮、还在长)。全量进表换来经验侧的自由 SQL(过滤 / 聚合 / 窗口 / 语义搜整段历史);若将来体积成负担,DuckDB 直读 JSONL 外部表是现成退路(表变视图,查询面不变)。
 
@@ -85,7 +85,7 @@ CREATE TABLE conversations (         -- 人 ↔ agent 的对话记录(chat 的�
 
 - **agent(们)**:结晶时逐 round 读、review 引证时核对 `indexes`——全部经 query-interface 的只读 SQL;
 - **query-interface 使用者**:经验侧自由 SQL(过滤 / 聚合 / 语义搜 rounds);「哪些轮成了证据」在 mind 侧按指针反查;
-- **时光机**(seekbase §7):as-of 连接下,「当时 session 长到哪」精确可答(`created_at` 界定每轮的入库时刻)。
+- **时光机**(seekbase §7):`ds_end` 时间窗下,「当时 session 长到哪」精确可答(引擎代管的 `ds`/`created_at` 界定每轮入库时刻)。
 
 ## 5. 待定
 

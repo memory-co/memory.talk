@@ -52,10 +52,10 @@ DELETE /v5/agents/{name}              → 注销实例(mind 库墓碑;经验与�
 
 ```json
 { "sql": "SELECT * FROM v_card_best WHERE credence > 0 LIMIT 20",
-  "as_of": "2026-06-01T00:00:00Z" }      // 可选,时光机
+  "ds_end": "20260601" }                 // 可选,时光机(YYYYMMDD)
 ```
 
-语义同 [query](query.md)(SELECT/WITH 白名单、semantic()、行数上限),只是**库 = 该 agent 的 mind**;`GET /v5/agents/{name}/schema` 同理。共享 reality 的查询走全局 [`POST /v5/query`](query.md)。
+语义同 [query](query.md)(SELECT/WITH 白名单、search()、ds 时间窗、行数上限),只是**库 = 该 agent 的 mind**;`GET /v5/agents/{name}/schema` 同理。共享 reality 的查询走全局 [`POST /v5/query`](query.md)。
 
 ## 写动作在哪
 

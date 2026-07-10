@@ -48,7 +48,7 @@ memory.talk agent create sandbox --harness lua
 
 ```
 可用(对自己的 mind 库):
-  query(sql)            ← 只读 SQL(agent mind;含 semantic() / as-of)
+  query(sql)            ← 只读 SQL(agent mind;含 search() / ds 时间窗)
   受治理写动作           ← card(撞库判新)/ position / review / link / merge / decay …
 可用(对共享 reality):
   query(sql)            ← 只读(经验是证据,谁都改不了)

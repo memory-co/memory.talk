@@ -52,7 +52,7 @@ executor **不需要「提交经验」这个调用**:CC 把 session 写到自己
 
 ## 5. 召回:两种,都不加新端点
 
-- **无意识召回**(hook 注入):session 开场 / 用户提问 → hook 拿 prompt 文本对**指定 agent 的 mind** 跑一条**预制 SQL**(`semantic('cards', <prompt>)` join `v_card_best`,top-k 带 credence 门槛)→ 结果作为 context 注入。预制 SQL 是**宿主侧配置**(hook 脚本里的一段 SQL),不是 system 的新端点——调多了口味(门槛 / k / 过滤)改宿主自己的 SQL 就行。
+- **无意识召回**(hook 注入):session 开场 / 用户提问 → hook 拿 prompt 文本对**指定 agent 的 mind** 跑一条**预制 SQL**(`WHERE search(issue, <prompt>)` join `v_card_best`,top-k 带 credence 门槛)→ 结果作为 context 注入。预制 SQL 是**宿主侧配置**(hook 脚本里的一段 SQL),不是 system 的新端点——调多了口味(门槛 / k / 过滤)改宿主自己的 SQL 就行。
 - **有意识检索**(CC 主动):干活中觉得「这事以前见过」→ `/mem` 或直接 `memory.talk agent mind <name> "…"`。
 
 v4 的 `recall` 命令 / 端点不回归:两种召回都是 query 上的一条 SQL,差别只在**谁触发**(hook vs CC 自己)。

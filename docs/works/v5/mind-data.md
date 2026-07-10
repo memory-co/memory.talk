@@ -92,7 +92,7 @@ CREATE TABLE link_proofs (           -- 边的证据
 
 > **为什么没有 mark 表**:v4 把「以写代读」固化成 mark 三表(marks / mark_rounds / mark_issues)。v5 **不预制**——mark 是 agent 的**工作结构**,跟 harness session 一个道理([agent §4](agent.md)):「怎么逐轮读、读到哪、记什么工作痕迹」该由 agent **自己在 mind 里长出来**(它需要的话,自己建卡 / 自己的记录形态),框架焊死一套三表反而把结晶流程锁死在 v4 的形状上。框架保证的只有**证据链**:结晶产物(card / position / review / link)必须带 `(type, ref)` + `indexes` 的 grounding(proofs / 引证)——**「以写代读」作为纪律仍在,载体不预制。**
 
-**计数列退役**是本篇对 v4 最大的结构改动:`reviews` 本来就是 append-only 事件,计数与 credence **全部从它现算**(§3)——写路径不再 bump 任何计数(v4 的原子 upsert 消失),as-of 时光机下的历史值天然精确(seekbase §7 的「事件化」纪律),`p<n>`/`l<n>` 的 mint 改为 `max(seq)+1`(墓碑不复用号)。
+**计数列退役**是本篇对 v4 最大的结构改动:`reviews` 本来就是 append-only 事件,计数与 credence **全部从它现算**(§3)——写路径不再 bump 任何计数(v4 的原子 upsert 消失),时光机(`ds_end`)下的历史值天然精确(seekbase §7 的事件重放),`p<n>`/`l<n>` 的 mint 改为 `max(seq)+1`(墓碑不复用号)。
 
 ## 3. 视图:口径的唯一出处
 
@@ -132,7 +132,7 @@ CREATE VIEW v_card_provenance AS     -- 卡 ← 证据源(全型通用)
 | positions | `claim` |
 | 其余(reviews / links / proofs) | — |
 
-> 文件镜像(`files` 声明)、墓碑、时光机是 **seekbase 的通用机制**([seekbase §6/§7](seekbase.md)),不在业务数据篇重复;路径模板到实现时在 schema 声明里给。
+> 文件镜像(每表每天自动一个 jsonl,无需声明)、墓碑、时光机四字段(`ds`/`created_at`/`deleted_ds`/`deleted_at`,引擎代管——本篇 DDL 里的 `created_at`/`deleted_at` 仅示意,声明式 schema 不写)是 **seekbase 的通用机制**([seekbase §6/§7](seekbase.md)),不在业务数据篇重复。
 
 ## 5. 写动作面(唯一的写门)
 

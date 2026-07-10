@@ -15,9 +15,9 @@ v5 的数据模型。**在 v5,表结构就是对外契约**([query-interface](..
 
 ## 引擎通用列与不变性(seekbase 焊死,所有表适用)
 
-- **insert-only**:没有 update;`delete` = 打墓碑。每张表都有 `created_at`(写入时刻)与 `deleted_at`(墓碑,NULL = 活着);正常查询自动滤墓碑,[时光机](../../works/v5/seekbase.md)(as-of)按这两列回放;
+- **insert-only**:没有 update;`delete` = 打墓碑,**无物理删 / 无 vacuum,历史永久保留**;「改」= 同主键再 insert 新版本(查询视图现算最新版)。每张表带**四个引擎代管字段**(声明式 schema 不写):创建对 `ds`(创建日 `YYYYMMDD`,分区键)+ `created_at`,删除对 `deleted_ds` + `deleted_at`。正常查询自动现算存活版本;[时光机](../../works/v5/seekbase.md)(`ds_end`)按事件重放回到某天;
 - **派生值不落表**:会变的值(计数 / credence / round_count)一律视图现算;
-- **文件镜像**:表数据同步落本地 JSON(可 grep 的第二查询面),file ≥ row ≥ vector 的一致性次序——都是 [seekbase](../../works/v5/seekbase.md) 的通用机制,不逐表重述。
+- **文件镜像**:每表每天自动一个 `ds=YYYYMMDD/<表>.jsonl`(canonical,可 grep 的第二查询面),file ≥ row ≥ vector 的一致性次序——都是 [seekbase](../../works/v5/seekbase.md) 的通用机制,不逐表重述。
 
 ## 证据模式与寻址
 
