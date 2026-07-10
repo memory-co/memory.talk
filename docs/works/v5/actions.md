@@ -57,7 +57,7 @@
 | **B · 在环** | merge / delete | 打墓碑 = **当前态收窄**(时光机能回放 ≠ 当前可见);初期 human-in-loop——agent 在 chat 里请示(「4 张卡拟合并成 2,可以吗?」),人批了才执行 |
 
 - B 级的「在环」是**阶段性的**:等 [metrics](metrics.md) 的护栏组跑稳、agent 的 merge 判断有了对照记录,可以按实例放权(per-agent 配置),放权后靠**事后审计**(chat 的 `actions[]` + 时光机回放)兜底;
-- lua harness 的**自进化改自己**(engine_versions)天然是 B 级(影子对照 + 切换拍板,[agent §3](agent.md))——同一个判据:切换引擎版本改变的是「谁在管这个 mind」,比墓碑更收窄。
+- quickjs harness 的**自进化改自己**(engine_versions)天然是 B 级(影子对照 + 切换拍板,[agent §3](agent.md))——同一个判据:切换引擎版本改变的是「谁在管这个 mind」,比墓碑更收窄。
 
 ## 5. 待定
 

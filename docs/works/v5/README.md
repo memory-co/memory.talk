@@ -3,7 +3,7 @@
 > **v5 重新定位 memory.talk:定位上,记忆管理该有自己的 harness(memory harness),而不是 executor 里贴的一块。**
 > 今天所有 agent harness 都是 **executor harness**(为「把任务做完」而生);记忆在它们里是贴上去的副产物。
 >
-> **但这版不手搓 harness。** v5 交付的是一个 **memory system**——记忆管理的完整能力(结晶 / 治理 / 召回 + 数据 + 接口),设计成**可被不同 harness 嵌入**:**当前嵌 CC(Claude Code)当宿主**;未来实现专职记忆管家时,同一套 system 原样嵌进去。**落地词汇**:北极星里的「memory harness」,落地实体叫 **agent**(**实例化**的记忆管家,自带独立 mind 库),**harness 降为 agent 的底座字段**(`claude-code` / `codex` / `lua` 自进化)——本版不实现(节奏见 §7;核心机制已另篇定形 → [agent.md](agent.md))。
+> **但这版不手搓 harness。** v5 交付的是一个 **memory system**——记忆管理的完整能力(结晶 / 治理 / 召回 + 数据 + 接口),设计成**可被不同 harness 嵌入**:**当前嵌 CC(Claude Code)当宿主**;未来实现专职记忆管家时,同一套 system 原样嵌进去。**落地词汇**:北极星里的「memory harness」,落地实体叫 **agent**(**实例化**的记忆管家,自带独立 mind 库),**harness 降为 agent 的底座字段**(`claude-code` / `codex` / `quickjs` 自进化〔QuickJS + WASM〕)——本版不实现(节奏见 §7;核心机制已另篇定形 → [agent.md](agent.md))。
 
 > 状态:**设计中**。本篇是 v5 的立意文(positioning),只定方向、不定实现。机制 / 数据 / 接口细节由后续 v5 文档展开。v5 是一次**彻底重做**,会大幅改写 v4 的表层;但 v4 的**底料**(被治理的问题图 + 以写代读)保留(见 §8)。
 
@@ -112,7 +112,7 @@
 
 executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus 永远在被养。它不是 context 加载器、不是被动 RAG、不做用户任务——它若「动作」,动的只是记忆本身。
 
-> **机制已另篇定形 → [agent.md](agent.md)**:落地实体 = **agent**(实例化:name + harness 底座 + 独立 mind 库 + 常驻 server 可对话);harness 三选(claude-code / codex 租 loop、剥基础工具、单会话;lua 沙箱 VM、无会话、可自进化);能力面只有 memory interface;**一个 reality 多个 mind**;自进化的治理(影子对照 + 可回滚)。本篇只保定义,细节不重复。
+> **机制已另篇定形 → [agent.md](agent.md)**:落地实体 = **agent**(实例化:name + harness 底座 + 独立 mind 库 + 常驻 server 可对话);harness 三选(claude-code / codex 租 loop、剥基础工具、单会话;quickjs〔QuickJS + WASM 沙箱〕、无会话、可自进化);能力面只有 memory interface;**一个 reality 多个 mind**;自进化的治理(影子对照 + 可回滚)。本篇只保定义,细节不重复。
 
 ---
 
@@ -182,7 +182,7 @@ executor 的 loop 会闭环;**memory harness 的 loop 永不闭环**——corpus
 | query-interface 查询层(把 card / session 以 **SQL 直接暴露**:表结构即 API;库版图总述 + schema 原则 + `search(列,…)` SQL 函数 + 暴露面;SQL 全只读;入口按库分、**完全隔离**,mind→证据靠 (type,ref) 指针两步解析) | [query-interface.md](query-interface.md) |
 | mind-data:**card 库**(信念 / IBIS 基石,harness 可读写)的具体表设计——问题图 / proofs 出处 + 视图(**mark 三表不预制**——harness 的工作结构让它自己长);**计数列退役**(credence / 计数全从 reviews 事件现算);**证据统一 `(type, ref)` 泛化模式**(session 当前唯一,file 等为进化预留) | [mind-data.md](mind-data.md) |
 | reality-data:**session 库**(经验事实,只有 sync-server 可写、harness 只读)的具体表设计——sessions / rounds 两张表,标准格式的列即表列 | [reality-data.md](reality-data.md) |
-| agent 核心设计(**实例化**:name + **harness 底座字段**〔claude-code / codex 租 loop、剥工具、单会话;lua 沙箱可自进化、无会话〕+ **每实例独立 mind 库**〔一个 reality 多个 mind〕+ 常驻 server 可对话;能力面只有 memory interface;session 不硬切分、让它自己长) | [agent.md](agent.md) |
+| agent 核心设计(**实例化**:name + **harness 底座字段**〔claude-code / codex 租 loop、剥工具、单会话;quickjs〔QuickJS + WASM〕沙箱可自进化、无会话〕+ **每实例独立 mind 库**〔一个 reality 多个 mind〕+ 常驻 server 可对话;能力面只有 memory interface;session 不硬切分、让它自己长) | [agent.md](agent.md) |
 | sync-server 摄入服务(sync 整体剥离为与 seekbase 平级的独立服务;**一个数据来源一个 worker**(监听 → 增量拉 → **normalize 成标准 session 格式** → 推 ingest),现有 claude-code / codex / openclaw adapter 变身 worker;只做格式加工不做语义加工、不碰 seekbase) | [sync-server.md](sync-server.md) |
 | embed-contract 嵌入契约(第③层:**两个 profile**——executor 宿主〔CC,只读+chat,无写权是立场〕vs harness 宿主〔读+受治理写〕;四通道 query/chat/status/actions;CC 三件套分工 hooks/skills/CLAUDE.md;**交经验零动作**〔sync-server 侦听〕;召回两种都是一条 SQL、不加端点) | [embed-contract.md](embed-contract.md) |
 | actions 受治理写动作 = 能力层写侧(动作语义与不变性——「棋子的走法」,流程留给 agent 进化;**merge / decay 定形**〔merge 三步机械、答案不自动搬;decay 事件表、credence 口径收编〕;**权属分级:A 自主〔全 append〕/ B 在环〔墓碑收窄当前态〕**) | [actions.md](actions.md) |

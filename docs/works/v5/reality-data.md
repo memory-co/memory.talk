@@ -57,7 +57,7 @@ CREATE TABLE conversations (         -- 人 ↔ agent 的对话记录(chat 的�
   idx         INTEGER NOT NULL,      -- 流内序号,1 起严格 +1
   agent       TEXT NOT NULL,         -- 哪个 agent 实例的对话(name)
   speaker     TEXT NOT NULL,         -- 'human' | 'agent'
-  harness     TEXT NOT NULL,         -- 说话时该实例的底座:'claude-code' | 'codex' | 'lua'(出处)
+  harness     TEXT NOT NULL,         -- 说话时该实例的底座:'claude-code' | 'codex' | 'quickjs'(出处)
   text        TEXT NOT NULL,
   created_at  TEXT NOT NULL,
   deleted_at  TEXT,

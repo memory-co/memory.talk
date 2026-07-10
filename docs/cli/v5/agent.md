@@ -3,7 +3,7 @@
 [agent](../../works/v5/agent.md) 的控制面:**建实例、选 harness 底座、跟每个实例对话、查每个实例的 mind**。命令是 [api/v5/agent.md](../../api/v5/agent.md) 的薄壳。
 
 ```bash
-memory.talk agent create <name> --harness claude-code|codex|lua   # 建实例(+它的空 mind 库)
+memory.talk agent create <name> --harness claude-code|codex|quickjs   # 建实例(+它的空 mind 库)
 memory.talk agent list                                             # 所有实例:name/harness/状态
 memory.talk agent start <name> | stop <name>                       # 实例的常驻 server 生命周期
 memory.talk agent status [<name>] [--json]                         # 在忙什么/预算;不给 name = 全部
@@ -43,7 +43,7 @@ curator> 收到。我读了 sess_9f2…:38-52,加了 #p3 并踩了 #p1(-1)。cre
 $ memory.talk agent status
 agent     harness      state          current                  budget   daemon
 curator   claude-code  governing      去重扫描 32/74            41%      ok
-sandbox   lua (v12)    consolidating  聚类 74 → 候选合并 3 组    12%      ok
+sandbox   quickjs(v12) consolidating  聚类 74 → 候选合并 3 组    12%      ok
 ```
 
 ## harness 三选(建实例时定)
@@ -52,6 +52,6 @@ sandbox   lua (v12)    consolidating  聚类 74 → 候选合并 3 组    12%   
 |---|---|---|
 | `claude-code` | 租 CC 的 loop,剥基础工具,单一长会话 | 否 |
 | `codex` | 租 Codex 的 loop,同样剥工具 | 否 |
-| `lua` | 沙箱 VM 自研循环,无会话 | **是**(影子对照 + 可回滚) |
+| `quickjs` | 自研 JS 循环:QuickJS 引擎跑在 WASM 沙箱,无会话 | **是**(影子对照 + 可回滚) |
 
 换 harness 不换任何契约(chat / status / mind 全同)——细节见 [works/v5/agent.md §2](../../works/v5/agent.md)。

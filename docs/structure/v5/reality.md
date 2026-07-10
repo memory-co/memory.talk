@@ -31,7 +31,7 @@
 | `conv_id`, `idx` | TEXT, INTEGER · PK | `conv_<ULID>` 对话流(纯传输分组,不承载语义分段)+ 流内序号(1 起 +1) |
 | `agent` | TEXT | 哪个 agent 实例的对话(name) |
 | `speaker` | TEXT | `human` / `agent` |
-| `harness` | TEXT | 说话时该实例的底座:`claude-code` / `codex` / `lua`(出处) |
+| `harness` | TEXT | 说话时该实例的底座:`claude-code` / `codex` / `quickjs`(出处) |
 | `text` | TEXT | 消息正文;**searchable**(语义搜「跟管家聊过什么」) |
 
 写入方 = 各 agent server(经 ingest 的 conversations 门,[api/agent](../../api/v5/agent.md));将来可作 mind 的证据源(`type='conversation'`)。

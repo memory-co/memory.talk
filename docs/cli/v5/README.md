@@ -7,7 +7,7 @@ memory.talk
 ├── reality [<SQL>]                # 问经验库(共享一份;单发/交互 REPL)→ reality.md
 ├── sync    <status|…>             # 看/管:sync-server 的状态与操作 → sync.md
 └── agent                          # 实例化的记忆管家 → agent.md
-    ├── create <name> --harness claude-code|codex|lua
+    ├── create <name> --harness claude-code|codex|quickjs
     ├── list · start · stop · status
     ├── chat <name> [<msg>]        #   跟某个实例对话(人影响记忆的正门)
     └── mind <name> [<SQL>]        #   查该实例的 mind 库(每实例一个独立库)

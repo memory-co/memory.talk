@@ -149,4 +149,4 @@ mind 库**只接受受治理写动作**(SQL 面只读,见 query-interface §2):`
 
 - [reality-data.md](reality-data.md):它是证据、我是判断;我软引用它,永不写它。
 - [query-interface.md](query-interface.md):我的表 + 视图就是它 SQL 契约的 mind 半边。
-- [agent.md](agent.md):agent 的受治理写动作全部落在**它自己的**这套库上;lua harness 的 `engine_versions` 也在这;它对 reality 只读。
+- [agent.md](agent.md):agent 的受治理写动作全部落在**它自己的**这套库上;quickjs harness 的 `engine_versions` 也在这;它对 reality 只读。

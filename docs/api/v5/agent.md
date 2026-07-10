@@ -1,6 +1,6 @@
 # agent — 实例控制面 + harness 无关的 server API(v5)
 
-agent 是**实例化**的记忆管家([works/v5/agent.md](../../works/v5/agent.md)):每个实例 = `name` + `harness`(`claude-code` / `codex` / `lua`)+ 独立 mind 库 + 常驻 server。**API 钉在 server 层,三种 harness 同一套契约**——底座细节只出现在 `status.harness`,不漏进任何请求 / 响应结构。
+agent 是**实例化**的记忆管家([works/v5/agent.md](../../works/v5/agent.md)):每个实例 = `name` + `harness`(`claude-code` / `codex` / `quickjs`)+ 独立 mind 库 + 常驻 server。**API 钉在 server 层,三种 harness 同一套契约**——底座细节只出现在 `status.harness`,不漏进任何请求 / 响应结构。
 
 ## 实例管理(registry)
 
@@ -44,7 +44,7 @@ DELETE /v5/agents/{name}              → 注销实例(mind 库墓碑;经验与�
   "current": "去重扫描 32/74",
   "budget": { "tokens_today_pct": 41 },
   "daemon": "ok", "outbox_pending": 0,
-  "engine_version": "v12",              // lua harness:当前生效的自进化版本;其余为空
+  "engine_version": "v12",              // quickjs harness:当前生效的自进化版本;其余为空
   "recent_actions": [ { "action": "review", "target": "…", "at": "…" } ] }
 ```
 

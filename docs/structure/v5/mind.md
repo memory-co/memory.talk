@@ -52,7 +52,7 @@
 | `position_proofs (card_id, position, type, ref, indexes)` | — | 答案从哪长出来(`indexes` 必填) |
 | `link_proofs (card_id, link, type, ref, indexes)` | — | 边的出处 |
 
-> **没有 mark 表**:逐轮标注是 agent 的工作结构,由它自己长([mind-data](../../works/v5/mind-data.md));框架只保证证据链(本节)。lua harness 的 `engine_versions` 也落本库(实现时随 schema 声明)。
+> **没有 mark 表**:逐轮标注是 agent 的工作结构,由它自己长([mind-data](../../works/v5/mind-data.md));框架只保证证据链(本节)。quickjs harness 的 `engine_versions` 也落本库(实现时随 schema 声明)。
 
 ## 视图(口径的唯一出处)
 
