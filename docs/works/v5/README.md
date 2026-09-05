@@ -2,7 +2,7 @@
 
 > **状态:定位稿,未实施。** 这篇只回答三件事:memory.talk 是什么、它由哪几层抽象组成、这几层怎么咬合。字段、表、命令、端点一概不在这里——那些等定位敲定后再分篇立(同 [v4](../v4/README.md) 的 works / cli / api / structure 四目录分工)。
 >
-> 分篇:[task.md](task.md)(做事层:task 树)、[issue.md](issue.md)(议事层:树上节点管、派活取证)。card 待起。
+> 分篇:[task.md](task.md)(做事层:task 树)、[issue.md](issue.md)(议事层:树上节点管、派活取证)、[card.md](card.md)(记事层:本地论、结晶、不自带分数)。
 >
 > 读法:先 §1 看定位怎么变,再 §2 看三层各是什么,§3 看它们之间的循环。§4 是跟 v3 / v4 / shellbase 的继承关系,§5 是留待后续分篇敲定的问题。
 
@@ -126,7 +126,7 @@ card 是记事层:一条**已经站得住、并且说清了自己在哪成立**�
 
 这些都会各自分篇,本稿只列出来,不在这里定:
 
-- **issue 与 card 的边界**:哪一刻一个 position「够格」结晶成卡——人工点一下、还是 credence 过阈值自动、还是两者都行。它决定 card 是「被治理的快照」还是「另一份可编辑对象」。
+- **issue 与 card 的边界**:[card.md §3](card.md) 定为「结晶是一个决定,不是一个阈值」——人或 agent 在 manager task 里结晶,可信度只当提示;card 是静态切面,对错留在 issue 上(§4)。
 - **task 的边界**:一个 task = 一个 window(画布),还是一个 window 里可以有多个 task。这取决于「工作单元」和「屏幕布局」要不要绑死。
 - **task 的结束语义**:task 做完之后 session 是否冻结、标注是否还能追加、后验回流从哪一刻开始算。
 - **多平台**:task 里的 agent session 目前只考虑 tmux 里跑的 CLI agent(claude / codex);外部平台(网页版 Codex、别的机器)的会话是否还走 sync 兼容路径进 task。
