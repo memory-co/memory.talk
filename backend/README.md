@@ -1,6 +1,6 @@
 # backend(v5)
 
-memory.talk v5 的后端骨架。**目前全部是空文件,只立结构,不做实现。** 按 **models / services / controllers** 三层分目录;services 下每个子包对应 [docs/works/v5](../docs/works/v5/README.md) 的一篇设计;底层逻辑照 shellbase `server/shellbase/` 原生实现。`backend/` 本身就是 Python 包根,不再套一层包名目录。
+memory.talk v5 的后端。**issue 与 card 两层已有最简实现(git 存储 + FastAPI),task / server 两层仍是空文件。** 端点清单见 [docs/api/v5](../docs/api/v5/README.md);起服务 `python -m backend serve`,测试 `pytest`。 按 **models / services / controllers** 三层分目录;services 下每个子包对应 [docs/works/v5](../docs/works/v5/README.md) 的一篇设计;底层逻辑照 shellbase `server/shellbase/` 原生实现。`backend/` 本身就是 Python 包根,不再套一层包名目录。
 
 ```
 backend/
