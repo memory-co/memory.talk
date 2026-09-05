@@ -26,3 +26,17 @@ def read_text(path: Path) -> str | None:
         return path.read_text(encoding="utf-8")
     except FileNotFoundError:
         return None
+
+
+def append_line(path: Path, line: str) -> None:
+    """append-only 文件(rounds / events):只追加,不改既有行。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(line.rstrip("\n") + "\n")
+
+
+def read_lines(path: Path) -> list[str]:
+    try:
+        return [l for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
+    except FileNotFoundError:
+        return []

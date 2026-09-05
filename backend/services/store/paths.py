@@ -25,3 +25,27 @@ class MemoryLayout:
 
     def rel(self, p: Path) -> str:
         return p.relative_to(self.root).as_posix()
+
+
+@dataclass(frozen=True)
+class TasksLayout:
+    """tasks/<task_id>/ —— 每个 task 一个目录,裸文件(store.md §4)。"""
+    root: Path
+
+    def task_dir(self, task_id: str) -> Path:
+        return self.root / task_id
+
+    def task_json(self, task_id: str) -> Path:
+        return self.task_dir(task_id) / "task.json"
+
+    def canvas_json(self, task_id: str) -> Path:
+        return self.task_dir(task_id) / "canvas.json"
+
+    def members_json(self, task_id: str) -> Path:
+        return self.task_dir(task_id) / "members.json"
+
+    def events_jsonl(self, task_id: str) -> Path:
+        return self.task_dir(task_id) / "events.jsonl"
+
+    def rounds_jsonl(self, task_id: str, member_id: str) -> Path:
+        return self.task_dir(task_id) / "sessions" / member_id / "rounds.jsonl"

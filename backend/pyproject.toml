@@ -20,3 +20,4 @@ dev = ["pytest>=8", "httpx>=0.27"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py", "test.py"]
+addopts = "--import-mode=importlib"
