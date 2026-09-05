@@ -37,7 +37,7 @@ v5 三层里只有 task 有**状态和完成**。issue 是 IBIS,故意不关闭�
 
 ## 3. 跟 shellbase window 的关系:底层逻辑完全一致,在 memory.talk 里原生实现
 
-**shellbase 到此为止,不再作为独立项目存在;它的 window 在 memory.talk 里原生实现,就是 task 的画布。** task 不另起一套运行时——shellbase 的画布、块、块即 URI、终端 attach、无中生有 + 重入、后端是状态唯一权威,这套底层逻辑 task **完全一致地**实现一遍,只是搬进 memory.talk 自己的进程和存储里。打开一个 task,就是打开它的画布;在 task 里开一个 Codex 会话,就是在画布上放一个 `codex://` 块。
+**shellbase 到此为止,不再作为独立项目存在;它的 window 在 memory.talk 里原生实现,就是 task 的画布。** task 不另起一套运行时——shellbase 的画布、块、块即 URI、终端 attach、无中生有 + 重入、后端是状态唯一权威,这套底层逻辑 task **完全一致地**实现一遍,只是搬进 memory.talk 自己的进程和存储里。打开一个 task,就是打开它的画布;在 task 里开一个 Codex 会话,就是在画布上放一个 `codex://` 块——这个块的协议决定去找哪个 **server** 把现场建出来,见 [protocol-server.md](protocol-server.md)。
 
 **树上任何一层的 task 都可以有自己的画布**——你现在在哪一层干活,就打开哪一层。通常画布在叶子上(那是真正坐下来干的地方),但根 task 也可以有一块画布,用来开总览、议事、派活。
 
