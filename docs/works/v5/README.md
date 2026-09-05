@@ -2,7 +2,7 @@
 
 > **状态:定位稿,未实施。** 这篇只回答三件事:memory.talk 是什么、它由哪几层抽象组成、这几层怎么咬合。字段、表、命令、端点一概不在这里——那些等定位敲定后再分篇立(同 [v4](../v4/README.md) 的 works / cli / api / structure 四目录分工)。
 >
-> 分篇:[task.md](task.md)(做事层:task 树)、[issue.md](issue.md)(议事层:树上节点管、派活取证)、[card.md](card.md)(记事层:维基式事实条目,issue 是它的讨论页)。
+> 分篇:[task.md](task.md)(做事层:task 树)、[issue.md](issue.md)(议事层:树上节点管、派活取证)、[card.md](card.md)(记事层:维基式事实条目,issue 是它的讨论页)、[store.md](store.md)(存储:git 存 card / issue,裸文件存 task,没有数据库)。
 >
 > 读法:先 §1 看定位怎么变,再 §2 看三层各是什么,§3 看它们之间的循环。§4 是跟 v3 / v4 / shellbase 的继承关系,§5 是留待后续分篇敲定的问题。
 
@@ -110,7 +110,8 @@ card 是记事层:**一条事实,像维基百科的一个词条**。一个事实
 | | 来源 | v5 怎么处理 |
 |---|---|---|
 | 画布 / 块即 URI / 终端 attach / window 状态 | shellbase v1 | **在 memory.talk 里原生实现,底层逻辑完全一致**;shellbase 不再作为独立项目继续,它的设计文档是 task 运行时的蓝本 |
-| session / round(append-only)、file-canonical、searchbase、migration 框架 | v3 | 沿用不动,只是 session 的上游从 sync 变成 task |
+| session / round(append-only)、file-canonical、searchbase | v3 | 沿用;file-canonical 延伸成「git 是 canonical(含历史)」;session 的上游从 sync 变成 task |
+| SQLite(派生索引 + 运行态计数)、events.jsonl、migration 框架 | v3 / v4 | **SQLite 去掉**:运行态在 v5 不存在,派生索引归 searchbase;历史归 git(见 [store.md](store.md));migration 框架收窄到索引重建 |
 | explore(先验 / 后验工作区) | v3 设计 | **并入 task**,不再独立 |
 | insight(v3 的陈述卡) | v3 → v4 改名 | 继续只读可搜,慢慢下掉,不变 |
 | 问题图(issue / position / argument、IBIS 边、credence 现算) | v4 card | 成为 **issue 层**;机制不变,名字归位 |
