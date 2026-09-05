@@ -1,0 +1,130 @@
+# memory.talk v5 —— 总设计(定位 + 三层抽象)
+
+> **状态:定位稿,未实施。** 这篇只回答三件事:memory.talk 是什么、它由哪几层抽象组成、这几层怎么咬合。字段、表、命令、端点一概不在这里——那些等定位敲定后再分篇立(同 [v4](../v4/README.md) 的 works / cli / api / structure 四目录分工)。
+>
+> 读法:先 §1 看定位怎么变,再 §2 看三层各是什么,§3 看它们之间的循环。§4 是跟 v3 / v4 / shellbase 的继承关系,§5 是留待后续分篇敲定的问题。
+
+---
+
+## 1. 重新定位:从「记忆库」到「工作台」
+
+### 1.1 v1–v4 的定位:会话的事后记忆
+
+到 v4 为止,memory.talk 一直是一个**挂在别人工作旁边的记忆库**:
+
+```
+Claude Code / Codex 在别处工作  →  sync 把会话抄进来  →  抽卡  →  下次开会话时 recall 注入
+```
+
+它的主语是「会话」:会话在外面发生,memory.talk 事后导入、事后提炼、事后召回。这条线的每一版都在打磨「卡」这一个对象——v3 是陈述卡 + 论坛动力学,v4 把卡升级成「问题 + 竞争答案」的被治理问题图。但**工作本身**始终不在 memory.talk 里,它只看得到工作留下的对话记录。
+
+### 1.2 v5 的定位:像 Codex work 一样的工作台,记忆是它的副产物
+
+v5 把主语换掉:**memory.talk 是一个工作台,工作在它里面发生**。定位对标 OpenAI Codex app 的那套形态——agent 在按项目组织的线程里跑,你在多个任务之间切换而不丢上下文,任务可以并行、可以被看、可以被接管([Introducing the Codex app](https://openai.com/index/introducing-the-codex-app/))。
+
+差别在于 memory.talk 多出「记忆」这一半:Codex work 的任务做完就是做完了,memory.talk 的任务做完会**长出问题和认知**,并在下一个任务里被想起来。一句话:
+
+> **memory.talk v5 = 一个跑 code agent 的工作台,它把「做事」「议事」「记事」三层接成一个闭环。**
+
+这三层就是 v5 的三个抽象:**task、issue、card**。
+
+---
+
+## 2. 三层抽象:task / issue / card
+
+| 层 | 对象 | 它是什么 | 主语在干什么 | 来源 |
+|---|---|---|---|---|
+| 做事 | **task** | 一个工作单元,里面盛放若干个 **code agent session** | 干活 | 把 [shellbase](https://github.com/memory-co/shellbase) 的画布直接放进来 |
+| 议事 | **issue** | 一个问题 + 围绕它的立场与论证(IBIS) | 讨论、争辩、定夺 | v4 的问题图(issue / position / argument) |
+| 记事 | **card** | 本地论的认知卡片:一条**在某个适用范围内成立**的认知 | 记住、被想起 | v4 的位(scope)治理 + 召回单元 |
+
+三层的**粒度**从大到小、**寿命**从短到长、**流动性**从动到静:task 是过程,做完就结束;issue 是过程里冒出来、可以跨 task 一直开着的争论;card 是争论沉淀下来的、能被反复召回的结论。
+
+### 2.1 task:盛放 code agent session 的工作单元
+
+task 是 v5 的顶层对象,**取代 session 成为 memory.talk 的入口**。一个 task 大致就是一个 shellbase 的 window:一块可分割的画布,每个块由一个虚拟 URI 定位(`claude:///workspace/proj`、`codex:///workspace/proj`、`bash://`、`file://`、`https://`),块背后是 tmux 里活着的一个进程,断线重入现场无损。
+
+- **task 里的每个 agent 块 = 一个 code agent session**。shellbase 那套「块即 URI、后端是状态唯一权威、无中生有 + 重入」的模型原样搬进来,memory.talk 不重新发明 agent 运行时。
+- **session 从「事后导入的对象」变成「在 task 里原生发生的对象」**。v3 的 sync(从平台目录抄会话)退成兼容路径——task 里跑的 session,memory.talk 本来就看得见。
+- **task 承接 v3/v4 的 explore**。explore 原本是「一个目录 + 一条时间分割线」的抽卡工作区;v5 里每个 task 天然就是这样一个工作区:task 里的 session 是它的先验素材,之后的 task 是它的后验证据。explore 不再单独存在。
+- task 有目标、有始终、有归属的项目(工作目录),但 task 不做认知——它只负责让工作发生并把过程留下来。
+
+### 2.2 issue:IBIS 结构的议事层
+
+issue 是「一个问题」,以及围绕它的 **position(立场 / 候选答案)** 和 **argument(支持 / 反对的论证)**。这就是 IBIS(Issue-Based Information System)那套本体,v4 已经把它推导出来了([v4 card.md §4](../v4/card.md));v5 把它从「卡」里独立出来,成为 task 和 card 之间的一层。
+
+- **issue 从 task 里冒出来**。做事过程中的每个「为什么」「该不该」「哪个更好」都是一个 issue;v4 设计的逐 round 标注 + `#问题` 自动建问题([session-annotation.md](../v4/session-annotation.md))就是 issue 的主要入口。
+- **issue 是跨 task 的**。一个问题可以在 task A 里提出、在 task B 里得到新立场、在 task C 里被反驳;issue 之间用 IBIS 的边连成图(细化、引出、质疑、取代)。
+- **issue 不需要「关闭」**。IBIS 允许多个 position 长期竞争,哪个当下占优靠论证的多寡(v4 的 credence 现算)决定,不钉成已解决状态。
+- issue 的作用是**把争论结构化地留住**——它是可讨论的对象,但不是召回的单元。召回的单元是 card。
+
+### 2.3 card:本地论的认知卡片
+
+card 是记事层:一条**已经站得住、并且说清了自己在哪成立**的认知。「本地论」是指——**认知是局部的**,没有一条结论在所有场景下都对;所以一张卡除了「答案是什么」,必须带着「它在什么范围内成立、别用在哪」。这正是 v4 用「位」(scope)表达的东西,v5 把它提升成 card 的定义本身。
+
+- **card 从 issue 里结晶出来**。当一个 issue 的某个 position 被足够多的论证顶起来、并且能写清适用范围时,它就可以固化成一张 card。issue 是过程,card 是过程的一个稳定切面。
+- **card 是召回单元**。新 task 开始或 agent 思考时,拿当前语境去撞 card,命中的卡连同它的适用范围一起注入;适用范围是软提示,让模型自判合不合,不硬挡(沿用 v4 §5、§7 的立场)。
+- **card 只增不改**。认知变了不是改卡,而是回到 issue 层加一个新 position、打一轮新论证,再结晶出一张新卡;旧卡留着,靠新论证把它压下去。认知史落在 issue 的论证记录上,不落在状态位上。
+- **card 反过来指回 issue**。每张卡都能追溯到它结晶自哪个 issue、哪个 position、哪些 task 里的哪些 round——从「我为什么这么认为」一路能挖到「当时那个 agent 说了什么」。
+
+---
+
+## 3. 三层怎么咬合:一个闭环
+
+```
+            做事                      议事                       记事
+   ┌──────────────────┐      ┌──────────────────┐      ┌──────────────────┐
+   │      task        │      │      issue       │      │      card        │
+   │  code agent      │ 标注  │  问题            │ 结晶  │  本地论认知卡    │
+   │  session × N     │─────▶│  + position × N  │─────▶│  答案 + 适用范围  │
+   │  (shellbase 画布) │ #问题 │  + argument      │      │  (召回单元)       │
+   └──────────────────┘      └──────────────────┘      └──────────────────┘
+            ▲                         ▲                          │
+            │                         │ 后验 task 回流论证          │
+            │                         └──────────────────────────┤
+            │                              recall:新 task 开工时注入   │
+            └──────────────────────────────────────────────────────┘
+```
+
+顺着走一遍:
+
+1. **task 里干活**:若干 agent session 在 shellbase 画布上跑,过程按 round 留下。
+2. **task → issue**:对 session 逐 round 标注(以写代读),标注里 `#` 出来的问题经检索判定——新问题建 issue,老问题挂到既有 issue;标注里给出的回答落成 position,后续证据落成 argument。
+3. **issue → card**:站住脚且说得清适用范围的 position 结晶成 card。
+4. **card → task**:下一个 task 开工,recall 拿语境撞 card,把命中的卡注入 agent 的上下文。
+5. **task → issue(回流)**:新 task 里发生的事,对老 issue 的 position 构成新的支持或反对——这就是 explore 想做的「后验验证」,在 v5 里是每个 task 天然具备的能力。
+
+三条守住闭环不退化的原则,全部继承自 v4,这里只点名不展开:
+
+- **沉默 ≠ 确认**:一个 task 没提到某个 issue,不给它任何分。
+- **惊讶 grounding 在检索**:「这是不是新问题」由检索 miss 判定,不由 agent 自评。
+- **「不该用」≠「错」**:卡的适用范围和卡的对错是两件独立的事。
+
+---
+
+## 4. 继承什么、换掉什么
+
+| | 来源 | v5 怎么处理 |
+|---|---|---|
+| 画布 / 块即 URI / 终端 attach / window 状态 | shellbase v1 | **整体放进来**,task 直接建在它上面;shellbase 本身继续作为可独立部署的组件存在 |
+| session / round(append-only)、file-canonical、searchbase、migration 框架 | v3 | 沿用不动,只是 session 的上游从 sync 变成 task |
+| explore(先验 / 后验工作区) | v3 设计 | **并入 task**,不再独立 |
+| insight(v3 的陈述卡) | v3 → v4 改名 | 继续只读可搜,慢慢下掉,不变 |
+| 问题图(issue / position / argument、IBIS 边、credence 现算) | v4 card | 成为 **issue 层**;机制不变,名字归位 |
+| 位(scope)/ 变(append-only + fork) | v4 card 治理 | 位成为 **card 的定义**;变继续是不变性原则 |
+| 逐 round 标注 + `#问题` | v4 session-annotation | 成为 task → issue 的主入口 |
+| 召回(撞问题 + 答案、credence 排序、scope 随注入) | v4 读路径 | 召回单元从「position」改成「card」,排序思路不变 |
+
+一句话概括 v5 相对 v4 的改动:**往上加了 task 这一层把工作装进来,往下把 v4 的 card 拆成 issue(争论)和 card(结晶),其余机制不动。**
+
+---
+
+## 5. 定位层面还没敲死的事
+
+这些都会各自分篇,本稿只列出来,不在这里定:
+
+- **issue 与 card 的边界**:哪一刻一个 position「够格」结晶成卡——人工点一下、还是 credence 过阈值自动、还是两者都行。它决定 card 是「被治理的快照」还是「另一份可编辑对象」。
+- **task 的边界**:一个 task = 一个 shellbase window,还是一个 window 里可以有多个 task。这取决于「工作单元」和「屏幕布局」要不要绑死。
+- **task 的结束语义**:task 做完之后 session 是否冻结、标注是否还能追加、后验回流从哪一刻开始算。
+- **多平台**:task 里的 agent session 目前只考虑 tmux 里跑的 CLI agent(claude / codex);外部平台(网页版 Codex、别的机器)的会话是否还走 sync 兼容路径进 task。
+- **命名**:「本地论」这个提法在文档里怎么落——是就叫 card 并在定义里说清「带适用范围」,还是把「位」提到名字里。
