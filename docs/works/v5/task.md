@@ -1,10 +1,10 @@
 # task —— 为完成一件事而汇集起来的现场(v5 设计)
 
-> **状态:框架稿,未实施。** 本篇只立 task 这一层的大框架:它是什么、跟 shellbase 的 window 是什么关系、里面装什么、session 怎么进来、做完留下什么。字段 / 端点 / 命令等后续分篇。总定位见 [README.md](README.md)。
+> **状态:框架稿,未实施。** 本篇只立 task 这一层的大框架:它是什么、跟 shellbase 的 window 是什么关系(继承其底层逻辑、原生实现)、里面装什么、session 怎么进来、做完留下什么。字段 / 端点 / 命令等后续分篇。总定位见 [README.md](README.md)。
 
 相关:
 - v5 总设计(task / issue / card 三层): [README.md](README.md)
-- shellbase window 与块即 URI(task 建在它上面): [shellbase design.md](https://github.com/memory-co/shellbase/blob/main/docs/v1/works/design.md) / [uri.md](https://github.com/memory-co/shellbase/blob/main/docs/v1/works/uri.md)
+- shellbase window 与块即 URI(task 运行时的蓝本,底层逻辑完全一致): [shellbase design.md](https://github.com/memory-co/shellbase/blob/main/docs/v1/works/design.md) / [uri.md](https://github.com/memory-co/shellbase/blob/main/docs/v1/works/uri.md)
 - v3 explore(先验 / 后验工作区,被 task 并入): [../v3/explore.md](../v3/explore.md)
 - v4 逐 round 标注(task → issue 的入口): [../v4/session-annotation.md](../v4/session-annotation.md)
 
@@ -18,9 +18,9 @@
 
 ---
 
-## 2. 跟 shellbase window 的关系:一比一,但重心不同
+## 2. 跟 shellbase window 的关系:底层逻辑完全一致,在 memory.talk 里原生实现
 
-**每个 shellbase window 就是一个 task。** task 不另起一套运行时——window 有的画布、块、URI、终端 attach、断线重入,task 原样拿来用。打开一个 task,就是打开它那个 window;在 task 里开一个 Codex 会话,就是在 window 里放一个 `codex://` 块。
+**shellbase 到此为止,不再作为独立项目存在;它的 window 在 memory.talk 里原生实现,就是 task。** task 不另起一套运行时——shellbase 的画布、块、块即 URI、终端 attach、无中生有 + 重入、后端是状态唯一权威,这套底层逻辑 task **完全一致地**实现一遍,只是搬进 memory.talk 自己的进程和存储里。打开一个 task,就是打开一块画布;在 task 里开一个 Codex 会话,就是在画布上放一个 `codex://` 块。**一个 task = 一块画布(window)**,一比一。
 
 但两者**重心**不一样:
 
@@ -33,7 +33,7 @@
 
 所以:**window 是 task 的显示层,task 是 window 的意义层**。window 回答「现在屏幕上有什么」,task 回答「这些东西为什么在一起、事做到哪了」。布局丢了、重排了、换个设备打开分割方式全不一样——task 一点没变,因为 task 记的是**成员和目的**,不是网格坐标。
 
-> 这条决定了一个具体的设计方向:shellbase 里终端身份挂在 `block` 序号上,序号又跟布局绑着;task 里的成员身份要**脱离布局**——一个会话是这个 task 的成员,不因为它被移到别的格子就变成另一个会话。这一点落地时要在 shellbase 的 URI 身份模型上做调整,细节另篇。
+> 这条决定了原生实现时**唯一有意偏离 shellbase 的地方**:shellbase 里终端身份挂在 `block` 序号上,序号又跟布局绑着;task 里的成员身份要**脱离布局**——一个会话是这个 task 的成员,不因为它被移到别的格子就变成另一个会话。其余底层逻辑照搬,只有身份这一点在 URI 模型上要改,细节另篇。
 
 ---
 
@@ -48,7 +48,7 @@ task 的成员是**现场**(一个活着的、可以回去看的东西),不限�
 | **浏览器窗口** | `https://…` 的文档、issue 页、dev server 预览 | 为了这件事**看过什么**——也是上下文的一部分 |
 | **文件视图** | `file:///proj/src` | 事情落在哪个目录 |
 
-关键是:**它们都是同一件事的一部分**。在 shellbase 里它们是并排的几个块;在 task 里它们是「做这件事时打开过的所有东西」。一个 task 里可以同时跑多个 agent 会话(一个 Claude Code 写代码、一个 Codex 做 review),它们互相看得见对方的工作目录,也共享 task 的目的。
+关键是:**它们都是同一件事的一部分**。在画布上它们是并排的几个块;在 task 的意义上它们是「做这件事时打开过的所有东西」。一个 task 里可以同时跑多个 agent 会话(一个 Claude Code 写代码、一个 Codex 做 review),它们互相看得见对方的工作目录,也共享 task 的目的。
 
 task 本身还有一点自己的东西,不多:**它是什么事**(一句话目标)、**在哪个项目**(工作目录)、**什么时候开的、什么时候算完**。task 不做认知,不打分,不抽卡——那是 issue 和 card 的事。
 
@@ -70,7 +70,7 @@ task 本身还有一点自己的东西,不多:**它是什么事**(一句话目�
 粗线条地看,一个 task 就四段:
 
 1. **开工**:说清要做什么事、在哪个项目;memory.talk 拿这句目标去撞 card,把相关的认知先注入进来——这是 recall 在 v5 的落点:**recall 的对象是 task,不再是零散的会话**。
-2. **干活**:往 task 里加现场,agent 跑、人看、网页翻。这段时间 task 就是一个 shellbase window,怎么排随便。
+2. **干活**:往 task 里加现场,agent 跑、人看、网页翻。这段时间 task 就是一块画布,怎么排随便。
 3. **做完**:事成了(或者放弃了),task 结束。结束以后成员冻结:会话不再追加 round,现场可以回去看,但不再是干活的地方。
 4. **留下痕迹**:task 留下的是它所有成员的记录——agent 会话的 round、看过的网页、动过的目录。这堆痕迹是 **issue 层的原料**:逐 round 标注在这上面做,`#问题` 从这里冒出来。
 
@@ -95,4 +95,4 @@ task 之间**不直接连**。两个 task 有关系,是因为它们碰到了同�
 - **agent 会话之外的成员留什么痕迹**:浏览器窗口的访问记录、终端里敲过的命令,要留到什么程度才够当 issue 的原料,又不至于把什么都往里塞。
 - **一个 window 里能不能有多个 task**:本篇按一比一写。如果实践中「我这个屏幕上同时在做两件事」很常见,再考虑 task 小于 window。
 - **task 的层级**:大事拆小事要不要建模成父子 task。本篇不建,先靠 issue 的「细化」边表达事情之间的层级。
-- **成员身份脱离布局**怎么落到 shellbase 的 URI 模型上(§2 末),这是唯一需要动 shellbase 的地方,单独一篇。
+- **成员身份脱离布局**怎么落到 URI 身份模型上(§2 末),这是原生实现时唯一有意偏离 shellbase 的地方,单独一篇。

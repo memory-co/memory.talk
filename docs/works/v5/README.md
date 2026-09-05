@@ -36,7 +36,7 @@ v5 把主语换掉:**memory.talk 是一个工作台,工作在它里面发生**�
 
 | 层 | 对象 | 它是什么 | 主语在干什么 | 来源 |
 |---|---|---|---|---|
-| 做事 | **task** | 一个工作单元,里面盛放若干个 **code agent session** | 干活 | 把 [shellbase](https://github.com/memory-co/shellbase) 的画布直接放进来 |
+| 做事 | **task** | 一个工作单元,里面盛放若干个 **code agent session** | 干活 | 在 memory.talk 里**原生实现**,底层逻辑与 [shellbase](https://github.com/memory-co/shellbase) 完全一致 |
 | 议事 | **issue** | 一个问题 + 围绕它的立场与论证(IBIS) | 讨论、争辩、定夺 | v4 的问题图(issue / position / argument) |
 | 记事 | **card** | 本地论的认知卡片:一条**在某个适用范围内成立**的认知 | 记住、被想起 | v4 的位(scope)治理 + 召回单元 |
 
@@ -44,9 +44,9 @@ v5 把主语换掉:**memory.talk 是一个工作台,工作在它里面发生**�
 
 ### 2.1 task:盛放 code agent session 的工作单元
 
-task 是 v5 的顶层对象,**取代 session 成为 memory.talk 的入口**。一个 task 大致就是一个 shellbase 的 window:一块可分割的画布,每个块由一个虚拟 URI 定位(`claude:///workspace/proj`、`codex:///workspace/proj`、`bash://`、`file://`、`https://`),块背后是 tmux 里活着的一个进程,断线重入现场无损。
+task 是 v5 的顶层对象,**取代 session 成为 memory.talk 的入口**。一个 task 就是 shellbase 里那个 window 的原生版本:一块可分割的画布,每个块由一个虚拟 URI 定位(`claude:///workspace/proj`、`codex:///workspace/proj`、`bash://`、`file://`、`https://`),块背后是 tmux 里活着的一个进程,断线重入现场无损。
 
-- **task 里的每个 agent 块 = 一个 code agent session**。shellbase 那套「块即 URI、后端是状态唯一权威、无中生有 + 重入」的模型原样搬进来,memory.talk 不重新发明 agent 运行时。
+- **task 里的每个 agent 块 = 一个 code agent session**。shellbase 那套「块即 URI、后端是状态唯一权威、无中生有 + 重入」的底层逻辑在 memory.talk 里**原生实现、完全一致**;shellbase 作为独立项目到此为止,memory.talk 不重新发明 agent 运行时,只是把这个运行时收进自己家。
 - **session 从「事后导入的对象」变成「在 task 里原生发生的对象」**。v3 的 sync(从平台目录抄会话)退成兼容路径——task 里跑的 session,memory.talk 本来就看得见。
 - **task 承接 v3/v4 的 explore**。explore 原本是「一个目录 + 一条时间分割线」的抽卡工作区;v5 里每个 task 天然就是这样一个工作区:task 里的 session 是它的先验素材,之后的 task 是它的后验证据。explore 不再单独存在。
 - task 有目标、有始终、有归属的项目(工作目录),但 task 不做认知——它只负责让工作发生并把过程留下来。
@@ -79,7 +79,7 @@ card 是记事层:一条**已经站得住、并且说清了自己在哪成立**�
    │      task        │      │      issue       │      │      card        │
    │  code agent      │ 标注  │  问题            │ 结晶  │  本地论认知卡    │
    │  session × N     │─────▶│  + position × N  │─────▶│  答案 + 适用范围  │
-   │  (shellbase 画布) │ #问题 │  + argument      │      │  (召回单元)       │
+   │  (原生画布)       │ #问题 │  + argument      │      │  (召回单元)       │
    └──────────────────┘      └──────────────────┘      └──────────────────┘
             ▲                         ▲                          │
             │                         │ 后验 task 回流论证          │
@@ -90,7 +90,7 @@ card 是记事层:一条**已经站得住、并且说清了自己在哪成立**�
 
 顺着走一遍:
 
-1. **task 里干活**:若干 agent session 在 shellbase 画布上跑,过程按 round 留下。
+1. **task 里干活**:若干 agent session 在 task 的画布上跑,过程按 round 留下。
 2. **task → issue**:对 session 逐 round 标注(以写代读),标注里 `#` 出来的问题经检索判定——新问题建 issue,老问题挂到既有 issue;标注里给出的回答落成 position,后续证据落成 argument。
 3. **issue → card**:站住脚且说得清适用范围的 position 结晶成 card。
 4. **card → task**:下一个 task 开工,recall 拿语境撞 card,把命中的卡注入 agent 的上下文。
@@ -108,7 +108,7 @@ card 是记事层:一条**已经站得住、并且说清了自己在哪成立**�
 
 | | 来源 | v5 怎么处理 |
 |---|---|---|
-| 画布 / 块即 URI / 终端 attach / window 状态 | shellbase v1 | **整体放进来**,task 直接建在它上面;shellbase 本身继续作为可独立部署的组件存在 |
+| 画布 / 块即 URI / 终端 attach / window 状态 | shellbase v1 | **在 memory.talk 里原生实现,底层逻辑完全一致**;shellbase 不再作为独立项目继续,它的设计文档是 task 运行时的蓝本 |
 | session / round(append-only)、file-canonical、searchbase、migration 框架 | v3 | 沿用不动,只是 session 的上游从 sync 变成 task |
 | explore(先验 / 后验工作区) | v3 设计 | **并入 task**,不再独立 |
 | insight(v3 的陈述卡) | v3 → v4 改名 | 继续只读可搜,慢慢下掉,不变 |
@@ -126,7 +126,7 @@ card 是记事层:一条**已经站得住、并且说清了自己在哪成立**�
 这些都会各自分篇,本稿只列出来,不在这里定:
 
 - **issue 与 card 的边界**:哪一刻一个 position「够格」结晶成卡——人工点一下、还是 credence 过阈值自动、还是两者都行。它决定 card 是「被治理的快照」还是「另一份可编辑对象」。
-- **task 的边界**:一个 task = 一个 shellbase window,还是一个 window 里可以有多个 task。这取决于「工作单元」和「屏幕布局」要不要绑死。
+- **task 的边界**:一个 task = 一个 window(画布),还是一个 window 里可以有多个 task。这取决于「工作单元」和「屏幕布局」要不要绑死。
 - **task 的结束语义**:task 做完之后 session 是否冻结、标注是否还能追加、后验回流从哪一刻开始算。
 - **多平台**:task 里的 agent session 目前只考虑 tmux 里跑的 CLI agent(claude / codex);外部平台(网页版 Codex、别的机器)的会话是否还走 sync 兼容路径进 task。
 - **命名**:「本地论」这个提法在文档里怎么落——是就叫 card 并在定义里说清「带适用范围」,还是把「位」提到名字里。
