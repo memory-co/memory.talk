@@ -2,7 +2,7 @@
 
 > **状态:定位稿,未实施。** 这篇只回答三件事:memory.talk 是什么、它由哪几层抽象组成、这几层怎么咬合。字段、表、命令、端点一概不在这里——那些等定位敲定后再分篇立(同 [v4](../v4/README.md) 的 works / cli / api / structure 四目录分工)。
 >
-> 分篇:[task.md](task.md)(做事层)、[issue.md](issue.md)(议事层:manager task + 派活取证)。card 待起。
+> 分篇:[task.md](task.md)(做事层:task 树)、[issue.md](issue.md)(议事层:树上节点管、派活取证)。card 待起。
 >
 > 读法:先 §1 看定位怎么变,再 §2 看三层各是什么,§3 看它们之间的循环。§4 是跟 v3 / v4 / shellbase 的继承关系,§5 是留待后续分篇敲定的问题。
 
@@ -36,11 +36,11 @@ v5 把主语换掉:**memory.talk 是一个工作台,工作在它里面发生**�
 
 | 层 | 对象 | 它是什么 | 主语在干什么 | 来源 |
 |---|---|---|---|---|
-| 做事 | **task** | 一个工作单元,里面盛放若干个 **code agent session** | 干活 | 在 memory.talk 里**原生实现**,底层逻辑与 [shellbase](https://github.com/memory-co/shellbase) 完全一致 |
+| 做事 | **task** | 一个工作单元,里面盛放若干个 **code agent session**;复杂的事是一棵 **task 树** | 干活 | 在 memory.talk 里**原生实现**,底层逻辑与 [shellbase](https://github.com/memory-co/shellbase) 完全一致 |
 | 议事 | **issue** | 一个问题 + 围绕它的立场与论证(IBIS) | 讨论、争辩、定夺 | v4 的问题图(issue / position / argument) |
 | 记事 | **card** | 本地论的认知卡片:一条**在某个适用范围内成立**的认知 | 记住、被想起 | v4 的位(scope)治理 + 召回单元 |
 
-三层的**粒度**从大到小、**寿命**从短到长、**流动性**从动到静:task 是过程,做完就结束;issue 是过程里冒出来、可以跨 task 一直开着的争论;card 是争论沉淀下来的、能被反复召回的结论。
+三层的分工一句话:**task 装已经定下来、正在做的事;issue 装还没定的事;card 装已经站住、可以带走的认知。** 三层里只有 task 有状态和完成——它是过程,做完就结束(复杂的事是一棵树,叶子先完、往上收拢);issue 是过程里冒出来、可以跨 task 一直开着的争论;card 是争论沉淀下来的、能被反复召回的结论。
 
 ### 2.1 task:盛放 code agent session 的工作单元
 
@@ -49,14 +49,15 @@ task 是 v5 的顶层对象,**取代 session 成为 memory.talk 的入口**。�
 - **task 里的每个 agent 块 = 一个 code agent session**。shellbase 那套「块即 URI、后端是状态唯一权威、无中生有 + 重入」的底层逻辑在 memory.talk 里**原生实现、完全一致**;shellbase 作为独立项目到此为止,memory.talk 不重新发明 agent 运行时,只是把这个运行时收进自己家。
 - **session 从「事后导入的对象」变成「在 task 里原生发生的对象」**。v3 的 sync(从平台目录抄会话)退成兼容路径——task 里跑的 session,memory.talk 本来就看得见。
 - **task 承接 v3/v4 的 explore**。explore 原本是「一个目录 + 一条时间分割线」的抽卡工作区;v5 里每个 task 天然就是这样一个工作区:task 里的 session 是它的先验素材,之后的 task 是它的后验证据。explore 不再单独存在。
-- task 有目标、有始终、有归属的项目(工作目录),但 task 不做认知——它只负责让工作发生并把过程留下来。
+- **复杂的事是一棵 task 树**。task 可以有子 task:根是「把 X 做出来」,叶子是真正坐下来干的一件小事。拆分、顺序、状态、完成——执行的结构全部落在 task 上;树上每个节点都可以有自己的画布。
+- task 有目标、有状态、有始终、有父子、有归属的项目(工作目录),但 task 不做认知——它只负责让工作发生并把过程留下来。
 
 ### 2.2 issue:IBIS 结构的议事层
 
 issue 是「一个问题」,以及围绕它的 **position(立场 / 候选答案)** 和 **argument(支持 / 反对的论证)**。这就是 IBIS(Issue-Based Information System)那套本体,v4 已经把它推导出来了([v4 card.md §4](../v4/card.md));v5 把它从「卡」里独立出来,成为 task 和 card 之间的一层。
 
 - **issue 从 task 里冒出来**。做事过程中的每个「为什么」「该不该」「哪个更好」都是一个 issue;v4 设计的逐 round 标注 + `#问题` 自动建问题([session-annotation.md](../v4/session-annotation.md))就是 issue 的主要入口。
-- **issue 是跨 task 的**。一个问题可以在 task A 里提出、在 task B 里得到新立场、在 task C 里被反驳;issue 之间用 IBIS 的边连成图(细化、引出、质疑、取代)。
+- **issue 是跨 task 的,但有人管**。一个问题可以在 task A 里提出、在 task B 里得到新立场、在 task C 里被反驳;每个 issue 由 task 树上一个节点(manager)负责推,推不动时可以派出新 task 去取证。issue 之间用 IBIS 的边连成图(细化、引出、质疑、取代)。
 - **issue 不需要「关闭」**。IBIS 允许多个 position 长期竞争,哪个当下占优靠论证的多寡(v4 的 credence 现算)决定,不钉成已解决状态。
 - issue 的作用是**把争论结构化地留住**——它是可讨论的对象,但不是召回的单元。召回的单元是 card。
 
