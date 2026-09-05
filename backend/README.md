@@ -16,16 +16,16 @@ backend/
 │   ├── card.py               #   Card:标题、正文、语境、链接
 │   └── server.py             #   Server 契约:claims(scheme) / open(id, uri) → Window + Handle / destroy
 │
-├── services/                 # 业务逻辑(每个子包对应一篇设计;**每个子包的入口固定叫 `service.py`**,main.py 按此扫描)
+├── services/                 # 业务逻辑(每个子包对应一篇设计;**入口就是子包的 `__init__.py`**,导出该 service 类,main.py 按 `services/*` 扫描装配,不另加约定)
 │   ├── task/                 #   做事层 —— docs/works/v5/task.md
-│   │   ├── service.py        #     入口:TaskService(对外唯一门面;main.py 按 services/*/service.py 扫描装配)
+│   │   ├── __init__.py       #     入口:导出 TaskService(对外唯一门面)
 │   │   ├── tree.py           #     task 树:建节点、父子、状态、完成收拢
 │   │   ├── canvas.py         #     画布(24×16 网格剖分)—— task 的视图,可随时重排
 │   │   ├── members.py        #     成员登记:成员 id ↔ URI ↔ server ↔ 活着(唯一权威,脱离布局)
 │   │   ├── sessions.py       #     agent 成员的 rounds.jsonl(append-only)
 │   │   └── events.py         #     task 自己的 append-only 事件(开工/状态/做完)
 │   ├── servers/              #   协议 server —— docs/works/v5/protocol-server.md
-│   │   ├── service.py        #     入口:ServerService(协议 → server 请求;持有 registry)
+│   │   ├── __init__.py       #     入口:导出 ServerService(协议 → server 请求;持有 registry)
 │   │   ├── registry.py       #     协议 → server 的解析(名单优先于约定,找不到明确报错)
 │   │   ├── terminal.py       #     bash:// + 任何 PATH 命令名(tmux 现场)
 │   │   ├── agent.py          #     claude:// codex://:终端把手 + 读会话 round
@@ -34,18 +34,18 @@ backend/
 │   │   └── adapters/         #     读各平台会话记录(来自 v3 adapters,归入 agent server 把手)
 │   │       └── base.py / claude_code.py / codex.py
 │   ├── issue/                #   议事层 —— docs/works/v5/issue.md
-│   │   ├── service.py        #     入口:IssueService
+│   │   ├── __init__.py       #     入口:导出 IssueService
 │   │   ├── repo.py           #     读写 memory 仓库里的 issues/(每个动作一个 commit)
 │   │   ├── links.py          #     IBIS 边的建立与查询
 │   │   ├── manager.py        #     manager 绑定、派出论证 task、胜出立场 → task 节点
 │   │   └── annotation.py     #     逐 round 标注、#问题 → 在 issue 目录里指认 / 新建
 │   ├── card/                 #   记事层 —— docs/works/v5/card.md
-│   │   ├── service.py        #     入口:CardService
+│   │   ├── __init__.py       #     入口:导出 CardService
 │   │   ├── repo.py           #     读写 memory 仓库里的 cards/(改卡 = commit,历史 = git log)
 │   │   ├── catalog.py        #     目录:按目录分层的标题清单
 │   │   └── recall.py         #     task 开工时注入目录
 │   └── store/                #   存储 —— docs/works/v5/store.md
-│       ├── service.py        #     入口:StoreService(git 仓库 + 裸文件根,其余 service 的依赖)
+│       ├── __init__.py       #     入口:导出 StoreService(git 仓库 + 裸文件根,其余 service 的依赖)
 │       ├── paths.py          #     ~/.memory.talk 布局
 │       ├── files.py          #     裸文件原语:原子写、单写者、无缓存直读(task 用)
 │       ├── git.py            #     git 仓库封装:一个决定一个 commit、log、revert
