@@ -29,7 +29,7 @@
 | `POST` | `/api/issues/{issue_id}/positions/{position_id}/tasks` | 为验证这个立场派出一个 task(先只记 id) |
 ## 路径规则
 
-- `card_id` 是仓库内相对路径(不含 `.md`),目录即分类:`memory.talk/向量库用-LanceDB` ↔ `cards/memory.talk/向量库用-LanceDB.md`。建卡时给 `dir` + `title`(或显式 `slug`)。
+- `card_id` 是仓库内相对路径(不含 `.md`),目录即分类:`memory.talk/配置只来自环境变量` ↔ `cards/memory.talk/配置只来自环境变量.md`。建卡时给 `dir` + `title`(或显式 `slug`)。
 - `issue_id` 形如 `iss_<时间戳><4hex>`;立场 id `p1, p2…`,论证 id `a1, a2…`,都在 issue 内顺序编号、只增不改。
 - `GET /api/cards/{id}?rev=<sha>` 读历史版本;sha 来自 `/history`。
 
@@ -47,11 +47,11 @@
 ```
 
 ```
-d3a5641 card: deprecate memory.talk/向量库用-LanceDB
-487d55f decide: iss_…#p2 -> card memory.talk/向量库用-LanceDB      ← issue + card 同一 commit
-50f1fdf issue: argue iss_…#p2 +1                                    ← body: Task: task_bench / Rounds: 9
-5c0282a issue: spawn iss_…#p2 -> task_bench
-ee0875e issue: position iss_…#p2: 不换,继续 LanceDB
+d3a5641 card: deprecate memory.talk/配置只来自环境变量
+487d55f decide: iss_…#p2 -> card memory.talk/配置只来自环境变量      ← issue + card 同一 commit
+50f1fdf issue: argue iss_…#p2 +1                                    ← body: Task: task_try / Rounds: 9
+5c0282a issue: spawn iss_…#p2 -> task_try
+ee0875e issue: position iss_…#p2: 只用环境变量,不要配置文件
 dd84ba9 issue: manage iss_… by task_root
-61137ff issue: raise iss_…: memory.talk 的向量库该不该换?
+61137ff issue: raise iss_…: memory.talk v5 的配置该走文件还是环境变量?
 ```
