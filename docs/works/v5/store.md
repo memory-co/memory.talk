@@ -1,29 +1,30 @@
 # store —— git 存认知,裸文件存现场,没有数据库(v5 设计)
 
-> **状态:框架稿,未实施。** 本篇只立 v5 存储的大框架:card 和 issue 放进一个 git 仓库,task 用裸文件,SQLite 整个去掉,搜索索引降为可重建的派生物。目录布局、文件格式、commit 规范后续分篇。总定位见 [README.md](README.md)。
+> **状态:框架稿,未实施。** 本篇只立 v5 存储的大框架:card 和 issue 放进一个 git 仓库,task 用裸文件,SQLite 和搜索索引整个去掉——存储只有这两样。目录布局、文件格式、commit 规范后续分篇。总定位见 [README.md](README.md)。
 
 相关:
 - v5 三层(存的就是这三样): [task.md](task.md) / [issue.md](issue.md) / [card.md](card.md)
-- v3 file-canonical 模式(文件是 canonical、SQLite 和向量库是派生——本篇是它的延伸和简化): [../v3/file-canonical-pattern.md](../v3/file-canonical-pattern.md)
-- v3 searchbase(向量 + FTS 索引底座,继续用,只是不再有 SQLite 陪着): [../v3/searchbase-extraction.md](../v3/searchbase-extraction.md)
+- v3 file-canonical 模式(文件是 canonical、SQLite 和向量库是派生——本篇把「派生」整个去掉): [../v3/file-canonical-pattern.md](../v3/file-canonical-pattern.md)
+- v3 searchbase(向量 + FTS 索引底座——**v5 不再用**,召回改成目录 + 链接): [../v3/searchbase-extraction.md](../v3/searchbase-extraction.md)
 - v4 存储(file 罐 + SQLite 瘦索引 + 运行态计数——v5 不再需要运行态): [../v4/card.md §8](../v4/card.md)
 
 ---
 
-## 1. 一句话:认知层进 git,现场层用裸文件,中间没有数据库
+## 1. 一句话:认知层进 git,现场层用裸文件,没有别的
 
 ```
 ~/.memory.talk/
 ├── memory/          ← 一个 git 仓库:cards/ + issues/。认知的 canonical,连同它的全部历史
-├── tasks/           ← 裸文件:task 树、画布、会话 round。现场的 canonical,原子写,不进 git
-└── index/           ← 派生:向量 + FTS 索引,随时可从上面两处重建,丢了不心疼
+└── tasks/           ← 裸文件:task 树、画布、会话 round。现场的 canonical,原子写,不进 git
 ```
+
+就这两样。没有数据库,也没有索引——**磁盘上的每一个字节都是 canonical,没有任何「派生的、可重建的」第二份**。
 
 三条原则:
 
 - **card 和 issue 在 git 里**。它们是「认知」——会被改、会被争、要问「为什么变成这样」;git 天生就是回答这个问题的工具。
 - **task 是裸文件**。它是「现场」——画布状态、终端登记、会话 round;变化频繁、体量大、要的是原子写和唯一权威,不是历史叙事。这正是 shellbase 的状态模型([task.md §3](task.md)),原样继承。
-- **没有 SQLite**。v3 / v4 的 SQLite 干两件事:派生索引、可变运行态(顶踩计数、read / recall 计数)。v5 的 card 没有计数([card.md](card.md)),issue 的论证是 append-only 的文件,task 是裸文件——**可变运行态消失了**;剩下的派生索引由 searchbase 承担。SQLite 没剩下什么非它不可的事。
+- **没有数据库,也没有索引**。v3 / v4 的 SQLite 干两件事:派生索引、可变运行态(顶踩计数、read / recall 计数);LanceDB 干一件事:向量 + FTS 检索。v5 的 card 没有计数([card.md](card.md)),issue 的论证是 append-only 的文件,task 是裸文件——**可变运行态消失了**;而检索改成查目录、顺链接、grep(§5),**派生索引也不需要了**。两样都没剩下非它不可的事。
 
 ---
 
@@ -75,11 +76,17 @@ task 的存储就是 shellbase 的 state 目录,原生实现、逻辑一致([tas
 
 ---
 
-## 5. 索引:派生、可重建、不是 canonical
+## 5. 没有索引:召回是目录,检索是链接和 grep
 
-searchbase(向量 + FTS,LanceDB)继续用,角色比 v3 更纯:**只是 card / issue / session 的检索索引**,从 git 工作树和 task 目录建出来,`rebuild` 随时从头重建。它不存任何别处没有的东西——v3 里 SQLite 兼任的「派生索引」这一半也归它;「运行态」那一半 v5 根本没有。
+维基不是靠 embedding 被使用的:人看目录、搜标题、顺内链走。v5 的召回和检索照这个来,**不建向量库、不建全文索引**:
 
-索引读 git 的**工作树(HEAD)**,不读历史——召回查的是「现在的事实」。要历史的时候(某张卡的故事、某个 issue 的辩论序列)直接读 git,不经索引。
+- **召回 = 给一张目录**。每张卡有一个维基式的规范标题,所有标题排成目录;task 开工时把目录(或当前项目那一层的目录)注入 agent 的上下文,agent 自己决定读哪几张。这仍然是「无意识」的——你脑子里随时有自己知识的目录,想到了才去翻。
+- **检索 = grep + 链接**。agent 要找东西,`git grep` 工作树,或者从一张卡的链接走到相关卡、走到讨论页(issue)、走到出处(task)。
+- **「是不是新问题」= 必须在 issue 目录里指认**。agent 标一个 `#问题`,要么指出它对应哪个既有 issue,要么说没有。grounding 从 v4 的向量距离换成「必须引用一个存在的 issue 标题」——裁判从一个数值变成一份清单,agent 仍然不能凭空宣布新发现。
+
+目录的大小靠**分目录**控制:卡按项目 / 主题分目录,注入时只给当前 task 所在的那一层;这跟维基的分类是一回事。目录读 git 的**工作树(HEAD)**——召回查的是「现在的事实」;要历史的时候(某张卡的故事、某个 issue 的辩论序列)直接读 git 的 log。
+
+> 代价说清楚:语义模糊的匹配(「用户偏好简洁」撞「回答风格」)靠标题不如靠 embedding。但这正好逼着卡的标题写成维基式的规范标题——这是好事,不是妥协。将来目录大到分目录也压不住,再考虑加 embedding,而且那时它也只是一个加速器,不是存储的一部分。
 
 ---
 
@@ -99,4 +106,5 @@ searchbase(向量 + FTS,LanceDB)继续用,角色比 v3 更纯:**只是 card / is
 - **commit 粒度的边界**:标注流程一轮冒出十个问题,是十个 commit 还是一个;一次「争出结果」改了三张卡,是一个还是三个。倾向「一个决定一个 commit」,但决定的边界要定。
 - **task 目录要不要也用 git 管极少数的东西**:比如 task 的目标和状态变化。本篇按「不进」写,靠事件文件留时间线;若实践中发现 task 层也需要因果,再议。
 - **v3 数据怎么进来**:insight 投影成 card / issue 是一批初始 commit;旧的 SQLite 计数(review / read / recall)不迁——v5 没有它们的位置。
-- **searchbase 还需不需要 FTS 之外的结构化查询**(比如「这个 task 管的所有 issue」):从 git 工作树扫、还是索引里多存几列。倾向前者,量级不大。
+- **结构化查询**(比如「这个 task 管的所有 issue」「链接到这张卡的所有卡」):从 git 工作树扫就够,还是要在文件里维护反向链接。倾向前者,量级不大;真慢了再说。
+- **目录多大算大**:几百张卡全量注入没问题;几千张要靠分目录;再往上是不是必须加 embedding——等真到那一步再定,不预先设计。

@@ -110,8 +110,8 @@ card 是记事层:**一条事实,像维基百科的一个词条**。一个事实
 | | 来源 | v5 怎么处理 |
 |---|---|---|
 | 画布 / 块即 URI / 终端 attach / window 状态 | shellbase v1 | **在 memory.talk 里原生实现,底层逻辑完全一致**;shellbase 不再作为独立项目继续,它的设计文档是 task 运行时的蓝本 |
-| session / round(append-only)、file-canonical、searchbase | v3 | 沿用;file-canonical 延伸成「git 是 canonical(含历史)」;session 的上游从 sync 变成 task |
-| SQLite(派生索引 + 运行态计数)、events.jsonl、migration 框架 | v3 / v4 | **SQLite 去掉**:运行态在 v5 不存在,派生索引归 searchbase;历史归 git(见 [store.md](store.md));migration 框架收窄到索引重建 |
+| session / round(append-only)、file-canonical | v3 | 沿用;file-canonical 延伸成「git 是 canonical(含历史)」;session 的上游从 sync 变成 task |
+| SQLite(派生索引 + 运行态计数)、searchbase(向量 + FTS)、events.jsonl、migration 框架 | v3 / v4 | **全部去掉**:运行态在 v5 不存在;召回改成目录 + 链接 + grep,不建索引;历史归 git(见 [store.md](store.md));存储只有 git 和裸文件,没有派生物 |
 | explore(先验 / 后验工作区) | v3 设计 | **并入 task**,不再独立 |
 | insight(v3 的陈述卡) | v3 → v4 改名 | 继续只读可搜,慢慢下掉,不变 |
 | 问题图(issue / position / argument、IBIS 边、credence 现算) | v4 card | 成为 **issue 层**;机制不变,名字归位 |
