@@ -11,7 +11,7 @@ from services.card import CardExists, CardNotFound, CardService
 from services.issue import IssueNotFound, IssueService, PositionNotFound
 from services.servers import ServerService
 from services.store import GitError, StoreService
-from services.task import MemberNotFound, TaskConflict, TaskNotFound, TaskService
+from services.task import SessionNotFound, TaskConflict, TaskNotFound, TaskService
 
 
 def create_app(config: Config | None = None, runtime: RuntimeConfig | None = None) -> FastAPI:
@@ -37,7 +37,7 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
             return JSONResponse({"error": code, "message": str(exc)}, status_code=status)
         return handler
 
-    for exc_type in (CardNotFound, IssueNotFound, PositionNotFound, TaskNotFound, MemberNotFound):
+    for exc_type in (CardNotFound, IssueNotFound, PositionNotFound, TaskNotFound, SessionNotFound):
         app.add_exception_handler(exc_type, _err(404, "not_found"))
     app.add_exception_handler(CardExists, _err(409, "exists"))
     app.add_exception_handler(TaskConflict, _err(409, "conflict"))

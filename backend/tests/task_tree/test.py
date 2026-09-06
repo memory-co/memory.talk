@@ -20,7 +20,7 @@ def test_tree_status_canvas_events(client):
     assert client.patch(f"/api/tasks/{root['id']}", json={"status": "done"}).json()["status"] == "done"
 
     # 结束后不再是干活的地方
-    assert client.post(f"/api/tasks/{a['id']}/members", json={"uri": "bash://"}).status_code == 409
+    assert client.post(f"/api/tasks/{a['id']}/sessions", json={"uri": "bash://"}).status_code == 409
 
     # 画布:视图 + 乐观锁 + 越界
     cv = client.get(f"/api/tasks/{root['id']}/canvas").json()

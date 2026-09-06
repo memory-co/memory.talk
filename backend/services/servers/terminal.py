@@ -1,6 +1,6 @@
 """tmux 现场 + 终端类 server 的基类(蓝本 tmuxd)。具体的 server 在 backend/servers/ 里,各自声明响应哪些协议。
 
-现场 = tmux 会话(名字 = 成员 id),活得比连接久;
+现场 = tmux 会话(名字 = 会话 id),活得比连接久;
 窗   = ttyd(配置了地址才有;没配就老实报 None);
 把手 = send-keys / capture-pane / has-session。
 """
@@ -85,20 +85,20 @@ class TerminalBase:
             return path.parent, [cmd, path.name]
         return path, [cmd]
 
-    def open(self, member_id: str, uri: ParsedUri, since_mtime: float = 0.0) -> tuple[Live, TmuxHandle]:
+    def open(self, session_id: str, uri: ParsedUri, since_mtime: float = 0.0) -> tuple[Live, TmuxHandle]:
         cwd, cmd = self.resolve(uri)
-        if not self.tmux.has(member_id):
-            self.tmux.new(member_id, cwd, cmd)
-        handle = self.handle(member_id, uri, cwd, since_mtime)
-        url = f"{self.ttyd_url.rstrip('/')}/?arg={member_id}" if self.ttyd_url else None
-        return Live(member_id=member_id, server=self.name, window=Window(url=url, embed=url),
+        if not self.tmux.has(session_id):
+            self.tmux.new(session_id, cwd, cmd)
+        handle = self.handle(session_id, uri, cwd, since_mtime)
+        url = f"{self.ttyd_url.rstrip('/')}/?arg={session_id}" if self.ttyd_url else None
+        return Live(session_id=session_id, server=self.name, window=Window(url=url, embed=url),
                     handle=handle.info(), cwd=str(cwd), command=cmd), handle
 
-    def handle(self, member_id: str, uri: ParsedUri, cwd: Path, since_mtime: float) -> TmuxHandle:
-        return TmuxHandle(self.tmux, member_id)
+    def handle(self, session_id: str, uri: ParsedUri, cwd: Path, since_mtime: float) -> TmuxHandle:
+        return TmuxHandle(self.tmux, session_id)
 
-    def alive(self, member_id: str) -> bool:
-        return self.tmux.has(member_id)
+    def alive(self, session_id: str) -> bool:
+        return self.tmux.has(session_id)
 
-    def destroy(self, member_id: str) -> None:
-        self.tmux.kill(member_id)
+    def destroy(self, session_id: str) -> None:
+        self.tmux.kill(session_id)

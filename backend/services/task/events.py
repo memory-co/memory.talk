@@ -1,4 +1,4 @@
-"""task 自己的 append-only 事件:开工 / 状态 / 成员 / 做完。v3 events.jsonl 在 v5 唯一保留的地方。"""
+"""task 自己的 append-only 事件:开工 / 状态 / 会话 / 做完。v3 events.jsonl 在 v5 唯一保留的地方。"""
 from __future__ import annotations
 
 from models.task import Event

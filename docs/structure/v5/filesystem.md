@@ -15,10 +15,10 @@
     └── <task_id>/
         ├── task.json               ← 目标 / 项目 / 父 / 状态
         ├── canvas.json             ← 画布(视图);不存在 = 空画布
-        ├── members.json            ← 成员登记(数组)
+        ├── sessions.json            ← 会话登记(数组)
         ├── events.jsonl            ← task 时间线,只追加
         └── sessions/
-            └── <member_id>/
+            └── <session_id>/
                 └── rounds.jsonl    ← agent 会话痕迹,只追加
 ```
 
@@ -33,7 +33,7 @@
 
 ## tasks/(裸文件)
 
-- **原子写**:`task.json` / `canvas.json` / `members.json` 写临时文件后 `os.replace`。
+- **原子写**:`task.json` / `canvas.json` / `sessions.json` 写临时文件后 `os.replace`。
 - **只追加**:`events.jsonl` / `rounds.jsonl` 以 append 打开,从不改既有行。
 - **单写者、无缓存直读**:服务进程是唯一写者;每次请求直接读盘。
 - **不在 git 里**:画布重排、attach 时间、agent 的每一轮输出,都是过程,不是决定。
@@ -43,8 +43,8 @@
 
 | 东西 | 在哪 | 谁管 |
 |---|---|---|
-| tmux 会话(终端 / agent 现场) | tmux server,socket `-L <MEMORY_TALK_TMUX_SOCKET>`(默认 `memorytalk`) | server 层建 / 杀;会话名 = 成员 id |
-| 各平台的会话记录(agent 把手读的原文) | `~/.claude/projects/` `~/.codex/sessions/` `~/.kimi-code/sessions/` | 各平台自己写;memory.talk 只读,按 cwd + 成员创建时间定位 |
+| tmux 会话(终端 / agent 现场) | tmux server,socket `-L <MEMORY_TALK_TMUX_SOCKET>`(默认 `memorytalk`) | server 层建 / 杀;会话名 = 会话 id |
+| 各平台的会话记录(agent 把手读的原文) | `~/.claude/projects/` `~/.codex/sessions/` `~/.kimi-code/sessions/` | 各平台自己写;memory.talk 只读,按 cwd + 会话创建时间定位 |
 
 ## 环境变量
 

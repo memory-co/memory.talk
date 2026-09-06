@@ -53,11 +53,11 @@ server **不做**的事同样重要:它**不记 task**——哪个块属于哪�
 
 ## 4. 请求流:一个块从 URI 到现场
 
-1. **task 画布上放一个块**,块有一个 URI。task 层给这个块一个**稳定的成员 id**——脱离布局的那个([task.md §3](task.md)),不是格子序号。
+1. **task 画布上放一个块**,块有一个 URI。task 层给这个块一个**稳定的会话 id**——脱离布局的那个([task.md §3](task.md)),不是格子序号。
 2. **memory.talk 拿协议名去 server 那里寻址**:哪个 server 声明了它就是哪个;没人声明 → **default**。default 也建不起来(PATH 里没这个命令)→ 明确报错。
-3. **server 拿(成员 id,URI)幂等地建 / 取现场**。第一次:建(起 tmux 会话、开浏览器 tab、定位目录);之后:取回同一个。
+3. **server 拿(会话 id,URI)幂等地建 / 取现场**。第一次:建(起 tmux 会话、开浏览器 tab、定位目录);之后:取回同一个。
 4. **server 交回窗和把手**。窗的 URL 给画布 iframe 嵌进去;把手留给 task 层——观测(这个会话跑到哪了、新的 round)、驱动(往里发一句话)、销毁(块关闭时)。
-5. **task 层记登记**:成员 id ↔ URI ↔ 这个 server ↔ 现场是否活着。这份登记是 task 目录里的裸文件,是唯一权威;server 重启后,task 层拿登记去 server 那里把现场一个个取回来。
+5. **task 层记登记**:会话 id ↔ URI ↔ 这个 server ↔ 现场是否活着。这份登记是 task 目录里的裸文件,是唯一权威;server 重启后,task 层拿登记去 server 那里把现场一个个取回来。
 
 块关闭 = task 层通过把手让 server 销毁现场 + 删登记;不是只从画布上摘掉(沿用 shellbase「关闭即回收」)。
 

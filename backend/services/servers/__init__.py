@@ -24,18 +24,18 @@ class ServerService:
         uri = parse_uri(raw_uri)
         return uri, self.registry.resolve(uri)
 
-    def open(self, member_id: str, raw_uri: str, since_mtime: float = 0.0) -> tuple[Live, object]:
+    def open(self, session_id: str, raw_uri: str, since_mtime: float = 0.0) -> tuple[Live, object]:
         uri, server = self.resolve(raw_uri)
-        return server.open(member_id, uri, since_mtime)
+        return server.open(session_id, uri, since_mtime)
 
-    def handle(self, server_name: str, member_id: str, raw_uri: str, cwd: str | None, since_mtime: float):
-        return self.registry.by_name(server_name).handle(member_id, parse_uri(raw_uri), Path(cwd or "."), since_mtime)
+    def handle(self, server_name: str, session_id: str, raw_uri: str, cwd: str | None, since_mtime: float):
+        return self.registry.by_name(server_name).handle(session_id, parse_uri(raw_uri), Path(cwd or "."), since_mtime)
 
-    def alive(self, server_name: str, member_id: str) -> bool:
-        return self.registry.by_name(server_name).alive(member_id)
+    def alive(self, server_name: str, session_id: str) -> bool:
+        return self.registry.by_name(server_name).alive(session_id)
 
-    def destroy(self, server_name: str, member_id: str) -> None:
-        self.registry.by_name(server_name).destroy(member_id)
+    def destroy(self, server_name: str, session_id: str) -> None:
+        self.registry.by_name(server_name).destroy(session_id)
 
 
 __all__ = ["ServerService", "ServerError", "parse_uri"]

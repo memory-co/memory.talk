@@ -1,6 +1,6 @@
 # Tasks API
 
-task 树、画布、成员、痕迹、事件、召回。字段语义见 [`../../structure/v5/task.md`](../../structure/v5/task.md)。
+task 树、画布、会话、痕迹、事件、召回。字段语义见 [`../../structure/v5/task.md`](../../structure/v5/task.md)。
 
 ---
 
@@ -56,17 +56,17 @@ task 树(森林)。
 | 目标 | 规则 | 副作用 |
 |---|---|---|
 | `todo` / `doing` | 无 | `done_at` 清空 |
-| `done` | 所有子 task 须为 `done` / `abandoned`,否则 **409** `conflict`(message 列出未完的子 task) | `done_at`;**冻结**:成员现场全部销毁(登记留着),事件 `status` + `frozen` |
+| `done` | 所有子 task 须为 `done` / `abandoned`,否则 **409** `conflict`(message 列出未完的子 task) | `done_at`;**冻结**:会话现场全部销毁(登记留着),事件 `status` + `frozen` |
 | `abandoned` | 无 | 同上 |
 
-结束后:`POST …/members` → 409;`rounds` 不再从把手同步。
+结束后:`POST …/sessions` → 409;`rounds` 不再从把手同步。
 
 ## GET /api/tasks/{task_id}/events
 
 ```json
 [
   {"ts": "…", "type": "created", "data": {"goal": "…", "parent": null}},
-  {"ts": "…", "type": "member.attached", "data": {"member": "…-m1", "uri": "codex:///w", "server": "codex"}},
+  {"ts": "…", "type": "session.attached", "data": {"session": "…-s1", "uri": "codex:///w", "server": "codex"}},
   {"ts": "…", "type": "status", "data": {"from": "doing", "to": "done"}},
   {"ts": "…", "type": "frozen", "data": {}}
 ]
@@ -104,8 +104,8 @@ memory.talk/
 
 ```json
 {"version": 0,
- "panels": [{"id": "p1", "uri": "file:///w", "member": null, "x": 0, "y": 0, "w": 6, "h": 16},
-            {"id": "p2", "uri": "codex:///w", "member": "task_…-m1", "x": 6, "y": 0, "w": 18, "h": 16}]}
+ "panels": [{"id": "p1", "uri": "file:///w", "session": null, "x": 0, "y": 0, "w": 6, "h": 16},
+            {"id": "p2", "uri": "codex:///w", "session": "task_…-s1", "x": 6, "y": 0, "w": 18, "h": 16}]}
 ```
 
 | 错误 | 状态 |
@@ -113,22 +113,22 @@ memory.talk/
 | `version` ≠ 当前 | 409 `conflict` `canvas version 0 != 1` |
 | 某块越界(`x+w > 24`、`y+h > 16`、`w/h < 1`、负坐标) | 409 `conflict` `panel p1 越界` |
 
-成功返回新画布,`version + 1`。**画布是视图**——它不建、不删成员;成员走下面的端点。
+成功返回新画布,`version + 1`。**画布是视图**——它不建、不删会话;会话走下面的端点。
 
 ---
 
-## GET /api/tasks/{task_id}/members
+## GET /api/tasks/{task_id}/sessions
 
 ```json
-[{"id": "task_…-m1", "uri": "codex:///w", "scheme": "codex", "server": "codex", "cwd": "/w",
+[{"id": "task_…-s1", "uri": "codex:///w", "scheme": "codex", "server": "codex", "cwd": "/w",
   "created_at": "…", "last_attached": "…", "alive": true, "window": null, "handle": null}]
 ```
 
 `alive` 现算(问 server);列表不带 `window` / `handle`(attach 时才给)。
 
-## POST /api/tasks/{task_id}/members
+## POST /api/tasks/{task_id}/sessions
 
-在 task 里打开一个块:拿协议去 server 那里寻址(声明了的 server,否则 default)→ 幂等建现场 → 登记成员 → 交回窗 + 把手。建现场失败则不留登记。
+在 task 里打开一个块:拿协议去 server 那里寻址(声明了的 server,否则 default)→ 幂等建现场 → 登记会话 → 交回窗 + 把手。建现场失败则不留登记。
 
 ```json
 {"uri": "codex:///w/memory.talk"}
@@ -137,7 +137,7 @@ memory.talk/
 **201**:
 
 ```json
-{"id": "task_…-m1", "uri": "codex:///w/memory.talk", "scheme": "codex", "server": "codex",
+{"id": "task_…-s1", "uri": "codex:///w/memory.talk", "scheme": "codex", "server": "codex",
  "cwd": "/w/memory.talk", "created_at": "…", "last_attached": "…",
  "alive": true,
  "window": {"url": null, "embed": null},
@@ -146,7 +146,7 @@ memory.talk/
 
 - `server` 可以 ≠ `scheme`:`https://` 由 `http` 建,`vim://` 由 `default` 建。
 - `window.url` 为 `null` = 没配 ttyd,只有把手没有画面。
-- 副作用:`members.json` 追加一条;终端类起一个 tmux 会话(名 = 成员 id);事件 `member.attached`。
+- 副作用:`sessions.json` 追加一条;终端类起一个 tmux 会话(名 = 会话 id);事件 `session.attached`。
 
 | 错误 | 状态 |
 |---|---|
@@ -155,15 +155,15 @@ memory.talk/
 | 要跑的命令不在 PATH(如 `vim://` 走 default 但没装 vim) | 400 `cmd_not_found` |
 | tmux 起不来 | 502 `platform` |
 
-## POST /api/tasks/{task_id}/members/{member_id}/attach
+## POST /api/tasks/{task_id}/sessions/{session_id}/attach
 
-重入:同一成员再次打开,幂等取回同一现场(tmux 会话还在就直接 attach,没了就按原 URI 重建)。返回同上,`last_attached` 更新。
+重入:同一会话再次打开,幂等取回同一现场(tmux 会话还在就直接 attach,没了就按原 URI 重建)。返回同上,`last_attached` 更新。
 
-## DELETE /api/tasks/{task_id}/members/{member_id}
+## DELETE /api/tasks/{task_id}/sessions/{session_id}
 
-关闭即回收:销毁现场(`tmux kill-session`)+ 删登记 + 事件 `member.detached`。**204**。
+关闭即回收:销毁现场(`tmux kill-session`)+ 删登记 + 事件 `session.detached`。**204**。
 
-## GET /api/tasks/{task_id}/members/{member_id}/capture
+## GET /api/tasks/{task_id}/sessions/{session_id}/capture
 
 把手 `capture`:抓终端屏幕,`text/plain`。
 
@@ -171,15 +171,15 @@ memory.talk/
 |---|---|
 | `lines` | 回看多少行,默认 200,`[1, 5000]` |
 
-把手没有 `capture`(http 成员)→ 409 `conflict`。
+把手没有 `capture`(http 会话)→ 409 `conflict`。
 
-## GET /api/tasks/{task_id}/members/{member_id}/rounds
+## GET /api/tasks/{task_id}/sessions/{session_id}/rounds
 
-agent 成员的会话痕迹。task 未结束时先从把手同步:按 cwd + 成员创建时间定位平台记录文件,新 round 追加进 `rounds.jsonl`(按 `id` 去重);然后返回全部。
+agent 会话的会话痕迹。task 未结束时先从把手同步:按 cwd + 会话创建时间定位平台记录文件,新 round 追加进 `rounds.jsonl`(按 `id` 去重);然后返回全部。
 
 ```json
 [{"id": "u1", "timestamp": "2026-09-05T10:00:00Z", "role": "human", "text": "把配置改成环境变量"},
  {"id": "a1", "timestamp": "…", "role": "assistant", "text": "好\n[Edit] {\"f\": \"config.py\"}"}]
 ```
 
-没有 `rounds` 能力的成员(bash / http)返回 `[]`(bash)或 `[]`(http)——不报错,因为「没有痕迹」是合法状态。
+没有 `rounds` 能力的会话(bash / http)返回 `[]`(bash)或 `[]`(http)——不报错,因为「没有痕迹」是合法状态。

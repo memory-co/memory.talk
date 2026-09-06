@@ -29,7 +29,7 @@ class HandleInfo(BaseModel):
 
 class Live(BaseModel):
     """一次 open 的结果:现场活着,这是看它、驱动它的两样东西。"""
-    member_id: str
+    session_id: str
     server: str
     window: Window
     handle: HandleInfo

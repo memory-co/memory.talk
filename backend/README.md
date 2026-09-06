@@ -11,7 +11,7 @@ backend/
 ├── gateway.py                # AuthGate + 静态托管 + 反代(/tty、/proxy/<port>)
 │
 ├── models/                   # 数据模型(纯结构,不含 IO)
-│   ├── task.py               #   Task 节点(目标、状态、父子)、Canvas、Member、Round、Event
+│   ├── task.py               #   Task 节点(目标、状态、父子)、Canvas、Session、Round、Event
 │   ├── issue.py              #   Issue / Position / Argument / Link(IBIS 边)
 │   ├── card.py               #   Card:标题、正文、语境、链接
 │   └── server.py             #   Server 契约:name + protocols(声明响应哪些协议)/ open(id, uri) → Window + Handle / handle / alive / destroy
@@ -21,8 +21,8 @@ backend/
 │   │   ├── __init__.py       #     入口:导出 TaskService(对外唯一门面)
 │   │   ├── tree.py           #     task 树:建节点、父子、状态、完成收拢
 │   │   ├── canvas.py         #     画布(24×16 网格剖分)—— task 的视图,可随时重排
-│   │   ├── members.py        #     成员登记:成员 id ↔ URI ↔ server ↔ 活着(唯一权威,脱离布局)
-│   │   ├── sessions.py       #     agent 成员的 rounds.jsonl(append-only)
+│   │   ├── sessions.py        #     会话登记:会话 id ↔ URI ↔ server ↔ 活着(唯一权威,脱离布局)
+│   │   ├── sessions.py       #     agent 会话的 rounds.jsonl(append-only)
 │   │   └── events.py         #     task 自己的 append-only 事件(开工/状态/做完)
 │   ├── servers/              #   server 的装载与分发 —— docs/works/v5/protocol-server.md
 │   │   ├── registry.py       #     协议 → server 寻址:先看谁声明了它,没人声明去 default

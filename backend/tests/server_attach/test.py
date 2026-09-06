@@ -23,54 +23,54 @@ def test_registry_and_resolve(client):
     assert client.get("/api/servers/resolve", params={"uri": "no-scheme"}).status_code == 400
 
 
-def test_http_members(client):
+def test_http_sessions(client):
     t = client.post("/api/tasks", json={"goal": "看文档"}).json()
-    m = client.post(f"/api/tasks/{t['id']}/members", json={"uri": "https://localhost:5173/app"}).json()
+    m = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": "https://localhost:5173/app"}).json()
     assert m["scheme"] == "https" and m["server"] == "http" and m["window"]["embed"] == "/proxy/5173/app"
     assert m["handle"] == {"kind": "none", "capabilities": []}
-    m2 = client.post(f"/api/tasks/{t['id']}/members", json={"uri": "https://example.com/x"}).json()
-    assert m2["window"]["embed"] == "https://example.com/x" and m2["id"].endswith("-m2")
-    assert client.get(f"/api/tasks/{t['id']}/members/{m['id']}/capture").status_code == 409
+    m2 = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": "https://example.com/x"}).json()
+    assert m2["window"]["embed"] == "https://example.com/x" and m2["id"].endswith("-s2")
+    assert client.get(f"/api/tasks/{t['id']}/sessions/{m['id']}/capture").status_code == 409
 
 
 @needs_tmux
-def test_terminal_member_lifecycle(client, home):
+def test_terminal_session_lifecycle(client, home):
     t = client.post("/api/tasks", json={"goal": "跑个终端"}).json()
     ws = str(home / "ws")
-    r = client.post(f"/api/tasks/{t['id']}/members", json={"uri": f"bash://{ws}"})
+    r = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": f"bash://{ws}"})
     assert r.status_code == 201, r.text
     m = r.json()
     assert m["server"] == "bash" and m["alive"] is True and m["cwd"] == ws
     assert m["window"]["url"] is None                       # 没配 ttyd → 老实报没有画面
     assert m["handle"]["capabilities"] == ["capture", "send"]
 
-    # 现场真的活着:tmux 会话名 = 成员 id
+    # 现场真的活着:tmux 会话名 = 会话 id
     sock = client.get("/api/system/info").json()["tmux_socket"]
     assert subprocess.run(["tmux", "-L", sock, "has-session", "-t", f"={m['id']}"]).returncode == 0
 
     # 把手能看见;重入幂等
     subprocess.run(["tmux", "-L", sock, "send-keys", "-t", f"{m['id']}:", "echo hello-v5", "Enter"])
     time.sleep(0.3)
-    assert "hello-v5" in client.get(f"/api/tasks/{t['id']}/members/{m['id']}/capture").text
-    again = client.post(f"/api/tasks/{t['id']}/members/{m['id']}/attach").json()
+    assert "hello-v5" in client.get(f"/api/tasks/{t['id']}/sessions/{m['id']}/capture").text
+    again = client.post(f"/api/tasks/{t['id']}/sessions/{m['id']}/attach").json()
     assert again["id"] == m["id"] and again["alive"]
-    assert len(client.get(f"/api/tasks/{t['id']}/members").json()) == 1
+    assert len(client.get(f"/api/tasks/{t['id']}/sessions").json()) == 1
 
     # 没有专门 server 的协议 → default:协议名当命令。命令不在 PATH → 明确报错
-    r = client.post(f"/api/tasks/{t['id']}/members", json={"uri": "nosuchcmd-zz://"})
+    r = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": "nosuchcmd-zz://"})
     assert r.status_code == 400 and r.json()["error"] == "cmd_not_found"
-    d = client.post(f"/api/tasks/{t['id']}/members", json={"uri": f"sleep://{ws}"})
+    d = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": f"sleep://{ws}"})
     assert d.status_code == 201 and d.json()["server"] == "default" and d.json()["scheme"] == "sleep"
-    client.delete(f"/api/tasks/{t['id']}/members/{d.json()['id']}")
+    client.delete(f"/api/tasks/{t['id']}/sessions/{d.json()['id']}")
 
     # 关闭即回收
-    assert client.delete(f"/api/tasks/{t['id']}/members/{m['id']}").status_code == 204
+    assert client.delete(f"/api/tasks/{t['id']}/sessions/{m['id']}").status_code == 204
     assert subprocess.run(["tmux", "-L", sock, "has-session", "-t", f"={m['id']}"]).returncode != 0
-    assert client.get(f"/api/tasks/{t['id']}/members").json() == []
-    assert client.get(f"/api/tasks/{t['id']}/members/{m['id']}/capture").status_code == 404
+    assert client.get(f"/api/tasks/{t['id']}/sessions").json() == []
+    assert client.get(f"/api/tasks/{t['id']}/sessions/{m['id']}/capture").status_code == 404
 
     # 做完 → 冻结:现场销毁、登记留着
-    m = client.post(f"/api/tasks/{t['id']}/members", json={"uri": f"bash://{ws}"}).json()
+    m = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": f"bash://{ws}"}).json()
     client.patch(f"/api/tasks/{t['id']}", json={"status": "done"})
-    mem = client.get(f"/api/tasks/{t['id']}/members").json()
+    mem = client.get(f"/api/tasks/{t['id']}/sessions").json()
     assert len(mem) == 1 and mem[0]["alive"] is False

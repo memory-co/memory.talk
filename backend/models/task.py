@@ -41,7 +41,7 @@ class TaskNode(Task):
 class Panel(BaseModel):
     id: str
     uri: str
-    member: str | None = Field(None, description="装的是哪个成员(终端类块必有;浏览器 / 文件类可无)")
+    session: str | None = Field(None, description="装的是哪个会话(终端类块必有;浏览器 / 文件类可无)")
     x: int
     y: int
     w: int
@@ -60,9 +60,9 @@ class CanvasPut(BaseModel):
     panels: list[Panel]
 
 
-# ---- 成员:现场,身份脱离布局 ----
+# ---- 会话:现场,身份脱离布局 ----
 
-class Member(BaseModel):
+class Session(BaseModel):
     id: str
     uri: str
     scheme: str
@@ -72,11 +72,11 @@ class Member(BaseModel):
     last_attached: str
 
 
-class MemberCreate(BaseModel):
+class SessionCreate(BaseModel):
     uri: str
 
 
-class MemberView(Member):
+class SessionView(Session):
     alive: bool = False
     window: Window | None = None
     handle: HandleInfo | None = None
@@ -98,3 +98,21 @@ class Event(BaseModel):
 
 
 TaskNode.model_rebuild()
+
+
+# ---- 成员:人 ↔ task。只做可见性,不做权限(整个实例给一个团队用) ----
+
+class Member(BaseModel):
+    user: str = Field(description="团队里的一个人,由客户端在请求头 X-Memory-Talk-User 里自报")
+    first_seen: str
+    last_seen: str
+    ops: int = Field(0, description="对这个 task 的操作次数")
+
+
+class MemberView(Member):
+    active: bool = Field(False, description="最近一段时间内操作过 = 当前正在操作(现算)")
+
+
+class Members(BaseModel):
+    current: list[MemberView] = Field(default_factory=list, description="当前正在操作的人")
+    history: list[MemberView] = Field(default_factory=list, description="历史操作过的人(含当前),按最近活动倒序")

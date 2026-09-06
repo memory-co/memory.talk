@@ -17,12 +17,12 @@ Tasks    GET    /api/tasks                                        task 树(森�
          GET    /api/tasks/{id}/recall                            开工注入:card 目录文本
          GET    /api/tasks/{id}/canvas                            画布
          PUT    /api/tasks/{id}/canvas                            全量写画布(version 乐观锁)
-         GET    /api/tasks/{id}/members                           成员清单
-         POST   /api/tasks/{id}/members                           打开一个块:协议 → server 建现场
-         POST   /api/tasks/{id}/members/{mid}/attach              重入
-         DELETE /api/tasks/{id}/members/{mid}                     关闭即回收
-         GET    /api/tasks/{id}/members/{mid}/capture             抓终端屏幕
-         GET    /api/tasks/{id}/members/{mid}/rounds              agent 会话痕迹
+         GET    /api/tasks/{id}/sessions                           会话清单
+         POST   /api/tasks/{id}/sessions                           打开一个块:协议 → server 建现场
+         POST   /api/tasks/{id}/sessions/{sid}/attach              重入
+         DELETE /api/tasks/{id}/sessions/{sid}                     关闭即回收
+         GET    /api/tasks/{id}/sessions/{sid}/capture             抓终端屏幕
+         GET    /api/tasks/{id}/sessions/{sid}/rounds              agent 会话痕迹
 
 Servers  GET    /api/servers                                      server 清单及各自响应的协议
          GET    /api/servers/resolve?uri=                         一个 URI 会请求到谁
@@ -59,7 +59,7 @@ Issues   GET    /api/issues                                       清单(manager
   | 状态 | `error` | 何时 |
   |---|---|---|
   | 400 | `bad_uri` / `no_server` / `cmd_not_found` | URI 没协议 / 连 default 都没有 / 要跑的命令不在 PATH |
-  | 404 | `not_found` | task / member / card / issue / position 不存在 |
+  | 404 | `not_found` | task / session / card / issue / position 不存在 |
   | 409 | `exists` | 建卡时 id 已存在 |
   | 409 | `conflict` | task 状态规则、画布 version / 越界、已结束的 task 不能 attach、把手没有该能力 |
   | 422 | (FastAPI 默认) | 请求体校验失败 |
@@ -77,7 +77,7 @@ Issues   GET    /api/issues                                       清单(manager
 | 对象 | 形态 |
 |---|---|
 | task | `task_<时间戳><4hex>` |
-| member | `<task_id>-m<n>`(同时是 tmux 会话名) |
+| session | `<task_id>-s<n>`(同时是 tmux 会话名) |
 | issue | `iss_<时间戳><4hex>`;position `p<n>`;argument `a<n>` |
 | card | 仓库内相对路径 `<dir>/<slug>`,不含 `.md`;路径里可含 `/` 和中文,直接放在 URL 里 |
 
@@ -85,7 +85,7 @@ Issues   GET    /api/issues                                       清单(manager
 
 ```
 ~/.memory.talk/memory/   git 仓库:cards/<dir>/<slug>.md + issues/<id>.json
-~/.memory.talk/tasks/    裸文件:<task_id>/{task,canvas,members}.json + events.jsonl + sessions/<member>/rounds.jsonl
+~/.memory.talk/tasks/    裸文件:<task_id>/{task,canvas,sessions}.json + events.jsonl + sessions/<session>/rounds.jsonl
 ```
 
 环境变量 `MEMORY_TALK_HOME` / `MEMORY_TALK_AUTHOR` / `MEMORY_TALK_EMAIL` / `MEMORY_TALK_WORKSPACE` / `MEMORY_TALK_TMUX_SOCKET` / `MEMORY_TALK_TTYD_URL` / `MEMORY_TALK_CLAUDE_PROJECTS` / `MEMORY_TALK_CODEX_SESSIONS` / `MEMORY_TALK_KIMI_SESSIONS`,含义见 [`../../structure/v5/filesystem.md`](../../structure/v5/filesystem.md)。

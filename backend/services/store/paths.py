@@ -41,11 +41,15 @@ class TasksLayout:
     def canvas_json(self, task_id: str) -> Path:
         return self.task_dir(task_id) / "canvas.json"
 
-    def members_json(self, task_id: str) -> Path:
-        return self.task_dir(task_id) / "members.json"
+    def sessions_json(self, task_id: str) -> Path:
+        return self.task_dir(task_id) / "sessions.json"
 
     def events_jsonl(self, task_id: str) -> Path:
         return self.task_dir(task_id) / "events.jsonl"
 
-    def rounds_jsonl(self, task_id: str, member_id: str) -> Path:
-        return self.task_dir(task_id) / "sessions" / member_id / "rounds.jsonl"
+    def rounds_jsonl(self, task_id: str, session_id: str) -> Path:
+        return self.task_dir(task_id) / "sessions" / session_id / "rounds.jsonl"
+
+    def members_json(self, task_id: str) -> Path:
+        """人:谁在操作 / 操作过这个 task(不是现场,现场是 sessions.json)。"""
+        return self.task_dir(task_id) / "members.json"

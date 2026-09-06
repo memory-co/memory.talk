@@ -23,20 +23,20 @@ class HttpServer:
     def info(self) -> ServerInfo:
         return ServerInfo(name=self.name, protocols=self.protocols, description=self.description)
 
-    def open(self, member_id: str, uri: ParsedUri, since_mtime: float = 0.0) -> tuple[Live, NoHandle]:
+    def open(self, session_id: str, uri: ParsedUri, since_mtime: float = 0.0) -> tuple[Live, NoHandle]:
         local = uri.host in ("localhost", "127.0.0.1")
         embed = f"/proxy/{uri.port}{uri.path or '/'}" if local and uri.port else uri.raw
         h = NoHandle()
-        return Live(member_id=member_id, server=self.name, window=Window(url=uri.raw, embed=embed),
+        return Live(session_id=session_id, server=self.name, window=Window(url=uri.raw, embed=embed),
                     handle=h.info()), h
 
-    def handle(self, member_id: str, uri: ParsedUri, cwd: Path, since_mtime: float) -> NoHandle:
+    def handle(self, session_id: str, uri: ParsedUri, cwd: Path, since_mtime: float) -> NoHandle:
         return NoHandle()
 
-    def alive(self, member_id: str) -> bool:
+    def alive(self, session_id: str) -> bool:
         return True
 
-    def destroy(self, member_id: str) -> None:
+    def destroy(self, session_id: str) -> None:
         pass
 
 

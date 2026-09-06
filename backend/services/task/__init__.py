@@ -1,16 +1,17 @@
-"""TaskService:树、画布、成员(经 server 建现场)、痕迹、事件(docs/works/v5/task.md)。"""
+"""TaskService:树、画布、会话(经 server 建现场)、痕迹、事件(docs/works/v5/task.md)。"""
 from __future__ import annotations
 
 from datetime import datetime
-from models.task import (Canvas, CanvasPut, Event, Member, MemberView, Round, Task, TaskCreate,
+from models.task import (Canvas, CanvasPut, Event, Members, Round, Session, SessionView, Task, TaskCreate,
                          TaskNode, TaskUpdate)
 from services.servers import ServerService
 from services.store import StoreService
 
 from .canvas import CanvasStore
 from .events import Events
-from .members import MemberNotFound, MemberRegistry
-from .sessions import Sessions
+from .members import MemberRegistry
+from .sessions import SessionNotFound, SessionRegistry
+from .rounds import Rounds
 from .tree import TaskConflict, TaskNotFound, TaskTree
 
 
@@ -19,9 +20,21 @@ class TaskService:
         self.servers = servers
         self.tree = TaskTree(store.tasks)
         self.canvas = CanvasStore(store.tasks)
-        self.members = MemberRegistry(store.tasks)
-        self.sessions = Sessions(store.tasks)
+        self.sessions = SessionRegistry(store.tasks)
+        self.round_log = Rounds(store.tasks)
         self.events = Events(store.tasks)
+        self.members = MemberRegistry(store.tasks)
+
+    # ---- 成员(人):谁在操作 / 操作过。只记,不拦 ----
+
+    def touch(self, task_id: str, user: str | None) -> None:
+        if user:
+            self.tree.get(task_id)
+            self.members.touch(task_id, user)
+
+    def list_members(self, task_id: str) -> Members:
+        self.tree.get(task_id)
+        return self.members.list(task_id)
 
     # ---- 树 ----
 
@@ -46,8 +59,8 @@ class TaskService:
         return task
 
     def _freeze(self, task_id: str) -> None:
-        """做完:成员冻结——现场销毁,登记留着(可回去看痕迹,不再是干活的地方)。"""
-        for m in self.members.list(task_id):
+        """做完:会话冻结——现场销毁,登记留着(可回去看痕迹,不再是干活的地方)。"""
+        for m in self.sessions.list(task_id):
             try:
                 self.servers.destroy(m.server, m.id)
             except Exception:
@@ -64,74 +77,74 @@ class TaskService:
         self.tree.get(task_id)
         return self.canvas.put(task_id, req)
 
-    # ---- 成员:在 task 里打开,就是它的 ----
+    # ---- 会话:在 task 里打开,就是它的 ----
 
-    def attach(self, task_id: str, raw_uri: str) -> MemberView:
+    def attach(self, task_id: str, raw_uri: str) -> SessionView:
         task = self.tree.get(task_id)
         if task.status in ("done", "abandoned"):
             raise TaskConflict(f"{task_id} 已结束,不再是干活的地方")
         uri, server = self.servers.resolve(raw_uri)
-        m = self.members.add(task_id, raw_uri, uri.scheme, server.name, None)
+        m = self.sessions.add(task_id, raw_uri, uri.scheme, server.name, None)
         try:
             live, _ = self.servers.open(m.id, raw_uri, since_mtime=_epoch(m.created_at))
         except Exception:
-            self.members.remove(task_id, m.id)      # 现场没建起来,登记不能留
+            self.sessions.remove(task_id, m.id)      # 现场没建起来,登记不能留
             raise
         if live.cwd:
             m = self._set_cwd(task_id, m, live.cwd)
-        self.events.emit(task_id, "member.attached", member=m.id, uri=raw_uri, server=server.name)
-        return MemberView(**m.model_dump(), alive=True, window=live.window, handle=live.handle)
+        self.events.emit(task_id, "session.attached", session=m.id, uri=raw_uri, server=server.name)
+        return SessionView(**m.model_dump(), alive=True, window=live.window, handle=live.handle)
 
-    def reattach(self, task_id: str, member_id: str) -> MemberView:
-        """重入:同一成员再次打开,幂等地取回同一个现场。"""
-        m = self.members.get(task_id, member_id)
+    def reattach(self, task_id: str, session_id: str) -> SessionView:
+        """重入:同一会话再次打开,幂等地取回同一个现场。"""
+        m = self.sessions.get(task_id, session_id)
         live, _ = self.servers.open(m.id, m.uri, since_mtime=_epoch(m.created_at))
-        m = self.members.touch(task_id, member_id)
-        return MemberView(**m.model_dump(), alive=True, window=live.window, handle=live.handle)
+        m = self.sessions.touch(task_id, session_id)
+        return SessionView(**m.model_dump(), alive=True, window=live.window, handle=live.handle)
 
-    def _set_cwd(self, task_id: str, m: Member, cwd: str) -> Member:
-        members = self.members._load(task_id)
-        for i, x in enumerate(members):
+    def _set_cwd(self, task_id: str, m: Session, cwd: str) -> Session:
+        sessions = self.sessions._load(task_id)
+        for i, x in enumerate(sessions):
             if x.id == m.id:
-                members[i] = x.model_copy(update={"cwd": cwd})
-                self.members._save(task_id, members)
-                return members[i]
+                sessions[i] = x.model_copy(update={"cwd": cwd})
+                self.sessions._save(task_id, sessions)
+                return sessions[i]
         return m
 
-    def list_members(self, task_id: str) -> list[MemberView]:
+    def list_sessions(self, task_id: str) -> list[SessionView]:
         self.tree.get(task_id)
         out = []
-        for m in self.members.list(task_id):
+        for m in self.sessions.list(task_id):
             alive = self.servers.alive(m.server, m.id)
-            out.append(MemberView(**m.model_dump(), alive=alive))
+            out.append(SessionView(**m.model_dump(), alive=alive))
         return out
 
-    def detach(self, task_id: str, member_id: str) -> None:
+    def detach(self, task_id: str, session_id: str) -> None:
         """关闭即回收:销毁现场 + 删登记。"""
-        m = self.members.get(task_id, member_id)
+        m = self.sessions.get(task_id, session_id)
         self.servers.destroy(m.server, m.id)
-        self.members.remove(task_id, member_id)
-        self.events.emit(task_id, "member.detached", member=member_id)
+        self.sessions.remove(task_id, session_id)
+        self.events.emit(task_id, "session.detached", session=session_id)
 
     # ---- 痕迹 ----
 
-    def capture(self, task_id: str, member_id: str, lines: int = 200) -> str:
-        m = self.members.get(task_id, member_id)
+    def capture(self, task_id: str, session_id: str, lines: int = 200) -> str:
+        m = self.sessions.get(task_id, session_id)
         h = self._handle(m)
         if not hasattr(h, "capture"):
-            raise TaskConflict(f"{member_id} 的把手没有 capture")
+            raise TaskConflict(f"{session_id} 的把手没有 capture")
         return h.capture(lines)
 
-    def rounds(self, task_id: str, member_id: str) -> list[Round]:
-        m = self.members.get(task_id, member_id)
+    def rounds(self, task_id: str, session_id: str) -> list[Round]:
+        m = self.sessions.get(task_id, session_id)
         task = self.tree.get(task_id)
         if task.status not in ("done", "abandoned"):
             h = self._handle(m)
             if hasattr(h, "rounds"):
-                self.sessions.sync(task_id, member_id, h.rounds())
-        return self.sessions.read(task_id, member_id)
+                self.round_log.sync(task_id, session_id, h.rounds())
+        return self.round_log.read(task_id, session_id)
 
-    def _handle(self, m: Member):
+    def _handle(self, m: Session):
         return self.servers.handle(m.server, m.id, m.uri, m.cwd, _epoch(m.created_at))
 
     def history(self, task_id: str) -> list[Event]:
@@ -143,4 +156,4 @@ def _epoch(iso: str) -> float:
     return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
 
 
-__all__ = ["TaskService", "TaskNotFound", "TaskConflict", "MemberNotFound"]
+__all__ = ["TaskService", "TaskNotFound", "TaskConflict", "SessionNotFound"]

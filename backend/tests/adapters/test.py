@@ -18,7 +18,7 @@ def _claude_transcript(root, cwd, rows):
 
 
 @needs_tmux
-def test_claude_member_rounds(client, home, monkeypatch):
+def test_claude_session_rounds(client, home, monkeypatch):
     # 让 "claude" 这个协议在 PATH 里有个命令可跑(假的,只要 tmux 能起)
     bindir = home / "bin"; bindir.mkdir()
     fake = bindir / "claude"; fake.write_text("#!/bin/sh\nsleep 60\n"); fake.chmod(0o755)
@@ -26,11 +26,11 @@ def test_claude_member_rounds(client, home, monkeypatch):
 
     t = client.post("/api/tasks", json={"goal": "让 agent 干活"}).json()
     proj = home / "ws" / "proj"; proj.mkdir(parents=True)
-    m = client.post(f"/api/tasks/{t['id']}/members", json={"uri": f"claude://{proj}"}).json()
+    m = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": f"claude://{proj}"}).json()
     assert m["server"] == "claude" and "rounds" in m["handle"]["capabilities"]
-    assert client.get(f"/api/tasks/{t['id']}/members/{m['id']}/rounds").json() == []
+    assert client.get(f"/api/tasks/{t['id']}/sessions/{m['id']}/rounds").json() == []
 
-    # 会话记录出现了(成员创建之后)
+    # 会话记录出现了(会话创建之后)
     time.sleep(0.05)
     rows = [
         {"type": "user", "uuid": "u1", "timestamp": "2026-09-05T10:00:00Z", "cwd": str(proj),
@@ -43,16 +43,16 @@ def test_claude_member_rounds(client, home, monkeypatch):
     ]
     _claude_transcript(home / "claude", proj, rows)
 
-    rounds = client.get(f"/api/tasks/{t['id']}/members/{m['id']}/rounds").json()
+    rounds = client.get(f"/api/tasks/{t['id']}/sessions/{m['id']}/rounds").json()
     assert [(r["id"], r["role"]) for r in rounds] == [("u1", "human"), ("a1", "assistant"), ("u2", "tool"), ("u3", "system")]
     assert "[Edit]" in rounds[1]["text"]
 
     # append-only:再读不重复;新 round 追加
-    assert len(client.get(f"/api/tasks/{t['id']}/members/{m['id']}/rounds").json()) == 4
+    assert len(client.get(f"/api/tasks/{t['id']}/sessions/{m['id']}/rounds").json()) == 4
     p = home / "claude" / str(proj).replace("/", "-") / "sess.jsonl"
     with open(p, "a") as f:
         f.write(json.dumps({"type": "assistant", "uuid": "a2", "message": {"content": [{"type": "text", "text": "改完了"}]}}) + "\n")
-    assert [r["id"] for r in client.get(f"/api/tasks/{t['id']}/members/{m['id']}/rounds").json()][-1] == "a2"
+    assert [r["id"] for r in client.get(f"/api/tasks/{t['id']}/sessions/{m['id']}/rounds").json()][-1] == "a2"
     jsonl = home / "home" / "tasks" / t["id"] / "sessions" / m["id"] / "rounds.jsonl"
     assert len(jsonl.read_text().splitlines()) == 5
 

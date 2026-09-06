@@ -1,6 +1,6 @@
 # Servers API
 
-server 是建现场、交回窗 + 把手的那层。**每个 server 自己声明响应哪些协议**,一个可以多个;没人声明的协议去 **default**(背后是 bash 把协议名当命令跑,调用方不感知)。本页只有观测端点——**建现场走 [`POST /api/tasks/{id}/members`](tasks.md#post-apitaskstask_idmembers)**,因为现场总是某个 task 的成员。字段见 [`../../structure/v5/server.md`](../../structure/v5/server.md)。
+server 是建现场、交回窗 + 把手的那层。**每个 server 自己声明响应哪些协议**,一个可以多个;没人声明的协议去 **default**(背后是 bash 把协议名当命令跑,调用方不感知)。本页只有观测端点——**建现场走 [`POST /api/tasks/{id}/sessions`](tasks.md#post-apitaskstask_idmembers)**,因为现场总是某个 task 的会话。字段见 [`../../structure/v5/server.md`](../../structure/v5/server.md)。
 
 ## GET /api/servers
 
@@ -40,4 +40,4 @@ server 是建现场、交回窗 + 把手的那层。**每个 server 自己声明
 | 没协议 | 400 `bad_uri` |
 | 连 default 都没有 | 400 `no_server` |
 
-> `resolve` 不探 PATH:`vim://` 一律答 `default`;`vim` 装没装,要到真正 open(`POST /api/tasks/{id}/members`)时才知道——没装报 `400 cmd_not_found`。
+> `resolve` 不探 PATH:`vim://` 一律答 `default`;`vim` 装没装,要到真正 open(`POST /api/tasks/{id}/sessions`)时才知道——没装报 `400 cmd_not_found`。

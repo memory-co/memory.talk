@@ -1,4 +1,4 @@
-"""/api/servers —— 有哪些 server、一个 URI 会请求到谁。建现场走 /api/tasks/{id}/members。"""
+"""/api/servers —— 有哪些 server、一个 URI 会请求到谁。建现场走 /api/tasks/{id}/sessions。"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request

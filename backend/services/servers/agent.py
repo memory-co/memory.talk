@@ -34,5 +34,5 @@ class AgentBase(TerminalBase):
         super().__init__(tmux, workspace, ttyd_url)
         self.adapter = adapter
 
-    def handle(self, member_id: str, uri: ParsedUri, cwd: Path, since_mtime: float) -> AgentHandle:
-        return AgentHandle(self.tmux, member_id, self.adapter, cwd, since_mtime)
+    def handle(self, session_id: str, uri: ParsedUri, cwd: Path, since_mtime: float) -> AgentHandle:
+        return AgentHandle(self.tmux, session_id, self.adapter, cwd, since_mtime)
