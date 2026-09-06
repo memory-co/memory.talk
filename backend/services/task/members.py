@@ -36,11 +36,12 @@ class MemberRegistry:
         ts = now()
         for i, m in enumerate(members):
             if m.user == user:
-                members[i] = m.model_copy(update={"last_seen": ts, "ops": m.ops + 1})
-                self._save(task_id, members)
-                return members[i]
-        m = Member(user=user, first_seen=ts, last_seen=ts, ops=1)
-        members.append(m)
+                m = m.model_copy(update={"last_seen": ts, "ops": m.ops + 1})
+                del members[i]
+                break
+        else:
+            m = Member(user=user, first_seen=ts, last_seen=ts, ops=1)
+        members.insert(0, m)          # 最近动过的排最前;同一秒内的并列靠这个顺序分先后
         self._save(task_id, members)
         return m
 

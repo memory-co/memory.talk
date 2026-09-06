@@ -15,7 +15,8 @@
     └── <task_id>/
         ├── task.json               ← 目标 / 项目 / 父 / 状态
         ├── canvas.json             ← 画布(视图);不存在 = 空画布
-        ├── sessions.json            ← 会话登记(数组)
+        ├── sessions.json           ← 会话登记(数组,现场)
+        ├── members.json            ← 成员(人):谁在操作 / 操作过,只做可见性
         ├── events.jsonl            ← task 时间线,只追加
         └── sessions/
             └── <session_id>/
@@ -33,7 +34,7 @@
 
 ## tasks/(裸文件)
 
-- **原子写**:`task.json` / `canvas.json` / `sessions.json` 写临时文件后 `os.replace`。
+- **原子写**:`task.json` / `canvas.json` / `sessions.json` / `members.json` 写临时文件后 `os.replace`。
 - **只追加**:`events.jsonl` / `rounds.jsonl` 以 append 打开,从不改既有行。
 - **单写者、无缓存直读**:服务进程是唯一写者;每次请求直接读盘。
 - **不在 git 里**:画布重排、attach 时间、agent 的每一轮输出,都是过程,不是决定。

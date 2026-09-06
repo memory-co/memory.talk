@@ -15,6 +15,8 @@ Tasks    GET    /api/tasks                                        task 树(森�
          PATCH  /api/tasks/{id}                                   改目标 / 项目 / 状态
          GET    /api/tasks/{id}/events                            task 时间线
          GET    /api/tasks/{id}/recall                            开工注入:card 目录文本
+         GET    /api/tasks/{id}/members                           成员(人):谁在操作 / 操作过
+         POST   /api/tasks/{id}/members/touch                     心跳:我在操作
          GET    /api/tasks/{id}/canvas                            画布
          PUT    /api/tasks/{id}/canvas                            全量写画布(version 乐观锁)
          GET    /api/tasks/{id}/sessions                           会话清单
@@ -70,6 +72,7 @@ Issues   GET    /api/issues                                       清单(manager
 - **时间**:ISO 8601 UTC `2026-09-05T23:02:07Z`。
 - **HTTP 方法**:读 GET;建 POST;全量替换 PUT;部分改 PATCH;删 / 废弃 DELETE。
 - **无分页**:量级小,列表全量返回;`history` 最多 50 条。
+- **身份自报、不做权限**:请求头 `X-Memory-Talk-User: <名字>` 表示谁在操作;带了就记进 task 的成员名单(只做可见性),不带照样能操作。整个实例给一个团队用。
 - **没有鉴权、没有网关**:ttyd / 反代 / 静态托管随前端一起做。
 
 ## ID

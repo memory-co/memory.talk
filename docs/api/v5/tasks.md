@@ -1,6 +1,6 @@
 # Tasks API
 
-task 树、画布、会话、痕迹、事件、召回。字段语义见 [`../../structure/v5/task.md`](../../structure/v5/task.md)。
+task 树、画布、会话(现场)、成员(人)、痕迹、事件、召回。带 `X-Memory-Talk-User` 头的请求,凡会动某个 task 的(建、改、重排画布、开 / 重入 / 关会话、打开 task 本身),都会把这个人记进该 task 的成员名单。字段语义见 [`../../structure/v5/task.md`](../../structure/v5/task.md)。
 
 ---
 
@@ -87,6 +87,24 @@ memory.talk/
 ```
 
 不含 `deprecated` 的卡。
+
+---
+
+## GET /api/tasks/{task_id}/members
+
+成员(**人**):谁当前正在操作、谁历史操作过。只做可见性,不做权限。
+
+```json
+{"current": [{"user": "alice", "first_seen": "…", "last_seen": "…", "ops": 7, "active": true}],
+ "history": [{"user": "alice", "first_seen": "…", "last_seen": "…", "ops": 7, "active": true},
+             {"user": "bob",   "first_seen": "…", "last_seen": "…", "ops": 2, "active": false}]}
+```
+
+`active` = 最近 120 秒内动过;`current` 是 `history` 里 active 的那些;`history` 按最近活动倒序。
+
+## POST /api/tasks/{task_id}/members/touch
+
+心跳:「我在操作这个 task」。身份来自 `X-Memory-Talk-User`;不带头则什么都不记。返回同上。前端开着 task 页面时每 30 秒调一次。
 
 ---
 

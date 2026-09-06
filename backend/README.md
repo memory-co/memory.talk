@@ -21,8 +21,9 @@ backend/
 │   │   ├── __init__.py       #     入口:导出 TaskService(对外唯一门面)
 │   │   ├── tree.py           #     task 树:建节点、父子、状态、完成收拢
 │   │   ├── canvas.py         #     画布(24×16 网格剖分)—— task 的视图,可随时重排
-│   │   ├── sessions.py        #     会话登记:会话 id ↔ URI ↔ server ↔ 活着(唯一权威,脱离布局)
-│   │   ├── sessions.py       #     agent 会话的 rounds.jsonl(append-only)
+│   │   ├── sessions.py       #     会话(现场)登记:会话 id ↔ URI ↔ server ↔ 活着(唯一权威,脱离布局)
+│   │   ├── members.py        #     成员(人):谁在操作 / 操作过,只做可见性不做权限(身份来自 X-Memory-Talk-User)
+│   │   ├── rounds.py         #     agent 会话的 rounds.jsonl(append-only)
 │   │   └── events.py         #     task 自己的 append-only 事件(开工/状态/做完)
 │   ├── servers/              #   server 的装载与分发 —— docs/works/v5/protocol-server.md
 │   │   ├── registry.py       #     协议 → server 寻址:先看谁声明了它,没人声明去 default

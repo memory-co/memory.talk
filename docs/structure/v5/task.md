@@ -1,6 +1,6 @@
-# Task + Canvas + Session + Round + Event
+# Task + Canvas + Session + Member + Round + Event
 
-做事层的五个对象,全部住在 `tasks/<task_id>/` 目录下,裸文件。机制见 [`../../works/v5/task.md`](../../works/v5/task.md)。
+做事层的六个对象,全部住在 `tasks/<task_id>/` 目录下,裸文件。机制见 [`../../works/v5/task.md`](../../works/v5/task.md)。
 
 ## Task
 
@@ -89,6 +89,24 @@ task 的一个会话 = 一个现场。**在 task 里打开就是它的**,归属�
 
 一个会话只属于一个 task、一个确定节点。要在别的事里用它的结论,走 issue / card,不搬会话。
 
+## Member
+
+**人**,不是现场。谁在操作 / 操作过这个 task;只做可见性,**不做权限**(整个实例给一个团队用)。机制见 [`../../works/v5/member.md`](../../works/v5/member.md)。
+
+```json
+{"user": "alice", "first_seen": "2026-09-06T08:00:00Z", "last_seen": "2026-09-06T09:12:40Z", "ops": 7}
+```
+
+| 字段 | 说明 |
+|---|---|
+| `user` | 团队里的一个人;客户端在请求头 `X-Memory-Talk-User` 里自报,服务端不校验 |
+| `first_seen` / `last_seen` | 第一次 / 最近一次操作这个 task |
+| `ops` | 操作次数(带身份的、会动这个 task 的请求 + 打开 + 心跳) |
+
+**读视图 `Members`**:`{"current": [MemberView], "history": [MemberView]}`,`MemberView` = Member + `active`(最近 120 秒内动过,现算)。`current` 是 `history` 里 `active` 的子集;`history` 按最近活动倒序。
+
+不带身份的请求照样能操作,只是不记名。
+
 ## Round
 
 agent 会话的会话痕迹:从各平台的记录文件读出来、append-only 追加进 `rounds.jsonl`。
@@ -131,7 +149,8 @@ task 自己的时间线,append-only。v3 `events.jsonl` 在 v5 唯一保留的�
 tasks/<task_id>/
 ├── task.json         原子写(临时文件 + rename)
 ├── canvas.json       原子写;不存在 = 空画布 version 0
-├── sessions.json      原子写;数组
+├── sessions.json     原子写;数组(现场)
+├── members.json      原子写;数组(人)
 ├── events.jsonl      只追加
 └── sessions/<session_id>/rounds.jsonl   只追加
 ```
