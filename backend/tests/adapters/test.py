@@ -27,7 +27,7 @@ def test_claude_session_rounds(client, home, monkeypatch):
     t = client.post("/api/tasks", json={"goal": "让 agent 干活"}).json()
     proj = home / "ws" / "proj"; proj.mkdir(parents=True)
     m = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": f"claude://{proj}"}).json()
-    assert m["server"] == "claude" and "rounds" in m["handle"]["capabilities"]
+    assert m["scheme"] == "claude" and "rounds" in m["handle"]["capabilities"]
     assert client.get(f"/api/tasks/{t['id']}/sessions/{m['id']}/rounds").json() == []
 
     # 会话记录出现了(会话创建之后)

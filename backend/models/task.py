@@ -77,6 +77,7 @@ class SessionCreate(BaseModel):
 
 
 class SessionView(Session):
+    server: str = Field("", exclude=True)          # 内部寻址用,不对外
     alive: bool = False
     window: Window | None = None
     handle: HandleInfo | None = None

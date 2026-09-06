@@ -27,7 +27,6 @@ Tasks    GET    /api/tasks                                        task 树(森�
          GET    /api/tasks/{id}/sessions/{sid}/rounds              agent 会话痕迹
 
 Servers  GET    /api/servers                                      server 清单及各自响应的协议
-         GET    /api/servers/resolve?uri=                         一个 URI 会请求到谁
 
 Cards    GET    /api/cards                                        目录
          GET    /api/cards/recall                                 目录文本

@@ -138,7 +138,7 @@ memory.talk/
 ## GET /api/tasks/{task_id}/sessions
 
 ```json
-[{"id": "task_…-s1", "uri": "codex:///w", "scheme": "codex", "server": "codex", "cwd": "/w",
+[{"id": "task_…-s1", "uri": "codex:///w", "scheme": "codex", "cwd": "/w",
   "created_at": "…", "last_attached": "…", "alive": true, "window": null, "handle": null}]
 ```
 
@@ -155,14 +155,14 @@ memory.talk/
 **201**:
 
 ```json
-{"id": "task_…-s1", "uri": "codex:///w/memory.talk", "scheme": "codex", "server": "codex",
+{"id": "task_…-s1", "uri": "codex:///w/memory.talk", "scheme": "codex",
  "cwd": "/w/memory.talk", "created_at": "…", "last_attached": "…",
  "alive": true,
  "window": {"url": null, "embed": null},
  "handle": {"kind": "tmux+transcript", "capabilities": ["capture", "send", "rounds"]}}
 ```
 
-- `server` 可以 ≠ `scheme`:`https://` 由 `http` 建,`vim://` 由 `default` 建。
+- 由哪个 server 建的不对外——`https://` 走 http server、`vim://` 走 default,调用方不感知。
 - `window.url` 为 `null` = 没配 ttyd,只有把手没有画面。
 - 副作用:`sessions.json` 追加一条;终端类起一个 tmux 会话(名 = 会话 id);事件 `session.attached`。
 

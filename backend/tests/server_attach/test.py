@@ -13,20 +13,20 @@ def test_registry_and_resolve(client):
     assert infos == {"bash": ["bash"], "claude": ["claude"], "codex": ["codex"], "kimi": ["kimi"],
                      "http": ["http", "https"], "default": []}
     assert [s["name"] for s in client.get("/api/servers").json()][-1] == "default"
+    assert client.get("/api/servers/resolve").status_code == 404        # 寻址不是端点,open 时自动做
 
-    assert client.get("/api/servers/resolve", params={"uri": "codex:///w/p"}).json()["server"] == "codex"
-    assert client.get("/api/servers/resolve", params={"uri": "kimi:///w/p"}).json()["server"] == "kimi"
-    assert client.get("/api/servers/resolve", params={"uri": "https://x.y/z"}).json()["server"] == "http"
-    assert client.get("/api/servers/resolve", params={"uri": "bash:///w"}).json()["server"] == "bash"
-    assert client.get("/api/servers/resolve", params={"uri": "vim:///w/a.txt"}).json()["server"] == "default"
-    assert client.get("/api/servers/resolve", params={"uri": "nosuchcmd-zz://"}).json()["server"] == "default"
-    assert client.get("/api/servers/resolve", params={"uri": "no-scheme"}).status_code == 400
+    # 寻址是内部的:服务层按协议找到声明它的 server,没人声明 → default
+    from services.servers.uri import parse_uri
+    reg = client.app.state.servers.registry
+    assert reg.resolve(parse_uri("codex:///w/p")).name == "codex"
+    assert reg.resolve(parse_uri("https://x.y/z")).name == "http"
+    assert reg.resolve(parse_uri("vim:///w/a.txt")).name == "default"
 
 
 def test_http_sessions(client):
     t = client.post("/api/tasks", json={"goal": "看文档"}).json()
     m = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": "https://localhost:5173/app"}).json()
-    assert m["scheme"] == "https" and m["server"] == "http" and m["window"]["embed"] == "/proxy/5173/app"
+    assert m["scheme"] == "https" and "server" not in m and m["window"]["embed"] == "/proxy/5173/app"
     assert m["handle"] == {"kind": "none", "capabilities": []}
     m2 = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": "https://example.com/x"}).json()
     assert m2["window"]["embed"] == "https://example.com/x" and m2["id"].endswith("-s2")
@@ -40,7 +40,7 @@ def test_terminal_session_lifecycle(client, home):
     r = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": f"bash://{ws}"})
     assert r.status_code == 201, r.text
     m = r.json()
-    assert m["server"] == "bash" and m["alive"] is True and m["cwd"] == ws
+    assert m["scheme"] == "bash" and m["alive"] is True and m["cwd"] == ws
     assert m["window"]["url"] is None                       # 没配 ttyd → 老实报没有画面
     assert m["handle"]["capabilities"] == ["capture", "send"]
 
@@ -60,7 +60,7 @@ def test_terminal_session_lifecycle(client, home):
     r = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": "nosuchcmd-zz://"})
     assert r.status_code == 400 and r.json()["error"] == "cmd_not_found"
     d = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": f"sleep://{ws}"})
-    assert d.status_code == 201 and d.json()["server"] == "default" and d.json()["scheme"] == "sleep"
+    assert d.status_code == 201 and d.json()["scheme"] == "sleep"         # 走了 default,但调用方不感知
     client.delete(f"/api/tasks/{t['id']}/sessions/{d.json()['id']}")
 
     # 关闭即回收

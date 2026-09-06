@@ -68,7 +68,6 @@ task 的一个会话 = 一个现场。**在 task 里打开就是它的**,归属�
   "id": "task_202609052302072f2f-s1",
   "uri": "codex:///home/me/memory.talk",
   "scheme": "codex",
-  "server": "codex",
   "cwd": "/home/me/memory.talk",
   "created_at": "2026-09-05T23:02:10Z",
   "last_attached": "2026-09-05T23:40:01Z"
@@ -80,7 +79,7 @@ task 的一个会话 = 一个现场。**在 task 里打开就是它的**,归属�
 | `id` | `<task_id>-s<n>`,task 内顺序编号;**就是 tmux 会话名**(终端类) |
 | `uri` | 打开它用的 URI(原样) |
 | `scheme` | URI 的协议 |
-| `server` | 建它的 server 名;可以 ≠ `scheme`(`https` → `http`,`vim` → `default`) |
+| (`server`) | 建它的 server 名,**只在登记文件里、不对外**——销毁 / 取把手时内部用(`https` → `http`,`vim` → `default`,调用方不感知) |
 | `cwd` | server 解析出的工作目录(终端类);浏览器类为 `null` |
 | `created_at` | 会话诞生时刻;agent 类 server 用它找「之后新出现的那份会话记录」 |
 | `last_attached` | 最近一次重入 |

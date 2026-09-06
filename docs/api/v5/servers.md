@@ -17,27 +17,4 @@ server 是建现场、交回窗 + 把手的那层。**每个 server 自己声明
 
 一项 = `backend/servers/` 下一个文件。`protocols` 是它自己声明的;`default` 不声明、永远排最后。
 
-## GET /api/servers/resolve
-
-一个 URI 会请求到哪个 server,不建现场。
-
-| 参数 | 说明 |
-|---|---|
-| `uri` | 必填 |
-
-```json
-{"uri": {"raw": "https://x.y/z", "scheme": "https", "path": "/z", "host": "x.y", "port": null, "query": {}},
- "server": "http"}
-```
-
-```json
-{"uri": {"raw": "vim:///w/a.txt", "scheme": "vim", "path": "/w/a.txt", "host": "", "port": null, "query": {}},
- "server": "default"}
-```
-
-| 错误 | 状态 |
-|---|---|
-| 没协议 | 400 `bad_uri` |
-| 连 default 都没有 | 400 `no_server` |
-
-> `resolve` 不探 PATH:`vim://` 一律答 `default`;`vim` 装没装,要到真正 open(`POST /api/tasks/{id}/sessions`)时才知道——没装报 `400 cmd_not_found`。
+没有「先问一下这个 URI 归谁」的端点。**寻址在打开会话那一刻自动发生**(`POST /api/tasks/{id}/sessions`):协议在哪个 server 的 `protocols` 里就去哪个,没有就 default;调用方拿到的是窗和把手,不需要、也看不到是谁建的。

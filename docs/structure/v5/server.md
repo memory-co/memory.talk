@@ -67,7 +67,7 @@
 
 ```json
 {
-  "session_id": "task_…-s1", "server": "codex",
+  "session_id": "task_…-s1", "server": "codex",   // server 只在内部流转,API 视图不带
   "window": {"url": null, "embed": null},
   "handle": {"kind": "tmux+transcript", "capabilities": ["capture", "send", "rounds"]},
   "cwd": "/home/me/memory.talk", "command": ["codex"]
