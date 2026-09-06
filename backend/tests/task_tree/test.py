@@ -2,7 +2,7 @@
 
 
 def test_tree_status_canvas_events(client):
-    root = client.post("/api/tasks", json={"goal": "把 v5 做出来", "project": "/w/memory.talk"}).json()
+    root = client.post("/api/tasks", json={"goal": "把 v5 做出来"}).json()
     a = client.post("/api/tasks", json={"goal": "实现 issue", "parent": root["id"]}).json()
     b = client.post("/api/tasks", json={"goal": "实现 task", "parent": root["id"]}).json()
     assert client.post("/api/tasks", json={"goal": "x", "parent": "task_nope"}).status_code == 404

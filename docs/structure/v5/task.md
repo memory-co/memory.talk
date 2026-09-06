@@ -10,7 +10,6 @@
 {
   "id": "task_202609052302072f2f",
   "goal": "把 v5 做出来",
-  "project": "/home/me/memory.talk",
   "parent": null,
   "status": "doing",
   "created_at": "2026-09-05T23:02:07Z",
@@ -22,8 +21,7 @@
 |---|---|---|
 | `id` | string | `task_<时间戳><4hex>`,自动 |
 | `goal` | string | 它是什么事(一句话) |
-| `project` | string | 在哪个项目(工作目录);可空 |
-| `parent` | string \| null | 属于哪件更大的事;`null` = 根。**task 之间只有这一种直接关系** |
+| `parent` | string \| null | 属于哪件更大的事;`null` = 根。**task 之间只有这一种直接关系**——没有 project 之类的分组字段,横向关系靠 issue |
 | `status` | `todo` \| `doing` \| `done` \| `abandoned` | 三层里只有 task 有状态 |
 | `created_at` | ISO 8601 | |
 | `done_at` | ISO 8601 \| null | `done` / `abandoned` 时写;回到 `todo` / `doing` 清空 |

@@ -13,7 +13,6 @@ TaskStatus = Literal["todo", "doing", "done", "abandoned"]
 class Task(BaseModel):
     id: str
     goal: str = Field(description="它是什么事(一句话)")
-    project: str = Field("", description="在哪个项目(工作目录)")
     parent: str | None = Field(None, description="属于哪件更大的事")
     status: TaskStatus = "todo"
     created_at: str
@@ -22,13 +21,11 @@ class Task(BaseModel):
 
 class TaskCreate(BaseModel):
     goal: str
-    project: str = ""
     parent: str | None = None
 
 
 class TaskUpdate(BaseModel):
     goal: str | None = None
-    project: str | None = None
     status: TaskStatus | None = None
 
 

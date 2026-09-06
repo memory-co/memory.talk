@@ -72,7 +72,7 @@ class TaskTree:
     def create(self, req: TaskCreate) -> Task:
         if req.parent:
             self.get(req.parent)
-        task = Task(id=_new_id(), goal=req.goal, project=req.project, parent=req.parent, created_at=now())
+        task = Task(id=_new_id(), goal=req.goal, parent=req.parent, created_at=now())
         self._save(task)
         return task
 
@@ -81,8 +81,6 @@ class TaskTree:
         data = task.model_dump()
         if req.goal is not None:
             data["goal"] = req.goal
-        if req.project is not None:
-            data["project"] = req.project
         if req.status is not None:
             data.update(self._transition(task, req.status))
         task = Task(**data)

@@ -14,10 +14,10 @@ task 树(森林)。
 
 ```json
 [
-  {"id": "task_…2f2f", "goal": "把 v5 做出来", "project": "/w/memory.talk", "parent": null,
+  {"id": "task_…2f2f", "goal": "把 v5 做出来", "parent": null,
    "status": "doing", "created_at": "…", "done_at": null,
    "children": [
-     {"id": "task_…a1b2", "goal": "实现 issue", "project": "", "parent": "task_…2f2f", "status": "done",
+     {"id": "task_…a1b2", "goal": "实现 issue", "parent": "task_…2f2f", "status": "done",
       "created_at": "…", "done_at": "…", "children": []}
    ]}
 ]
@@ -30,13 +30,12 @@ task 树(森林)。
 开工。
 
 ```json
-{"goal": "实现 task", "project": "/w/memory.talk", "parent": "task_…2f2f"}
+{"goal": "实现 task", "parent": "task_…2f2f"}
 ```
 
 | 字段 | 必填 | 说明 |
 |---|---|---|
 | `goal` | 是 | 一句话 |
-| `project` | 否 | 工作目录 |
 | `parent` | 否 | 挂到哪个 task 下;不存在 → 404 |
 
 **201** 返回 Task(`status: "todo"`)。副作用:`tasks/<id>/task.json` + 一条 `created` 事件。
@@ -48,10 +47,10 @@ task 树(森林)。
 ## PATCH /api/tasks/{task_id}
 
 ```json
-{"goal": "…", "project": "…", "status": "done"}
+{"goal": "…", "status": "done"}
 ```
 
-三个字段都可选。`status` 规则:
+两个字段都可选。`status` 规则:
 
 | 目标 | 规则 | 副作用 |
 |---|---|---|

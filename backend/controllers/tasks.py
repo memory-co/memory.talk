@@ -44,7 +44,7 @@ def get(task_id: str, svc: TaskService = Depends(tasks), who: str | None = Depen
 
 
 @router.patch("/{task_id}", response_model=Task,
-              summary="改目标 / 项目 / 状态;done 要求子 task 全完;结束后会话冻结")
+              summary="改目标 / 状态;done 要求子 task 全完;结束后会话冻结")
 def update(task_id: str, req: TaskUpdate, svc: TaskService = Depends(tasks), who: str | None = Depends(user)):
     svc.touch(task_id, who)
     return svc.update(task_id, req)

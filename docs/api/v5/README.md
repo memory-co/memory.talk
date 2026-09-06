@@ -12,7 +12,7 @@ System   GET    /api/system/health                                健康检查
 Tasks    GET    /api/tasks                                        task 树(森林;root= 只看一棵)
          POST   /api/tasks                                        开工:建 task(parent= 挂到树上)
          GET    /api/tasks/{id}                                   读
-         PATCH  /api/tasks/{id}                                   改目标 / 项目 / 状态
+         PATCH  /api/tasks/{id}                                   改目标 / 状态
          GET    /api/tasks/{id}/events                            task 时间线
          GET    /api/tasks/{id}/recall                            开工注入:card 目录文本
          GET    /api/tasks/{id}/members                           成员(人):谁在操作 / 操作过

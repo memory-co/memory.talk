@@ -8,7 +8,7 @@ v5 的三层:**task**(做事,裸文件)、**issue**(议事,git)、**card**(记�
 
 | 对象 | 形态 | 存哪 | 文档 |
 |---|---|---|---|
-| Task | 树上一个节点:目标、项目、父、状态 | `tasks/<id>/task.json` | [task.md](task.md) |
+| Task | 树上一个节点:目标、父、状态(没有 project) | `tasks/<id>/task.json` | [task.md](task.md) |
 | Canvas / Panel | task 的画布:24×16 网格上的块;**视图,可随时重排** | `tasks/<id>/canvas.json` | [task.md](task.md#canvas) |
 | Session | task 的会话 = 一个现场:URI + 建它的 server;**身份脱离布局** | `tasks/<id>/sessions.json` | [task.md](task.md#session) |
 | Member | **人**:谁在操作 / 操作过这个 task;只做可见性,不做权限 | `tasks/<id>/members.json` | [task.md](task.md#member) |
@@ -70,7 +70,7 @@ Card  ──(links)──▶ Card                             ← 内链
 | Issue 的 question / origin / created_at | 建后不改 | git log |
 | Issue 的 manager_task / card / links | 能改(换绑、写卡、连边) | git log |
 | Position / Argument | **只增不改不删** | git log(每条一个 commit) |
-| Task 的 goal / project / status | 能改 | events.jsonl(状态变化) |
+| Task 的 goal / status | 能改 | events.jsonl(状态变化) |
 | Canvas | 能改(全量覆盖,version 乐观锁) | 不留(视图) |
 | Session | 建 / 删;`last_attached` 会更新 | events.jsonl |
 | Round / Event | **只追加** | 自身就是时间线 |
