@@ -13,7 +13,7 @@
 
 ## 1. 一句话:协议决定找谁,server 负责建出来
 
-task 的画布上每个块由一个 URI 定位:`codex:///workspace/proj`、`bash://`、`https://localhost:5173`、`file:///workspace/src`。URI 的**协议**说的是「这是哪一类现场」;**server** 就是认领某一类协议、并负责把这类现场**建出来或取回来**的那个东西。
+task 的画布上每个块由一个 URI 定位:`codex:///workspace/proj`、`bash://`、`https://localhost:5173`。URI 的**协议**(`://` 前面那个)**就是 server 的名字**;**server** 就是认领某一类协议、并负责把这类现场**建出来或取回来**的那个东西。
 
 ```
 块的 URI ──▶ 协议名 = server 名 ──▶ 找到那个 server ──▶ server 建 / 取现场 ──▶ 交回:一扇窗 + 一个把手
@@ -86,7 +86,7 @@ server **不做**的事同样重要:它**不记 task**——哪个块属于哪�
 
 server 这个概念**不新造一套规范**,它的形状就是 shellbase 已经写好的 `*muxd` 规范:两个端点、契约面 / 实现面分清、id 幂等、活得比连接久、库优先、可独立验证、不代理窗、失败说清楚、状态不撒谎。任何一个新 server 进来,先回答那三个问题——**窗是什么、把手是什么、哪一半是用户会直接碰到的**——答不出第三个就还没想清楚。
 
-所以 v5 里「server」和「`*muxd` 组件」基本是一回事,只差一层:`*muxd` 说的是**一个组件自己长什么样**,server 多说了一句**它认领哪些协议、在 memory.talk 里怎么被请求到**。tmuxd、webmuxd 是现成的 `*muxd` 组件,v5 的终端 / agent / 浏览器 server 就包在它们外面——或者按 muxd 的说法,**它们就是 server 的实现面**。
+所以 v5 里「server」和「`*muxd` 组件」基本是一回事,只差一层:`*muxd` 说的是**一个组件自己长什么样**,server 多说了一句**它叫哪个协议名、在 memory.talk 里怎么被请求到**。tmuxd、webmuxd 是现成的 `*muxd` 组件,v5 的 bash / claude / codex / kimi / http server 就包在它们外面——或者按 muxd 的说法,**它们就是 server 的实现面**。
 
 ---
 
