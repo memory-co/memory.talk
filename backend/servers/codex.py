@@ -7,6 +7,7 @@ from services.servers.agent import AgentBase
 
 class CodexServer(AgentBase):
     name = "codex"
+    protocols = ["codex"]
     description = "Codex:tmux 现场 + 读 ~/.codex/sessions 会话记录"
 
 

@@ -9,24 +9,24 @@ needs_tmux = pytest.mark.skipif(shutil.which("tmux") is None, reason="需要 tmu
 
 
 def test_registry_and_resolve(client):
-    names = sorted(s["name"] for s in client.get("/api/servers").json())
-    assert names == ["bash", "claude", "codex", "http", "https", "kimi"]
+    infos = {s["name"]: s["protocols"] for s in client.get("/api/servers").json()}
+    assert infos == {"bash": ["bash"], "claude": ["claude"], "codex": ["codex"], "kimi": ["kimi"],
+                     "http": ["http", "https"], "default": []}
+    assert [s["name"] for s in client.get("/api/servers").json()][-1] == "default"
 
     assert client.get("/api/servers/resolve", params={"uri": "codex:///w/p"}).json()["server"] == "codex"
     assert client.get("/api/servers/resolve", params={"uri": "kimi:///w/p"}).json()["server"] == "kimi"
-    assert client.get("/api/servers/resolve", params={"uri": "https://x.y/z"}).json()["server"] == "https"
+    assert client.get("/api/servers/resolve", params={"uri": "https://x.y/z"}).json()["server"] == "http"
     assert client.get("/api/servers/resolve", params={"uri": "bash:///w"}).json()["server"] == "bash"
-    r = client.get("/api/servers/resolve", params={"uri": "vim:///w/a.txt"})   # 没有 vim.py → 没有 vim server
-    assert r.status_code == 400 and r.json()["error"] == "no_server"
-    r = client.get("/api/servers/resolve", params={"uri": "nosuchcmd-zz://"})
-    assert r.status_code == 400 and r.json()["error"] == "no_server"
+    assert client.get("/api/servers/resolve", params={"uri": "vim:///w/a.txt"}).json()["server"] == "default"
+    assert client.get("/api/servers/resolve", params={"uri": "nosuchcmd-zz://"}).json()["server"] == "default"
     assert client.get("/api/servers/resolve", params={"uri": "no-scheme"}).status_code == 400
 
 
 def test_http_members(client):
     t = client.post("/api/tasks", json={"goal": "看文档"}).json()
     m = client.post(f"/api/tasks/{t['id']}/members", json={"uri": "https://localhost:5173/app"}).json()
-    assert m["scheme"] == "https" and m["window"]["embed"] == "/proxy/5173/app"
+    assert m["scheme"] == "https" and m["server"] == "http" and m["window"]["embed"] == "/proxy/5173/app"
     assert m["handle"] == {"kind": "none", "capabilities": []}
     m2 = client.post(f"/api/tasks/{t['id']}/members", json={"uri": "https://example.com/x"}).json()
     assert m2["window"]["embed"] == "https://example.com/x" and m2["id"].endswith("-m2")
@@ -40,7 +40,7 @@ def test_terminal_member_lifecycle(client, home):
     r = client.post(f"/api/tasks/{t['id']}/members", json={"uri": f"bash://{ws}"})
     assert r.status_code == 201, r.text
     m = r.json()
-    assert m["scheme"] == "bash" and m["alive"] is True and m["cwd"] == ws
+    assert m["server"] == "bash" and m["alive"] is True and m["cwd"] == ws
     assert m["window"]["url"] is None                       # 没配 ttyd → 老实报没有画面
     assert m["handle"]["capabilities"] == ["capture", "send"]
 
@@ -56,9 +56,12 @@ def test_terminal_member_lifecycle(client, home):
     assert again["id"] == m["id"] and again["alive"]
     assert len(client.get(f"/api/tasks/{t['id']}/members").json()) == 1
 
-    # 命令不存在 → 明确报错
+    # 没有专门 server 的协议 → default:协议名当命令。命令不在 PATH → 明确报错
     r = client.post(f"/api/tasks/{t['id']}/members", json={"uri": "nosuchcmd-zz://"})
-    assert r.status_code == 400 and r.json()["error"] == "no_server"
+    assert r.status_code == 400 and r.json()["error"] == "cmd_not_found"
+    d = client.post(f"/api/tasks/{t['id']}/members", json={"uri": f"sleep://{ws}"})
+    assert d.status_code == 201 and d.json()["server"] == "default" and d.json()["scheme"] == "sleep"
+    client.delete(f"/api/tasks/{t['id']}/members/{d.json()['id']}")
 
     # 关闭即回收
     assert client.delete(f"/api/tasks/{t['id']}/members/{m['id']}").status_code == 204

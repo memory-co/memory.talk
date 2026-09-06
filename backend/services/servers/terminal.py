@@ -1,4 +1,4 @@
-"""tmux 现场 + 终端类 server 的基类(蓝本 tmuxd)。具体协议的 server 在 backend/servers/ 里,server 名 = 协议名 = 命令名。
+"""tmux 现场 + 终端类 server 的基类(蓝本 tmuxd)。具体的 server 在 backend/servers/ 里,各自声明响应哪些协议。
 
 现场 = tmux 会话(名字 = 成员 id),活得比连接久;
 窗   = ttyd(配置了地址才有;没配就老实报 None);
@@ -63,16 +63,17 @@ class TmuxHandle:
 class TerminalBase:
     """「到某目录跑某命令」这一族 server 的公共实现。子类只定 name(= 协议名 = 命令名)。"""
     name = "terminal"
+    protocols: list[str] = []
     description = ""
 
     def __init__(self, tmux: Tmux, workspace: Path, ttyd_url: str | None) -> None:
         self.tmux, self.workspace, self.ttyd_url = tmux, workspace, ttyd_url
 
     def info(self) -> ServerInfo:
-        return ServerInfo(name=self.name, description=self.description)
+        return ServerInfo(name=self.name, protocols=self.protocols, description=self.description)
 
     def command(self, uri: ParsedUri) -> str:
-        """要跑的命令名;默认 = server 名 = 协议名。"""
+        """要跑的命令名;默认 = server 名。default server 改成用协议名。"""
         return self.name
 
     def resolve(self, uri: ParsedUri) -> tuple[Path, list[str]]:

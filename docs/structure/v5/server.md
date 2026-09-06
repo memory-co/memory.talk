@@ -9,7 +9,7 @@
 | 字段 | 说明 |
 |---|---|
 | `raw` | 原样 |
-| `scheme` | 小写协议名;**= server 名**;终端类同时 = 命令名 |
+| `scheme` | 小写协议名;拿它去 server 那里寻址;default server 把它当命令名 |
 | `path` | 终端类:工作目录(是文件则 cwd = 父目录、文件名作参数);`/` 或空 = 默认工作区 |
 | `host` / `port` | http 类:`localhost` / `127.0.0.1` + 端口 → 本地服务 |
 | `query` | 参数字典(v5 没有身份参数——身份在成员 id 上) |
@@ -19,16 +19,22 @@
 `GET /api/servers` 每项:
 
 ```json
-{"name": "bash", "description": "bash:///<cwd> → tmux 会话里的 bash"}
+{"name": "http", "protocols": ["http", "https"], "description": "网页块:外链直嵌,本地服务经网关代理;把手为空"}
 ```
 
-`name` 就是协议名:`bash://` 找 `bash`。没有别的匹配规则——`backend/servers/<name>.py` 存在,`<name>://` 就存在。
+| 字段 | 说明 |
+|---|---|
+| `name` | server 名;`backend/servers/<name>.py` |
+| `protocols[]` | 它响应哪些协议,**server 自己声明**;一个 server 可以多个。`default` 的为空——它不声明,专收没人声明的 |
 
-| server(= 协议) | 现场 | 窗 | 把手 |
-|---|---|---|---|
-| `claude` / `codex` / `kimi` | tmux 会话跑该 CLI | ttyd | `capture` `send` `rounds` |
-| `bash` | tmux 会话 | ttyd | `capture` `send` |
-| `http` / `https` | 无(纯 iframe) | URL 本身 | 无 |
+寻址:协议在某个 server 的 `protocols` 里 → 那个;否则 → `default`。列表里 `default` 永远排最后。
+
+| server | 响应 | 现场 | 窗 | 把手 |
+|---|---|---|---|---|
+| `claude` / `codex` / `kimi` | 各自同名 | tmux 会话跑该 CLI | ttyd | `capture` `send` `rounds` |
+| `bash` | `bash` | tmux 会话 | ttyd | `capture` `send` |
+| `http` | `http` `https` | 无(纯 iframe) | URL 本身 | 无 |
+| `default` | 没人声明的 | tmux 会话里跑「协议名」命令(`vim://` → `vim`) | ttyd | `capture` `send` |
 
 ## Window
 
@@ -61,7 +67,7 @@
 
 ```json
 {
-  "member_id": "task_…-m1", "server": "codex",   // = 协议名
+  "member_id": "task_…-m1", "server": "codex",
   "window": {"url": null, "embed": null},
   "handle": {"kind": "tmux+transcript", "capabilities": ["capture", "send", "rounds"]},
   "cwd": "/home/me/memory.talk", "command": ["codex"]
@@ -75,6 +81,6 @@
 | `code` | HTTP | 意思 | 下一步 |
 |---|---|---|---|
 | `bad_uri` | 400 | 没有协议 | 改 URI |
-| `no_server` | 400 | 没有这个协议的 server(`backend/servers/` 里没有同名文件) | 换协议 / 加一个 server |
-| `cmd_not_found` | 400 | server 在,但同名命令不在 PATH | 装命令 |
+| `no_server` | 400 | 连 default 都没有(只在 `default.py` 被删时出现) | 加回 default |
+| `cmd_not_found` | 400 | 要跑的命令不在 PATH(bash / agent 类:server 名;default:协议名) | 装命令 |
 | `platform` | 502 | tmux 起不来 | 查 tmux,别重试 |

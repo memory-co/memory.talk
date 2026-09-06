@@ -1,7 +1,7 @@
-"""每个协议一个 server,一个文件;**server 名 = 协议名(`://` 前面那个)**。
+"""每个 server 一个文件。**server 自己声明它响应哪些协议**(`protocols`),一个 server 可以响应多个
+(http.py 同时接 http 和 https);没有任何 server 声明的协议,一律去 **default**(背后是 bash,把协议名当命令跑)。
 
-URI 里已经写明了要请求谁,所以没有"认领"、没有兜底:`codex://` 找 codex,`vim://` 没有 vim.py 就是没有。
-load(rt) 扫描本包下所有模块,每个模块导出一个 `make(ctx) -> server`,server.name 必须等于文件名。
+load(rt) 扫描本包下所有模块,每个模块导出 `make(ctx) -> server`。
 """
 from __future__ import annotations
 
@@ -13,6 +13,8 @@ from pathlib import Path
 from config import RuntimeConfig
 from services.servers.terminal import Tmux
 
+DEFAULT = "default"
+
 
 @dataclass(frozen=True)
 class Context:
@@ -22,17 +24,16 @@ class Context:
     ttyd_url: str | None
 
 
-def load(rt: RuntimeConfig) -> dict[str, object]:
+def load(rt: RuntimeConfig) -> list[object]:
     ctx = Context(rt=rt, tmux=Tmux(rt.tmux_socket), workspace=rt.workspace, ttyd_url=rt.ttyd_url)
-    servers: dict[str, object] = {}
+    servers = []
     for mod in pkgutil.iter_modules(__path__):
         if mod.name.startswith("_"):
             continue
-        module = importlib.import_module(f"{__name__}.{mod.name}")
-        server = module.make(ctx)
-        assert server.name == mod.name, f"servers/{mod.name}.py 的 server.name 必须是 {mod.name!r}"
-        servers[server.name] = server
+        servers.append(importlib.import_module(f"{__name__}.{mod.name}").make(ctx))
+    # default 排最后:先查显式声明,再兜底
+    servers.sort(key=lambda s: s.name == DEFAULT)
     return servers
 
 
-__all__ = ["load", "Context"]
+__all__ = ["load", "Context", "DEFAULT"]

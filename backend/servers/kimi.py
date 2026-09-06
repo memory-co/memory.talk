@@ -7,6 +7,7 @@ from services.servers.agent import AgentBase
 
 class KimiServer(AgentBase):
     name = "kimi"
+    protocols = ["kimi"]
     description = "Kimi Code:tmux 现场 + 读 ~/.kimi-code/sessions 会话记录"
 
 

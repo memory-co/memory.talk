@@ -65,7 +65,8 @@ class CanvasPut(BaseModel):
 class Member(BaseModel):
     id: str
     uri: str
-    scheme: str = Field(description="协议名 = 认领它的 server 名")
+    scheme: str
+    server: str = Field(description="建它的 server(https → http,vim → default)")
     cwd: str | None = None
     created_at: str
     last_attached: str

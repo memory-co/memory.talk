@@ -6,6 +6,7 @@ from services.servers.terminal import TerminalBase
 
 class BashServer(TerminalBase):
     name = "bash"
+    protocols = ["bash"]
     description = "bash:///<cwd> → tmux 会话里的 bash"
 
 

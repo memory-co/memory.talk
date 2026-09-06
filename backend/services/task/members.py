@@ -34,11 +34,11 @@ class MemberRegistry:
                 return m
         raise MemberNotFound(f"{task_id}/{member_id}")
 
-    def add(self, task_id: str, uri: str, scheme: str, cwd: str | None) -> Member:
+    def add(self, task_id: str, uri: str, scheme: str, server: str, cwd: str | None) -> Member:
         members = self._load(task_id)
         n = 1 + max((int(m.id.rsplit("-m", 1)[1]) for m in members if m.id.rsplit("-m", 1)[-1].isdigit()), default=0)
         ts = now()
-        m = Member(id=f"{task_id}-m{n}", uri=uri, scheme=scheme, cwd=cwd,
+        m = Member(id=f"{task_id}-m{n}", uri=uri, scheme=scheme, server=server, cwd=cwd,
                    created_at=ts, last_attached=ts)
         members.append(m)
         self._save(task_id, members)

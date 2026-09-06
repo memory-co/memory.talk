@@ -66,7 +66,7 @@ task 树(森林)。
 ```json
 [
   {"ts": "…", "type": "created", "data": {"goal": "…", "parent": null}},
-  {"ts": "…", "type": "member.attached", "data": {"member": "…-m1", "uri": "codex:///w", "scheme": "codex"}},
+  {"ts": "…", "type": "member.attached", "data": {"member": "…-m1", "uri": "codex:///w", "server": "codex"}},
   {"ts": "…", "type": "status", "data": {"from": "doing", "to": "done"}},
   {"ts": "…", "type": "frozen", "data": {}}
 ]
@@ -120,7 +120,7 @@ memory.talk/
 ## GET /api/tasks/{task_id}/members
 
 ```json
-[{"id": "task_…-m1", "uri": "codex:///w", "scheme": "codex", "cwd": "/w",
+[{"id": "task_…-m1", "uri": "codex:///w", "scheme": "codex", "server": "codex", "cwd": "/w",
   "created_at": "…", "last_attached": "…", "alive": true, "window": null, "handle": null}]
 ```
 
@@ -128,7 +128,7 @@ memory.talk/
 
 ## POST /api/tasks/{task_id}/members
 
-在 task 里打开一个块:协议名 = server 名,查到 server → 幂等建现场 → 登记成员 → 交回窗 + 把手。
+在 task 里打开一个块:拿协议去 server 那里寻址(声明了的 server,否则 default)→ 幂等建现场 → 登记成员 → 交回窗 + 把手。建现场失败则不留登记。
 
 ```json
 {"uri": "codex:///w/memory.talk"}
@@ -137,13 +137,14 @@ memory.talk/
 **201**:
 
 ```json
-{"id": "task_…-m1", "uri": "codex:///w/memory.talk", "scheme": "codex",
+{"id": "task_…-m1", "uri": "codex:///w/memory.talk", "scheme": "codex", "server": "codex",
  "cwd": "/w/memory.talk", "created_at": "…", "last_attached": "…",
  "alive": true,
  "window": {"url": null, "embed": null},
  "handle": {"kind": "tmux+transcript", "capabilities": ["capture", "send", "rounds"]}}
 ```
 
+- `server` 可以 ≠ `scheme`:`https://` 由 `http` 建,`vim://` 由 `default` 建。
 - `window.url` 为 `null` = 没配 ttyd,只有把手没有画面。
 - 副作用:`members.json` 追加一条;终端类起一个 tmux 会话(名 = 成员 id);事件 `member.attached`。
 
@@ -151,7 +152,7 @@ memory.talk/
 |---|---|
 | task 已结束 | 409 `conflict` |
 | URI 没协议 | 400 `bad_uri` |
-| 没有这个协议的 server / 命令不在 PATH | 400 `no_server` / `cmd_not_found` |
+| 要跑的命令不在 PATH(如 `vim://` 走 default 但没装 vim) | 400 `cmd_not_found` |
 | tmux 起不来 | 502 `platform` |
 
 ## POST /api/tasks/{task_id}/members/{member_id}/attach

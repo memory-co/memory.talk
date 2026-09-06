@@ -38,7 +38,8 @@ class Live(BaseModel):
 
 
 class ServerInfo(BaseModel):
-    name: str = Field(description="= 协议名(URI 里 :// 前面那个)")
+    name: str
+    protocols: list[str] = Field(default_factory=list, description="它响应哪些协议;空 = 不声明(default 只当兜底)")
     description: str = ""
 
 

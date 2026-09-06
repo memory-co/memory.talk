@@ -14,7 +14,7 @@ backend/
 │   ├── task.py               #   Task 节点(目标、状态、父子)、Canvas、Member、Round、Event
 │   ├── issue.py              #   Issue / Position / Argument / Link(IBIS 边)
 │   ├── card.py               #   Card:标题、正文、语境、链接
-│   └── server.py             #   Server 契约:name(= 协议名)/ open(id, uri) → Window + Handle / handle / alive / destroy
+│   └── server.py             #   Server 契约:name + protocols(声明响应哪些协议)/ open(id, uri) → Window + Handle / handle / alive / destroy
 │
 ├── services/                 # 业务逻辑(每个子包对应一篇设计;**入口就是子包的 `__init__.py`**,导出该 service 类,main.py 按 `services/*` 扫描装配,不另加约定)
 │   ├── task/                 #   做事层 —— docs/works/v5/task.md
@@ -25,7 +25,7 @@ backend/
 │   │   ├── sessions.py       #     agent 成员的 rounds.jsonl(append-only)
 │   │   └── events.py         #     task 自己的 append-only 事件(开工/状态/做完)
 │   ├── servers/              #   server 的装载与分发 —— docs/works/v5/protocol-server.md
-│   │   ├── registry.py       #     协议名 → server 查表(没有就明确报错,不兜底)
+│   │   ├── registry.py       #     协议 → server 寻址:先看谁声明了它,没人声明去 default
 │   │   ├── uri.py            #     块的 URI 解析
 │   │   ├── terminal.py       #     tmux 现场 + 终端类 server 基类(TerminalBase)
 │   │   ├── agent.py          #     agent 类 server 基类(AgentBase:终端把手 + 读 round)
@@ -48,13 +48,13 @@ backend/
 │       ├── git.py            #     git 仓库封装:一个决定一个 commit、log、revert
 │       └── memory.py         #     memory/ 仓库布局:cards/ + issues/
 │
-├── servers/                  # 每个协议一个 server,一个文件;server 名 = 文件名 = 协议名(自动扫描,新协议 = 加一个文件)
-│   ├── bash.py               #   bash://
-│   ├── claude.py             #   claude://  Claude Code
-│   ├── codex.py              #   codex://   Codex
-│   ├── kimi.py               #   kimi://    Kimi Code
-│   ├── http.py               #   http://    浏览器块(把手为空)
-│   └── https.py              #   https://   同 http
+├── servers/                  # 每个 server 一个文件,自己声明响应哪些协议(自动扫描);没人声明的协议去 default
+│   ├── bash.py               #   bash
+│   ├── claude.py             #   claude     Claude Code
+│   ├── codex.py              #   codex      Codex
+│   ├── kimi.py               #   kimi       Kimi Code
+│   ├── http.py               #   http + https  浏览器块(把手为空)
+│   └── default.py            #   兜底:协议名当命令名在 tmux 里跑(vim:// htop:// …),背后是 bash 但调用方不感知
 │
 ├── controllers/              # HTTP 面(FastAPI 路由;只做参数/响应,不含逻辑)
 │   ├── tasks.py              #   /api/tasks/…

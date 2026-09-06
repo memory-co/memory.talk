@@ -7,6 +7,7 @@ from services.servers.agent import AgentBase
 
 class ClaudeServer(AgentBase):
     name = "claude"
+    protocols = ["claude"]
     description = "Claude Code:tmux 现场 + 读 ~/.claude/projects 会话记录"
 
 
