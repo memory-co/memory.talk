@@ -43,6 +43,7 @@ class RuntimeConfig:
     ttyd_url: str | None       # 终端那扇窗:ttyd 的地址;None = 只有把手没有画面(不撒谎)
     claude_projects: Path      # Claude Code 会话记录根
     codex_sessions: Path       # Codex 会话记录根
+    kimi_sessions: Path        # Kimi Code 会话记录根
 
 
 def load_runtime_config() -> RuntimeConfig:
@@ -52,4 +53,5 @@ def load_runtime_config() -> RuntimeConfig:
         ttyd_url=os.environ.get("MEMORY_TALK_TTYD_URL") or None,
         claude_projects=Path(_env("MEMORY_TALK_CLAUDE_PROJECTS", "~/.claude/projects")).expanduser(),
         codex_sessions=Path(_env("MEMORY_TALK_CODEX_SESSIONS", "~/.codex/sessions")).expanduser(),
+        kimi_sessions=Path(_env("MEMORY_TALK_KIMI_SESSIONS", "~/.kimi-code/sessions")).expanduser(),
     )

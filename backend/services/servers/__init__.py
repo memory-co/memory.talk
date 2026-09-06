@@ -1,29 +1,22 @@
-"""ServerService:协议 → server 的请求入口(docs/works/v5/protocol-server.md)。"""
+"""ServerService:协议 → server 的请求入口(docs/works/v5/protocol-server.md)。
+具体 server 住在 backend/servers/(一个协议一个文件),这里只做装载与分发。"""
 from __future__ import annotations
 
-from config import RuntimeConfig
-from models.server import Live, ParsedUri, ServerError, ServerInfo
+from pathlib import Path
 
-from .adapters import ClaudeCodeAdapter, CodexAdapter
-from .agent import AgentServer
-from .browser import BrowserServer
-from .files import FilesServer
+from config import RuntimeConfig
+from models.server import Live, ServerError, ServerInfo
+
 from .registry import Registry
-from .terminal import TerminalServer, Tmux
 from .uri import parse_uri
 
 
 class ServerService:
     def __init__(self, rt: RuntimeConfig) -> None:
+        import servers  # backend/servers/
         self.rt = rt
-        self.terminal = TerminalServer(Tmux(rt.tmux_socket), rt.workspace, rt.ttyd_url)
-        self.agent = AgentServer(self.terminal, {
-            "claude": ClaudeCodeAdapter(rt.claude_projects),
-            "codex": CodexAdapter(rt.codex_sessions),
-        })
-        self.browser = BrowserServer()
-        self.files = FilesServer()
-        self.registry = Registry(explicit=[self.agent, self.browser, self.files], fallback=[self.terminal])
+        explicit, fallback = servers.load(rt)
+        self.registry = Registry(explicit=explicit, fallback=fallback)
 
     def list(self) -> list[ServerInfo]:
         return self.registry.infos()
@@ -34,9 +27,10 @@ class ServerService:
 
     def open(self, member_id: str, raw_uri: str, since_mtime: float = 0.0) -> tuple[Live, object]:
         uri, server = self.resolve(raw_uri)
-        if server is self.agent:
-            return self.agent.open(member_id, uri, since_mtime)
-        return server.open(member_id, uri)
+        return server.open(member_id, uri, since_mtime)
+
+    def handle(self, server_name: str, member_id: str, raw_uri: str, cwd: str | None, since_mtime: float):
+        return self.registry.by_name(server_name).handle(member_id, parse_uri(raw_uri), Path(cwd or "."), since_mtime)
 
     def alive(self, server_name: str, member_id: str) -> bool:
         return self.registry.by_name(server_name).alive(member_id)

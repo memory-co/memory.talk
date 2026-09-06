@@ -1,4 +1,4 @@
-"""终端 server:bash:// 以及任何 PATH 里有的命令名 → tmux 会话(蓝本 tmuxd)。
+"""tmux 现场 + 终端类 server 的基类(蓝本 tmuxd)。具体协议的 server 在 backend/servers/ 里。
 
 现场 = tmux 会话(名字 = 成员 id),活得比连接久;
 窗   = ttyd(配置了地址才有;没配就老实报 None);
@@ -60,40 +60,46 @@ class TmuxHandle:
         self.tmux.send(self.name, text, enter)
 
 
-class TerminalServer:
+class TerminalBase:
+    """「到某目录跑某命令」这一族 server 的公共实现。子类定 name / claims / command。"""
     name = "terminal"
-    description = "bash:// 与任何 PATH 里的命令名 → tmux 会话"
+    description = ""
 
     def __init__(self, tmux: Tmux, workspace: Path, ttyd_url: str | None) -> None:
         self.tmux, self.workspace, self.ttyd_url = tmux, workspace, ttyd_url
 
     def info(self) -> ServerInfo:
-        return ServerInfo(name=self.name, claims=["*"], description=self.description)
+        return ServerInfo(name=self.name, claims=self.claim_list(), description=self.description)
 
-    # 约定优于注册:scheme 名即命令名,PATH 里有就认领
+    def claim_list(self) -> list[str]:
+        return [self.name]
+
     def claims(self, scheme: str) -> bool:
-        return shutil.which(scheme) is not None
+        return scheme == self.name
 
-    def resolve_command(self, uri: ParsedUri) -> tuple[Path, list[str]]:
-        exe = shutil.which(uri.scheme)
-        if exe is None:
-            raise ServerError("cmd_not_found", f"PATH 里没有 {uri.scheme!r};装上它,或换一个协议")
+    def command(self, uri: ParsedUri) -> str:
+        """要跑的命令名;默认 = 协议名。"""
+        return uri.scheme
+
+    def resolve(self, uri: ParsedUri) -> tuple[Path, list[str]]:
+        cmd = self.command(uri)
+        if shutil.which(cmd) is None:
+            raise ServerError("cmd_not_found", f"PATH 里没有 {cmd!r};装上它,或换一个协议")
         path = Path(uri.path) if uri.path and uri.path != "/" else self.workspace
         if path.is_file():
-            return path.parent, [uri.scheme, path.name]
-        return path, [uri.scheme]
+            return path.parent, [cmd, path.name]
+        return path, [cmd]
 
-    def open(self, member_id: str, uri: ParsedUri) -> tuple[Live, TmuxHandle]:
-        cwd, cmd = self.resolve_command(uri)
+    def open(self, member_id: str, uri: ParsedUri, since_mtime: float = 0.0) -> tuple[Live, TmuxHandle]:
+        cwd, cmd = self.resolve(uri)
         if not self.tmux.has(member_id):
             self.tmux.new(member_id, cwd, cmd)
-        handle = TmuxHandle(self.tmux, member_id)
+        handle = self.handle(member_id, uri, cwd, since_mtime)
         url = f"{self.ttyd_url.rstrip('/')}/?arg={member_id}" if self.ttyd_url else None
-        live = Live(member_id=member_id, server=self.name, window=Window(url=url, embed=url),
-                    handle=handle.info(), cwd=str(cwd), command=cmd)
-        return live, handle
+        return Live(member_id=member_id, server=self.name, window=Window(url=url, embed=url),
+                    handle=handle.info(), cwd=str(cwd), command=cmd), handle
 
-    def handle(self, member_id: str) -> TmuxHandle:
+    def handle(self, member_id: str, uri: ParsedUri, cwd: Path, since_mtime: float) -> TmuxHandle:
         return TmuxHandle(self.tmux, member_id)
 
     def alive(self, member_id: str) -> bool:

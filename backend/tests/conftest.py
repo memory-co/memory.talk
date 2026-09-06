@@ -17,6 +17,7 @@ def home(tmp_path, monkeypatch):
     monkeypatch.setenv("MEMORY_TALK_WORKSPACE", str(tmp_path / "ws"))
     monkeypatch.setenv("MEMORY_TALK_CLAUDE_PROJECTS", str(tmp_path / "claude"))
     monkeypatch.setenv("MEMORY_TALK_CODEX_SESSIONS", str(tmp_path / "codex"))
+    monkeypatch.setenv("MEMORY_TALK_KIMI_SESSIONS", str(tmp_path / "kimi"))
     monkeypatch.setenv("MEMORY_TALK_TMUX_SOCKET", f"mt-test-{uuid.uuid4().hex[:8]}")
     monkeypatch.delenv("MEMORY_TALK_TTYD_URL", raising=False)
     yield tmp_path

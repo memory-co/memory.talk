@@ -27,7 +27,7 @@ def test_claude_member_rounds(client, home, monkeypatch):
     t = client.post("/api/tasks", json={"goal": "让 agent 干活"}).json()
     proj = home / "ws" / "proj"; proj.mkdir(parents=True)
     m = client.post(f"/api/tasks/{t['id']}/members", json={"uri": f"claude://{proj}"}).json()
-    assert m["server"] == "agent" and "rounds" in m["handle"]["capabilities"]
+    assert m["server"] == "claude" and "rounds" in m["handle"]["capabilities"]
     assert client.get(f"/api/tasks/{t['id']}/members/{m['id']}/rounds").json() == []
 
     # 会话记录出现了(成员创建之后)
@@ -75,3 +75,26 @@ def test_codex_adapter_parses(home):
     assert ad.find(Path("/w/p"), 0) == p and ad.find(Path("/other"), 0) is None
     assert [(r.role, r.text) for r in ad.rounds(p)] == [
         ("human", "hi"), ("assistant", "[shell] ls"), ("tool", "[result] a b"), ("assistant", "done")]
+
+
+def test_kimi_adapter_parses(home):
+    from pathlib import Path
+    from services.servers.adapters import KimiAdapter
+    sd = home / "kimi" / "wd_u_abc" / "session_1"; (sd / "agents" / "main").mkdir(parents=True)
+    (sd / "state.json").write_text(json.dumps({"workDir": "/w/p", "createdAt": "2026-09-06T00:00:00Z"}))
+    wire = sd / "agents" / "main" / "wire.jsonl"
+    rows = [
+        {"type": "metadata", "protocol_version": "1.5"},
+        {"type": "turn.prompt", "time": 1, "input": [{"type": "text", "text": "拉个镜像"}]},
+        {"type": "context.append_loop_event", "time": 2, "event": {"type": "content.part", "uuid": "c1", "part": {"type": "think", "think": "先查 docker"}}},
+        {"type": "context.append_loop_event", "time": 3, "event": {"type": "tool.call", "uuid": "t1", "name": "Bash", "args": {"command": "docker images"}}},
+        {"type": "context.append_loop_event", "time": 4, "event": {"type": "tool.result", "toolCallId": "tc1", "result": {"output": "REPOSITORY TAG"}}},
+        {"type": "context.append_loop_event", "time": 5, "event": {"type": "content.part", "uuid": "c2", "part": {"type": "text", "text": "拉好了"}}},
+        {"type": "turn.ended", "time": 6},
+    ]
+    wire.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    ad = KimiAdapter(home / "kimi")
+    assert ad.find(Path("/w/p"), 0) == wire and ad.find(Path("/other"), 0) is None
+    assert [(r.role, r.text) for r in ad.rounds(wire)] == [
+        ("human", "拉个镜像"), ("assistant", "[thinking] 先查 docker"), ("assistant", '[Bash] {"command": "docker images"}'),
+        ("tool", "[result] REPOSITORY TAG"), ("assistant", "拉好了")]

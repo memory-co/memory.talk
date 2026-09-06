@@ -48,10 +48,10 @@
 
 - **task 是裸文件**:`~/.memory.talk/tasks/<task_id>/{task.json, canvas.json, members.json, events.jsonl, sessions/<member>/rounds.jsonl}`,不进 git。
 - **成员 = 现场**:`POST /api/tasks/{id}/members {uri}` 看协议找 server 建现场,登记成员(id 形如 `<task_id>-m1`,脱离布局),交回 `window`(画布 iframe 装的地址)和 `handle`(把手能干什么)。没配 `MEMORY_TALK_TTYD_URL` 时终端类成员 `window.url` 老实报 `null`。
-- **server 认领**:`agent` 显式认领 `claude` / `codex`;`browser` 认领 `http` / `https`;`files` 认领 `file`;`terminal` 按约定兜底认领 PATH 里任何命令名。找不到 → `400 no_server`。
-- **把手**:终端 / agent 成员有 `capture`(抓屏);agent 成员多一项 `rounds`(从 Claude Code / Codex 的记录文件读 round,append-only 追加进 `rounds.jsonl`)。`send` 只在进程内,不暴露 API。
+- **server 认领**(`backend/servers/`,一个协议一个文件):`claude` / `codex` / `kimi` 各自显式认领;`http` 认领 `http` / `https`;`bash` 显式认领 `bash`,并按约定兜底认领 PATH 里任何命令名(`vim://`、`htop://`…)。名单优先于约定;找不到 → `400 no_server`。
+- **把手**:终端 / agent 成员有 `capture`(抓屏);agent 成员(claude / codex / kimi)多一项 `rounds`(从各自的记录文件读 round,append-only 追加进 `rounds.jsonl`);http 成员把手为空,`capture` → `409`。`send` 只在进程内,不暴露 API。
 - **结束**:`PATCH {status: done}` 要求子 task 全完;结束后现场销毁、登记留着、不再能 attach。
-- 环境变量:`MEMORY_TALK_HOME` / `MEMORY_TALK_WORKSPACE` / `MEMORY_TALK_TMUX_SOCKET` / `MEMORY_TALK_TTYD_URL` / `MEMORY_TALK_CLAUDE_PROJECTS` / `MEMORY_TALK_CODEX_SESSIONS`。
+- 环境变量:`MEMORY_TALK_HOME` / `MEMORY_TALK_WORKSPACE` / `MEMORY_TALK_TMUX_SOCKET` / `MEMORY_TALK_TTYD_URL` / `MEMORY_TALK_CLAUDE_PROJECTS` / `MEMORY_TALK_CODEX_SESSIONS` / `MEMORY_TALK_KIMI_SESSIONS`。
 
 ## 路径规则
 

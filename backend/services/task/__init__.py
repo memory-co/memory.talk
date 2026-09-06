@@ -2,11 +2,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from pathlib import Path
-
 from models.task import (Canvas, CanvasPut, Event, Member, MemberView, Round, Task, TaskCreate,
                          TaskNode, TaskUpdate)
-from services.servers import ServerService, parse_uri
+from services.servers import ServerService
 from services.store import StoreService
 
 from .canvas import CanvasStore
@@ -130,12 +128,7 @@ class TaskService:
         return self.sessions.read(task_id, member_id)
 
     def _handle(self, m: Member):
-        server = self.servers.registry.by_name(m.server)
-        if m.server == "agent":
-            return server.handle(m.id, parse_uri(m.uri), Path(m.cwd or "."), _epoch(m.created_at))
-        if m.server == "terminal":
-            return server.handle(m.id)
-        raise TaskConflict(f"{m.server} server 没有把手")
+        return self.servers.handle(m.server, m.id, m.uri, m.cwd, _epoch(m.created_at))
 
     def history(self, task_id: str) -> list[Event]:
         self.tree.get(task_id)

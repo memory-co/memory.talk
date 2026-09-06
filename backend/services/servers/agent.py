@@ -1,18 +1,18 @@
-"""agent server:claude:// codex:// —— 现场同终端(tmux),把手多一项「读会话 round」。"""
+"""agent 类 server 的基类:现场同终端(tmux),把手多一项「读会话 round」。"""
 from __future__ import annotations
 
 from pathlib import Path
 
-from models.server import HandleInfo, Live, ParsedUri, ServerInfo
+from models.server import HandleInfo, ParsedUri
 from models.task import Round
 
 from .adapters import TranscriptAdapter
-from .terminal import TerminalServer, TmuxHandle
+from .terminal import TerminalBase, Tmux, TmuxHandle
 
 
 class AgentHandle(TmuxHandle):
-    def __init__(self, base: TmuxHandle, adapter: TranscriptAdapter, cwd: Path, since_mtime: float) -> None:
-        super().__init__(base.tmux, base.name)
+    def __init__(self, tmux: Tmux, name: str, adapter: TranscriptAdapter, cwd: Path, since_mtime: float) -> None:
+        super().__init__(tmux, name)
         self.adapter, self.cwd, self.since_mtime = adapter, cwd, since_mtime
 
     def info(self) -> HandleInfo:
@@ -26,30 +26,13 @@ class AgentHandle(TmuxHandle):
         return self.adapter.rounds(p) if p else []
 
 
-class AgentServer:
-    name = "agent"
-    description = "已知的 code agent CLI(claude / codex):终端 + 读会话记录"
+class AgentBase(TerminalBase):
+    """子类只需给 name + adapter。"""
+    description = "code agent CLI:终端 + 读会话记录"
 
-    def __init__(self, terminal: TerminalServer, adapters: dict[str, TranscriptAdapter]) -> None:
-        self.terminal, self.adapters = terminal, adapters
-
-    def info(self) -> ServerInfo:
-        return ServerInfo(name=self.name, claims=sorted(self.adapters), description=self.description)
-
-    def claims(self, scheme: str) -> bool:
-        return scheme in self.adapters
-
-    def open(self, member_id: str, uri: ParsedUri, since_mtime: float = 0.0) -> tuple[Live, AgentHandle]:
-        live, base = self.terminal.open(member_id, uri)
-        handle = AgentHandle(base, self.adapters[uri.scheme], Path(live.cwd or "."), since_mtime)
-        live = live.model_copy(update={"server": self.name, "handle": handle.info()})
-        return live, handle
+    def __init__(self, tmux: Tmux, workspace: Path, ttyd_url: str | None, adapter: TranscriptAdapter) -> None:
+        super().__init__(tmux, workspace, ttyd_url)
+        self.adapter = adapter
 
     def handle(self, member_id: str, uri: ParsedUri, cwd: Path, since_mtime: float) -> AgentHandle:
-        return AgentHandle(self.terminal.handle(member_id), self.adapters[uri.scheme], cwd, since_mtime)
-
-    def alive(self, member_id: str) -> bool:
-        return self.terminal.alive(member_id)
-
-    def destroy(self, member_id: str) -> None:
-        self.terminal.destroy(member_id)
+        return AgentHandle(self.tmux, member_id, self.adapter, cwd, since_mtime)

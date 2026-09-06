@@ -1,6 +1,6 @@
 # backend(v5)
 
-memory.talk v5 的后端。**task / server / issue / card 四层都有最简实现(git + 裸文件存储,FastAPI,真 tmux)。** 未做:鉴权网关、ttyd / 反代托管、`daemon` / `start` / `stop`、逐 round 标注(`annotation.py` 仍为空)。 端点清单见 [docs/api/v5](../docs/api/v5/README.md);起服务 `python -m backend serve`,测试 `pytest`。 按 **models / services / controllers** 三层分目录;services 下每个子包对应 [docs/works/v5](../docs/works/v5/README.md) 的一篇设计;底层逻辑照 shellbase `server/shellbase/` 原生实现。`backend/` 本身就是 Python 包根,不再套一层包名目录。
+memory.talk v5 的后端。**task / server / issue / card 四层都有最简实现(git + 裸文件存储,FastAPI,真 tmux)。** 未做:鉴权网关、ttyd / 反代托管、`daemon` / `start` / `stop`、逐 round 标注(`annotation.py` 仍为空)。 端点清单见 [docs/api/v5](../docs/api/v5/README.md);起服务 `python -m backend serve`,测试 `pytest`。 按 **models / services / controllers** 三层分目录,外加 **servers/**(每个协议一个 server);services 下每个子包对应 [docs/works/v5](../docs/works/v5/README.md) 的一篇设计;底层逻辑照 shellbase `server/shellbase/` 原生实现。`backend/` 本身就是 Python 包根,不再套一层包名目录。
 
 ```
 backend/
@@ -24,15 +24,12 @@ backend/
 │   │   ├── members.py        #     成员登记:成员 id ↔ URI ↔ server ↔ 活着(唯一权威,脱离布局)
 │   │   ├── sessions.py       #     agent 成员的 rounds.jsonl(append-only)
 │   │   └── events.py         #     task 自己的 append-only 事件(开工/状态/做完)
-│   ├── servers/              #   协议 server —— docs/works/v5/protocol-server.md
-│   │   ├── __init__.py       #     入口:导出 ServerService(协议 → server 请求;持有 registry)
+│   ├── servers/              #   server 的装载与分发 —— docs/works/v5/protocol-server.md
 │   │   ├── registry.py       #     协议 → server 的解析(名单优先于约定,找不到明确报错)
-│   │   ├── terminal.py       #     bash:// + 任何 PATH 命令名(tmux 现场)
-│   │   ├── agent.py          #     claude:// codex://:终端把手 + 读会话 round
-│   │   ├── browser.py        #     https:// http://(本地服务经代理、外链直嵌;把手为空)
-│   │   ├── files.py          #     file://
-│   │   └── adapters/         #     读各平台会话记录(来自 v3 adapters,归入 agent server 把手)
-│   │       └── base.py / claude_code.py / codex.py
+│   │   ├── uri.py            #     块的 URI 解析
+│   │   ├── terminal.py       #     tmux 现场 + 终端类 server 基类(TerminalBase)
+│   │   ├── agent.py          #     agent 类 server 基类(AgentBase:终端把手 + 读 round)
+│   │   └── adapters/         #     读各平台会话记录:claude_code / codex / kimi
 │   ├── issue/                #   议事层 —— docs/works/v5/issue.md
 │   │   ├── __init__.py       #     入口:导出 IssueService
 │   │   ├── repo.py           #     读写 memory 仓库里的 issues/(每个动作一个 commit)
@@ -50,6 +47,13 @@ backend/
 │       ├── files.py          #     裸文件原语:原子写、单写者、无缓存直读(task 用)
 │       ├── git.py            #     git 仓库封装:一个决定一个 commit、log、revert
 │       └── memory.py         #     memory/ 仓库布局:cards/ + issues/
+│
+├── servers/                  # 每个协议一个 server,一个文件(新协议 = 加一个文件 + 在 __init__ 排进去)
+│   ├── bash.py               #   bash:// 以及任何 PATH 里的命令名(约定兜底)
+│   ├── claude.py             #   claude://  Claude Code
+│   ├── codex.py              #   codex://   Codex
+│   ├── kimi.py               #   kimi://    Kimi Code
+│   └── http.py               #   http:// https://  浏览器块(把手为空)
 │
 ├── controllers/              # HTTP 面(FastAPI 路由;只做参数/响应,不含逻辑)
 │   ├── tasks.py              #   /api/tasks/…

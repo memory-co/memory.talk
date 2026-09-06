@@ -10,26 +10,27 @@ needs_tmux = pytest.mark.skipif(shutil.which("tmux") is None, reason="需要 tmu
 
 def test_registry_and_resolve(client):
     names = {s["name"]: s["claims"] for s in client.get("/api/servers").json()}
-    assert names["agent"] == ["claude", "codex"] and names["terminal"] == ["*"]
-    assert names["browser"] == ["http", "https"] and names["files"] == ["file"]
+    assert names == {"claude": ["claude"], "codex": ["codex"], "kimi": ["kimi"], "http": ["http", "https"],
+                     "bash": ["bash", "*"]}
 
-    assert client.get("/api/servers/resolve", params={"uri": "codex:///w/p"}).json()["server"] == "agent"
-    assert client.get("/api/servers/resolve", params={"uri": "https://x.y/z"}).json()["server"] == "browser"
-    assert client.get("/api/servers/resolve", params={"uri": "file:///w"}).json()["server"] == "files"
-    assert client.get("/api/servers/resolve", params={"uri": "bash:///w"}).json()["server"] == "terminal"
+    assert client.get("/api/servers/resolve", params={"uri": "codex:///w/p"}).json()["server"] == "codex"
+    assert client.get("/api/servers/resolve", params={"uri": "kimi:///w/p"}).json()["server"] == "kimi"
+    assert client.get("/api/servers/resolve", params={"uri": "https://x.y/z"}).json()["server"] == "http"
+    assert client.get("/api/servers/resolve", params={"uri": "bash:///w"}).json()["server"] == "bash"
+    assert client.get("/api/servers/resolve", params={"uri": "vim:///w/a.txt"}).json()["server"] == "bash"
     r = client.get("/api/servers/resolve", params={"uri": "nosuchcmd-zz://"})
     assert r.status_code == 400 and r.json()["error"] == "no_server"
     assert client.get("/api/servers/resolve", params={"uri": "no-scheme"}).status_code == 400
 
 
-def test_browser_and_files_members(client):
+def test_http_members(client):
     t = client.post("/api/tasks", json={"goal": "看文档"}).json()
     m = client.post(f"/api/tasks/{t['id']}/members", json={"uri": "https://localhost:5173/app"}).json()
-    assert m["server"] == "browser" and m["window"]["embed"] == "/proxy/5173/app"
+    assert m["server"] == "http" and m["window"]["embed"] == "/proxy/5173/app"
     assert m["handle"] == {"kind": "none", "capabilities": []}
-    m2 = client.post(f"/api/tasks/{t['id']}/members", json={"uri": "file:///tmp"}).json()
-    assert m2["window"]["embed"].startswith("/apps/files?path=")
-    assert m2["id"].endswith("-m2")
+    m2 = client.post(f"/api/tasks/{t['id']}/members", json={"uri": "https://example.com/x"}).json()
+    assert m2["window"]["embed"] == "https://example.com/x" and m2["id"].endswith("-m2")
+    assert client.get(f"/api/tasks/{t['id']}/members/{m['id']}/capture").status_code == 409
 
 
 @needs_tmux
@@ -39,7 +40,7 @@ def test_terminal_member_lifecycle(client, home):
     r = client.post(f"/api/tasks/{t['id']}/members", json={"uri": f"bash://{ws}"})
     assert r.status_code == 201, r.text
     m = r.json()
-    assert m["server"] == "terminal" and m["alive"] is True and m["cwd"] == ws
+    assert m["server"] == "bash" and m["alive"] is True and m["cwd"] == ws
     assert m["window"]["url"] is None                       # 没配 ttyd → 老实报没有画面
     assert m["handle"]["capabilities"] == ["capture", "send"]
 
