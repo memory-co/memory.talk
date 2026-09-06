@@ -49,7 +49,7 @@ class TaskService:
         """做完:成员冻结——现场销毁,登记留着(可回去看痕迹,不再是干活的地方)。"""
         for m in self.members.list(task_id):
             try:
-                self.servers.destroy(m.server, m.id)
+                self.servers.destroy(m.scheme, m.id)
             except Exception:
                 pass
         self.events.emit(task_id, "frozen")
@@ -71,11 +71,11 @@ class TaskService:
         if task.status in ("done", "abandoned"):
             raise TaskConflict(f"{task_id} 已结束,不再是干活的地方")
         uri, server = self.servers.resolve(raw_uri)
-        m = self.members.add(task_id, raw_uri, uri.scheme, server.name, None)
+        m = self.members.add(task_id, raw_uri, uri.scheme, None)
         live, _ = self.servers.open(m.id, raw_uri, since_mtime=_epoch(m.created_at))
         if live.cwd:
             m = self._set_cwd(task_id, m, live.cwd)
-        self.events.emit(task_id, "member.attached", member=m.id, uri=raw_uri, server=server.name)
+        self.events.emit(task_id, "member.attached", member=m.id, uri=raw_uri, scheme=uri.scheme)
         return MemberView(**m.model_dump(), alive=True, window=live.window, handle=live.handle)
 
     def reattach(self, task_id: str, member_id: str) -> MemberView:
@@ -98,14 +98,14 @@ class TaskService:
         self.tree.get(task_id)
         out = []
         for m in self.members.list(task_id):
-            alive = self.servers.alive(m.server, m.id)
+            alive = self.servers.alive(m.scheme, m.id)
             out.append(MemberView(**m.model_dump(), alive=alive))
         return out
 
     def detach(self, task_id: str, member_id: str) -> None:
         """关闭即回收:销毁现场 + 删登记。"""
         m = self.members.get(task_id, member_id)
-        self.servers.destroy(m.server, m.id)
+        self.servers.destroy(m.scheme, m.id)
         self.members.remove(task_id, member_id)
         self.events.emit(task_id, "member.detached", member=member_id)
 
@@ -128,7 +128,7 @@ class TaskService:
         return self.sessions.read(task_id, member_id)
 
     def _handle(self, m: Member):
-        return self.servers.handle(m.server, m.id, m.uri, m.cwd, _epoch(m.created_at))
+        return self.servers.handle(m.scheme, m.id, m.uri, m.cwd, _epoch(m.created_at))
 
     def history(self, task_id: str) -> list[Event]:
         self.tree.get(task_id)

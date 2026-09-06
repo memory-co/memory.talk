@@ -1,5 +1,5 @@
 """ServerService:协议 → server 的请求入口(docs/works/v5/protocol-server.md)。
-具体 server 住在 backend/servers/(一个协议一个文件),这里只做装载与分发。"""
+具体 server 住在 backend/servers/(一个协议一个文件,server 名 = 协议名),这里只做装载与查表。"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -15,8 +15,7 @@ class ServerService:
     def __init__(self, rt: RuntimeConfig) -> None:
         import servers  # backend/servers/
         self.rt = rt
-        explicit, fallback = servers.load(rt)
-        self.registry = Registry(explicit=explicit, fallback=fallback)
+        self.registry = Registry(servers.load(rt))
 
     def list(self) -> list[ServerInfo]:
         return self.registry.infos()

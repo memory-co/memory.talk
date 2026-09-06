@@ -24,7 +24,7 @@ Tasks    GET    /api/tasks                                        task 树(森�
          GET    /api/tasks/{id}/members/{mid}/capture             抓终端屏幕
          GET    /api/tasks/{id}/members/{mid}/rounds              agent 会话痕迹
 
-Servers  GET    /api/servers                                      server 清单及认领的协议
+Servers  GET    /api/servers                                      server 清单(名字 = 协议名)
          GET    /api/servers/resolve?uri=                         一个 URI 会请求到谁
 
 Cards    GET    /api/cards                                        目录
@@ -58,7 +58,7 @@ Issues   GET    /api/issues                                       清单(manager
 
   | 状态 | `error` | 何时 |
   |---|---|---|
-  | 400 | `bad_uri` / `no_server` / `cmd_not_found` | URI 没协议 / 没 server 认领 / 命令不在 PATH |
+  | 400 | `bad_uri` / `no_server` / `cmd_not_found` | URI 没协议 / 没有这个协议的 server / 命令不在 PATH |
   | 404 | `not_found` | task / member / card / issue / position 不存在 |
   | 409 | `exists` | 建卡时 id 已存在 |
   | 409 | `conflict` | task 状态规则、画布 version / 越界、已结束的 task 不能 attach、把手没有该能力 |

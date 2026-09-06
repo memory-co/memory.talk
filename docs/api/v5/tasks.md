@@ -66,7 +66,7 @@ task 树(森林)。
 ```json
 [
   {"ts": "…", "type": "created", "data": {"goal": "…", "parent": null}},
-  {"ts": "…", "type": "member.attached", "data": {"member": "…-m1", "uri": "codex:///w", "server": "codex"}},
+  {"ts": "…", "type": "member.attached", "data": {"member": "…-m1", "uri": "codex:///w", "scheme": "codex"}},
   {"ts": "…", "type": "status", "data": {"from": "doing", "to": "done"}},
   {"ts": "…", "type": "frozen", "data": {}}
 ]
@@ -120,7 +120,7 @@ memory.talk/
 ## GET /api/tasks/{task_id}/members
 
 ```json
-[{"id": "task_…-m1", "uri": "codex:///w", "scheme": "codex", "server": "codex", "cwd": "/w",
+[{"id": "task_…-m1", "uri": "codex:///w", "scheme": "codex", "cwd": "/w",
   "created_at": "…", "last_attached": "…", "alive": true, "window": null, "handle": null}]
 ```
 
@@ -128,7 +128,7 @@ memory.talk/
 
 ## POST /api/tasks/{task_id}/members
 
-在 task 里打开一个块:看协议找 server → 幂等建现场 → 登记成员 → 交回窗 + 把手。
+在 task 里打开一个块:协议名 = server 名,查到 server → 幂等建现场 → 登记成员 → 交回窗 + 把手。
 
 ```json
 {"uri": "codex:///w/memory.talk"}
@@ -137,7 +137,7 @@ memory.talk/
 **201**:
 
 ```json
-{"id": "task_…-m1", "uri": "codex:///w/memory.talk", "scheme": "codex", "server": "codex",
+{"id": "task_…-m1", "uri": "codex:///w/memory.talk", "scheme": "codex",
  "cwd": "/w/memory.talk", "created_at": "…", "last_attached": "…",
  "alive": true,
  "window": {"url": null, "embed": null},
@@ -151,7 +151,7 @@ memory.talk/
 |---|---|
 | task 已结束 | 409 `conflict` |
 | URI 没协议 | 400 `bad_uri` |
-| 没 server 认领 / PATH 无此命令 | 400 `no_server` / `cmd_not_found` |
+| 没有这个协议的 server / 命令不在 PATH | 400 `no_server` / `cmd_not_found` |
 | tmux 起不来 | 502 `platform` |
 
 ## POST /api/tasks/{task_id}/members/{member_id}/attach

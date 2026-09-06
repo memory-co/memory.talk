@@ -68,7 +68,6 @@ task 的一个成员 = 一个现场。**在 task 里打开就是它的**,归属�
   "id": "task_202609052302072f2f-m1",
   "uri": "codex:///home/me/memory.talk",
   "scheme": "codex",
-  "server": "codex",
   "cwd": "/home/me/memory.talk",
   "created_at": "2026-09-05T23:02:10Z",
   "last_attached": "2026-09-05T23:40:01Z"
@@ -79,8 +78,7 @@ task 的一个成员 = 一个现场。**在 task 里打开就是它的**,归属�
 |---|---|
 | `id` | `<task_id>-m<n>`,task 内顺序编号;**就是 tmux 会话名**(终端类) |
 | `uri` | 打开它用的 URI(原样) |
-| `scheme` | URI 的协议 |
-| `server` | 认领它的 server 名(`bash` / `claude` / `codex` / `kimi` / `http`) |
+| `scheme` | URI 的协议 = 建它的 server 名(`bash` / `claude` / `codex` / `kimi` / `http` / `https`) |
 | `cwd` | server 解析出的工作目录(终端类);浏览器类为 `null` |
 | `created_at` | 成员诞生时刻;agent 类 server 用它找「之后新出现的那份会话记录」 |
 | `last_attached` | 最近一次重入 |
@@ -112,7 +110,7 @@ task 自己的时间线,append-only。v3 `events.jsonl` 在 v5 唯一保留的�
 
 ```json
 {"ts": "2026-09-05T23:02:07Z", "type": "created", "data": {"goal": "把 v5 做出来", "parent": null}}
-{"ts": "2026-09-05T23:02:10Z", "type": "member.attached", "data": {"member": "…-m1", "uri": "codex:///…", "server": "codex"}}
+{"ts": "2026-09-05T23:02:10Z", "type": "member.attached", "data": {"member": "…-m1", "uri": "codex:///…", "scheme": "codex"}}
 {"ts": "2026-09-06T01:00:00Z", "type": "status", "data": {"from": "doing", "to": "done"}}
 {"ts": "2026-09-06T01:00:00Z", "type": "frozen", "data": {}}
 ```
@@ -122,7 +120,7 @@ task 自己的时间线,append-only。v3 `events.jsonl` 在 v5 唯一保留的�
 | `created` | `goal`, `parent` |
 | `status` | `from`, `to` |
 | `frozen` | — (结束时现场已销毁) |
-| `member.attached` | `member`, `uri`, `server` |
+| `member.attached` | `member`, `uri`, `scheme` |
 | `member.detached` | `member` |
 
 ## 存储

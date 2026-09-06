@@ -38,8 +38,7 @@ class Live(BaseModel):
 
 
 class ServerInfo(BaseModel):
-    name: str
-    claims: list[str] = Field(description="显式认领的协议;'*' = 按约定兜底(PATH 里的命令名)")
+    name: str = Field(description="= 协议名(URI 里 :// 前面那个)")
     description: str = ""
 
 

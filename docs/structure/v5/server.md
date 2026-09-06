@@ -9,7 +9,7 @@
 | 字段 | 说明 |
 |---|---|
 | `raw` | 原样 |
-| `scheme` | 小写协议名;终端类 = 命令名 |
+| `scheme` | 小写协议名;**= server 名**;终端类同时 = 命令名 |
 | `path` | 终端类:工作目录(是文件则 cwd = 父目录、文件名作参数);`/` 或空 = 默认工作区 |
 | `host` / `port` | http 类:`localhost` / `127.0.0.1` + 端口 → 本地服务 |
 | `query` | 参数字典(v5 没有身份参数——身份在成员 id 上) |
@@ -19,16 +19,16 @@
 `GET /api/servers` 每项:
 
 ```json
-{"name": "bash", "claims": ["bash", "*"], "description": "bash:// 以及任何 PATH 里的命令名 → tmux 会话(约定优于注册)"}
+{"name": "bash", "description": "bash:///<cwd> → tmux 会话里的 bash"}
 ```
 
-`claims` 里的 `"*"` 表示按约定兜底(PATH 里有的命令名都认)。解析顺序:显式名单 → 兜底;名单里先排的先赢。
+`name` 就是协议名:`bash://` 找 `bash`。没有别的匹配规则——`backend/servers/<name>.py` 存在,`<name>://` 就存在。
 
-| server | 认领 | 现场 | 窗 | 把手 |
-|---|---|---|---|---|
-| `claude` / `codex` / `kimi` | 各自协议名 | tmux 会话跑该 CLI | ttyd | `capture` `send` `rounds` |
-| `bash` | `bash` + 任何 PATH 命令名 | tmux 会话 | ttyd | `capture` `send` |
-| `http` | `http` `https` | 无(纯 iframe) | URL 本身 | 无 |
+| server(= 协议) | 现场 | 窗 | 把手 |
+|---|---|---|---|
+| `claude` / `codex` / `kimi` | tmux 会话跑该 CLI | ttyd | `capture` `send` `rounds` |
+| `bash` | tmux 会话 | ttyd | `capture` `send` |
+| `http` / `https` | 无(纯 iframe) | URL 本身 | 无 |
 
 ## Window
 
@@ -61,7 +61,7 @@
 
 ```json
 {
-  "member_id": "task_…-m1", "server": "codex",
+  "member_id": "task_…-m1", "server": "codex",   // = 协议名
   "window": {"url": null, "embed": null},
   "handle": {"kind": "tmux+transcript", "capabilities": ["capture", "send", "rounds"]},
   "cwd": "/home/me/memory.talk", "command": ["codex"]
@@ -75,6 +75,6 @@
 | `code` | HTTP | 意思 | 下一步 |
 |---|---|---|---|
 | `bad_uri` | 400 | 没有协议 | 改 URI |
-| `no_server` | 400 | 没有 server 认领这个协议,PATH 里也没这个命令 | 换协议 / 装命令 |
-| `cmd_not_found` | 400 | server 认领了但命令不在 PATH | 装命令 |
+| `no_server` | 400 | 没有这个协议的 server(`backend/servers/` 里没有同名文件) | 换协议 / 加一个 server |
+| `cmd_not_found` | 400 | server 在,但同名命令不在 PATH | 装命令 |
 | `platform` | 502 | tmux 起不来 | 查 tmux,别重试 |

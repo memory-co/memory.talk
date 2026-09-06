@@ -10,12 +10,12 @@ v5 的三层:**task**(做事,裸文件)、**issue**(议事,git)、**card**(记�
 |---|---|---|---|
 | Task | 树上一个节点:目标、项目、父、状态 | `tasks/<id>/task.json` | [task.md](task.md) |
 | Canvas / Panel | task 的画布:24×16 网格上的块;**视图,可随时重排** | `tasks/<id>/canvas.json` | [task.md](task.md#canvas) |
-| Member | task 的成员 = 一个现场:URI + 认领它的 server;**身份脱离布局** | `tasks/<id>/members.json` | [task.md](task.md#member) |
+| Member | task 的成员 = 一个现场:URI(协议名 = server 名);**身份脱离布局** | `tasks/<id>/members.json` | [task.md](task.md#member) |
 | Round | agent 成员的会话痕迹,append-only | `tasks/<id>/sessions/<member>/rounds.jsonl` | [task.md](task.md#round) |
 | Event | task 自己的时间线,append-only | `tasks/<id>/events.jsonl` | [task.md](task.md#event) |
 | Issue / Position / Argument / IssueLink | 问题 + 立场 + 论证 + IBIS 边;立场 / 论证只增不改 | `memory/issues/<id>.json` | [issue.md](issue.md) |
 | Card | 维基式事实条目:标题 + 正文 + 语境 + 链接;可改,历史在 git | `memory/cards/<dir>/<slug>.md` | [card.md](card.md) |
-| Server / Window / Handle / Live | 认领协议、建现场、交回窗 + 把手 | 不落盘(运行时对象) | [server.md](server.md) |
+| Server / Window / Handle / Live | 名字 = 协议名;建现场、交回窗 + 把手 | 不落盘(运行时对象) | [server.md](server.md) |
 
 ## ID
 

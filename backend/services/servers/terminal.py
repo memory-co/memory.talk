@@ -1,4 +1,4 @@
-"""tmux 现场 + 终端类 server 的基类(蓝本 tmuxd)。具体协议的 server 在 backend/servers/ 里。
+"""tmux 现场 + 终端类 server 的基类(蓝本 tmuxd)。具体协议的 server 在 backend/servers/ 里,server 名 = 协议名 = 命令名。
 
 现场 = tmux 会话(名字 = 成员 id),活得比连接久;
 窗   = ttyd(配置了地址才有;没配就老实报 None);
@@ -61,7 +61,7 @@ class TmuxHandle:
 
 
 class TerminalBase:
-    """「到某目录跑某命令」这一族 server 的公共实现。子类定 name / claims / command。"""
+    """「到某目录跑某命令」这一族 server 的公共实现。子类只定 name(= 协议名 = 命令名)。"""
     name = "terminal"
     description = ""
 
@@ -69,22 +69,16 @@ class TerminalBase:
         self.tmux, self.workspace, self.ttyd_url = tmux, workspace, ttyd_url
 
     def info(self) -> ServerInfo:
-        return ServerInfo(name=self.name, claims=self.claim_list(), description=self.description)
-
-    def claim_list(self) -> list[str]:
-        return [self.name]
-
-    def claims(self, scheme: str) -> bool:
-        return scheme == self.name
+        return ServerInfo(name=self.name, description=self.description)
 
     def command(self, uri: ParsedUri) -> str:
-        """要跑的命令名;默认 = 协议名。"""
-        return uri.scheme
+        """要跑的命令名;默认 = server 名 = 协议名。"""
+        return self.name
 
     def resolve(self, uri: ParsedUri) -> tuple[Path, list[str]]:
         cmd = self.command(uri)
         if shutil.which(cmd) is None:
-            raise ServerError("cmd_not_found", f"PATH 里没有 {cmd!r};装上它,或换一个协议")
+            raise ServerError("cmd_not_found", f"PATH 里没有 {cmd!r};装上它")
         path = Path(uri.path) if uri.path and uri.path != "/" else self.workspace
         if path.is_file():
             return path.parent, [cmd, path.name]
