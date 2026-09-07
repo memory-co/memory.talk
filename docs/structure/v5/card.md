@@ -24,7 +24,7 @@
 | `context` | string | 在哪成立:关于哪个项目 / 用户 / 场景。「本地论」在卡上的落法——不是治理字段,是事实陈述的一部分 |
 | `links[]` | string[] | 相关卡的 id(内链,只有一种类型) |
 | `issue` | string \| null | 讨论页:挂在这张卡上的 issue |
-| `status` | `active` \| `deprecated` | 唯一的状态位;废弃不删文件,目录默认不列 |
+| `status` | `active` \| `deprecated` | **待移除**(当前实现仍有):设计已定卡上不留状态位,废弃 = 删文件,历史在 git(见 [works card.md §4](../../works/v5/card.md)) |
 
 **没有的东西**:顶踩、可信度、沉浮、分数、版本号。对错在 issue 上争,历史在 git 里翻。
 

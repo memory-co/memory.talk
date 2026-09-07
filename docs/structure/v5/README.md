@@ -66,7 +66,7 @@ Card  ──(links)──▶ Card                             ← 内链
 
 | 对象 | 能不能改 | 历史在哪 |
 |---|---|---|
-| Card | **能改**(像编辑词条);废弃不删文件 | git log |
+| Card | **能改、能删**(像编辑词条);当前实现还有 `deprecated` 状态位,设计上已去掉 | git log |
 | Issue 的 question / origin / created_at | 建后不改 | git log |
 | Issue 的 manager_task / card / links | 能改(换绑、写卡、连边) | git log |
 | Position / Argument | **只增不改不删** | git log(每条一个 commit) |

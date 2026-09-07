@@ -20,7 +20,7 @@
 ```
 Collect(一个 collectbase 仓库,~/.memory.talk/memory/)
 ├── layer/issue ← layer issue:issues/<id>.json schema:question / positions[] / arguments[] / links[] …
-├── layer/card ← layer card :cards/**/<slug>.md schema:frontmatter(title / context / links / issue / status)+ 正文
+├── layer/card ← layer card :cards/**/<slug>.md schema:frontmatter(title / context / links / issue)+ 正文
 └── layer/<你的> ← 用户自定义的 layer:写清 schema 就行
  stack ← 合并视图:所有 layer 的文件并在一起,日常读写站在这里
 ```
@@ -54,7 +54,7 @@ issue 和 card **只是两个内置的 layer**。它们的对象模型([issue.md
 schema 决定的事:
 
 - **读**:通用的读 / 列 / 历史 / 检索,按 schema 解析文件就能做,不需要为每个 layer 写代码。
-- **写**:通用的建 / 改 / 废弃,按 schema 校验后落盘 + `[layer 名]` 提交。
+- **写**:通用的建 / 改 / 删,按 schema 校验后落盘 + `[layer 名]` 提交。删也是提交——文件没了,历史在。
 - **引用**:schema 里标出「这个字段指向哪个 layer 的对象」,于是 card.issue、issue.card、card.links 这些跨 layer 的边有了统一的表达;顺链接走(store.md §5 的检索方式)靠它。
 - **目录**:哪个字段是标题、按什么分目录——召回时给 agent 的那份目录由此生成。
 
@@ -67,7 +67,7 @@ schema 决定的事:
 collectbase 的层是有序的:**事实在最下,推论在上;上层改不动下层**。memory.talk 的两个内置 layer 怎么排,按「谁更接近记录、谁更接近结论」:
 
 ```
-上 card ← 争完的结论;可改、可废弃(维基式);从 issue 派生
+上 card ← 争完的结论;可改、可删(维基式,git 记历史);从 issue 派生
 下 issue ← 争的过程;立场 / 论证只增不改;更接近证据
 ```
 
@@ -118,6 +118,6 @@ store.md 的两条原则不变:**认知层进 git,现场层用裸文件**。Coll
 - **schema 用什么写**:JSON Schema、一份 YAML 字段表、还是直接一个 pydantic 类文件。内置 layer 现在就是 pydantic 类;用户的 layer 要能不写 Python——倾向 YAML 字段表 + 少量约定(哪个字段是标题、哪个是引用)。
 - **通用 API 的形状**:`/api/collect/<class>/...` 一套 CRUD + 历史 + 检索,内置 layer 的专用端点(`/api/issues/...` `/api/cards/...`)是不是它上面的别名。
 - **要不要把 rounds 纳入 Collect 当事实层**:那会让 task 的痕迹进 git、成为 issue 之下真正的「地板」,collectbase 的分层语义才完整;代价是 store.md §4 的「过程不进 git」被推翻。先不做。
-- **跨 layer 引用要不要校验**:card.issue 指向的 issue 必须存在吗;删 / 废弃时要不要检查反向引用。collectbase 明确「不管文件之间的关系」,这是 memory.talk 自己的事;倾向只在写时校验存在、不做级联。
+- **跨 layer 引用要不要校验**:card.issue 指向的 issue 必须存在吗;删时要不要检查反向引用。collectbase 明确「不管文件之间的关系」,这是 memory.talk 自己的事;倾向只在写时校验存在、不做级联。
 - **两个提交的事务**(§5):第一个成、第二个败时的回退,是 `reset` 权威分支(需要绕过「只进不退」)还是补一个反向提交。倾向后者,历史更诚实。
 - **`stack` 之外要不要给每个 layer 一条工作分支**:collectbase 说站在 `stack` 上声明哪层都行;memory.talk 的服务进程是唯一写者,站 `stack` 就够。

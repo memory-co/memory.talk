@@ -56,11 +56,11 @@ card 上**没有**:顶踩计数、可信度、沉浮、竞争的候选、状态�
 
 ## 4. 卡可以改,改的历史留着
 
-这是跟 v4「只增不改」最大的不同。v4 的卡是治理对象,改一次等于一次信念变更,所以要 append-only + 分叉血缘;v5 的卡是词条,**写错了就改,改了留版本**,跟维基的编辑历史一样。
+这是跟 v4「只增不改」最大的不同。v4 的卡是治理对象,改一次等于一次信念变更,所以要 append-only + 分叉血缘;v5 的卡是词条,**写错了就改,改了留版本**,跟维基的编辑历史一样。有了 Collect([collect.md](collect.md))之后这一点更彻底:**卡上不需要任何不可变约束、也不需要任何状态位**——git 记录所有事实,卡本身只管当前内容。
 
 - 事实变了(项目后来加了配置文件)→ **改卡**,旧内容进历史,不另起一张。
 - 事实说得不准 → 改措辞,同上。
-- 事实被推翻、不再成立 → 卡删掉或标为已废弃,历史留着。
+- 事实被推翻、不再成立 → **卡删掉**。不标「已废弃」、不留状态位——文件没了,`git log` 里它还在,要看随时能看。
 - 改从哪来:通常是 issue 讨论出结果后改;小改(错别字、补一句语境)直接改,不必开 issue。
 
 没有沉浮,一张卡就不会「自己掉下去」。它要么在、要么改了、要么废了,都是明确的编辑动作,不是分数慢慢降的结果。这比沉浮更像维基,也更好解释:一张卡为什么长这样,翻历史就知道。
@@ -83,7 +83,7 @@ card 是 v5 的召回单元。task 开工时拿目标去查,agent 干活途中�
 
 一个 task 用了一张卡,发现它不对——**不是给卡打分,是去它的讨论页**:卡上没有 issue 就开一个挂上(`[issue] raise` + `[card] link` 两个提交),有就在那个 issue 里加立场、加论证。issue 里议出结果,再回来改卡(§4)。
 
-**卡变了,有人会知道。** 卡所在的目录(或它上面的某一级)有 `manager.json`,这张卡的每一次改 / 废弃就打到那个 task 的收件箱([manager.md §4](manager.md));那个 task 去检查链接到它的卡和讨论页有没有过时、要不要合并重复的卡。`cards/manager.json` 管所有卡,`cards/memory.talk/manager.json` 管这个项目的卡——就近优先。所以 card 的「回流」有两条:**不同意 → 讨论页**(issue),**变了 → 管这片卡的 task**(manager)。
+**卡变了,有人会知道。** 卡所在的目录(或它上面的某一级)有 `manager.json`,这张卡的每一次改 / 删就打到那个 task 的收件箱([manager.md §4](manager.md));那个 task 去检查链接到它的卡和讨论页有没有过时、要不要合并重复的卡。`cards/manager.json` 管所有卡,`cards/memory.talk/manager.json` 管这个项目的卡——就近优先。所以 card 的「回流」有两条:**不同意 → 讨论页**(issue),**变了 → 管这片卡的 task**(manager)。
 
 这条路把 v4 那三条最容易写错的原则变得不需要特别防守:
 
@@ -112,8 +112,8 @@ card 是 Collect([collect.md](collect.md))里内置的一个 **layer**:
 |---|---|
 | layer 名 | `card`;分支 `layer/card`;提交信息以 `[card]` 开头 |
 | 路径 | `cards/<目录>/…/<slug>.md`——一张卡一个文件,目录即分类;目录下可放 `manager.json` 管这一片 |
-| schema | markdown + frontmatter:`title` / `context` / `links[]→card` / `issue→issue` / `status`;正文 |
-| 行为 | 写、改、废弃(通用 CRUD 就够);从 issue 写出来(`decide`,issue 侧发起)、对卡开讨论页(`raise`,两层各一个提交) |
+| schema | markdown + frontmatter:`title` / `context` / `links[]→card` / `issue→issue`;正文。**没有 status**——在与不在由文件在不在决定,历史由 git 记 |
+| 行为 | 写、改、删(通用 CRUD 就够);从 issue 写出来(`decide`,issue 侧发起)、对卡开讨论页(`raise`,两层各一个提交) |
 | 层序 | 在 issue 之上:card 是争完的结论,从 issue 派生;改卡碰不到 issue |
 | 历史 | `git log layer/card` = 全部编辑史;`git log -- cards/<id>.md` = 这一张的 |
 | manager | 按目录:`cards/manager.json` → 所有卡;`cards/<目录>/manager.json` → 这一片;要单独管一张卡,把它变成目录 `cards/<目录>/<slug>/card.md`([manager.md §7](manager.md)) |
@@ -125,6 +125,6 @@ card 是 Collect([collect.md](collect.md))里内置的一个 **layer**:
 - **谁能改卡**:人和 agent 都能直接编辑,还是 agent 只能通过 issue 提议、人来改。维基的答案是「都能改、靠历史和回滚兜底」,本篇倾向照搬,没定。collectbase 的 hook 只守层不守人——它挡的是「改卡时顺手动了 issue」,不是「谁在改」;要限人得另加,而 [member.md](member.md) 说不做权限。
 - **单张卡要不要变目录**:为了给一张卡单独放 `manager.json`。倾向不变——管目录就够,一张卡值得专人盯的时候,它多半该有自己的讨论页,而讨论页(issue)是有 manager 的。
 - **卡与卡的合并 / 拆分**:两张卡说的其实是一件事、一张卡其实讲了两件事——谁判、怎么并、历史怎么接。
-- **废弃的卡召不召回**:标为已废弃的卡是彻底不出现,还是在明确查历史时可见。
+- ~~废弃的卡召不召回~~:已定——没有「废弃」,只有删;删了的卡不在目录里,查历史走 `git log`。
 - **卡的出处要多细**:记到 task 的 round,还是记到 issue 就够(issue 自己记 round)。
 - **卡之间的链接类型**:只要一种「相关」,还是像 issue 图那样分类型。本篇倾向只要一种——词条内链从来只有一种。
