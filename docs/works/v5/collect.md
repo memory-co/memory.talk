@@ -5,6 +5,7 @@
 相关:
 - v5 store(git 存认知层——本篇把「怎么用 git」交给 collectbase): [store.md](store.md)
 - v5 issue / card(Collect 里内置的两个 layer): [issue.md](issue.md) / [card.md](card.md)
+- v5 collect layer(用户怎么设计一个自己的层): [collect-layer.md](collect-layer.md)
 - collectbase v2 契约(层即分支、路径不相交、`[层名]` 声明、守卫): [DESIGN.md](https://github.com/memory-co/collectbase/blob/main/docs/v2/DESIGN.md) / [branch-topology.md](https://github.com/memory-co/collectbase/blob/main/docs/v2/works/branch-topology.md)
 
 ---
