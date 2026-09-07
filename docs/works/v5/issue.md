@@ -5,6 +5,8 @@
 相关:
 - v5 总设计(task / issue / card 三层): [README.md](README.md)
 - v5 task 树(issue 的原料来源、管理者所在、派活的去处): [task.md](task.md)
+- v5 collect(issue 在认知层里是一个 layer:`layer/issue`,路径 `issues/`): [collect.md](collect.md)
+- v5 manager(issue 目录下的 `manager.json` 决定谁管它、变动打给谁): [manager.md](manager.md)
 - v4 问题图(issue / position / argument、IBIS 边、credence 现算——本篇机制的来源): [../v4/card.md](../v4/card.md)
 - v4 逐 round 标注 + `#问题`(issue 的主入口): [../v4/session-annotation.md](../v4/session-annotation.md)
 
@@ -31,19 +33,24 @@ issue 的主入口是 task 留下的痕迹。对一个 task 的 session 逐 roun
 
 ---
 
-## 3. issue 有人管:绑定一个 manager task
-
-> **本节的绑定方式已被 [manager.md](manager.md) 升级**:不再是 issue 上的一个字段,而是 issue 目录下的 `manager.json`——目录级、可继承、任何对象都能有;issue 的变动(新立场、新论证)会自动打到绑定的 task 的收件箱。下面讲的「谁管、管什么、为什么」不变,只有「怎么绑」换了。
+## 3. issue 有人管:目录下的 manager.json
 
 v4 的问题图有一个没解决的问题:**一个问题被提出来之后,谁在推它**?卡建了、立场挂了,然后就等着后续对话碰巧撞上它。没人负责去找答案、去安排验证。
 
-v5 给每个 issue **绑定一个 manager task**——task 树上管这个问题的那个节点。这样每个 issue 就有管的了:
+v5 用 [manager.md](manager.md) 的机制给每个 issue 一个 **manager task**——task 树上管这个问题的那个节点。绑法就是在 issue 的目录下放一个 `manager.json`:
+
+```
+issues/iss_…3f6a/
+├── issue.json          ← 问题、立场、论证、边
+└── manager.json        ← {"task": "task_…"}:谁管它
+```
 
 - **manager 就是树上正卡在这个问题上的 task**。做「把 X 做出来」这件事时冒出「数据库该不该换」,那 X 这个节点(或它下面正做到这一步的那个子节点)就是这个 issue 的 manager。不必为了管一个问题专门开 task——问题是在做事时冒出来的,管它的就是正在做那件事的节点。
+- **issue 的每一次变动都打到 manager task 的收件箱**:新立场、新论证、新的边、被写成了卡——manager task 里的 agent 看到变动,决定下一步(派活取证、写卡、换绑)。这是「有人管」的实际含义:**不是名单上有个名字,是变动会到它手里**。
 - **manager task 是议这个问题的现场**。在它的画布里开 agent 会话去梳理立场、找资料、判断现有论证够不够、决定下一步要验什么。这个 task 的 session 痕迹就是这个 issue 的**议事记录**。
-- **manager task 是普通 task**。它跟别的 task 一样有画布、有成员、有状态、有父子;唯一多出来的是它知道自己在管哪些问题,issue 也知道去哪找它的管理者。
-- **一个 issue 同一时间只有一个 manager task;一个 task 可以管多个 issue**。一个 task 里同时推几个相关问题很自然;反过来一个问题同时有两个地方在管,会分裂。
-- **可以换、可以没有**。manager task 做完了、问题还没定,issue 可以换绑到树上另一个节点(常常是它的父节点)接着管;没绑的 issue 就是「还没人管的问题」,这本身是一种有用的状态——issue 列表里一眼看出哪些问题在推、哪些搁着。
+- **manager task 是普通 task**。它跟别的 task 一样有画布、有成员、有状态、有父子;唯一多出来的是变动先到它这里。它没有更大的权限([member.md](member.md):不做权限)。
+- **一个 issue 同一时间只有一个 manager**(最近的那个 `manager.json`);**一个 task 可以管多个 issue**。
+- **可以继承、可以换、可以没有**。issue 自己目录下没有 `manager.json`,就往上找——`issues/manager.json` 管所有 issue,再往上是 Collect 根上的兜底;所以「一个 task 管所有还没人专门管的问题」只要在 `issues/` 下放一个文件。换绑 = 改这个文件(一次 `[issue]` 提交,`git log manager.json` 就是换绑史);一路都找不到 = **没人管的问题**,这是有用的状态——issue 列表里一眼看出哪些在推、哪些搁着。
 
 > 出处 task 和 manager task 是两回事:前者是**冒出**这个问题的地方(可能是在做别的事时顺手撞见的),后者是**推进**这个问题的地方。它们常常是同一个节点;不是的时候,通常是「在叶子上撞见、但该由父节点来管」——比如做功能 A 的某一步时发现「数据库该不该换」,这个问题比 A 大,该挂到 A 的父节点去管。
 
@@ -57,7 +64,7 @@ v5 给每个 issue **绑定一个 manager task**——task 树上管这个问题
 
 - 在 manager task 里判断「要验这个立场,得去做 X」→ **为这条论证开一个新 task**,挂在 manager 下面当子节点。这个 task 跟任何 task 一样干活:开 agent 会话、跑、看结果。
 - 这个 task 记得自己是**为哪个 issue 的哪个立场**开的,所以它的结果有地方落——做完后,它的痕迹成为那个立场的一条**论证**(支持、反对或中立,证据就是这个 task 里的那些 round)。
-- 派出去的 task 做完就是做完了;论证落回 issue,manager task 接着议。
+- 派出去的 task 做完就是做完了。它挂在 manager task 下面,所以「做完」这个变动沿 task 树的隐式 manager 链([manager.md §3](manager.md))打回 manager task 的收件箱;manager 看它的 rounds,把结果记成那个立场的一条**论证**——这一步也是一个 `[issue]` 提交,又打回 manager 自己(自己造成的,不投递)。然后接着议。
 
 这样 task 和 issue 之间就是**双向的**:task 里冒出 issue,issue 又派出 task。三种 task 角色摆在一起:
 
@@ -98,14 +105,33 @@ issue 图和 task 树是**两套层级,各管各的**:task 树表达「事怎么
 
 issue 和 card 的关系就是维基的讨论页和正文(见 [card.md §2](card.md)):争在 issue 里争,争出结果——某个立场站住了——就把它**写成一张 card**(或者改一张已有的卡)。card 上没有立场、没有计数,只有事实;card 链接回它的 issue,顺着能一路挖回 manager task 的议事记录和论证 task 的证据。
 
-写卡不等于关闭 issue:issue 继续开着当讨论页;后面若另一个立场翻盘,回来改卡,旧内容进卡的历史。反过来,一张直接写的卡后来有人不同意,就开一个 issue 挂到这张卡上当它的讨论页。
+在 Collect 里这是**两个相邻的提交,各在自己的 layer**([collect.md §5](collect.md)):`[issue] decide iss_…#p2 -> card …`(issue 记下「这个立场写成了卡」)+ `[card] write …`(卡的正文),带同一个 `Decision:` trailer。issue 在下、card 在上——写卡、改卡的提交碰不到 `issues/` 下的任何文件,hook 守着;所以「立场只增不改」不靠代码纪律,靠层。
+
+写卡不等于关闭 issue:issue 继续开着当讨论页;后面若另一个立场翻盘,回来改卡,旧内容进卡的历史。反过来,一张直接写的卡后来有人不同意,就开一个 issue 挂到这张卡上当它的讨论页——同样是两个提交:`[issue] raise …`(新 issue,`card` 指向那张卡)+ `[card] link …`(卡的 `issue` 指回来)。
 
 ---
 
-## 8. 这篇有意不定的事
+## 8. issue 在 Collect 里:一个 layer
 
-- **manager 怎么定**:从 task 标注里冒出的 issue 默认绑到出处节点,还是默认往父节点挂;手建的 issue 必须指定 manager 吗;没人管的 issue 要不要有提醒。
+issue 是 Collect([collect.md](collect.md))里内置的一个 **layer**:
+
+| | |
+|---|---|
+| layer 名 | `issue`;分支 `layer/issue`;提交信息以 `[issue]` 开头 |
+| 路径 | `issues/<id>/`——**一个 issue 一个目录**(为了能放 `manager.json`),里面 `issue.json` 是本体 |
+| schema | `question` / `origin` / `card→card` / `positions[]{claim, origin, arguments[]{stance, evidence, task_id}, spawned_tasks[]}` / `links[]{type, target→issue}` |
+| 行为 | 提问题、加立场、表态、连边、派活、写卡(`decide`)、被开成讨论页(`raise` 带 `card`)——这些是 schema 之上的领域动作,有自己的端点 |
+| 层序 | 在 card 之下:issue 是争的过程、只增不改,card 从它派生 |
+| 历史 | `git log layer/issue` = 全部辩论序列;`git log -- issues/<id>/` = 这一个问题的 |
+
+原来的 `manager_task` 字段**退役**,由目录下的 `manager.json` 取代(§3);`GET /api/issues?manager_task=` / `unmanaged=` 改为按 `manager.json` 的继承链解析。
+
+---
+
+## 9. 这篇有意不定的事
+
+- **新 issue 默认谁管**:从 task 标注里冒出的 issue,要不要自动写一个 `manager.json` 指向出处 task(或它的父);还是不写、靠 `issues/manager.json` 的继承。倾向不写——少一个文件,继承链本来就能答;真要专门管再写。
 - **论证 task 的结果怎么落成论证**:做完后人来标方向(支持 / 反对 / 中立),还是标注流程自动从它的 round 里提;一个论证 task 能不能同时给多个立场供证据。
 - **不是派出去的 task 碰到了这个 issue**:别的 task 在标注时撞上老 issue 并给出证据,走 §2 的挂接路径就够,还是也要记成「事后关联的论证 task」。
 - ~~结晶的触发~~:已由 [card.md §2、§4](card.md) 定——写卡 / 改卡是 manager task 里的一个编辑动作,不是阈值触发。
-- **manager 绑定要不要有历史**:换绑之后,前一个 manager task 的议事记录还算不算这个 issue 的一部分。本篇倾向于算(出处一样,记录不删),但没定。
+- ~~manager 绑定要不要有历史~~:已定——`manager.json` 在 git 里,`git log` 就是换绑史;前一个 manager 的议事记录当然还算(它在那个 task 的 rounds 里,不会消失)。
