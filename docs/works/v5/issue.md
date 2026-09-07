@@ -5,7 +5,7 @@
 相关:
 - v5 总设计(task / issue / card 三层): [README.md](README.md)
 - v5 task 树(issue 的原料来源、管理者所在、派活的去处): [task.md](task.md)
-- v5 collect(issue 在认知层里是一个 layer:`layer/issue`,路径 `issues/`): [collect.md](collect.md)
+- v5 collect(issue 在认知层里是一个 layer:`layer/issue`;对象是任意位置的 `<名>.issue/` 目录): [collect.md](collect.md)
 - v5 manager(issue 目录下的 `manager.json` 决定谁管它、变动打给谁): [manager.md](manager.md)
 - v4 问题图(issue / position / argument、IBIS 边、credence 现算——本篇机制的来源): [../v4/card.md](../v4/card.md)
 - v4 逐 round 标注 + `#问题`(issue 的主入口): [../v4/session-annotation.md](../v4/session-annotation.md)
@@ -40,17 +40,19 @@ v4 的问题图有一个没解决的问题:**一个问题被提出来之后,谁�
 v5 用 [manager.md](manager.md) 的机制给每个 issue 一个 **manager task**——task 树上管这个问题的那个节点。绑法就是在 issue 的目录下放一个 `manager.json`:
 
 ```
-issues/iss_…3f6a/
+memory.talk/配置/该走文件还是环境变量.issue/
 ├── issue.json          ← 问题、立场、论证、边
 └── manager.json        ← {"task": "task_…"}:谁管它
 ```
+
+issue 是一个带 `.issue/` 后缀的目录,放在它相关的东西旁边——同一个文件夹里可能还有它引用的原文(origin)和它争出来的卡(`.card/`)。
 
 - **manager 就是树上正卡在这个问题上的 task**。做「把 X 做出来」这件事时冒出「数据库该不该换」,那 X 这个节点(或它下面正做到这一步的那个子节点)就是这个 issue 的 manager。不必为了管一个问题专门开 task——问题是在做事时冒出来的,管它的就是正在做那件事的节点。
 - **issue 的每一次变动都打到 manager task 的收件箱**:新立场、新论证、新的边、被写成了卡——manager task 里的 agent 看到变动,决定下一步(派活取证、写卡、换绑)。这是「有人管」的实际含义:**不是名单上有个名字,是变动会到它手里**。
 - **manager task 是议这个问题的现场**。在它的画布里开 agent 会话去梳理立场、找资料、判断现有论证够不够、决定下一步要验什么。这个 task 的 session 痕迹就是这个 issue 的**议事记录**。
 - **manager task 是普通 task**。它跟别的 task 一样有画布、有成员、有状态、有父子;唯一多出来的是变动先到它这里。它没有更大的权限([member.md](member.md):不做权限)。
 - **一个 issue 同一时间只有一个 manager**(最近的那个 `manager.json`);**一个 task 可以管多个 issue**。
-- **可以继承、可以换、可以没有**。issue 自己目录下没有 `manager.json`,就往上找——`issues/manager.json` 管所有 issue,再往上是 Collect 根上的兜底;所以「一个 task 管所有还没人专门管的问题」只要在 `issues/` 下放一个文件。换绑 = 改这个文件(一次 `[issue]` 提交,`git log manager.json` 就是换绑史);一路都找不到 = **没人管的问题**,这是有用的状态——issue 列表里一眼看出哪些在推、哪些搁着。
+- **可以继承、可以换、可以没有**。issue 自己目录下没有 `manager.json`,就往上找——所在主题文件夹的 `manager.json`(它管这个文件夹里所有层的东西,不只 issue),再往上是 Collect 根上的兜底;所以「一个 task 管这个主题下所有还没人专门管的问题」只要在那个文件夹里放一个文件。换绑 = 改这个文件(一次 `[issue]` 提交,`git log manager.json` 就是换绑史);一路都找不到 = **没人管的问题**,这是有用的状态——issue 列表里一眼看出哪些在推、哪些搁着。
 
 > 出处 task 和 manager task 是两回事:前者是**冒出**这个问题的地方(可能是在做别的事时顺手撞见的),后者是**推进**这个问题的地方。它们常常是同一个节点;不是的时候,通常是「在叶子上撞见、但该由父节点来管」——比如做功能 A 的某一步时发现「数据库该不该换」,这个问题比 A 大,该挂到 A 的父节点去管。
 
@@ -118,13 +120,13 @@ issue 是 Collect([collect.md](collect.md))里内置的一个 **layer**:
 | | |
 |---|---|
 | layer 名 | `issue`;分支 `layer/issue`;提交信息以 `[issue]` 开头 |
-| 路径 | `issues/<id>/`——**一个 issue 一个目录**(为了能放 `manager.json`),里面 `issue.json` 是本体 |
+| 形态 | **`<任意路径>/<名>.issue/`**——一个 issue 一个带后缀的目录,放哪都行;里面 `issue.json` 是本体,可放 `manager.json`;`<名>` 由人起(问题的短标题) |
 | schema | `question` / `origin` / `card→card` / `positions[]{claim, origin, arguments[]{stance, evidence, task_id}, spawned_tasks[]}` / `links[]{type, target→issue}` |
 | 行为 | 提问题、加立场、表态、连边、派活、写卡(`decide`)、被开成讨论页(`raise` 带 `card`)——这些是 schema 之上的领域动作,有自己的端点 |
 | 层序 | 在 card 之下:issue 是争的过程、只增不改,card 从它派生 |
-| 历史 | `git log layer/issue` = 全部辩论序列;`git log -- issues/<id>/` = 这一个问题的 |
+| 历史 | `git log layer/issue` = 全部辩论序列;`git log -- <路径>.issue/` = 这一个问题的 |
 
-原来的 `manager_task` 字段**退役**,由目录下的 `manager.json` 取代(§3);`GET /api/issues?manager_task=` / `unmanaged=` 改为按 `manager.json` 的继承链解析。
+原来的 `manager_task` 字段**退役**,由目录下的 `manager.json` 取代(§3);`GET /api/issues?manager_task=` / `unmanaged=` 改为按 `manager.json` 的继承链解析。issue 的 id 从 `iss_…` 变成**它的路径**(同 card),`iss_…` 前缀退役。
 
 ---
 

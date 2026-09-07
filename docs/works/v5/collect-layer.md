@@ -29,13 +29,13 @@
 
 ### 叫什么
 
-一个小写英文单词,单数:`decision`、`experiment`、`person`。它同时是层名、分支名、提交前缀、目录名、API 路径段——一个名字到处用,别起两个。
+一个小写英文单词,单数:`decision`、`experiment`、`person`。它同时是层名、分支名、提交前缀、**目录后缀**、API 路径段——一个名字到处用,别起两个。
 
 ### 住哪
 
-约定:**`<名>s/` 目录**(`decisions/`、`experiments/`),和 `issues/`、`cards/` 并列。collectbase 不强制每层一个目录(它允许上层文件放在下层文件旁边),但 memory.talk 的层各占一个顶层目录——这样「这个路径归哪层」看一眼就知道,`manager.json` 的继承链也清楚。
+**哪都行。** 层不占目录([collect.md §1](collect.md)):一个对象是**一个带后缀的目录** `<名>.<层>/`,放在树的任何位置——`memory.talk/配置/重审配置方案.decision/` 和它讨论的 `.issue/`、写出来的 `.card/`、引用的原文文件并排在同一个文件夹里。「这个路径归哪层」看后缀就知道;`manager.json` 的继承链按目录树走,一个主题文件夹一个 manager,管它下面所有层的东西。
 
-目录里面怎么组织,是 schema 的事(下一条)。一个对象通常是**一个文件**;要在对象自己身上放 `manager.json`,就让它是**一个目录**(issue 是目录,card 是文件,见 [manager.md §7](manager.md))。
+对象是目录,不是文件——这样它自己身上能放 `manager.json`,也能带附件。目录里放什么由 schema 定(下一条):一个本体文件(`<层>.md` 或 `<层>.json`)+ 可选的附件。
 
 ### 长什么样:schema
 
@@ -44,7 +44,7 @@ schema 说清一个对象是什么样的文件。最小的一份:
 ```yaml
 # schemas/decision.yaml
 layer: decision
-path: decisions/<id>/decision.md        # 对象 = 目录(可放 manager.json);<id> 由系统生成
+object: <名>.decision/decision.md       # 对象 = 带后缀的目录,本体文件叫 decision.md;<名> 由人起,放哪都行
 format: markdown+frontmatter             # 或 json
 title: title                             # 哪个字段是标题(目录、召回用它)
 fields:
@@ -57,7 +57,7 @@ fields:
 body: true                               # markdown 正文(format=json 时没有)
 ```
 
-schema 只有五样东西:**格式**(json / markdown+frontmatter)、**路径模板**(对象是文件还是目录、id 怎么来)、**字段**(名字、类型、必不必填)、**哪个字段是标题**、**哪些字段是引用**(指向哪个层)。类型就几种:`string` `int` `bool` `list[…]` `ref`。不做嵌套对象——要嵌套,那是另一个层加一个 `ref`。
+schema 只有五样东西:**格式**(json / markdown+frontmatter)、**对象形态**(目录后缀 + 本体文件名)、**字段**(名字、类型、必不必填)、**哪个字段是标题**、**哪些字段是引用**(指向哪个层)。类型就几种:`string` `int` `bool` `list[…]` `ref`。不做嵌套对象——要嵌套,那是另一个层加一个 `ref`。
 
 > 内置的 issue 有 `positions[]{…arguments[]{…}}` 这种嵌套,那是它作为内置层带**行为**的代价;用户层没有行为,也就不需要嵌套。真需要,先问自己:嵌在里面的那个东西是不是该独立成一层。
 
@@ -115,10 +115,10 @@ issue 争完写卡,那个「决定」本身现在只是两个提交上的一个 
 
 ```
 layers:      origin, issue, decision, card  ← 夹在中间
-路径:        decisions/<id>/decision.md      ← 目录,能放 manager.json
+形态:        <名>.decision/decision.md       ← 放在它相关的 issue / card 旁边
 schema:      title / context / chosen / rejected[] / issue→issue / cards[]→card / review_after(date)
 行为:        无。「做一个决定」= 建 decision + 改 issue + 写 card,三个提交
-manager:     decisions/manager.json → 一个「定期重审决定」的 task;review_after 到了,agent 在收件箱里看到它
+manager:     某个主题文件夹的 manager.json → 一个「定期重审决定」的 task;review_after 到了,agent 在收件箱里看到它
 ```
 
 ### experiment:实验日志
@@ -127,13 +127,13 @@ manager:     decisions/manager.json → 一个「定期重审决定」的 task;r
 
 ```
 layers:      origin, issue, card, experiment ← 放最上:它引用 issue(为哪个立场做的),没人引用它
-路径:        experiments/<id>.md            ← 文件就够,不需要单独管
+形态:        <名>.experiment/experiment.md   ← 放在它验证的那个 .issue/ 旁边
 schema:      title / hypothesis / setup / result / verdict(supports | refutes | inconclusive)
              / position→issue#position / task→(裸 id,task 不在 Collect 里)
 行为:        无。实验做完 = 建一个 experiment;给立场加论证是另一个 `[issue]` 提交,evidence 指回这个 experiment
 ```
 
-两个例子的共同点:**它们都只是文件 + 引用**,没有一处需要代码。不同点在层序——decision 被 card 引用所以夹中间,experiment 谁也不引用它所以放最上。
+两个例子的共同点:**它们都只是目录 + 引用**,没有一处需要代码;而且都跟它们相关的 issue、card、原文放在同一个文件夹里。不同点在层序——decision 被 card 引用所以夹中间,experiment 谁也不引用它所以放最上。
 
 ---
 

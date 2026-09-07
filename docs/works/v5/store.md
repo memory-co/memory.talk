@@ -16,7 +16,7 @@
 
 ```
 ~/.memory.talk/
-├── memory/          ← 一个 git 仓库:cards/ + issues/。认知的 canonical,连同它的全部历史
+├── memory/          ← 一个 git 仓库(Collect):按主题组织的目录树,原文 / .issue/ / .card/ 并排。认知的 canonical,连同全部历史
 └── tasks/           ← 裸文件:task 树、画布、会话 round。现场的 canonical,原子写,不进 git
 ```
 

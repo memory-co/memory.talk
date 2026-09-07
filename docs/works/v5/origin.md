@@ -57,7 +57,7 @@
 
 origin 是最底层,享受 collectbase 给底层的全部保护:
 
-- **文件 444。** 上层写它的那一刻 `EACCES`;`[issue]` / `[card]` 提交碰了 `origins/` 下的路径,hook 当场拒绝。
+- **文件 444。** 上层写它的那一刻 `EACCES`;`[issue]` / `[card]` 提交碰了任何 origin 路径(不带层后缀的文件或目录),hook 当场拒绝。
 - **agent 不写 origin。** 谁写:人(手动放材料)、采集(抓网页、同步外部工具)、导入。agent 在 task 里跑,它的产出是上层的事;它想「修正」一份原文,只能在上层另写一份注解引用它——原文永远在,谁在什么时候提出异议是可 diff 的(collectbase §2 的三个后果,原样成立)。
 - **可以删,不可以改。** 一份材料放错了、过期了,可以删(一次 `[origin]` 提交,git 留着);但不改它的内容——改了就不是原文了。
 
@@ -75,7 +75,7 @@ origin(原文)──逐段标注、#问题──▶ issue(问题 + 立场 + 论�
 
 - **消化不消耗 origin。** 一份文档被读完、提了三个 issue、写了两张卡,它本身还在原处,一字不动。card 的出处、issue 的证据都指向它——地板就是拿来被指的。
 - **「还没消化的」是一份清单,不是一个状态。** 没有任何 issue / card 引用的 origin 对象,就是待读材料;读没读过不写在它身上(它是只读的),从引用关系反推。
-- **新材料进来,有人会知道。** `origins/manager.json` 绑一个「读材料」的 task,每份新进的 origin 都打到它的收件箱([manager.md](manager.md));它去标注、提问题。`origins/<来源>/manager.json` 可以更细——比如某个外部工具同步进来的东西专门由某个 task 消化。
+- **新材料进来,有人会知道。** 材料所在文件夹的 `manager.json` 绑着一个 task(常常就是管这个主题的那个),每份新进的 origin 都打到它的收件箱([manager.md](manager.md));它去标注、提问题。想让某个来源的东西专门由某个 task 消化,给那个来源单独一个文件夹、放一个 `manager.json`。
 
 ---
 
@@ -83,7 +83,7 @@ origin(原文)──逐段标注、#问题──▶ issue(问题 + 立场 + 论�
 
 task 的 rounds、屏幕、事件是**本实例自己的过程**,它们是裸文件、不进 git([store.md §4](store.md))。origin 收的是**外部来的**。两者都是「事实」,但一个是过程、一个是材料,分开放:
 
-| | task 的痕迹(`tasks/<id>/…`) | origin(`origins/…`) |
+| | task 的痕迹(`tasks/<id>/…`) | origin(Collect 里不带层后缀的一切) |
 |---|---|---|
 | 从哪来 | 本实例的 agent 会话跑出来的 | 外面来的 |
 | 体量 | 大、持续增长、每一轮都记 | 一份一份的,进来就定 |
@@ -97,20 +97,26 @@ task 的 rounds、屏幕、事件是**本实例自己的过程**,它们是裸文
 
 ---
 
-## 7. 形态:一份材料一个目录,meta 很薄
+## 7. 形态:没限制,文件或目录都行
+
+origin **没有形态约束**:Collect 目录树里任何**不带层后缀**的文件或目录,都是 origin。一份 markdown、一个 PDF(软链到 blob)、一个装着十几个文件的文件夹——放进来就是。
 
 ```
-origins/
-├── manager.json                      ← 谁消化新材料
-└── <来源>/<id>/                       ← 一份材料一个目录(能放自己的 manager.json)
-    ├── origin.json                   ← meta:source(url / 路径 / 谁给的)、kind、fetched_at、by
-    ├── content.md                    ← 正文(文本类)
-    └── attachment.png → ../../../blob/…   ← 二进制走 collectbase 的 blob 外置,原地留软链
+memory.talk/
+├── manager.json
+└── 配置/
+    ├── 旧的 settings 方案.md                    ← origin:一个文件
+    ├── 同事发来的截图.png → ../../blob/…        ← origin:二进制外置,原地留软链
+    ├── 上个季度的调研/                          ← origin:一个目录,里面随便放
+    │   ├── 访谈记录.md
+    │   └── 数据.csv
+    ├── 该走文件还是环境变量.issue/              ← 不是 origin:带后缀
+    └── 配置只来自环境变量.card/                 ← 不是 origin:带后缀
 ```
 
-schema 极薄——origin 的价值在**原文**不在字段:`source`(从哪来)、`kind`(文档 / 网页 / 会话 / 给定 / 摘录)、`fetched_at`、`by`(人 / 哪个采集器)、`title`(给目录用)。**没有** summary、tags、rating 这类东西:那些是消化的产物,归上层。
+meta 是**可选的**:想记「从哪来、什么时候、谁放的」,在旁边放一个 `<名>.origin.json`(或目录里放 `origin.json`),字段只有 `source` / `kind` / `fetched_at` / `by`。不写也行——文件本身就是事实,git 记着谁什么时候放进来的。**没有** summary、tags、rating:那些是消化的产物,归上层。
 
-`<来源>` 分目录是为了 manager 能按来源绑(§5)和目录能按来源看;不是分类——分类是上层的事。
+不分目录、不分来源、不分类——**怎么摆是人的事**,按主题摆,让原文和它的讨论页、词条待在一起。
 
 ---
 
@@ -129,5 +135,5 @@ layers:  origin, issue, card           ← origin 永远第一个(最底)
 - **rounds 摘录的粒度**(§6):按轮、按段、还是整个会话;摘录要不要保留工具调用的原始输出。
 - **去重**:同一份文档两次进来(抓两次网页、两个人各放一份)——按内容哈希合并,还是各放各的、让上层引用其中一份。倾向后者:origin 不做聪明事,重复也是事实。
 - **大材料**:一本 200 页的 PDF 进 origin,是整本(blob)+ 抽出的文本,还是只抽文本。倾向两者都留:原件 blob、文本 content。
-- **采集器**:谁把网页抓成 origin、谁把外部工具的会话同步进来——是 memory.talk 的一部分,还是外部脚本往 `origins/` 里 commit。collectbase 说「不做采集」;倾向 memory.talk 先只提供「放进来」的端点,采集是外部的。
+- **采集器**:谁把网页抓成 origin、谁把外部工具的会话同步进来——是 memory.talk 的一部分,还是外部脚本直接往 Collect 里 commit(`[origin]`)。collectbase 说「不做采集」;倾向 memory.talk 先只提供「放进来」的端点,采集是外部的。
 - **过期**:材料旧了要不要标。不标——它是原文,旧也是事实;上层的 card 说「这条已过时」。

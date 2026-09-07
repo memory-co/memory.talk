@@ -21,12 +21,30 @@
 
 ```
 Collect(一个 collectbase 仓库,~/.memory.talk/memory/)
-├── layer/origin   ← origin:origins/<来源>/<id>/     schema:source / kind / fetched_at / by + 原文;最底层,只读
-├── layer/issue    ← issue :issues/<id>/issue.json   schema:question / positions[] / arguments[] / links[] …
-├── layer/card     ← card  :cards/**/<slug>.md       schema:frontmatter(title / context / links / issue)+ 正文
-└── layer/<你的>   ← 用户自定义的 layer:写清 schema 就行
+├── layer/origin   ← origin:任何**不带层后缀**的文件或目录          schema 极薄:原文 + 可选 meta;最底层,只读
+├── layer/issue    ← issue :任何 `<名>.issue/` 目录(里面 issue.json)  schema:question / positions[] / arguments[] / links[] …
+├── layer/card     ← card  :任何 `<名>.card/` 目录(里面 card.md)     schema:frontmatter(title / context / links / issue)+ 正文
+└── layer/<你的>   ← 用户自定义的 layer:`<名>.<层>/`,写清 schema 就行
     stack          ← 合并视图:所有 layer 的文件并在一起,日常读写站在这里
 ```
+
+**层不占目录,对象带后缀。** 没有 `issues/`、`cards/` 这种按层分的顶层目录——一个对象是哪一层,看它目录名的后缀(`.issue/`、`.card/`);没有后缀的一切都是 origin。于是目录树可以按**主题**组织,同一个文件夹里原文、讨论页、词条并排:
+
+```
+memory.talk/
+├── manager.json                              ← 这一片归谁管(任何层的变动都打过去)
+├── 配置/
+│   ├── 旧的 settings 方案.md                  ← origin:一份原文
+│   ├── 该走文件还是环境变量.issue/            ← issue:围绕它的讨论
+│   │   ├── issue.json
+│   │   └── manager.json
+│   └── 配置只来自环境变量.card/               ← card:争完的结论
+│       └── card.md
+└── design/
+    └── v5-总设计.pdf → blob/…                ← origin:二进制外置
+```
+
+这就是「在文件系统里做融合」:分层是 git 分支上的事(每层自己的历史、路径不相交、hook 守卫),**布局是人的事**——collectbase 本来就说「布局完全自由,上层文件可以放在下层文件旁边」,memory.talk 只多加一条:用后缀标身份。
 
 issue 和 card **只是两个内置的 layer**。它们的对象模型([issue.md](issue.md) / [card.md](card.md))一字不改;改的是它们**住在哪、怎么被管**——从「两个目录」变成「两个 layer」。
 
@@ -37,7 +55,7 @@ issue 和 card **只是两个内置的 layer**。它们的对象模型([issue.md
 三个理由,都是 store.md 想要而裸 git 给不了的:
 
 - **每个 layer 自己一条历史。** `git log layer/card` 只有卡的变化,`git log layer/issue` 只有辩论序列;`git log --first-parent stack` 是全部认知的时间线,每一行自带 `[issue]` / `[card]` 标注。裸 git 里这些要靠路径过滤去拼,而且分支上什么都混在一起。
-- **layer 与 layer 之间路径不相交,由 hook 守着。** 一个声明 `[card]` 的提交碰了 `issues/` 下的文件,当场拒绝——包括 `--no-verify`、`reset`、`cherry-pick` 都绕不过。这就是 collectbase 说的「认知卫生」在 memory.talk 里的形态:**不会有一次提交把「争的过程」和「争完的结论」搅在一起**。
+- **layer 与 layer 之间路径不相交,由 hook 守着。** 一个声明 `[card]` 的提交碰了某个 `.issue/` 目录里的文件,当场拒绝——包括 `--no-verify`、`reset`、`cherry-pick` 都绕不过。这就是 collectbase 说的「认知卫生」在 memory.talk 里的形态:**不会有一次提交把「争的过程」和「争完的结论」搅在一起**。
 - **layer 是可加的,不用改代码。** collectbase 的 `layers` 文件就是 layer 的清单;加一层 = 加一个名字。memory.talk 在这上面只多要一样东西:**schema**——这个 layer 的文件长什么样。于是「我想记一种新东西」(决策记录、实验日志、人物档案……)变成写一份 schema,而不是往 backend 里加一个包。
 
 一句话:**collectbase 管「层怎么在 git 里成立」,memory.talk 管「每一层里的文件是什么」。**
@@ -51,7 +69,7 @@ issue 和 card **只是两个内置的 layer**。它们的对象模型([issue.md
 | 要素 | 是什么 | issue | card |
 |---|---|---|---|
 | **名字** | = layer 名 = 提交信息里的 `[层名]` = 分支 `layer/<名字>` | `issue` | `card` |
-| **路径** | 这个 layer 的文件住在哪(collectbase 不强制每层一个目录,但 memory.talk 的内置 layer 各占一个) | `issues/<id>.json` | `cards/**/<slug>.md` |
+| **路径** | 对象怎么认:**目录名后缀 `.<层>/`**,放在树的任何位置;没有后缀的就是 origin | `<任意路径>/<名>.issue/issue.json` | `<任意路径>/<名>.card/card.md` |
 | **schema** | 文件长什么样:格式 + 字段 + 哪些字段是引用(指向别的 layer 的对象) | JSON;`question` `origin` `manager_task` `card→card` `positions[]` … | markdown + frontmatter;`title` `context` `links[]→card` `issue→issue` `status` |
 
 schema 决定的事:
@@ -104,9 +122,9 @@ git log --first-parent stack
 
 | | 之前 | 引入 Collect 之后 |
 |---|---|---|
-| memory/ 仓库 | 裸 git,一条 main | collectbase 仓库:`layer/issue`、`layer/card`、`stack`,`cb init --layers issue,card` |
+| memory/ 仓库 | 裸 git,一条 main | collectbase 仓库:`layer/origin`、`layer/issue`、`layer/card`、`stack`,`cb init --layers origin,issue,card` |
 | issue / card 的对象模型 | issue.md / card.md | **不变** |
-| 文件形态与路径 | `issues/<id>.json`、`cards/**/<slug>.md` | **不变**,成为各层的路径 |
+| 文件形态与路径 | `issues/<id>.json`、`cards/**/<slug>.md`(按层分目录) | **对象变目录、带后缀、放哪都行**:`<名>.issue/issue.json`、`<名>.card/card.md`;不再有按层分的顶层目录 |
 | 提交信息 | `card: write …` / `issue: argue …` | `[card] write …` / `[issue] argue …`(动词不变,层名前置) |
 | 跨对象的决定 | 一个 commit | 两个相邻提交 + 同一个 `Decision:` trailer(§5) |
 | 历史 | `git log -- <path>` | 同,外加 `git log layer/<名>` 看整层 |

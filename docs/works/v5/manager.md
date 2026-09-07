@@ -13,9 +13,9 @@
 ## 1. 一句话:一个文件,把「这里的变动」交给「那个 task」
 
 ```
-cards/memory.talk/manager.json     {"task": "task_…root"}
-issues/iss_…3f6a/manager.json      {"task": "task_…db"}
-tasks/task_…a1/manager.json        {"task": "task_…root"}
+memory.talk/manager.json                              {"task": "task_…root"}   ← 这个主题文件夹里的一切(原文、讨论页、词条)
+memory.talk/配置/该走文件还是环境变量.issue/manager.json  {"task": "task_…db"}     ← 单独管这一个 issue
+tasks/task_…a1/manager.json                           {"task": "task_…root"}   ← 一棵 task 子树
 ```
 
 `manager.json` 就一句话:**这个目录归那个 task 管**。它下面任何东西变了——一张卡被改、一个 issue 多了一条论证、一个子 task 做完了——变动就**打到**绑定的 task 那里;那个 task 里跑着的 agent(或人)看到变动,决定下一步:该写卡就写卡,该派活就派活,该推进父 task 就推进。
@@ -50,11 +50,14 @@ issue.md 原来的做法是每个 issue 记一个 `manager_task`。它有三个�
 一个路径变了,往上找**最近的一个 `manager.json`**,那就是它的 manager:
 
 ```
-cards/manager.json                     ← 管所有卡(默认)
-cards/memory.talk/manager.json         ← 管这个项目的卡;比上一个近,优先
-cards/memory.talk/配置只来自环境变量.md   ← 变了 → 打到 cards/memory.talk/manager.json 绑的 task
-cards/其他/某张卡.md                    ← 变了 → 没有更近的 → 打到 cards/manager.json 绑的 task
+manager.json                                     ← Collect 根:管一切(默认)
+memory.talk/manager.json                         ← 管这个主题文件夹;比上一个近,优先
+memory.talk/配置/配置只来自环境变量.card/card.md    ← 变了 → 打到 memory.talk/manager.json 绑的 task
+memory.talk/配置/旧的 settings 方案.md             ← origin 变了(新放进来)→ 同上,同一个 task
+其他/某张卡.card/card.md                          ← 变了 → 没有更近的 → 打到根 manager.json 绑的 task
 ```
+
+`manager.json` **不分层**:一个主题文件夹里的原文、讨论页、词条,变动都打到同一个 task——这正是把它们摆在一起的意思。
 
 - **根上的 `manager.json` 就是全局默认**——整个 Collect 的「兜底管理者」。
 - **一路都没有**:这个变动**没人管**。它不会丢,会进一份「无人管的变动」清单——跟 issue.md 说的「没人管的 issue 是有用的状态」一个意思:看得见哪些地方没人接。
@@ -103,14 +106,14 @@ manager 机制不规定动作。但把它接到 v5 已有的几条线上,会自�
 | `GET /api/issues?manager_task=` / `unmanaged=` | 按字段过滤 | 按 `manager.json` 解析:「这个 task 管哪些 issue」= 所有路由到它的 issue;「没人管」= 一路找不到 `manager.json` |
 | issue.md §4 派出论证 task | `positions[].spawned_tasks` | 不变——派出是 issue 的领域动作,不是 manager 机制的事;派出的 task 默认挂在 manager task 下 |
 | task 树的父子 | 只表达「事怎么拆」 | 同时是**隐式的 manager 链**:子的变动默认打到父 |
-| issue 的存储形态 | `issues/<id>.json` 一个文件 | 为了能在「这个 issue 的目录」下放 `manager.json`,issue 变成**目录**:`issues/<id>/issue.json` + 可选 `manager.json`(见 §7) |
-| collectbase 分层 | `[issue]` / `[card]` 各自路径 | `manager.json` 归它所在目录的那一层:`issues/…/manager.json` 是 `[issue]` 的路径,`cards/…/manager.json` 是 `[card]` 的路径。根上那个(管整个 Collect)归最底层 |
+| issue / card 的存储形态 | `issues/<id>.json`、`cards/**/<slug>.md`,按层分目录 | 都变成**带后缀的目录**,放哪都行:`<名>.issue/issue.json`、`<名>.card/card.md`,自己目录里可放 `manager.json`([collect.md §1](collect.md)) |
+| collectbase 分层 | `[issue]` / `[card]` 各自路径 | `manager.json` 是**机制文件**(同 collectbase 的 `layers`),不是证据:在 `.issue/` 里随 `[issue]` 提交,在 `.card/` 里随 `[card]` 提交,在普通文件夹里归最底层但**不受 444 保护**——memory.talk 把它登记为机制例外 |
 
 ---
 
 ## 7. 这篇有意不定的事
 
-- **单文件对象要不要变目录**:issue 是 `issues/<id>.json`,card 是 `cards/<dir>/<slug>.md`。要给「一个对象」放 `manager.json`,对象得是目录。倾向:issue 变目录(它天然是「有人管的东西」);card 不变,管一张卡就管它所在的目录,真要单独管一张卡再把它变成 `cards/<dir>/<slug>/card.md`。
+- ~~单文件对象要不要变目录~~:已定——issue、card 都是带后缀的目录([collect.md §1](collect.md)),自己身上就能放 `manager.json`;origin 文件或目录都行,管它就管它所在的文件夹。
 - **投递形式**:收件箱(拉)还是推进会话(推)。§4 按收件箱写;推的那半等把手开驱动再说。
 - **变动粒度**:一个 commit 一条,还是一个「决定」(两个相邻提交)合成一条。倾向按 commit,由消费方自己合并——投递侧不做聪明事。
 - **`manager.json` 里还要不要别的**:现在只有 `task`。要不要 `only: ["argue", "write"]` 这类过滤、要不要 `until`(临时代管)——先不要,一个字段起步。
