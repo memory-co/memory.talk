@@ -2,7 +2,7 @@
 
 > **状态:定位稿,未实施。** 这篇只回答三件事:memory.talk 是什么、它由哪几层抽象组成、这几层怎么咬合。字段、表、命令、端点一概不在这里——那些等定位敲定后再分篇立(同 [v4](../v4/README.md) 的 works / cli / api / structure 四目录分工)。
 >
-> 分篇:[task.md](task.md)(做事层:task 树)、[issue.md](issue.md)(议事层:树上节点管、派活取证)、[card.md](card.md)(记事层:维基式事实条目,issue 是它的讨论页)、[store.md](store.md)(存储:git 存 card / issue,裸文件存 task,没有数据库)、[protocol-server.md](protocol-server.md)(每个协议背后把现场建出来的 server)、[session.md](session.md)(task 里的一个现场:身份脱离布局)、[member.md](member.md)(人:谁在操作 / 操作过某个 task,不做权限)、[collect.md](collect.md)(认知层的容器:collectbase 仓库,issue / card 各是一层,layer 由 schema 定义、可自定义)、[collect-layer.md](collect-layer.md)(怎么设计一个自己的层:四个问题、两个文件、系统替你做什么 / 不做什么)、[manager.md](manager.md)(目录下的 manager.json 把变动打给绑定的 task,task 干活往下推;取代 issue 上的 manager_task 字段)。
+> 分篇:[task.md](task.md)(做事层:task 树)、[issue.md](issue.md)(议事层:树上节点管、派活取证)、[card.md](card.md)(记事层:维基式事实条目,issue 是它的讨论页)、[store.md](store.md)(存储:git 存 card / issue,裸文件存 task,没有数据库)、[protocol-server.md](protocol-server.md)(每个协议背后把现场建出来的 server)、[session.md](session.md)(task 里的一个现场:身份脱离布局)、[member.md](member.md)(人:谁在操作 / 操作过某个 task,不做权限)、[collect.md](collect.md)(认知层的容器:collectbase 仓库,issue / card 各是一层,layer 由 schema 定义、可自定义)、[collect-layer.md](collect-layer.md)(怎么设计一个自己的层:四个问题、两个文件、系统替你做什么 / 不做什么)、[origin.md](origin.md)(最底层:外部来的、未消化的原文,上层改不动的地板)、[manager.md](manager.md)(目录下的 manager.json 把变动打给绑定的 task,task 干活往下推;取代 issue 上的 manager_task 字段)。
 >
 > 读法:先 §1 看定位怎么变,再 §2 看三层各是什么,§3 看它们之间的循环。§4 是跟 v3 / v4 / shellbase 的继承关系,§5 是留待后续分篇敲定的问题。
 

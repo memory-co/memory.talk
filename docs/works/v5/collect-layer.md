@@ -68,7 +68,8 @@ collectbase 的层是有序的:下面的更接近记录、上面的更接近结�
 ```
 上   card       ← 争完的结论
      decision   ← 你的层:一个决定,引用 issue、指向 card;它由 issue 派生,card 由它派生
-下   issue      ← 争的过程
+     issue      ← 争的过程
+下   origin     ← 事实:外部材料,永远最底([origin.md](origin.md))
 ```
 
 规则很简单:**你的对象引用谁,就排在谁上面**。引用是「我从它来」;排在它上面,改自己就碰不到它。反过来被谁引用,就排在谁下面。两边都有(像上面的 decision)就夹在中间。都没有,放最上。
@@ -113,7 +114,7 @@ collectbase 的层是有序的:下面的更接近记录、上面的更接近结�
 issue 争完写卡,那个「决定」本身现在只是两个提交上的一个 trailer。有的团队想把它立起来——记谁定的、为什么、否掉了什么、什么时候可以重审:
 
 ```
-layers:      issue, decision, card          ← 夹在中间
+layers:      origin, issue, decision, card  ← 夹在中间
 路径:        decisions/<id>/decision.md      ← 目录,能放 manager.json
 schema:      title / context / chosen / rejected[] / issue→issue / cards[]→card / review_after(date)
 行为:        无。「做一个决定」= 建 decision + 改 issue + 写 card,三个提交
@@ -125,7 +126,7 @@ manager:     decisions/manager.json → 一个「定期重审决定」的 task;r
 跑一次基准、试一个方案,过程在 task 的 rounds 里,但「这次实验测了什么、结论是什么」值得单独记:
 
 ```
-layers:      issue, card, experiment        ← 放最上:它引用 issue(为哪个立场做的),没人引用它
+layers:      origin, issue, card, experiment ← 放最上:它引用 issue(为哪个立场做的),没人引用它
 路径:        experiments/<id>.md            ← 文件就够,不需要单独管
 schema:      title / hypothesis / setup / result / verdict(supports | refutes | inconclusive)
              / position→issue#position / task→(裸 id,task 不在 Collect 里)

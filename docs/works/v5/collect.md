@@ -6,6 +6,7 @@
 - v5 store(git 存认知层——本篇把「怎么用 git」交给 collectbase): [store.md](store.md)
 - v5 issue / card(Collect 里内置的两个 layer): [issue.md](issue.md) / [card.md](card.md)
 - v5 collect layer(用户怎么设计一个自己的层): [collect-layer.md](collect-layer.md)
+- v5 origin(最底层:外部来的、未消化的原文;上层改不动): [origin.md](origin.md)
 - collectbase v2 契约(层即分支、路径不相交、`[层名]` 声明、守卫): [DESIGN.md](https://github.com/memory-co/collectbase/blob/main/docs/v2/DESIGN.md) / [branch-topology.md](https://github.com/memory-co/collectbase/blob/main/docs/v2/works/branch-topology.md)
 
 ---
@@ -20,10 +21,11 @@
 
 ```
 Collect(一个 collectbase 仓库,~/.memory.talk/memory/)
-├── layer/issue ← layer issue:issues/<id>.json schema:question / positions[] / arguments[] / links[] …
-├── layer/card ← layer card :cards/**/<slug>.md schema:frontmatter(title / context / links / issue)+ 正文
-└── layer/<你的> ← 用户自定义的 layer:写清 schema 就行
- stack ← 合并视图:所有 layer 的文件并在一起,日常读写站在这里
+├── layer/origin   ← origin:origins/<来源>/<id>/     schema:source / kind / fetched_at / by + 原文;最底层,只读
+├── layer/issue    ← issue :issues/<id>/issue.json   schema:question / positions[] / arguments[] / links[] …
+├── layer/card     ← card  :cards/**/<slug>.md       schema:frontmatter(title / context / links / issue)+ 正文
+└── layer/<你的>   ← 用户自定义的 layer:写清 schema 就行
+    stack          ← 合并视图:所有 layer 的文件并在一起,日常读写站在这里
 ```
 
 issue 和 card **只是两个内置的 layer**。它们的对象模型([issue.md](issue.md) / [card.md](card.md))一字不改;改的是它们**住在哪、怎么被管**——从「两个目录」变成「两个 layer」。
@@ -68,14 +70,15 @@ schema 决定的事:
 collectbase 的层是有序的:**事实在最下,推论在上;上层改不动下层**。memory.talk 的两个内置 layer 怎么排,按「谁更接近记录、谁更接近结论」:
 
 ```
-上 card ← 争完的结论;可改、可删(维基式,git 记历史);从 issue 派生
-下 issue ← 争的过程;立场 / 论证只增不改;更接近证据
+上   card    ← 争完的结论;可改、可删(维基式,git 记历史);从 issue 派生
+     issue   ← 争的过程;立场 / 论证只增不改;从 origin 消化而来
+下   origin  ← 事实:外部来的、原样的、未消化的材料;上层改不动。见 [origin.md](origin.md)
 ```
 
-issue 在下、card 在上:card 是从 issue 里争出来的,改 card 不能顺手改 issue 的记录——这正是 issue.md 说的「立场只增不改」在存储层的保证。但注意两点:
+origin 在最底、issue 在中、card 在上:issue 从 origin 消化出来,card 从 issue 争出来;改 card 不能顺手改 issue 的记录,改 issue 不能碰 origin 的原文。origin 就是 collectbase 意义上的**事实层**——「智能体够不着的地板」。两点说明:
 
-- **这不是 collectbase 意义上的「事实层」。** collectbase 的最底层是「智能体够不着」的观测(会话记录、命令输出);memory.talk 里那一层现在**不在 git 里**——task 的痕迹是裸文件([store.md §4](store.md))。将来若把 rounds 也纳入 Collect 当事实层,它会排在 issue 之下;本篇不做,列在 §7。
-- **用户自定义的 layer 排在哪**,由用户在 `layers` 里声明顺序时决定。默认建议放在最上(它们多半是更高层的推论)。
+- **task 的痕迹(rounds)仍不在 Collect 里**——它是本实例自己的过程,裸文件([store.md §4](store.md));值得长期当证据的那几轮,摘录一份进 origin([origin.md §6](origin.md))。
+- **用户自定义的 layer 排在哪**,按 [collect-layer.md §2](collect-layer.md):引用谁就排在谁上面;所有层都引用 origin,所以都在它之上。
 
 ---
 
@@ -118,7 +121,7 @@ store.md 的两条原则不变:**认知层进 git,现场层用裸文件**。Coll
 
 - **schema 用什么写**:JSON Schema、一份 YAML 字段表、还是直接一个 pydantic 类文件。内置 layer 现在就是 pydantic 类;用户的 layer 要能不写 Python——倾向 YAML 字段表 + 少量约定(哪个字段是标题、哪个是引用)。
 - **通用 API 的形状**:`/api/collect/<class>/...` 一套 CRUD + 历史 + 检索,内置 layer 的专用端点(`/api/issues/...` `/api/cards/...`)是不是它上面的别名。
-- **要不要把 rounds 纳入 Collect 当事实层**:那会让 task 的痕迹进 git、成为 issue 之下真正的「地板」,collectbase 的分层语义才完整;代价是 store.md §4 的「过程不进 git」被推翻。先不做。
+- ~~要不要把 rounds 纳入 Collect 当事实层~~:已定——地板是 [origin](origin.md)(外部材料),rounds 整体仍不进 git;要留的几轮摘录进 origin。
 - **跨 layer 引用要不要校验**:card.issue 指向的 issue 必须存在吗;删时要不要检查反向引用。collectbase 明确「不管文件之间的关系」,这是 memory.talk 自己的事;倾向只在写时校验存在、不做级联。
 - **两个提交的事务**(§5):第一个成、第二个败时的回退,是 `reset` 权威分支(需要绕过「只进不退」)还是补一个反向提交。倾向后者,历史更诚实。
 - **`stack` 之外要不要给每个 layer 一条工作分支**:collectbase 说站在 `stack` 上声明哪层都行;memory.talk 的服务进程是唯一写者,站 `stack` 就够。
