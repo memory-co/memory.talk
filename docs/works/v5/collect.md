@@ -25,7 +25,7 @@ Collect(一个 collectbase 仓库,~/.memory.talk/memory/)
  stack ← 合并视图:所有 layer 的文件并在一起,日常读写站在这里
 ```
 
-issue 和 card **只是两个内置的 layer **。它们的对象模型([issue.md](issue.md) / [card.md](card.md))一字不改;改的是它们**住在哪、怎么被管**——从「两个目录」变成「两个 layer」。
+issue 和 card **只是两个内置的 layer**。它们的对象模型([issue.md](issue.md) / [card.md](card.md))一字不改;改的是它们**住在哪、怎么被管**——从「两个目录」变成「两个 layer」。
 
 ---
 
@@ -35,7 +35,7 @@ issue 和 card **只是两个内置的 layer **。它们的对象模型([issue.m
 
 - **每个 layer 自己一条历史。** `git log layer/card` 只有卡的变化,`git log layer/issue` 只有辩论序列;`git log --first-parent stack` 是全部认知的时间线,每一行自带 `[issue]` / `[card]` 标注。裸 git 里这些要靠路径过滤去拼,而且分支上什么都混在一起。
 - **layer 与 layer 之间路径不相交,由 hook 守着。** 一个声明 `[card]` 的提交碰了 `issues/` 下的文件,当场拒绝——包括 `--no-verify`、`reset`、`cherry-pick` 都绕不过。这就是 collectbase 说的「认知卫生」在 memory.talk 里的形态:**不会有一次提交把「争的过程」和「争完的结论」搅在一起**。
-- ** layer 是可加的,不用改代码。** collectbase 的 `layers` 文件就是 layer 的清单;加一层 = 加一个名字。memory.talk 在这上面只多要一样东西:**schema**——这个 layer 的文件长什么样。于是「我想记一种新东西」(决策记录、实验日志、人物档案……)变成写一份 schema,而不是往 backend 里加一个包。
+- **layer 是可加的,不用改代码。** collectbase 的 `layers` 文件就是 layer 的清单;加一层 = 加一个名字。memory.talk 在这上面只多要一样东西:**schema**——这个 layer 的文件长什么样。于是「我想记一种新东西」(决策记录、实验日志、人物档案……)变成写一份 schema,而不是往 backend 里加一个包。
 
 一句话:**collectbase 管「层怎么在 git 里成立」,memory.talk 管「每一层里的文件是什么」。**
 
