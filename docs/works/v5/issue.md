@@ -107,7 +107,7 @@ issue 图和 task 树是**两套层级,各管各的**:task 树表达「事怎么
 
 issue 和 card 的关系就是维基的讨论页和正文(见 [card.md §2](card.md)):争在 issue 里争,争出结果——某个立场站住了——就把它**写成一张 card**(或者改一张已有的卡)。card 上没有立场、没有计数,只有事实;card 链接回它的 issue,顺着能一路挖回 manager task 的议事记录和论证 task 的证据。
 
-在 Collect 里这是**两个相邻的提交,各在自己的 layer**([collect.md §5](collect.md)):`[issue] decide iss_…#p2 -> card …`(issue 记下「这个立场写成了卡」)+ `[card] write …`(卡的正文),带同一个 `Decision:` trailer。issue 在下、card 在上——写卡、改卡的提交碰不到 `issues/` 下的任何文件,hook 守着;所以「立场只增不改」不靠代码纪律,靠层。
+在 Collect 里这是**两个相邻的提交,各在自己的 layer**([collect.md §5](collect.md)):`[issue] decide iss_…#p2 -> card …`(issue 记下「这个立场写成了卡」)+ `[card] write …`(卡的正文),带同一个 `Decision:` trailer。issue 在下、card 在上——写卡、改卡的提交碰不到任何 `.issue/` 目录里的文件,hook 守着;所以「立场只增不改」不靠代码纪律,靠层。
 
 写卡不等于关闭 issue:issue 继续开着当讨论页;后面若另一个立场翻盘,回来改卡,旧内容进卡的历史。反过来,一张直接写的卡后来有人不同意,就开一个 issue 挂到这张卡上当它的讨论页——同样是两个提交:`[issue] raise …`(新 issue,`card` 指向那张卡)+ `[card] link …`(卡的 `issue` 指回来)。
 
@@ -132,7 +132,7 @@ issue 是 Collect([collect.md](collect.md))里内置的一个 **layer**:
 
 ## 9. 这篇有意不定的事
 
-- **新 issue 默认谁管**:从 task 标注里冒出的 issue,要不要自动写一个 `manager.json` 指向出处 task(或它的父);还是不写、靠 `issues/manager.json` 的继承。倾向不写——少一个文件,继承链本来就能答;真要专门管再写。
+- **新 issue 默认谁管**:从 task 标注里冒出的 issue,要不要自动写一个 `manager.json` 指向出处 task(或它的父);还是不写、靠所在文件夹 `manager.json` 的继承。倾向不写——少一个文件,继承链本来就能答;真要专门管再写。
 - **论证 task 的结果怎么落成论证**:做完后人来标方向(支持 / 反对 / 中立),还是标注流程自动从它的 round 里提;一个论证 task 能不能同时给多个立场供证据。
 - **不是派出去的 task 碰到了这个 issue**:别的 task 在标注时撞上老 issue 并给出证据,走 §2 的挂接路径就够,还是也要记成「事后关联的论证 task」。
 - ~~结晶的触发~~:已由 [card.md §2、§4](card.md) 定——写卡 / 改卡是 manager task 里的一个编辑动作,不是阈值触发。
