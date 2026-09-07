@@ -50,6 +50,10 @@ class TasksLayout:
     def rounds_jsonl(self, task_id: str, session_id: str) -> Path:
         return self.task_dir(task_id) / "sessions" / session_id / "rounds.jsonl"
 
+    def manager_json(self, task_id: str) -> Path:
+        """这棵子树的变动打给谁;没有 → 父 task(隐式 manager 链)。"""
+        return self.task_dir(task_id) / "manager.json"
+
     def members_json(self, task_id: str) -> Path:
         """人:谁在操作 / 操作过这个 task(不是现场,现场是 sessions.json)。"""
         return self.task_dir(task_id) / "members.json"

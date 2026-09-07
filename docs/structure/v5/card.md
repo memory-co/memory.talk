@@ -1,5 +1,7 @@
 # Card
 
+> **存储 / id 已变**:card 现在是 Collect 的一个 layer,对象是任意位置的 `<path>.card/` 目录,id 就是 path;本篇里关于 `iss_…` id、`issues/` `cards/` 目录、`manager_task` 字段、`status` 的说法**作废**,以 [collect.md](collect.md) 为准。字段语义仍有效。
+
 记事层:一条事实,像维基的一个词条。markdown + 简单 frontmatter,住在 git 仓库里;**可以改,历史在 git**。机制见 [`../../works/v5/card.md`](../../works/v5/card.md)。
 
 ## Schema

@@ -9,6 +9,7 @@ from services.store import StoreService
 
 from .canvas import CanvasStore
 from .events import Events
+from .inbox import Inbox
 from .members import MemberRegistry
 from .sessions import SessionNotFound, SessionRegistry
 from .rounds import Rounds
@@ -24,6 +25,8 @@ class TaskService:
         self.round_log = Rounds(store.tasks)
         self.events = Events(store.tasks)
         self.members = MemberRegistry(store.tasks)
+        self.inbox = Inbox(store.tasks)
+        self.layout = store.tasks
 
     # ---- 成员(人):谁在操作 / 操作过。只记,不拦 ----
 
@@ -36,11 +39,52 @@ class TaskService:
         self.tree.get(task_id)
         return self.members.list(task_id)
 
+    # ---- 收件箱 / manager:task 自己的变动沿树打给管它的 task ----
+
+    def read_inbox(self, task_id: str):
+        self.tree.get(task_id)
+        return self.inbox.read(task_id)
+
+    def manager_of(self, task_id: str) -> str | None:
+        """tasks/<id>/manager.json 里的 task;没有 → 父 task;根没有 → None。"""
+        import json
+        from services.store import read_text
+        text = read_text(self.layout.manager_json(task_id))
+        if text:
+            try:
+                t = json.loads(text).get("task")
+                if t:
+                    return t
+            except json.JSONDecodeError:
+                pass
+        return self.tree.get(task_id).parent
+
+    def set_manager(self, task_id: str, task: str | None) -> str | None:
+        import json
+        from services.store import atomic_write
+        self.tree.get(task_id)
+        p = self.layout.manager_json(task_id)
+        if task:
+            atomic_write(p, json.dumps({"task": task}) + "\n")
+        elif p.exists():
+            p.unlink()
+        return self.manager_of(task_id)
+
+    def _deliver(self, task_id: str, subject: str, by: str | None = None) -> None:
+        from models.collect import InboxItem
+        from .tree import now
+        target = self.manager_of(task_id)
+        if not target or target == task_id:
+            return
+        self.inbox.put(target, InboxItem(ts=now(), layer="task", path=task_id, subject=subject, by=by,
+                                         routed_by=task_id if self.layout.manager_json(task_id).exists() else "parent"))
+
     # ---- 树 ----
 
     def create(self, req: TaskCreate) -> Task:
         task = self.tree.create(req)
         self.events.emit(task.id, "created", goal=task.goal, parent=task.parent)
+        self._deliver(task.id, f"created: {task.goal[:60]}")
         return task
 
     def get(self, task_id: str) -> Task:
@@ -54,6 +98,7 @@ class TaskService:
         task = self.tree.update(task_id, req)
         if req.status and req.status != before.status:
             self.events.emit(task_id, "status", **{"from": before.status, "to": task.status})
+            self._deliver(task_id, f"status {before.status} -> {task.status}")
         if task.status in ("done", "abandoned") and before.status not in ("done", "abandoned"):
             self._freeze(task_id)
         return task

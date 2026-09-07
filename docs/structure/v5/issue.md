@@ -1,5 +1,7 @@
 # Issue + Position + Argument + IssueLink
 
+> **存储 / id 已变**:issue 现在是 Collect 的一个 layer,对象是任意位置的 `<path>.issue/` 目录,id 就是 path;本篇里关于 `iss_…` id、`issues/` `cards/` 目录、`manager_task` 字段、`status` 的说法**作废**,以 [collect.md](collect.md) 为准。字段语义仍有效。
+
 议事层:一个问题、它的立场、每个立场的论证、问题之间的 IBIS 边。一个 issue 一个 JSON 文件,住在 git 仓库里;**立场和论证只增不改**(service 保证,git 兜底)。机制见 [`../../works/v5/issue.md`](../../works/v5/issue.md)。
 
 ## Schema

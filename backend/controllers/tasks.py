@@ -4,9 +4,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.responses import PlainTextResponse
 
+from models.collect import InboxItem
 from models.task import (Canvas, CanvasPut, Event, Members, Round, Session, SessionCreate, SessionView,
                          Task, TaskCreate, TaskNode, TaskUpdate)
-from services.card import CardService
+from services.collect import CollectService
 from services.task import TaskService
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
@@ -16,8 +17,8 @@ def tasks(request: Request) -> TaskService:
     return request.app.state.tasks
 
 
-def cards(request: Request) -> CardService:
-    return request.app.state.cards
+def collect(request: Request) -> CollectService:
+    return request.app.state.collect
 
 
 def user(x_memory_talk_user: str | None = Header(None, alias="X-Memory-Talk-User")) -> str | None:
@@ -57,9 +58,26 @@ def events(task_id: str, svc: TaskService = Depends(tasks)):
 
 @router.get("/{task_id}/recall", response_class=PlainTextResponse,
             summary="开工注入:card 目录文本(card → task 的接口)")
-def recall(task_id: str, dir: str = "", svc: TaskService = Depends(tasks), c: CardService = Depends(cards)):
+def recall(task_id: str, dir: str = "", layer: str = "card", svc: TaskService = Depends(tasks),
+           c: CollectService = Depends(collect)):
     svc.get(task_id)
-    return c.recall_text(dir)
+    return c.recall_text(layer, dir)
+
+
+@router.get("/{task_id}/inbox", response_model=list[InboxItem],
+            summary="收件箱:被 manager.json 路由过来的变动(Collect 的对象、子 task 的状态)")
+def inbox(task_id: str, svc: TaskService = Depends(tasks)):
+    return svc.read_inbox(task_id)
+
+
+@router.get("/{task_id}/manager", summary="这个 task 的变动打给谁:manager.json,没有则父 task")
+def get_manager(task_id: str, svc: TaskService = Depends(tasks)) -> dict:
+    return {"task": svc.manager_of(task_id)}
+
+
+@router.put("/{task_id}/manager", summary="改写默认:这棵子树的变动打给指定 task(null = 删掉,回到父)")
+def put_manager(task_id: str, req: dict, svc: TaskService = Depends(tasks)) -> dict:
+    return {"task": svc.set_manager(task_id, req.get("task"))}
 
 
 @router.get("/{task_id}/members", response_model=Members,

@@ -51,9 +51,9 @@ fields:
   title:    {type: string, required: true}
   context:  {type: string}               # 在哪成立(本地论:事实自带语境)
   chosen:   {type: string, required: true}
-  rejected: {type: list[string]}
+  rejected: {type: "list[string]"}
   issue:    {type: ref, layer: issue}    # 引用:这个决定来自哪个 issue
-  cards:    {type: list[ref], layer: card}   # 引用:它写成了哪些卡
+  cards:    {type: "list[ref]", layer: card} # 引用:它写成了哪些卡
 body: true                               # markdown 正文(format=json 时没有)
 ```
 

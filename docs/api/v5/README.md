@@ -1,57 +1,52 @@
 # API Reference (v5)
 
-本地 API,全部挂在 `/api/` 下,请求 / 响应 JSON。**task / server / issue / card 四层都有最简实现。** 起服务 `cd backend && python -m backend serve`,`http://127.0.0.1:8000/docs` 有 OpenAPI。
+本地 API,全部挂在 `/api/` 下,请求 / 响应 JSON。起服务 `cd backend && python -m backend serve`,`http://127.0.0.1:8000/docs` 有 OpenAPI。
 
 - 机制 / 设计决策见 [`../../works/v5/`](../../works/v5/README.md)
 - 数据结构 / schema 见 [`../../structure/v5/`](../../structure/v5/README.md)
 
-```
-System   GET    /api/system/health                                健康检查
-         GET    /api/system/info                                  路径 / tmux socket / 有没有窗
+| 方法 | 端点 | 说明 |
+|---|---|---|
+| `GET` | `/api/system/health` | 健康检查 |
+| `GET` | `/api/system/info` | 运行信息:路径、tmux socket、有没有窗 |
+| `GET` | `/api/tasks` | task 树(森林;root= 只看一棵) |
+| `POST` | `/api/tasks` | 开工:建一个 task(parent= 挂到树上) |
+| `GET` | `/api/tasks/{task_id}` | 读一个 task(带身份 = 打开它,记一笔在操作) |
+| `PATCH` | `/api/tasks/{task_id}` | 改目标 / 状态;done 要求子 task 全完;结束后会话冻结 |
+| `GET` | `/api/tasks/{task_id}/canvas` | 画布(视图,随时可重排) |
+| `PUT` | `/api/tasks/{task_id}/canvas` | 全量写画布(version 乐观锁) |
+| `GET` | `/api/tasks/{task_id}/events` | task 自己的时间线 |
+| `GET` | `/api/tasks/{task_id}/inbox` | 收件箱:被 manager.json 路由过来的变动(Collect 的对象、子 task 的状态) |
+| `GET` | `/api/tasks/{task_id}/manager` | 这个 task 的变动打给谁:manager.json,没有则父 task |
+| `PUT` | `/api/tasks/{task_id}/manager` | 改写默认:这棵子树的变动打给指定 task(null = 删掉,回到父) |
+| `GET` | `/api/tasks/{task_id}/members` | 成员(人):谁当前正在操作(current)、谁历史操作过(history)。只做可见性,不做权限 |
+| `GET` | `/api/tasks/{task_id}/recall` | 开工注入:card 目录文本(card → task 的接口) |
+| `GET` | `/api/tasks/{task_id}/sessions` | 会话清单(含活没活着) |
+| `POST` | `/api/tasks/{task_id}/sessions` | 在 task 里打开一个块:协议 → server 建现场,登记会话,交回窗 + 把手 |
+| `POST` | `/api/tasks/{task_id}/members/touch` | 我在操作这个 task(心跳;身份来自 X-Memory-Talk-User) |
+| `DELETE` | `/api/tasks/{task_id}/sessions/{session_id}` | 关闭即回收:销毁现场 + 删登记 |
+| `POST` | `/api/tasks/{task_id}/sessions/{session_id}/attach` | 重入:幂等取回同一个现场 |
+| `GET` | `/api/tasks/{task_id}/sessions/{session_id}/capture` | 观测:抓终端屏幕(把手 capture) |
+| `GET` | `/api/tasks/{task_id}/sessions/{session_id}/rounds` | 痕迹:agent 会话的 round(先从把手同步新 round,再读 rounds.jsonl) |
+| `GET` | `/api/servers` | server 清单及各自响应的协议 |
+| `GET` | `/api/collect/layers` | 有哪些层(最底在前)、各自的 schema 与行为 |
+| `POST` | `/api/collect/layers` | 加一个用户层:一份 schema YAML |
+| `GET` | `/api/collect/managed` | 某个 task 管的所有对象;不传 task = 没人管的对象 |
+| `GET` | `/api/collect/manager` | 这个路径归谁管(最近的 manager.json) |
+| `PUT` | `/api/collect/manager` | 在这个目录(或对象)下放 manager.json,绑到一个 task |
+| `DELETE` | `/api/collect/manager` | 解绑:删这个目录的 manager.json |
+| `GET` | `/api/collect/search` | git grep 整个 Collect(可限定层) |
+| `GET` | `/api/collect/tree` | 浏览目录树:对象(带后缀的目录折成一项)、目录、origin 文件 |
+| `GET` | `/api/collect/{layer}` | 一层的目录(按目录树列标题) |
+| `GET` | `/api/collect/{layer}/recall` | 目录渲染成可注入 agent 的文本 |
+| `GET` | `/api/collect/{layer}/{path}` | 读一个对象(rev= 读历史版本) |
+| `POST` | `/api/collect/{layer}/{path}` | 建一个对象(一个 [layer] 提交) |
+| `PUT` | `/api/collect/{layer}/{path}` | 改一个对象(字段合并;origin 整体替换) |
+| `DELETE` | `/api/collect/{layer}/{path}` | 删一个对象(历史在 git) |
+| `GET` | `/api/collect/history/{layer}/{path}` | 一个对象的 git log(这一层的分支上) |
+| `POST` | `/api/collect/act/{layer}/{action}/{path}` | 行为:schema 之上的领域动作(issue: position / argue / link / spawn / decide;card: discuss) |
 
-Tasks    GET    /api/tasks                                        task 树(森林;root= 只看一棵)
-         POST   /api/tasks                                        开工:建 task(parent= 挂到树上)
-         GET    /api/tasks/{id}                                   读
-         PATCH  /api/tasks/{id}                                   改目标 / 状态
-         GET    /api/tasks/{id}/events                            task 时间线
-         GET    /api/tasks/{id}/recall                            开工注入:card 目录文本
-         GET    /api/tasks/{id}/members                           成员(人):谁在操作 / 操作过
-         POST   /api/tasks/{id}/members/touch                     心跳:我在操作
-         GET    /api/tasks/{id}/canvas                            画布
-         PUT    /api/tasks/{id}/canvas                            全量写画布(version 乐观锁)
-         GET    /api/tasks/{id}/sessions                           会话清单
-         POST   /api/tasks/{id}/sessions                           打开一个块:协议 → server 建现场
-         POST   /api/tasks/{id}/sessions/{sid}/attach              重入
-         DELETE /api/tasks/{id}/sessions/{sid}                     关闭即回收
-         GET    /api/tasks/{id}/sessions/{sid}/capture             抓终端屏幕
-         GET    /api/tasks/{id}/sessions/{sid}/rounds              agent 会话痕迹
-
-Servers  GET    /api/servers                                      server 清单及各自响应的协议
-
-Cards    GET    /api/cards                                        目录
-         GET    /api/cards/recall                                 目录文本
-         GET    /api/cards/search?q=                              git grep
-         POST   /api/cards                                        写卡
-         GET    /api/cards/{id}                                   读(rev= 读历史版本)
-         PUT    /api/cards/{id}                                   改
-         DELETE /api/cards/{id}                                   废弃
-         GET    /api/cards/{id}/history                           git log
-         POST   /api/cards/{id}/issue                             对卡开讨论页
-
-Issues   GET    /api/issues                                       清单(manager_task= / unmanaged=)
-         GET    /api/issues/search?q=                             git grep
-         POST   /api/issues                                       提问题
-         GET    /api/issues/{id}                                  读(立场按 credence 排)
-         GET    /api/issues/{id}/history                          git log
-         POST   /api/issues/{id}/positions                        加立场
-         POST   /api/issues/{id}/positions/{pid}/arguments        表态
-         POST   /api/issues/{id}/positions/{pid}/tasks            派出论证 task
-         PUT    /api/issues/{id}/manager                          绑 / 换 / 解绑 manager
-         POST   /api/issues/{id}/links                            IBIS 边
-         POST   /api/issues/{id}/card                             争出结果写成卡
-```
-
-分页面:[system.md](system.md) · [tasks.md](tasks.md) · [servers.md](servers.md) · [cards.md](cards.md) · [issues.md](issues.md)
+分页面:[system.md](system.md) · [tasks.md](tasks.md) · [servers.md](servers.md) · [collect.md](collect.md)
 
 ## 通用约定
 
@@ -59,35 +54,30 @@ Issues   GET    /api/issues                                       清单(manager
 
   | 状态 | `error` | 何时 |
   |---|---|---|
-  | 400 | `bad_uri` / `no_server` / `cmd_not_found` | URI 没协议 / 连 default 都没有 / 要跑的命令不在 PATH |
-  | 404 | `not_found` | task / session / card / issue / position 不存在 |
-  | 409 | `exists` | 建卡时 id 已存在 |
-  | 409 | `conflict` | task 状态规则、画布 version / 越界、已结束的 task 不能 attach、把手没有该能力 |
-  | 422 | (FastAPI 默认) | 请求体校验失败 |
-  | 500 | `git` | git 命令失败 |
+  | 400 | `bad_uri` / `no_server` / `cmd_not_found` / `guard` | URI 没协议 / 连 default 都没有 / 命令不在 PATH / 空改动、路径不合法 |
+  | 404 | `not_found` / `no_layer` / `no_action` | task、会话、对象、层、行为不存在 |
+  | 409 | `exists` / `conflict` / `guard` | 对象已存在 / task 状态、画布、结束后 attach / **跨层提交被守卫拒绝** |
+  | 422 | `invalid` | 对象不符合层的 schema(或 FastAPI 默认校验) |
   | 502 | `platform` | tmux 起不来 |
 
-- **写动作即 commit**(card / issue):写请求可带 `reason`(进 commit message 的 `Reason:`)和 `origin` `{"task_id", "rounds": [int]}`(进 `Task:` / `Rounds:`)。两个跨对象的决定——`POST /api/issues/{id}/card`、`POST /api/cards/{id}/issue`——issue 和 card 落在**同一个 commit**。
-- **时间**:ISO 8601 UTC `2026-09-05T23:02:07Z`。
-- **HTTP 方法**:读 GET;建 POST;全量替换 PUT;部分改 PATCH;删 / 废弃 DELETE。
-- **无分页**:量级小,列表全量返回;`history` 最多 50 条。
-- **身份自报、不做权限**:请求头 `X-Memory-Talk-User: <名字>` 表示谁在操作;带了就记进 task 的成员名单(只做可见性),不带照样能操作。整个实例给一个团队用。
-- **没有鉴权、没有网关**:ttyd / 反代 / 静态托管随前端一起做。
+- **身份自报、不做权限**:`X-Memory-Talk-User: <名字>` 是谁在操作(记进 task 成员名单、进 commit 的 `By:`);`X-Memory-Talk-Task: <task_id>` 是在哪个 task 里操作(进 `Task:`;**自己造成的变动不投给自己的收件箱**)。不带照样能操作。
+- **Collect 的每个写动作一个 `[层名]` 提交**,写请求可带 `reason`(进 `Reason:`)。跨层的决定是两个相邻提交 + 同一个 `Decision:` / `Discussion:` trailer。
+- **时间**:ISO 8601 UTC。**无分页**。**没有鉴权、没有网关**。
 
 ## ID
 
 | 对象 | 形态 |
 |---|---|
-| task | `task_<时间戳><4hex>` |
-| session | `<task_id>-s<n>`(同时是 tmux 会话名) |
-| issue | `iss_<时间戳><4hex>`;position `p<n>`;argument `a<n>` |
-| card | 仓库内相对路径 `<dir>/<slug>`,不含 `.md`;路径里可含 `/` 和中文,直接放在 URL 里 |
+| task | `task_<时间戳><4hex>`;会话 `<task_id>-s<n>` |
+| Collect 对象 | **路径**(不含后缀):`memory.talk/配置/该走文件还是环境变量` ↔ 目录 `….issue/`;origin 就是文件路径 |
+| position / argument | issue 内顺序编号 `p<n>` / `a<n>` |
 
 ## 磁盘
 
 ```
-~/.memory.talk/memory/   git 仓库:cards/<dir>/<slug>.md + issues/<id>.json
-~/.memory.talk/tasks/    裸文件:<task_id>/{task,canvas,sessions}.json + events.jsonl + sessions/<session>/rounds.jsonl
+~/.memory.talk/memory/   分层 git 仓库(Collect):layer/origin、layer/issue、layer/card(+ 用户层)、stack;工作树跟着 stack
+~/.memory.talk/tasks/    裸文件:<task_id>/{task,canvas,sessions,members,manager}.json + events/inbox.jsonl + sessions/<sid>/rounds.jsonl
+~/.memory.talk/unmanaged.jsonl   没人管的变动
 ```
 
-环境变量 `MEMORY_TALK_HOME` / `MEMORY_TALK_AUTHOR` / `MEMORY_TALK_EMAIL` / `MEMORY_TALK_WORKSPACE` / `MEMORY_TALK_TMUX_SOCKET` / `MEMORY_TALK_TTYD_URL` / `MEMORY_TALK_CLAUDE_PROJECTS` / `MEMORY_TALK_CODEX_SESSIONS` / `MEMORY_TALK_KIMI_SESSIONS`,含义见 [`../../structure/v5/filesystem.md`](../../structure/v5/filesystem.md)。
+环境变量见 [`../../structure/v5/filesystem.md`](../../structure/v5/filesystem.md)。

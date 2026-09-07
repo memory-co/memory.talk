@@ -73,19 +73,36 @@ task 树(森林)。
 
 ## GET /api/tasks/{task_id}/recall
 
-card → task 的接口:开工时注入的目录文本。`text/plain`。
+card → task 的接口:开工时注入的目录文本(`GET /api/collect/{layer}/recall` 的别名)。`text/plain`。
 
 | 参数 | 说明 |
 |---|---|
-| `dir` | 只给这个目录之下的卡;空 = 全部 |
+| `dir` | 只给这个目录之下的对象;空 = 全部 |
+| `layer` | 哪一层的目录,默认 `card` |
+
+## GET /api/tasks/{task_id}/inbox
+
+收件箱:被 `manager.json` 路由过来的变动——Collect 里这个 task 管的那一片的每次提交,以及子 task(或 `manager.json` 指过来的 task)的创建 / 状态变化。append-only。
+
+```json
+[{"ts": "…", "layer": "issue", "path": "memory.talk/配置/该走文件还是环境变量", "subject": "position …#p2: 只用环境变量",
+  "sha": "…", "by": "alice", "routed_by": "memory.talk"},
+ {"ts": "…", "layer": "task", "path": "task_…child", "subject": "status todo -> doing", "sha": null, "by": null, "routed_by": "parent"}]
+```
+
+## GET /api/tasks/{task_id}/manager
+
+这个 task 的变动打给谁:`tasks/<id>/manager.json` 里的 task,没有则父 task,根 → `null`。
+
+## PUT /api/tasks/{task_id}/manager
+
+`{"task": "task_…"}` 改写默认;`{"task": null}` 删掉、回到父。返回 `{"task": …}`。
 
 ```
 memory.talk/
   - 配置只来自环境变量  (memory.talk/配置只来自环境变量)
   - Python 3.12  (memory.talk/Python-3.12)
 ```
-
-不含 `deprecated` 的卡。
 
 ---
 

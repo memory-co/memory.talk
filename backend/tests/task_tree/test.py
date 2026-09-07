@@ -37,6 +37,16 @@ def test_tree_status_canvas_events(client):
     types = [e["type"] for e in client.get(f"/api/tasks/{root['id']}/events").json()]
     assert types == ["created", "status", "frozen"]
 
-    # 召回 = card 目录
-    client.post("/api/cards", json={"title": "配置只来自环境变量", "dir": "memory.talk"})
+    # 召回 = card 目录(Collect)
+    client.post("/api/collect/card/memory.talk/配置只来自环境变量", json={"data": {"title": "配置只来自环境变量"}})
     assert "配置只来自环境变量" in client.get(f"/api/tasks/{root['id']}/recall").text
+
+    # 子 task 的变动沿树打到父的收件箱;manager.json 可改写
+    c = client.post("/api/tasks", json={"goal": "子", "parent": root["id"]}).json()
+    inbox = client.get(f"/api/tasks/{root['id']}/inbox").json()
+    assert inbox[-1]["layer"] == "task" and inbox[-1]["path"] == c["id"] and inbox[-1]["routed_by"] == "parent"
+    other = client.post("/api/tasks", json={"goal": "别处"}).json()
+    assert client.put(f"/api/tasks/{c['id']}/manager", json={"task": other["id"]}).json()["task"] == other["id"]
+    client.patch(f"/api/tasks/{c['id']}", json={"status": "doing"})
+    assert client.get(f"/api/tasks/{other['id']}/inbox").json()[-1]["subject"] == "status todo -> doing"
+    assert client.put(f"/api/tasks/{c['id']}/manager", json={"task": None}).json()["task"] == root["id"]
