@@ -17,8 +17,8 @@ class Config:
         return self.home / "memory"
 
     @property
-    def tasks_dir(self) -> Path:    # 裸文件:task 树(本轮未实现)
-        return self.home / "tasks"
+    def works_dir(self) -> Path:    # 裸文件:work 树(本轮未实现)
+        return self.home / "works"
 
 
 def load_config() -> Config:
@@ -30,7 +30,7 @@ def load_config() -> Config:
     )
 
 
-# ---- task / server 层 ----
+# ---- work / server 层 ----
 
 def _env(name: str, default: str) -> str:
     return os.environ.get(name, default)

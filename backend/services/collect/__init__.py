@@ -11,7 +11,7 @@ from config import Config
 from layers._spec import LayerSpec
 from models.collect import (CatalogDir, InboxItem, LayerInfo, Manager, Obj, Revision, SearchHit,
                             TreeItem)
-from services.store import TasksLayout, append_line
+from services.store import WorksLayout, append_line
 
 from .catalog import build, render
 from .manager import FILE as MANAGER_FILE
@@ -29,9 +29,9 @@ class CollectError(RuntimeError):
 
 @dataclass(frozen=True)
 class Ctx:
-    """谁在动:人(X-Memory-Talk-User)和它所在的 task(X-Memory-Talk-Task)。"""
+    """谁在动:人(X-Memory-Talk-User)和它所在的 work(X-Memory-Talk-Work)。"""
     user: str | None = None
-    task: str | None = None
+    work: str | None = None
 
 
 def _now() -> str:
@@ -39,9 +39,9 @@ def _now() -> str:
 
 
 class CollectService:
-    def __init__(self, config: Config, tasks: TasksLayout) -> None:
+    def __init__(self, config: Config, works: WorksLayout) -> None:
         self.config = config
-        self.tasks = tasks
+        self.works = works
         self.repo = Repo(config.memory_dir, config.git_author_name, config.git_author_email)
         self.layers: dict[str, LayerSpec] = {}
         self.order: list[str] = []
@@ -183,8 +183,8 @@ class CollectService:
         trailers = []
         if reason:
             trailers.append(f"Reason: {reason}")
-        if ctx.task:
-            trailers.append(f"Task: {ctx.task}")
+        if ctx.work:
+            trailers.append(f"Work: {ctx.work}")
         if ctx.user:
             trailers.append(f"By: {ctx.user}")
         if extra:
@@ -266,12 +266,12 @@ class CollectService:
     def manager(self, path: str) -> Manager | None:
         return self.managers.resolve(self._as_dir(path))
 
-    def set_manager(self, dir_: str, task: str, reason: str, ctx: Ctx) -> Manager:
+    def set_manager(self, dir_: str, work: str, reason: str, ctx: Ctx) -> Manager:
         dir_ = self._as_dir(dir_)
         file = manager_path(dir_)
         layer = self.layer_of_path(file)
-        self.commit(layer, f"manage {dir_ or '/'} by {task}", {file: (json.dumps({"task": task}) + "\n").encode()}, [], reason, ctx)
-        return Manager(dir=dir_, task=task)
+        self.commit(layer, f"manage {dir_ or '/'} by {work}", {file: (json.dumps({"work": work}) + "\n").encode()}, [], reason, ctx)
+        return Manager(dir=dir_, work=work)
 
     def unset_manager(self, dir_: str, reason: str, ctx: Ctx) -> None:
         dir_ = self._as_dir(dir_)
@@ -280,15 +280,15 @@ class CollectService:
             raise CollectError("not_found", f"{file} 不存在", 404)
         self.commit(self.layer_of_path(file), f"unmanage {dir_ or '/'}", {}, [file], reason, ctx)
 
-    def managed_by(self, task: str) -> list[TreeItem]:
-        """这个 task 管的所有对象(按 manager 继承链解析)。"""
+    def managed_by(self, work: str) -> list[TreeItem]:
+        """这个 work 管的所有对象(按 manager 继承链解析)。"""
         out = []
         for name, spec in self.layers.items():
             if spec.format == "raw":
                 continue
             for o in self.list(name):
                 m = self.managers.resolve(spec.obj_dir(o.path))
-                if m and m.task == task:
+                if m and m.work == work:
                     out.append(TreeItem(name=o.title or o.path, path=o.path, kind="object", layer=name))
         return out
 
@@ -303,7 +303,7 @@ class CollectService:
         return out
 
     def _deliver(self, layer: str, files: list[str], subject: str, sha: str, ctx: Ctx) -> None:
-        """变动打到 manager task 的收件箱;没人管 → home/unmanaged.jsonl;自己造成的不投给自己。"""
+        """变动打到 manager work 的收件箱;没人管 → home/unmanaged.jsonl;自己造成的不投给自己。"""
         seen = set()
         for f in files:
             if f == MANAGER_FILE or f.endswith("/" + MANAGER_FILE) or f == "layers" or f.startswith(SCHEMAS_DIR + "/"):
@@ -311,16 +311,16 @@ class CollectService:
             m = self.managers.resolve(f)
             spec = self.layers[layer]
             path = spec.path_of(f) or f
-            key = (path, m.task if m else None)
+            key = (path, m.work if m else None)
             if key in seen:
                 continue
             seen.add(key)
             item = InboxItem(ts=_now(), layer=layer, path=path, subject=subject, sha=sha, by=ctx.user,
                              routed_by=m.dir if m else "")
             if m is None:
-                append_line(self.tasks.root.parent / "unmanaged.jsonl", item.model_dump_json())
-            elif m.task != ctx.task:
-                append_line(self.tasks.task_dir(m.task) / "inbox.jsonl", item.model_dump_json())
+                append_line(self.works.root.parent / "unmanaged.jsonl", item.model_dump_json())
+            elif m.work != ctx.work:
+                append_line(self.works.work_dir(m.work) / "inbox.jsonl", item.model_dump_json())
 
 
 __all__ = ["CollectService", "CollectError", "Ctx"]

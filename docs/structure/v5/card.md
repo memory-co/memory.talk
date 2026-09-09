@@ -1,6 +1,6 @@
 # Card
 
-> **存储 / id 已变**:card 现在是 Collect 的一个 layer,对象是任意位置的 `<path>.card/` 目录,id 就是 path;本篇里关于 `iss_…` id、`issues/` `cards/` 目录、`manager_task` 字段、`status` 的说法**作废**,以 [collect.md](collect.md) 为准。字段语义仍有效。
+> **存储 / id 已变**:card 现在是 Collect 的一个 layer,对象是任意位置的 `<path>.card/` 目录,id 就是 path;本篇里关于 `iss_…` id、`issues/` `cards/` 目录、`manager_work` 字段、`status` 的说法**作废**,以 [collect.md](collect.md) 为准。字段语义仍有效。
 
 记事层:一条事实,像维基的一个词条。markdown + 简单 frontmatter,住在 git 仓库里;**可以改,历史在 git**。机制见 [`../../designs/v5/card.md`](../../designs/v5/card.md)。
 
@@ -60,7 +60,7 @@ status: deprecated
 frontmatter 只有 `key: value` 行,不用 yaml 库;`links` 逗号分隔;`status` 只在非 `active` 时写。每个写动作一个 commit:
 
 ```
-card: write <id>        建(body: Reason: / Task: / Rounds:)
+card: write <id>        建(body: Reason: / Work: / Rounds:)
 card: edit <id>         改
 card: deprecate <id>    废弃
 decide: … -> card <id>  从 issue 写出来(与 issue 同一 commit)

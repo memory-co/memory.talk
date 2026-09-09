@@ -1,14 +1,14 @@
-# Task + Canvas + Session + Member + Round + Event
+# Work + Canvas + Session + Member + Round + Event
 
-做事层的六个对象,全部住在 `tasks/<task_id>/` 目录下,裸文件。机制见 [`../../designs/v5/task.md`](../../designs/v5/task.md)。
+做事层的六个对象,全部住在 `works/<work_id>/` 目录下,裸文件。机制见 [`../../designs/v5/work.md`](../../designs/v5/work.md)。
 
-## Task
+## Work
 
 树上一个节点。
 
 ```json
 {
-  "id": "task_202609052302072f2f",
+  "id": "work_202609052302072f2f",
   "goal": "把 v5 做出来",
   "parent": null,
   "status": "doing",
@@ -19,30 +19,30 @@
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
-| `id` | string | `task_<时间戳><4hex>`,自动 |
+| `id` | string | `work_<时间戳><4hex>`,自动 |
 | `goal` | string | 它是什么事(一句话) |
-| `parent` | string \| null | 属于哪件更大的事;`null` = 根。**task 之间只有这一种直接关系**——没有 project 之类的分组字段,横向关系靠 issue |
-| `status` | `todo` \| `doing` \| `done` \| `abandoned` | 三层里只有 task 有状态 |
+| `parent` | string \| null | 属于哪件更大的事;`null` = 根。**work 之间只有这一种直接关系**——没有 project 之类的分组字段,横向关系靠 issue |
+| `status` | `todo` \| `doing` \| `done` \| `abandoned` | 三层里只有 work 有状态 |
 | `created_at` | ISO 8601 | |
 | `done_at` | ISO 8601 \| null | `done` / `abandoned` 时写;回到 `todo` / `doing` 清空 |
 
 **状态规则**:
-- `done` 要求所有子 task 都是 `done` 或 `abandoned`,否则 `409`(完成从叶子往上收拢)。
+- `done` 要求所有子 work 都是 `done` 或 `abandoned`,否则 `409`(完成从叶子往上收拢)。
 - 进入 `done` / `abandoned` 即**冻结**:所有会话的现场销毁、登记留着、不能再 attach;`rounds` 不再从把手同步,只读已记的。
 - 没有 `doing` 的自动推断——开工 / 在做 / 待做由人或 agent 标。
 
-**读视图 `TaskNode`** = Task + `children: TaskNode[]`(读时拼出来,不存)。
+**读视图 `WorkNode`** = Work + `children: WorkNode[]`(读时拼出来,不存)。
 
 ## Canvas
 
-task 的画布:24×16 网格上的矩形剖分。**只是视图**——重排不改变 task 的会话和目的。
+work 的画布:24×16 网格上的矩形剖分。**只是视图**——重排不改变 work 的会话和目的。
 
 ```json
 {
   "cols": 24, "rows": 16, "version": 3,
   "panels": [
     {"id": "p1", "uri": "file:///home/me/memory.talk", "session": null, "x": 0, "y": 0, "w": 6, "h": 16},
-    {"id": "p2", "uri": "codex:///home/me/memory.talk", "session": "task_2026…2f2f-s1", "x": 6, "y": 0, "w": 18, "h": 16}
+    {"id": "p2", "uri": "codex:///home/me/memory.talk", "session": "work_2026…2f2f-s1", "x": 6, "y": 0, "w": 18, "h": 16}
   ]
 }
 ```
@@ -59,11 +59,11 @@ task 的画布:24×16 网格上的矩形剖分。**只是视图**——重排不
 
 ## Session
 
-task 的一个会话 = 一个现场。**在 task 里打开就是它的**,归属原生,不靠 cwd 推断。
+work 的一个会话 = 一个现场。**在 work 里打开就是它的**,归属原生,不靠 cwd 推断。
 
 ```json
 {
-  "id": "task_202609052302072f2f-s1",
+  "id": "work_202609052302072f2f-s1",
   "uri": "codex:///home/me/memory.talk",
   "scheme": "codex",
   "cwd": "/home/me/memory.talk",
@@ -74,7 +74,7 @@ task 的一个会话 = 一个现场。**在 task 里打开就是它的**,归属�
 
 | 字段 | 说明 |
 |---|---|
-| `id` | `<task_id>-s<n>`,task 内顺序编号;**就是 tmux 会话名**(终端类) |
+| `id` | `<work_id>-s<n>`,work 内顺序编号;**就是 tmux 会话名**(终端类) |
 | `uri` | 打开它用的 URI(原样) |
 | `scheme` | URI 的协议 |
 | (`server`) | 建它的 server 名,**只在登记文件里、不对外**——销毁 / 取把手时内部用(`https` → `http`,`vim` → `default`,调用方不感知) |
@@ -84,11 +84,11 @@ task 的一个会话 = 一个现场。**在 task 里打开就是它的**,归属�
 
 **读视图 `SessionView`** = Session + `alive`(问 server 现算)+ `window` / `handle`(attach / reattach 时返回,list 时不带)。
 
-一个会话只属于一个 task、一个确定节点。要在别的事里用它的结论,走 issue / card,不搬会话。
+一个会话只属于一个 work、一个确定节点。要在别的事里用它的结论,走 issue / card,不搬会话。
 
 ## Member
 
-**人**,不是现场。谁在操作 / 操作过这个 task;只做可见性,**不做权限**(整个实例给一个团队用)。机制见 [`../../designs/v5/member.md`](../../designs/v5/member.md)。
+**人**,不是现场。谁在操作 / 操作过这个 work;只做可见性,**不做权限**(整个实例给一个团队用)。机制见 [`../../designs/v5/member.md`](../../designs/v5/member.md)。
 
 ```json
 {"user": "alice", "first_seen": "2026-09-06T08:00:00Z", "last_seen": "2026-09-06T09:12:40Z", "ops": 7}
@@ -97,8 +97,8 @@ task 的一个会话 = 一个现场。**在 task 里打开就是它的**,归属�
 | 字段 | 说明 |
 |---|---|
 | `user` | 团队里的一个人;客户端在请求头 `X-Memory-Talk-User` 里自报,服务端不校验 |
-| `first_seen` / `last_seen` | 第一次 / 最近一次操作这个 task |
-| `ops` | 操作次数(带身份的、会动这个 task 的请求 + 打开 + 心跳) |
+| `first_seen` / `last_seen` | 第一次 / 最近一次操作这个 work |
+| `ops` | 操作次数(带身份的、会动这个 work 的请求 + 打开 + 心跳) |
 
 **读视图 `Members`**:`{"current": [MemberView], "history": [MemberView]}`,`MemberView` = Member + `active`(最近 120 秒内动过,现算)。`current` 是 `history` 里 `active` 的子集;`history` 按最近活动倒序。
 
@@ -123,7 +123,7 @@ agent 会话的会话痕迹:从各平台的记录文件读出来、append-only �
 
 ## Event
 
-task 自己的时间线,append-only。v3 `events.jsonl` 在 v5 唯一保留的地方。
+work 自己的时间线,append-only。v3 `events.jsonl` 在 v5 唯一保留的地方。
 
 ```json
 {"ts": "2026-09-05T23:02:07Z", "type": "created", "data": {"goal": "把 v5 做出来", "parent": null}}
@@ -143,8 +143,8 @@ task 自己的时间线,append-only。v3 `events.jsonl` 在 v5 唯一保留的�
 ## 存储
 
 ```
-tasks/<task_id>/
-├── task.json         原子写(临时文件 + rename)
+works/<work_id>/
+├── work.json         原子写(临时文件 + rename)
 ├── canvas.json       原子写;不存在 = 空画布 version 0
 ├── sessions.json     原子写;数组(现场)
 ├── members.json      原子写;数组(人)
@@ -152,4 +152,4 @@ tasks/<task_id>/
 └── sessions/<session_id>/rounds.jsonl   只追加
 ```
 
-读写纪律照 shellbase:单写者(服务进程)、无缓存直读、任何时刻磁盘上都是完整 JSON。**不进 git**——task 记的是过程,git 记的是决定(见 [`../../designs/v5/store.md`](../../designs/v5/store.md) §4)。
+读写纪律照 shellbase:单写者(服务进程)、无缓存直读、任何时刻磁盘上都是完整 JSON。**不进 git**——work 记的是过程,git 记的是决定(见 [`../../designs/v5/store.md`](../../designs/v5/store.md) §4)。

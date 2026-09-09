@@ -14,7 +14,7 @@
 {
   "home": "/home/me/.memory.talk",
   "memory": "/home/me/.memory.talk/memory",
-  "tasks": "/home/me/.memory.talk/tasks",
+  "works": "/home/me/.memory.talk/works",
   "workspace": "/home/me/workspace",
   "tmux_socket": "memorytalk",
   "ttyd_url": null

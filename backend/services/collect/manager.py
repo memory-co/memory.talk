@@ -1,4 +1,4 @@
-"""manager.json:目录绑 task;变动往上找最近的一个,打到那个 task 的收件箱(docs/designs/v5/manager.md)。"""
+"""manager.json:目录绑 work;变动往上找最近的一个,打到那个 work 的收件箱(docs/designs/v5/manager.md)。"""
 from __future__ import annotations
 
 import json
@@ -24,7 +24,7 @@ def manager_path(dir_: str) -> str:
 
 
 class ManagerIndex:
-    """从 stack 树里读出所有 manager.json 的 {目录: task}。每次用现读,量小。"""
+    """从 stack 树里读出所有 manager.json 的 {目录: work}。每次用现读,量小。"""
 
     def __init__(self, repo) -> None:
         self.repo = repo
@@ -35,11 +35,11 @@ class ManagerIndex:
             if path == FILE or path.endswith("/" + FILE):
                 data = self.repo.read(path)
                 try:
-                    task = json.loads(data or b"{}").get("task")
+                    work = json.loads(data or b"{}").get("work")
                 except json.JSONDecodeError:
-                    task = None
-                if task:
-                    out[path[: -len(FILE)].rstrip("/")] = task
+                    work = None
+                if work:
+                    out[path[: -len(FILE)].rstrip("/")] = work
         return out
 
     def resolve(self, path: str) -> Manager | None:
@@ -47,5 +47,5 @@ class ManagerIndex:
         table = self.all()
         for d in [path.rstrip("/"), *parents(path)]:
             if d in table:
-                return Manager(dir=d, task=table[d])
+                return Manager(dir=d, work=table[d])
         return None

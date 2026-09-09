@@ -1,4 +1,4 @@
-"""最小 CLI:serve。start / stop / status / daemon 等 task 层一起做。"""
+"""最小 CLI:serve。start / stop / status / daemon 等 work 层一起做。"""
 from __future__ import annotations
 
 import argparse

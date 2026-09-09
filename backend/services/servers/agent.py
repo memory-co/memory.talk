@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from models.server import HandleInfo, ParsedUri
-from models.task import Round
+from models.work import Round
 
 from .adapters import TranscriptAdapter
 from .terminal import TerminalBase, Tmux, TmuxHandle

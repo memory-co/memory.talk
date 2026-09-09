@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from models.task import Round
+from models.work import Round
 
 
 def _session_cwd(path: Path) -> str | None:

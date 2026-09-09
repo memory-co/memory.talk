@@ -1,4 +1,4 @@
-"""task —— 把一件事做下去的载体,复杂的事是一棵树(docs/designs/v5/task.md)。全部是裸文件。"""
+"""work —— 把一件事做下去的载体,复杂的事是一棵树(docs/designs/v5/work.md)。全部是裸文件。"""
 from __future__ import annotations
 
 from typing import Literal
@@ -7,33 +7,33 @@ from pydantic import BaseModel, Field
 
 from .server import HandleInfo, Window
 
-TaskStatus = Literal["todo", "doing", "done", "abandoned"]
+WorkStatus = Literal["todo", "doing", "done", "abandoned"]
 
 
-class Task(BaseModel):
+class Work(BaseModel):
     id: str
     goal: str = Field(description="它是什么事(一句话)")
     parent: str | None = Field(None, description="属于哪件更大的事")
-    status: TaskStatus = "todo"
+    status: WorkStatus = "todo"
     created_at: str
     done_at: str | None = None
 
 
-class TaskCreate(BaseModel):
+class WorkCreate(BaseModel):
     goal: str
     parent: str | None = None
 
 
-class TaskUpdate(BaseModel):
+class WorkUpdate(BaseModel):
     goal: str | None = None
-    status: TaskStatus | None = None
+    status: WorkStatus | None = None
 
 
-class TaskNode(Task):
-    children: list["TaskNode"] = Field(default_factory=list)
+class WorkNode(Work):
+    children: list["WorkNode"] = Field(default_factory=list)
 
 
-# ---- 画布:task 的视图,可随时重排 ----
+# ---- 画布:work 的视图,可随时重排 ----
 
 class Panel(BaseModel):
     id: str
@@ -95,16 +95,16 @@ class Event(BaseModel):
     data: dict = Field(default_factory=dict)
 
 
-TaskNode.model_rebuild()
+WorkNode.model_rebuild()
 
 
-# ---- 成员:人 ↔ task。只做可见性,不做权限(整个实例给一个团队用) ----
+# ---- 成员:人 ↔ work。只做可见性,不做权限(整个实例给一个团队用) ----
 
 class Member(BaseModel):
     user: str = Field(description="团队里的一个人,由客户端在请求头 X-Memory-Talk-User 里自报")
     first_seen: str
     last_seen: str
-    ops: int = Field(0, description="对这个 task 的操作次数")
+    ops: int = Field(0, description="对这个 work 的操作次数")
 
 
 class MemberView(Member):

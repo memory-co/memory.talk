@@ -54,7 +54,7 @@
 
 ### GET /api/collect/{layer}/recall?dir=
 
-同上,渲染成缩进文本(`text/plain`),给 agent 直接读。task 开工注入的是 `GET /api/tasks/{id}/recall`(默认 card 层)。
+同上,渲染成缩进文本(`text/plain`),给 agent 直接读。work 开工注入的是 `GET /api/works/{id}/recall`(默认 card 层)。
 
 ---
 
@@ -63,7 +63,7 @@
 ### POST /api/collect/{layer}/{path}
 
 ```json
-{"data": {"question": "配置该走文件还是环境变量?", "origin": {"task_id": "task_a", "rounds": [3]}}, "reason": "撞见的"}
+{"data": {"question": "配置该走文件还是环境变量?", "origin": {"work_id": "work_a", "rounds": [3]}}, "reason": "撞见的"}
 ```
 
 - 非 origin 层:`data` 按 schema 校验(不合 → 422 `invalid`),落成 `<path>.<层>/<本体文件>`。
@@ -99,9 +99,9 @@ payload 是 JSON 对象,按行为不同。返回该行为的结果(issue 的行�
 | action | payload | 提交 |
 |---|---|---|
 | `position` | `claim`, `origin?`, `reason?` | `[issue] position <path>#p<n>: …` |
-| `argue` | `position`, `stance` (1/0/-1), `comment?`, `evidence?` `{task_id, rounds, origin}`, `task_id?`, `reason?` | `[issue] argue <path>#p<n> +1` |
+| `argue` | `position`, `stance` (1/0/-1), `comment?`, `evidence?` `{work_id, rounds, origin}`, `work_id?`, `reason?` | `[issue] argue <path>#p<n> +1` |
 | `link` | `type` (specializes / suggested_by / questions / replaces / related), `target`, `reason?` | `[issue] link …` |
-| `spawn` | `position`, `task_id`, `reason?` | `[issue] spawn <path>#p<n> -> <task_id>` |
+| `spawn` | `position`, `work_id`, `reason?` | `[issue] spawn <path>#p<n> -> <work_id>` |
 | `decide` | `position`, `card` (卡的 path), `title?`, `body?`, `context?`, `reason?` | **两个相邻提交**:`[issue] decide <path>#p<n> -> card <card>` + `[card] write <card>`,同一个 `Decision:` trailer;第二个失败则第一个用反向提交退回。卡已存在 → 409 |
 
 **card**
@@ -119,21 +119,21 @@ payload 是 JSON 对象,按行为不同。返回该行为的结果(issue 的行�
 这个路径(目录、对象 path 或文件)归谁管:往上找最近的 `manager.json`。没有 → `null`。
 
 ```json
-{"dir": "memory.talk", "task": "task_…"}
+{"dir": "memory.talk", "work": "work_…"}
 ```
 
 ### PUT /api/collect/manager?path=
 
-`{"task": "task_…", "reason": ""}`。在这个目录(或对象自己的目录)下写 `manager.json`。它是机制文件:在 `.issue/` 里随 `[issue]` 提交,在普通目录里随最底层提交;它自己的变动不投递。
+`{"work": "work_…", "reason": ""}`。在这个目录(或对象自己的目录)下写 `manager.json`。它是机制文件:在 `.issue/` 里随 `[issue]` 提交,在普通目录里随最底层提交;它自己的变动不投递。
 
 ### DELETE /api/collect/manager?path=&reason=
 
 删这个目录的 `manager.json`,解析回到上一级。**204**。
 
-### GET /api/collect/managed?task=
+### GET /api/collect/managed?work=
 
-`task=` 给了:这个 task 管的所有对象(按继承链解析);不给:**没人管**的对象。
+`work=` 给了:这个 work 管的所有对象(按继承链解析);不给:**没人管**的对象。
 
 ### 投递
 
-Collect 里每个提交触碰的路径 → 解析 manager → 一条写进 `tasks/<task>/inbox.jsonl`(`GET /api/tasks/{id}/inbox`);没人管 → `~/.memory.talk/unmanaged.jsonl`;请求带的 `X-Memory-Talk-Task` 等于 manager task 时不投(自己造成的)。
+Collect 里每个提交触碰的路径 → 解析 manager → 一条写进 `works/<work>/inbox.jsonl`(`GET /api/works/{id}/inbox`);没人管 → `~/.memory.talk/unmanaged.jsonl`;请求带的 `X-Memory-Talk-Work` 等于 manager work 时不投(自己造成的)。

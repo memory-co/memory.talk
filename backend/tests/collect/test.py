@@ -20,7 +20,7 @@ def test_layers_and_objects(client):
     # origin:原文文件;issue / card:带后缀的目录,并排在同一个文件夹
     assert client.post("/api/collect/origin/memory.talk/配置/旧方案.md", json={"content": "这是原文"}).status_code == 201
     iss = client.post("/api/collect/issue/memory.talk/配置/该走文件还是环境变量",
-                      json={"data": {"question": "配置该走文件还是环境变量?", "origin": {"task_id": "task_a", "rounds": [3]}},
+                      json={"data": {"question": "配置该走文件还是环境变量?", "origin": {"work_id": "work_a", "rounds": [3]}},
                             "reason": "撞见的"}, headers=H)
     assert iss.status_code == 201, iss.text
     ip = iss.json()["path"]
@@ -34,13 +34,13 @@ def test_layers_and_objects(client):
     # 行为:立场、表态、派活、连边
     client.post(f"/api/collect/act/issue/position/{ip}", json={"claim": "加一个 settings.json"})
     client.post(f"/api/collect/act/issue/position/{ip}", json={"claim": "只用环境变量"})
-    client.post(f"/api/collect/act/issue/spawn/{ip}", json={"position": "p2", "task_id": "task_try"})
-    r = client.post(f"/api/collect/act/issue/argue/{ip}", json={"position": "p2", "stance": 1, "task_id": "task_try",
-                                                                  "evidence": {"task_id": "task_try", "rounds": [9]}}).json()
+    client.post(f"/api/collect/act/issue/spawn/{ip}", json={"position": "p2", "work_id": "work_try"})
+    r = client.post(f"/api/collect/act/issue/argue/{ip}", json={"position": "p2", "stance": 1, "work_id": "work_try",
+                                                                  "evidence": {"work_id": "work_try", "rounds": [9]}}).json()
     client.post(f"/api/collect/act/issue/argue/{ip}", json={"position": "p1", "stance": -1, "comment": "多一份状态"})
     v = client.get(f"/api/collect/issue/{ip}").json()["body"]
     assert [p["id"] for p in v["positions"]] == ["p2", "p1"] and v["positions"][0]["credence"] == 1
-    assert v["positions"][0]["spawned_tasks"] == ["task_try"]
+    assert v["positions"][0]["spawned_works"] == ["work_try"]
     assert client.post(f"/api/collect/act/issue/argue/{ip}", json={"position": "p9", "stance": 1}).status_code == 404
     assert client.post(f"/api/collect/act/issue/nope/{ip}", json={}).status_code == 404
 
@@ -94,35 +94,35 @@ def test_layers_and_objects(client):
 
 
 def test_manager_and_inbox(client):
-    t = client.post("/api/tasks", json={"goal": "管配置这一片"}).json()
+    t = client.post("/api/works", json={"goal": "管配置这一片"}).json()
     ip = "memory.talk/配置/该走文件还是环境变量"
     client.post(f"/api/collect/issue/{ip}", json={"data": {"question": "q"}})
     assert client.get("/api/collect/manager", params={"path": ip}).json() is None
     assert [o["path"] for o in client.get("/api/collect/managed").json()] == [ip]          # 没人管
 
-    # 主题文件夹绑 task;之后这一片(不分层)的变动都进它的收件箱
-    m = client.put("/api/collect/manager", params={"path": "memory.talk"}, json={"task": t["id"]}).json()
-    assert m == {"dir": "memory.talk", "task": t["id"]}
-    assert client.get("/api/collect/manager", params={"path": ip}).json()["task"] == t["id"]
-    assert [o["path"] for o in client.get("/api/collect/managed", params={"task": t["id"]}).json()] == [ip]
+    # 主题文件夹绑 work;之后这一片(不分层)的变动都进它的收件箱
+    m = client.put("/api/collect/manager", params={"path": "memory.talk"}, json={"work": t["id"]}).json()
+    assert m == {"dir": "memory.talk", "work": t["id"]}
+    assert client.get("/api/collect/manager", params={"path": ip}).json()["work"] == t["id"]
+    assert [o["path"] for o in client.get("/api/collect/managed", params={"work": t["id"]}).json()] == [ip]
     assert client.get("/api/collect/managed").json() == []
 
     client.post(f"/api/collect/act/issue/position/{ip}", json={"claim": "a"}, headers=H)
     client.post("/api/collect/origin/memory.talk/资料.md", json={"content": "x"})
-    client.post("/api/collect/card/memory.talk/一张卡", json={"data": {"title": "一张卡"}}, headers={"X-Memory-Talk-Task": t["id"]})
-    inbox = client.get(f"/api/tasks/{t['id']}/inbox").json()
+    client.post("/api/collect/card/memory.talk/一张卡", json={"data": {"title": "一张卡"}}, headers={"X-Memory-Talk-Work": t["id"]})
+    inbox = client.get(f"/api/works/{t['id']}/inbox").json()
     assert [(i["layer"], i["path"], i["routed_by"]) for i in inbox] == [
-        ("issue", ip, "memory.talk"), ("origin", "memory.talk/资料.md", "memory.talk")]   # 自己(带 X-Memory-Talk-Task)造成的不投给自己
+        ("issue", ip, "memory.talk"), ("origin", "memory.talk/资料.md", "memory.talk")]   # 自己(带 X-Memory-Talk-Work)造成的不投给自己
     assert inbox[0]["by"] == "alice" and inbox[0]["subject"].startswith("position")
 
     # 对象自己目录下的 manager.json 更近,优先;解绑回到上层
-    t2 = client.post("/api/tasks", json={"goal": "专管这个 issue"}).json()
-    client.put("/api/collect/manager", params={"path": ip}, json={"task": t2["id"]})
-    assert client.get("/api/collect/manager", params={"path": ip}).json() == {"dir": f"{ip}.issue", "task": t2["id"]}
+    t2 = client.post("/api/works", json={"goal": "专管这个 issue"}).json()
+    client.put("/api/collect/manager", params={"path": ip}, json={"work": t2["id"]})
+    assert client.get("/api/collect/manager", params={"path": ip}).json() == {"dir": f"{ip}.issue", "work": t2["id"]}
     client.post(f"/api/collect/act/issue/position/{ip}", json={"claim": "b"})
-    assert client.get(f"/api/tasks/{t2['id']}/inbox").json()[-1]["path"] == ip
+    assert client.get(f"/api/works/{t2['id']}/inbox").json()[-1]["path"] == ip
     assert client.delete("/api/collect/manager", params={"path": ip}).status_code == 204
-    assert client.get("/api/collect/manager", params={"path": ip}).json()["task"] == t["id"]
+    assert client.get("/api/collect/manager", params={"path": ip}).json()["work"] == t["id"]
     # manager.json 在 .issue/ 里随 [issue] 提交,在普通目录里归最底层
     log = _log(client)
     assert f"[issue] manage {ip}.issue" in log and "[origin] manage memory.talk by" in log

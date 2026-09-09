@@ -1,4 +1,4 @@
-"""agent server 的把手:从平台会话记录读 round → 追加进 task 的 rounds.jsonl(append-only)。"""
+"""agent server 的把手:从平台会话记录读 round → 追加进 work 的 rounds.jsonl(append-only)。"""
 import json
 import os
 import shutil
@@ -24,11 +24,11 @@ def test_claude_session_rounds(client, home, monkeypatch):
     fake = bindir / "claude"; fake.write_text("#!/bin/sh\nsleep 60\n"); fake.chmod(0o755)
     monkeypatch.setenv("PATH", f"{bindir}:{os.environ['PATH']}")
 
-    t = client.post("/api/tasks", json={"goal": "让 agent 干活"}).json()
+    t = client.post("/api/works", json={"goal": "让 agent 干活"}).json()
     proj = home / "ws" / "proj"; proj.mkdir(parents=True)
-    m = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": f"claude://{proj}"}).json()
+    m = client.post(f"/api/works/{t['id']}/sessions", json={"uri": f"claude://{proj}"}).json()
     assert m["scheme"] == "claude" and "rounds" in m["handle"]["capabilities"]
-    assert client.get(f"/api/tasks/{t['id']}/sessions/{m['id']}/rounds").json() == []
+    assert client.get(f"/api/works/{t['id']}/sessions/{m['id']}/rounds").json() == []
 
     # 会话记录出现了(会话创建之后)
     time.sleep(0.05)
@@ -43,17 +43,17 @@ def test_claude_session_rounds(client, home, monkeypatch):
     ]
     _claude_transcript(home / "claude", proj, rows)
 
-    rounds = client.get(f"/api/tasks/{t['id']}/sessions/{m['id']}/rounds").json()
+    rounds = client.get(f"/api/works/{t['id']}/sessions/{m['id']}/rounds").json()
     assert [(r["id"], r["role"]) for r in rounds] == [("u1", "human"), ("a1", "assistant"), ("u2", "tool"), ("u3", "system")]
     assert "[Edit]" in rounds[1]["text"]
 
     # append-only:再读不重复;新 round 追加
-    assert len(client.get(f"/api/tasks/{t['id']}/sessions/{m['id']}/rounds").json()) == 4
+    assert len(client.get(f"/api/works/{t['id']}/sessions/{m['id']}/rounds").json()) == 4
     p = home / "claude" / str(proj).replace("/", "-") / "sess.jsonl"
     with open(p, "a") as f:
         f.write(json.dumps({"type": "assistant", "uuid": "a2", "message": {"content": [{"type": "text", "text": "改完了"}]}}) + "\n")
-    assert [r["id"] for r in client.get(f"/api/tasks/{t['id']}/sessions/{m['id']}/rounds").json()][-1] == "a2"
-    jsonl = home / "home" / "tasks" / t["id"] / "sessions" / m["id"] / "rounds.jsonl"
+    assert [r["id"] for r in client.get(f"/api/works/{t['id']}/sessions/{m['id']}/rounds").json()][-1] == "a2"
+    jsonl = home / "home" / "works" / t["id"] / "sessions" / m["id"] / "rounds.jsonl"
     assert len(jsonl.read_text().splitlines()) == 5
 
 
@@ -65,7 +65,7 @@ def test_codex_adapter_parses(home):
     rows = [
         {"type": "session_meta", "payload": {"cwd": "/w/p"}},
         {"type": "event_msg", "timestamp": "t1", "payload": {"type": "user_message", "message": "hi"}},
-        {"type": "event_msg", "timestamp": "t2", "payload": {"type": "task_started"}},
+        {"type": "event_msg", "timestamp": "t2", "payload": {"type": "work_started"}},
         {"type": "response_item", "timestamp": "t3", "payload": {"type": "function_call", "name": "shell", "arguments": "ls"}},
         {"type": "response_item", "timestamp": "t4", "payload": {"type": "function_call_output", "output": "a b"}},
         {"type": "event_msg", "timestamp": "t5", "payload": {"type": "agent_message", "message": "done"}},

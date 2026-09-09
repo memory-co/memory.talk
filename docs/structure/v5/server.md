@@ -1,6 +1,6 @@
 # Server + Window + Handle + Live
 
-把块变成现场的那一层。**运行时对象,不落盘**——落盘的是 task 的会话登记([task.md](task.md#session))。机制见 [`../../designs/v5/protocol-server.md`](../../designs/v5/protocol-server.md)。
+把块变成现场的那一层。**运行时对象,不落盘**——落盘的是 work 的会话登记([work.md](work.md#session))。机制见 [`../../designs/v5/protocol-server.md`](../../designs/v5/protocol-server.md)。
 
 ## ParsedUri
 
@@ -39,7 +39,7 @@
 ## Window
 
 ```json
-{"url": "http://127.0.0.1:7681/?arg=task_…-s1", "embed": "http://127.0.0.1:7681/?arg=task_…-s1"}
+{"url": "http://127.0.0.1:7681/?arg=work_…-s1", "embed": "http://127.0.0.1:7681/?arg=work_…-s1"}
 ```
 
 | 字段 | 说明 |
@@ -67,14 +67,14 @@
 
 ```json
 {
-  "session_id": "task_…-s1", "server": "codex",   // server 只在内部流转,API 视图不带
+  "session_id": "work_…-s1", "server": "codex",   // server 只在内部流转,API 视图不带
   "window": {"url": null, "embed": null},
   "handle": {"kind": "tmux+transcript", "capabilities": ["capture", "send", "rounds"]},
   "cwd": "/home/me/memory.talk", "command": ["codex"]
 }
 ```
 
-`POST /api/tasks/{id}/sessions` 把它并进 `SessionView` 返回(`window` / `handle` 两个字段)。
+`POST /api/works/{id}/sessions` 把它并进 `SessionView` 返回(`window` / `handle` 两个字段)。
 
 ## ServerError
 

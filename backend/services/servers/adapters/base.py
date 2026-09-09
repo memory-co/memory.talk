@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol
 
-from models.task import Round
+from models.work import Round
 
 
 class TranscriptAdapter(Protocol):

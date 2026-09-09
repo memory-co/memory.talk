@@ -85,11 +85,11 @@ class TreeItem(BaseModel):
 
 class Manager(BaseModel):
     dir: str = Field(description="manager.json 所在目录('' = 根)")
-    task: str
+    work: str
 
 
 class ManagerPut(BaseModel):
-    task: str
+    work: str
     reason: str = ""
 
 

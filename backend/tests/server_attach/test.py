@@ -24,20 +24,20 @@ def test_registry_and_resolve(client):
 
 
 def test_http_sessions(client):
-    t = client.post("/api/tasks", json={"goal": "看文档"}).json()
-    m = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": "https://localhost:5173/app"}).json()
+    t = client.post("/api/works", json={"goal": "看文档"}).json()
+    m = client.post(f"/api/works/{t['id']}/sessions", json={"uri": "https://localhost:5173/app"}).json()
     assert m["scheme"] == "https" and "server" not in m and m["window"]["embed"] == "/proxy/5173/app"
     assert m["handle"] == {"kind": "none", "capabilities": []}
-    m2 = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": "https://example.com/x"}).json()
+    m2 = client.post(f"/api/works/{t['id']}/sessions", json={"uri": "https://example.com/x"}).json()
     assert m2["window"]["embed"] == "https://example.com/x" and m2["id"].endswith("-s2")
-    assert client.get(f"/api/tasks/{t['id']}/sessions/{m['id']}/capture").status_code == 409
+    assert client.get(f"/api/works/{t['id']}/sessions/{m['id']}/capture").status_code == 409
 
 
 @needs_tmux
 def test_terminal_session_lifecycle(client, home):
-    t = client.post("/api/tasks", json={"goal": "跑个终端"}).json()
+    t = client.post("/api/works", json={"goal": "跑个终端"}).json()
     ws = str(home / "ws")
-    r = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": f"bash://{ws}"})
+    r = client.post(f"/api/works/{t['id']}/sessions", json={"uri": f"bash://{ws}"})
     assert r.status_code == 201, r.text
     m = r.json()
     assert m["scheme"] == "bash" and m["alive"] is True and m["cwd"] == ws
@@ -51,26 +51,26 @@ def test_terminal_session_lifecycle(client, home):
     # 把手能看见;重入幂等
     subprocess.run(["tmux", "-L", sock, "send-keys", "-t", f"{m['id']}:", "echo hello-v5", "Enter"])
     time.sleep(0.3)
-    assert "hello-v5" in client.get(f"/api/tasks/{t['id']}/sessions/{m['id']}/capture").text
-    again = client.post(f"/api/tasks/{t['id']}/sessions/{m['id']}/attach").json()
+    assert "hello-v5" in client.get(f"/api/works/{t['id']}/sessions/{m['id']}/capture").text
+    again = client.post(f"/api/works/{t['id']}/sessions/{m['id']}/attach").json()
     assert again["id"] == m["id"] and again["alive"]
-    assert len(client.get(f"/api/tasks/{t['id']}/sessions").json()) == 1
+    assert len(client.get(f"/api/works/{t['id']}/sessions").json()) == 1
 
     # 没有专门 server 的协议 → default:协议名当命令。命令不在 PATH → 明确报错
-    r = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": "nosuchcmd-zz://"})
+    r = client.post(f"/api/works/{t['id']}/sessions", json={"uri": "nosuchcmd-zz://"})
     assert r.status_code == 400 and r.json()["error"] == "cmd_not_found"
-    d = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": f"sleep://{ws}"})
+    d = client.post(f"/api/works/{t['id']}/sessions", json={"uri": f"sleep://{ws}"})
     assert d.status_code == 201 and d.json()["scheme"] == "sleep"         # 走了 default,但调用方不感知
-    client.delete(f"/api/tasks/{t['id']}/sessions/{d.json()['id']}")
+    client.delete(f"/api/works/{t['id']}/sessions/{d.json()['id']}")
 
     # 关闭即回收
-    assert client.delete(f"/api/tasks/{t['id']}/sessions/{m['id']}").status_code == 204
+    assert client.delete(f"/api/works/{t['id']}/sessions/{m['id']}").status_code == 204
     assert subprocess.run(["tmux", "-L", sock, "has-session", "-t", f"={m['id']}"]).returncode != 0
-    assert client.get(f"/api/tasks/{t['id']}/sessions").json() == []
-    assert client.get(f"/api/tasks/{t['id']}/sessions/{m['id']}/capture").status_code == 404
+    assert client.get(f"/api/works/{t['id']}/sessions").json() == []
+    assert client.get(f"/api/works/{t['id']}/sessions/{m['id']}/capture").status_code == 404
 
     # 做完 → 冻结:现场销毁、登记留着
-    m = client.post(f"/api/tasks/{t['id']}/sessions", json={"uri": f"bash://{ws}"}).json()
-    client.patch(f"/api/tasks/{t['id']}", json={"status": "done"})
-    mem = client.get(f"/api/tasks/{t['id']}/sessions").json()
+    m = client.post(f"/api/works/{t['id']}/sessions", json={"uri": f"bash://{ws}"}).json()
+    client.patch(f"/api/works/{t['id']}", json={"status": "done"})
+    mem = client.get(f"/api/works/{t['id']}/sessions").json()
     assert len(mem) == 1 and mem[0]["alive"] is False

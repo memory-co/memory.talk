@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "memorytalk-v5"
 version = "5.0.0a0"
-description = "memory.talk v5 — task / issue / card 三层工作台(后端)"
+description = "memory.talk v5 — work / issue / card 三层工作台(后端)"
 requires-python = ">=3.10"
 license = "Apache-2.0"
 dependencies = [

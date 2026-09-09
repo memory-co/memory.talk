@@ -11,13 +11,13 @@
 │   │   └── <dir>/…/<slug>.md       ← 一张卡一个 markdown(frontmatter + 正文);目录即分类
 │   └── issues/
 │       └── <issue_id>.json         ← 一个 issue 一个 JSON(问题 / 立场 / 论证 / 边)
-└── tasks/                          ← 裸文件(现场层)
-    └── <task_id>/
-        ├── task.json               ← 目标 / 项目 / 父 / 状态
+└── works/                          ← 裸文件(现场层)
+    └── <work_id>/
+        ├── work.json               ← 目标 / 项目 / 父 / 状态
         ├── canvas.json             ← 画布(视图);不存在 = 空画布
         ├── sessions.json           ← 会话登记(数组,现场)
         ├── members.json            ← 成员(人):谁在操作 / 操作过,只做可见性
-        ├── events.jsonl            ← task 时间线,只追加
+        ├── events.jsonl            ← work 时间线,只追加
         └── sessions/
             └── <session_id>/
                 └── rounds.jsonl    ← agent 会话痕迹,只追加
@@ -25,20 +25,20 @@
 
 ## memory/(git)
 
-- **一个决定一个 commit**。subject 的动词就是动作(`card: write` / `issue: argue` / `decide:` / `discuss:`),body 带 `Reason:` / `Task:` / `Rounds:`。
+- **一个决定一个 commit**。subject 的动词就是动作(`card: write` / `issue: argue` / `decide:` / `discuss:`),body 带 `Reason:` / `Work:` / `Rounds:`。
 - **author** 来自 `MEMORY_TALK_AUTHOR` / `MEMORY_TALK_EMAIL`(默认 `memory.talk <memory.talk@localhost>`),用 `git -c` 传,不改仓库配置。
 - **跨对象的决定落在同一个 commit**:`decide:` 同时动 `issues/<id>.json` 和 `cards/<id>.md`;`discuss:` 同理。
 - **历史** = `git log -- <path>`;**检索** = `git grep -n -i -I`;**旧版本** = `git show <sha>:<path>`。都只用 git 命令行。
 - **并发**:进程内一把锁串行化 `add + commit`。多进程写同一仓库不在 v5 范围内。
-- **不进 git 的**:task 的一切。
+- **不进 git 的**:work 的一切。
 
-## tasks/(裸文件)
+## works/(裸文件)
 
-- **原子写**:`task.json` / `canvas.json` / `sessions.json` / `members.json` 写临时文件后 `os.replace`。
+- **原子写**:`work.json` / `canvas.json` / `sessions.json` / `members.json` 写临时文件后 `os.replace`。
 - **只追加**:`events.jsonl` / `rounds.jsonl` 以 append 打开,从不改既有行。
 - **单写者、无缓存直读**:服务进程是唯一写者;每次请求直接读盘。
 - **不在 git 里**:画布重排、attach 时间、agent 的每一轮输出,都是过程,不是决定。
-- **task 结束不删目录**:现场(tmux 会话)销毁,文件留着,可回去看痕迹。
+- **work 结束不删目录**:现场(tmux 会话)销毁,文件留着,可回去看痕迹。
 
 ## 运行时(不落盘)
 

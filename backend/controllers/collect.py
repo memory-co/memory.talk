@@ -18,8 +18,8 @@ def collect(request: Request) -> CollectService:
 
 
 def ctx(x_memory_talk_user: str | None = Header(None, alias="X-Memory-Talk-User"),
-        x_memory_talk_task: str | None = Header(None, alias="X-Memory-Talk-Task")) -> Ctx:
-    return Ctx(user=x_memory_talk_user, task=x_memory_talk_task)
+        x_memory_talk_work: str | None = Header(None, alias="X-Memory-Talk-Work")) -> Ctx:
+    return Ctx(user=x_memory_talk_user, work=x_memory_talk_work)
 
 
 # ---- 固定路径先于 /{layer} ----
@@ -49,9 +49,9 @@ def get_manager(path: str = "", svc: CollectService = Depends(collect)):
     return svc.manager(path)
 
 
-@router.put("/manager", response_model=Manager, summary="在这个目录(或对象)下放 manager.json,绑到一个 task")
+@router.put("/manager", response_model=Manager, summary="在这个目录(或对象)下放 manager.json,绑到一个 work")
 def put_manager(req: ManagerPut, path: str = "", svc: CollectService = Depends(collect), c: Ctx = Depends(ctx)):
-    return svc.set_manager(path, req.task, req.reason, c)
+    return svc.set_manager(path, req.work, req.reason, c)
 
 
 @router.delete("/manager", status_code=204, summary="解绑:删这个目录的 manager.json")
@@ -59,9 +59,9 @@ def delete_manager(path: str = "", reason: str = "", svc: CollectService = Depen
     svc.unset_manager(path, reason, c)
 
 
-@router.get("/managed", response_model=list[TreeItem], summary="某个 task 管的所有对象;不传 task = 没人管的对象")
-def managed(task: str | None = None, svc: CollectService = Depends(collect)):
-    return svc.managed_by(task) if task else svc.unmanaged()
+@router.get("/managed", response_model=list[TreeItem], summary="某个 work 管的所有对象;不传 work = 没人管的对象")
+def managed(work: str | None = None, svc: CollectService = Depends(collect)):
+    return svc.managed_by(work) if work else svc.unmanaged()
 
 
 @router.get("/history/{layer}/{path:path}", response_model=list[Revision], summary="一个对象的 git log(这一层的分支上)")

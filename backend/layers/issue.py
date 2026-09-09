@@ -20,8 +20,8 @@ def now() -> str:
 
 
 class Origin(BaseModel):
-    """出处:task 的哪些 round,或 Collect 里的一个 origin 路径。"""
-    task_id: str | None = None
+    """出处:work 的哪些 round,或 Collect 里的一个 origin 路径。"""
+    work_id: str | None = None
     rounds: list[int] = Field(default_factory=list)
     origin: str | None = Field(None, description="origin 层里的一个路径(原文)")
 
@@ -31,7 +31,7 @@ class Argument(BaseModel):
     stance: Stance
     comment: str = ""
     evidence: Origin | None = None
-    task_id: str | None = None
+    work_id: str | None = None
     created_at: str
 
 
@@ -40,7 +40,7 @@ class Position(BaseModel):
     claim: str
     origin: Origin | None = None
     arguments: list[Argument] = Field(default_factory=list)
-    spawned_tasks: list[str] = Field(default_factory=list)
+    spawned_works: list[str] = Field(default_factory=list)
     created_at: str
 
 
@@ -95,11 +95,11 @@ def position(collect, path: str, payload: dict, ctx) -> dict:
 
 
 def argue(collect, path: str, payload: dict, ctx) -> dict:
-    """对某个立场表态。payload: position, stance, comment?, evidence?, task_id?, reason?"""
+    """对某个立场表态。payload: position, stance, comment?, evidence?, work_id?, reason?"""
     issue = collect.get("issue", path).body
     pos = _position(issue, payload["position"])
     arg = Argument(id=f"a{len(pos['arguments']) + 1}", stance=payload["stance"], comment=payload.get("comment", ""),
-                   evidence=payload.get("evidence"), task_id=payload.get("task_id"), created_at=now()).model_dump()
+                   evidence=payload.get("evidence"), work_id=payload.get("work_id"), created_at=now()).model_dump()
     pos["arguments"].append(arg)
     sign = {1: "+1", 0: "0", -1: "-1"}[payload["stance"]]
     collect.write("issue", path, issue, f"argue {path}#{pos['id']} {sign}", payload.get("reason", ""), ctx)
@@ -117,12 +117,12 @@ def link(collect, path: str, payload: dict, ctx) -> dict:
 
 
 def spawn(collect, path: str, payload: dict, ctx) -> dict:
-    """为验证某个立场派出一个 task(只记 id)。payload: position, task_id, reason?"""
+    """为验证某个立场派出一个 work(只记 id)。payload: position, work_id, reason?"""
     issue = collect.get("issue", path).body
     pos = _position(issue, payload["position"])
-    if payload["task_id"] not in pos["spawned_tasks"]:
-        pos["spawned_tasks"].append(payload["task_id"])
-        collect.write("issue", path, issue, f"spawn {path}#{pos['id']} -> {payload['task_id']}", payload.get("reason", ""), ctx)
+    if payload["work_id"] not in pos["spawned_works"]:
+        pos["spawned_works"].append(payload["work_id"])
+        collect.write("issue", path, issue, f"spawn {path}#{pos['id']} -> {payload['work_id']}", payload.get("reason", ""), ctx)
     return view(issue)
 
 

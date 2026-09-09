@@ -37,16 +37,16 @@
 ### issue 的 body
 
 ```json
-{"question": "…", "origin": {"task_id": "task_a", "rounds": [3], "origin": null},
+{"question": "…", "origin": {"work_id": "work_a", "rounds": [3], "origin": null},
  "card": "memory.talk/配置/配置只来自环境变量",
  "positions": [{"id": "p1", "claim": "…", "origin": null,
-                "arguments": [{"id": "a1", "stance": 1, "comment": "", "evidence": {…}, "task_id": "task_try", "created_at": "…"}],
-                "spawned_tasks": ["task_try"], "created_at": "…"}],
+                "arguments": [{"id": "a1", "stance": 1, "comment": "", "evidence": {…}, "work_id": "work_try", "created_at": "…"}],
+                "spawned_works": ["work_try"], "created_at": "…"}],
  "links": [{"type": "specializes", "target": "<issue path>"}],
  "created_at": "…"}
 ```
 
-读视图每个立场附现算 `up / down / neutral / credence`,按 credence 倒序。**没有 `manager_task` 字段**——谁管它看目录下的 `manager.json`。`origin` / `evidence` 可以指 task 的 rounds,也可以指 origin 层的一个路径。
+读视图每个立场附现算 `up / down / neutral / credence`,按 credence 倒序。**没有 `manager_work` 字段**——谁管它看目录下的 `manager.json`。`origin` / `evidence` 可以指 work 的 rounds,也可以指 origin 层的一个路径。
 
 ### card 的 body
 
@@ -82,13 +82,13 @@ fields:
 ## manager.json
 
 ```json
-{"task": "task_…"}
+{"work": "work_…"}
 ```
 
-放在任何目录(含对象目录)下。解析:路径往上找最近的一个。变动投递到那个 task 的 `tasks/<task>/inbox.jsonl`:
+放在任何目录(含对象目录)下。解析:路径往上找最近的一个。变动投递到那个 work 的 `works/<work>/inbox.jsonl`:
 
 ```json
 {"ts": "…", "layer": "issue", "path": "<对象 path>", "subject": "position …", "sha": "…", "by": "alice", "routed_by": "memory.talk"}
 ```
 
-`routed_by` 是哪个目录的 `manager.json`('' = 根);task 层过来的是 `"parent"` 或那个 task 的 id。没人管 → `~/.memory.talk/unmanaged.jsonl`。
+`routed_by` 是哪个目录的 `manager.json`('' = 根);work 层过来的是 `"parent"` 或那个 work 的 id。没人管 → `~/.memory.talk/unmanaged.jsonl`。
