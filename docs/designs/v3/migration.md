@@ -11,7 +11,7 @@
 
 > **状态:已设计,未实施。** 本文是落地前的方案对齐。
 
-跟其它 works 文档的关系:
+跟其它 designs 文档的关系:
 - [`searchbase-extraction.md`](searchbase-extraction.md) 的下游 —— searchbase 故意不动 schema 演化,留给 migration 兜底
 - 替代 `repository/schema.py:_additive_migrations` 的零散 ALTER 流程 —— 把它升级成"有版本号 + 有 init/up 区分"的正式框架
 - 跟 [`index-backfill.md`](index-backfill.md) 正交:backfill 解决"数据丢了从 source-of-truth 重灌",migration 解决"schema 变了原地 ALTER"
