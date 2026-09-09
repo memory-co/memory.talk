@@ -84,10 +84,10 @@ collectbase 的层是有序的:下面的更接近记录、上面的更接近结�
 |---|---|
 | **建 / 读 / 改 / 删 / 列** | 按 schema 校验、落盘、`[名]` 提交;`/api/collect/<名>/…` 一套通用端点 |
 | **历史** | `git log layer/<名>`、`git log -- <路径>`;读任意历史版本 |
-| **目录 / 召回** | 按 `title` 字段和目录结构生成目录;task 开工时可以要求注入这一层的目录 |
+| **目录 / 召回** | 按 `title` 字段和目录结构生成目录;work 开工时可以要求注入这一层的目录 |
 | **检索** | `git grep` 这一层的路径 |
 | **引用与顺链接走** | schema 里标了 `ref`,系统知道 `decision.issue` 指向一个 issue、`decision.cards` 指向几张卡;读的时候能展开,agent 能顺着走 |
-| **manager** | 任何目录放 `manager.json`,这一层的变动就打到那个 task([manager.md](manager.md)) |
+| **manager** | 任何目录放 `manager.json`,这一层的变动就打到那个 work([manager.md](manager.md)) |
 | **层的守卫** | 提交必须声明 `[名]`,碰了别的层的路径当场拒绝——collectbase 的 hook,一行不用配 |
 
 这些对内置层和用户层**一视同仁**——issue 和 card 的通用部分也是这么来的,它们只是在这之上多了行为。
@@ -100,7 +100,7 @@ collectbase 的层是有序的:下面的更接近记录、上面的更接近结�
 
 一个用户层想要行为,只有两条路:
 
-- **用 CRUD 拼**。「记录一个决定」= 建一个 decision 对象 + 改它引用的 issue(`[issue]` 提交)+ 建一张卡(`[card]` 提交)。三个提交,agent 在 manager task 里顺序做,带同一个 `Decision:` trailer。**大多数情况这就够了**——行为往往只是「几次 CRUD 按某个顺序做」,而顺序是 agent 的事。
+- **用 CRUD 拼**。「记录一个决定」= 建一个 decision 对象 + 改它引用的 issue(`[issue]` 提交)+ 建一张卡(`[card]` 提交)。三个提交,agent 在 manager work 里顺序做,带同一个 `Decision:` trailer。**大多数情况这就够了**——行为往往只是「几次 CRUD 按某个顺序做」,而顺序是 agent 的事。
 - **升级成内置层**。真的需要原子性、需要专门校验、需要别的层来调它——那它就不是「用户层」了,得写代码,进 backend,和 issue / card 平起平坐。这是明确的分界线,不模糊。
 
 同理,用户层**没有「现算」**。issue 的 credence 是读的时候从论证数出来的;用户层的读就是文件本身,schema 里没有派生字段。要派生,agent 读的时候自己算。
@@ -118,18 +118,18 @@ layers:      origin, issue, decision, card  ← 夹在中间
 形态:        <名>.decision/decision.md       ← 放在它相关的 issue / card 旁边
 schema:      title / context / chosen / rejected[] / issue→issue / cards[]→card / review_after(date)
 行为:        无。「做一个决定」= 建 decision + 改 issue + 写 card,三个提交
-manager:     某个主题文件夹的 manager.json → 一个「定期重审决定」的 task;review_after 到了,agent 在收件箱里看到它
+manager:     某个主题文件夹的 manager.json → 一个「定期重审决定」的 work;review_after 到了,agent 在收件箱里看到它
 ```
 
 ### experiment:实验日志
 
-跑一次基准、试一个方案,过程在 task 的 rounds 里,但「这次实验测了什么、结论是什么」值得单独记:
+跑一次基准、试一个方案,过程在 work 的 rounds 里,但「这次实验测了什么、结论是什么」值得单独记:
 
 ```
 layers:      origin, issue, card, experiment ← 放最上:它引用 issue(为哪个立场做的),没人引用它
 形态:        <名>.experiment/experiment.md   ← 放在它验证的那个 .issue/ 旁边
 schema:      title / hypothesis / setup / result / verdict(supports | refutes | inconclusive)
-             / position→issue#position / task→(裸 id,task 不在 Collect 里)
+             / position→issue#position / work→(裸 id,work 不在 Collect 里)
 行为:        无。实验做完 = 建一个 experiment;给立场加论证是另一个 `[issue]` 提交,evidence 指回这个 experiment
 ```
 

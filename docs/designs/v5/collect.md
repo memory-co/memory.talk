@@ -70,7 +70,7 @@ issue 和 card **只是两个内置的 layer**。它们的对象模型([issue.md
 |---|---|---|---|
 | **名字** | = layer 名 = 提交信息里的 `[层名]` = 分支 `layer/<名字>` | `issue` | `card` |
 | **路径** | 对象怎么认:**目录名后缀 `.<层>/`**,放在树的任何位置;没有后缀的就是 origin | `<任意路径>/<名>.issue/issue.json` | `<任意路径>/<名>.card/card.md` |
-| **schema** | 文件长什么样:格式 + 字段 + 哪些字段是引用(指向别的 layer 的对象) | JSON;`question` `origin` `manager_task` `card→card` `positions[]` … | markdown + frontmatter;`title` `context` `links[]→card` `issue→issue` `status` |
+| **schema** | 文件长什么样:格式 + 字段 + 哪些字段是引用(指向别的 layer 的对象) | JSON;`question` `origin` `manager_work` `card→card` `positions[]` … | markdown + frontmatter;`title` `context` `links[]→card` `issue→issue` `status` |
 
 schema 决定的事:
 
@@ -95,7 +95,7 @@ collectbase 的层是有序的:**事实在最下,推论在上;上层改不动下
 
 origin 在最底、issue 在中、card 在上:issue 从 origin 消化出来,card 从 issue 争出来;改 card 不能顺手改 issue 的记录,改 issue 不能碰 origin 的原文。origin 就是 collectbase 意义上的**事实层**——「智能体够不着的地板」。两点说明:
 
-- **task 的痕迹(rounds)仍不在 Collect 里**——它是本实例自己的过程,裸文件([store.md §4](store.md));值得长期当证据的那几轮,摘录一份进 origin([origin.md §6](origin.md))。
+- **work 的痕迹(rounds)仍不在 Collect 里**——它是本实例自己的过程,裸文件([store.md §4](store.md));值得长期当证据的那几轮,摘录一份进 origin([origin.md §6](origin.md))。
 - **用户自定义的 layer 排在哪**,按 [collect-layer.md §2](collect-layer.md):引用谁就排在谁上面;所有层都引用 origin,所以都在它之上。
 
 ---

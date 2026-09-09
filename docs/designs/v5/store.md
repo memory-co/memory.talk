@@ -1,9 +1,9 @@
 # store —— git 存认知,裸文件存现场,没有数据库(v5 设计)
 
-> **状态:框架稿,未实施。** 本篇只立 v5 存储的大框架:card 和 issue 放进一个 git 仓库,task 用裸文件,SQLite 和搜索索引整个去掉——存储只有这两样。目录布局、文件格式、commit 规范后续分篇。总定位见 [README.md](README.md)。
+> **状态:框架稿,未实施。** 本篇只立 v5 存储的大框架:card 和 issue 放进一个 git 仓库,work 用裸文件,SQLite 和搜索索引整个去掉——存储只有这两样。目录布局、文件格式、commit 规范后续分篇。总定位见 [README.md](README.md)。
 
 相关:
-- v5 三层(存的就是这三样): [task.md](task.md) / [issue.md](issue.md) / [card.md](card.md)
+- v5 三层(存的就是这三样): [work.md](work.md) / [issue.md](issue.md) / [card.md](card.md)
 - v3 file-canonical 模式(文件是 canonical、SQLite 和向量库是派生——本篇把「派生」整个去掉): [../v3/file-canonical-pattern.md](../v3/file-canonical-pattern.md)
 - v3 searchbase(向量 + FTS 索引底座——**v5 不再用**,召回改成目录 + 链接): [../v3/searchbase-extraction.md](../v3/searchbase-extraction.md)
 - v4 存储(file 罐 + SQLite 瘦索引 + 运行态计数——v5 不再需要运行态): [../v4/card.md §8](../v4/card.md)
@@ -17,7 +17,7 @@
 ```
 ~/.memory.talk/
 ├── memory/          ← 一个 git 仓库(Collect):按主题组织的目录树,原文 / .issue/ / .card/ 并排。认知的 canonical,连同全部历史
-└── tasks/           ← 裸文件:task 树、画布、会话 round。现场的 canonical,原子写,不进 git
+└── works/           ← 裸文件:work 树、画布、会话 round。现场的 canonical,原子写,不进 git
 ```
 
 就这两样。没有数据库,也没有索引——**磁盘上的每一个字节都是 canonical,没有任何「派生的、可重建的」第二份**。
@@ -25,8 +25,8 @@
 三条原则:
 
 - **card 和 issue 在 git 里**。它们是「认知」——会被改、会被争、要问「为什么变成这样」;git 天生就是回答这个问题的工具。
-- **task 是裸文件**。它是「现场」——画布状态、终端登记、会话 round;变化频繁、体量大、要的是原子写和唯一权威,不是历史叙事。这正是 shellbase 的状态模型([task.md §3](task.md)),原样继承。
-- **没有数据库,也没有索引**。v3 / v4 的 SQLite 干两件事:派生索引、可变运行态(顶踩计数、read / recall 计数);LanceDB 干一件事:向量 + FTS 检索。v5 的 card 没有计数([card.md](card.md)),issue 的论证是 append-only 的文件,task 是裸文件——**可变运行态消失了**;而检索改成查目录、顺链接、grep(§5),**派生索引也不需要了**。两样都没剩下非它不可的事。
+- **work 是裸文件**。它是「现场」——画布状态、终端登记、会话 round;变化频繁、体量大、要的是原子写和唯一权威,不是历史叙事。这正是 shellbase 的状态模型([work.md §3](work.md)),原样继承。
+- **没有数据库,也没有索引**。v3 / v4 的 SQLite 干两件事:派生索引、可变运行态(顶踩计数、read / recall 计数);LanceDB 干一件事:向量 + FTS 检索。v5 的 card 没有计数([card.md](card.md)),issue 的论证是 append-only 的文件,work 是裸文件——**可变运行态消失了**;而检索改成查目录、顺链接、grep(§5),**派生索引也不需要了**。两样都没剩下非它不可的事。
 
 ---
 
@@ -40,7 +40,7 @@ git 就是那条时间线,而且是带**因果**的:
 - **parent 链就是因果链**。一次改卡,是因为某个 issue 议出了结果——那次 commit 同时动了 issue(记下结论)和 card(改正文),**因果在同一个 commit 里**,不用另外建一张「谁导致谁」的表。「一个决定」在存储上就是一个 commit。
 - **card 要的「可编辑 + 有历史」是 git 的原生能力**:维基的编辑历史 = `git log -p`,回滚 = `git revert`,谁改的 = author,为什么改 = message。不需要再设计一套版本模型。
 - **issue 要的「立场和论证只增不改」也是 git 的原生能力**:append 一条论证 = 一个 commit;想改历史必须显式 rewrite,而这正是我们不允许的。不变性由工具兜底,不靠代码纪律。
-- **explore 的先验 / 后验在 git 里是免费的**:一个 task 开工那一刻对应仓库的一个 commit,线之前的认知是它的先验,线之后的 commit 是后验。不用再画分割线。
+- **explore 的先验 / 后验在 git 里是免费的**:一个 work 开工那一刻对应仓库的一个 commit,线之前的认知是它的先验,线之后的 commit 是后验。不用再画分割线。
 
 反过来说,如果不用 git,v5 就得自己实现:版本历史、原子的跨对象变更、作者和理由的记录、不可篡改的追加日志——每一样 git 都已经做得比我们好。
 
@@ -54,27 +54,27 @@ commit 的粒度是**一个认知层的动作**,不是一次文件保存:
 
 | 动作 | 动了什么 | 谁提交 |
 |---|---|---|
-| 标注里冒出新问题 | 新建一个 issue | 标注流程(以 task + round 为出处) |
-| 加立场 / 加论证 / 换 manager / 派出论证 task | 那个 issue 追加一条 | manager task 里的人或 agent |
-| 争出结果,写卡或改卡 | issue 记结论 + card 改正文,**同一个 commit** | manager task 里的人或 agent |
+| 标注里冒出新问题 | 新建一个 issue | 标注流程(以 work + round 为出处) |
+| 加立场 / 加论证 / 换 manager / 派出论证 work | 那个 issue 追加一条 | manager work 里的人或 agent |
+| 争出结果,写卡或改卡 | issue 记结论 + card 改正文,**同一个 commit** | manager work 里的人或 agent |
 | 直接写一张没什么可争的卡 | 新建一个 card | 人或 agent |
 | 废弃一张卡 | card 标废弃(文件留着) | 人或 agent |
 
-message 里带**理由**和**出处**(哪个 task、哪些 round),author 区分人和 agent(agent 带上它所在的 task)。这些不是装饰——它们就是「时间线里的因果」本身;没有理由和出处的 commit,时间线退化成流水账。
+message 里带**理由**和**出处**(哪个 work、哪些 round),author 区分人和 agent(agent 带上它所在的 work)。这些不是装饰——它们就是「时间线里的因果」本身;没有理由和出处的 commit,时间线退化成流水账。
 
-task 那边的动作(开工、拆子 task、状态变化、做完)**不进 git**,但 task 会被 commit 引用(出处、manager、派出),引用跨过 git 边界没问题——task id 是稳定的,round 是 append-only 的。
+work 那边的动作(开工、拆子 work、状态变化、做完)**不进 git**,但 work 会被 commit 引用(出处、manager、派出),引用跨过 git 边界没问题——work id 是稳定的,round 是 append-only 的。
 
 ---
 
-## 4. 裸文件那半:task 沿用 shellbase 的状态模型
+## 4. 裸文件那半:work 沿用 shellbase 的状态模型
 
-task 的存储就是 shellbase 的 state 目录,原生实现、逻辑一致([task.md §3](task.md)):
+work 的存储就是 shellbase 的 state 目录,原生实现、逻辑一致([work.md §3](work.md)):
 
-- **每个 task 一个目录**,树用目录嵌套或父指针表达(布局细节后议);里面是 task 自己的元信息(目标、状态、父子)、画布(布局 + 每块的 URI)、终端登记、以及每个会话的 `rounds.jsonl`。
+- **每个 work 一个目录**,树用目录嵌套或父指针表达(布局细节后议);里面是 work 自己的元信息(目标、状态、父子)、画布(布局 + 每块的 URI)、终端登记、以及每个会话的 `rounds.jsonl`。
 - **原子写、单写者、无缓存直读**——shellbase 的三条读写纪律原样继承。
-- **会话 round 是 append-only 的裸文件**,跟 v3 一样;它体量大、增长快、不需要「为什么」,所以不进 git。task 自己的时间线(什么时候开的、什么时候变状态、什么时候完)由 task 目录下一个小的 append-only 事件文件记着——这是 v3 events.jsonl 在 v5 唯一保留的地方。
+- **会话 round 是 append-only 的裸文件**,跟 v3 一样;它体量大、增长快、不需要「为什么」,所以不进 git。work 自己的时间线(什么时候开的、什么时候变状态、什么时候完)由 work 目录下一个小的 append-only 事件文件记着——这是 v3 events.jsonl 在 v5 唯一保留的地方。
 
-为什么 task 不进 git,再说一遍:git 记的是**决定**,task 记的是**过程**。把画布每次重排、终端每次 attach、agent 每一轮输出都提交进 git,时间线会被淹没,真正的因果反而找不到。
+为什么 work 不进 git,再说一遍:git 记的是**决定**,work 记的是**过程**。把画布每次重排、终端每次 attach、agent 每一轮输出都提交进 git,时间线会被淹没,真正的因果反而找不到。
 
 ---
 
@@ -82,11 +82,11 @@ task 的存储就是 shellbase 的 state 目录,原生实现、逻辑一致([tas
 
 维基不是靠 embedding 被使用的:人看目录、搜标题、顺内链走。v5 的召回和检索照这个来,**不建向量库、不建全文索引**:
 
-- **召回 = 给一张目录**。每张卡有一个维基式的规范标题,所有标题排成目录;task 开工时把目录(或当前项目那一层的目录)注入 agent 的上下文,agent 自己决定读哪几张。这仍然是「无意识」的——你脑子里随时有自己知识的目录,想到了才去翻。
-- **检索 = grep + 链接**。agent 要找东西,`git grep` 工作树,或者从一张卡的链接走到相关卡、走到讨论页(issue)、走到出处(task)。
+- **召回 = 给一张目录**。每张卡有一个维基式的规范标题,所有标题排成目录;work 开工时把目录(或当前项目那一层的目录)注入 agent 的上下文,agent 自己决定读哪几张。这仍然是「无意识」的——你脑子里随时有自己知识的目录,想到了才去翻。
+- **检索 = grep + 链接**。agent 要找东西,`git grep` 工作树,或者从一张卡的链接走到相关卡、走到讨论页(issue)、走到出处(work)。
 - **「是不是新问题」= 必须在 issue 目录里指认**。agent 标一个 `#问题`,要么指出它对应哪个既有 issue,要么说没有。grounding 从 v4 的向量距离换成「必须引用一个存在的 issue 标题」——裁判从一个数值变成一份清单,agent 仍然不能凭空宣布新发现。
 
-目录的大小靠**分目录**控制:卡按项目 / 主题分目录,注入时只给当前 task 所在的那一层;这跟维基的分类是一回事。目录读 git 的**工作树(HEAD)**——召回查的是「现在的事实」;要历史的时候(某张卡的故事、某个 issue 的辩论序列)直接读 git 的 log。
+目录的大小靠**分目录**控制:卡按项目 / 主题分目录,注入时只给当前 work 所在的那一层;这跟维基的分类是一回事。目录读 git 的**工作树(HEAD)**——召回查的是「现在的事实」;要历史的时候(某张卡的故事、某个 issue 的辩论序列)直接读 git 的 log。
 
 > 代价说清楚:语义模糊的匹配(「用户偏好简洁」撞「回答风格」)靠标题不如靠 embedding。但这正好逼着卡的标题写成维基式的规范标题——这是好事,不是妥协。将来目录大到分目录也压不住,再考虑加 embedding,而且那时它也只是一个加速器,不是存储的一部分。
 
@@ -104,9 +104,9 @@ task 的存储就是 shellbase 的 state 目录,原生实现、逻辑一致([tas
 ## 7. 这篇有意不定的事
 
 - **单仓还是分仓**:card 和 issue 在一个仓库里(跨对象的因果能落在同一个 commit,本篇倾向这个)还是各一个仓库。
-- **并发写**:一台机器上多个 task 的 agent 同时往认知层提交——串行锁(简单,本篇倾向)还是每个 task 一个分支再合并(复杂,但更 git)。
+- **并发写**:一台机器上多个 work 的 agent 同时往认知层提交——串行锁(简单,本篇倾向)还是每个 work 一个分支再合并(复杂,但更 git)。
 - **commit 粒度的边界**:标注流程一轮冒出十个问题,是十个 commit 还是一个;一次「争出结果」改了三张卡,是一个还是三个。倾向「一个决定一个 commit」,但决定的边界要定。
-- **task 目录要不要也用 git 管极少数的东西**:比如 task 的目标和状态变化。本篇按「不进」写,靠事件文件留时间线;若实践中发现 task 层也需要因果,再议。
+- **work 目录要不要也用 git 管极少数的东西**:比如 work 的目标和状态变化。本篇按「不进」写,靠事件文件留时间线;若实践中发现 work 层也需要因果,再议。
 - **v3 数据怎么进来**:insight 投影成 card / issue 是一批初始 commit;旧的 SQLite 计数(review / read / recall)不迁——v5 没有它们的位置。
-- **结构化查询**(比如「这个 task 管的所有 issue」「链接到这张卡的所有卡」):从 git 工作树扫就够,还是要在文件里维护反向链接。倾向前者,量级不大;真慢了再说。
+- **结构化查询**(比如「这个 work 管的所有 issue」「链接到这张卡的所有卡」):从 git 工作树扫就够,还是要在文件里维护反向链接。倾向前者,量级不大;真慢了再说。
 - **目录多大算大**:几百张卡全量注入没问题;几千张要靠分目录;再往上是不是必须加 embedding——等真到那一步再定,不预先设计。
