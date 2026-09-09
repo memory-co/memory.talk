@@ -1,6 +1,6 @@
 # Servers API
 
-server 是建现场、交回窗 + 把手的那层。**每个 server 自己声明响应哪些协议**,一个可以多个;没人声明的协议去 **default**(背后是 bash 把协议名当命令跑,调用方不感知)。本页只有观测端点——**建现场走 [`POST /api/works/{id}/sessions`](works.md#post-apitaskstask_idmembers)**,因为现场总是某个 work 的会话。字段见 [`../../structure/v5/server.md`](../../structure/v5/server.md)。
+server 是建现场、交回窗 + 把手的那层。**每个 server 自己声明响应哪些协议**,一个可以多个;没人声明的协议去 **default**(背后是 bash 把协议名当命令跑,调用方不感知)。本页只有观测端点——**建现场走 [`POST /api/works/{id}/sessions`](works.md#post-apiworkswork_idsessions)**,因为现场总是某个 work 的会话。字段见 [`../../structure/v5/server.md`](../../structure/v5/server.md)。
 
 ## GET /api/servers
 
