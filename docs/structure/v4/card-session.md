@@ -2,7 +2,7 @@
 
 **card↔session 的出处关系** —— 哪个 session(的哪几条旁白 round)**启发 / 生出**了这张卡 / 这个答案。跟 [CardLink](card-link.md)(card↔card)平行:`card_links` 管卡之间,`card_sessions` 管卡↔会话。**支持多 session**。
 
-机制见 [`../../works/v4/card.md`](../../works/v4/card.md) §6 / §8;写入口(旁白)见 [`../../works/v4/session-annotation.md`](../../works/v4/session-annotation.md)。
+机制见 [`../../designs/v4/card.md`](../../designs/v4/card.md) §6 / §8;写入口(旁白)见 [`../../designs/v4/session-annotation.md`](../../designs/v4/session-annotation.md)。
 
 ## 形态
 
@@ -30,7 +30,7 @@
 
 ## canonical 在哪 —— 旁白的 `questions[]`
 
-CardSession **不是原始真相**:它的 canonical 是旁白(逐 round 标注)里每行的 `questions[]`(`card_id` + `is_new` + 这条 round 的 index),落在 session 的标注文件(file)。`card_sessions` 表是**从这些 `questions[]` 派生出来的可 join 索引**,回答「这个 session 启发了哪些卡 / 答案」。详见 [`../../works/v4/session-annotation.md`](../../works/v4/session-annotation.md)。
+CardSession **不是原始真相**:它的 canonical 是旁白(逐 round 标注)里每行的 `questions[]`(`card_id` + `is_new` + 这条 round 的 index),落在 session 的标注文件(file)。`card_sessions` 表是**从这些 `questions[]` 派生出来的可 join 索引**,回答「这个 session 启发了哪些卡 / 答案」。详见 [`../../designs/v4/session-annotation.md`](../../designs/v4/session-annotation.md)。
 
 所以:**每条 `card_sessions` 的 `(session_id, indexes)` 永远指向 session-annotation 里被标注的旁白 round**,不是凭空来的。它跟 [reviews](review.md) 是旁白机制的两个写出口 —— card_sessions 记「出处 / 启发」(miss→新卡、冲突→新竞争 Position),reviews 记「顶/踩/中立」(hit)。
 
@@ -55,4 +55,4 @@ CREATE INDEX idx_card_sessions_session ON card_sessions(session_id);  -- 反查�
 
 ## 跟 v3 的对应
 
-v3 没有独立的 card↔session 表:card↔session 隐式在 `card.rounds[].session_id` 里。v4 把它显式化成 `card_sessions`(出处)+ 旁白 `questions[]`(canonical)。v3 card 投影进 v4 图时,其 `rounds` → 一条 `card_sessions`(见 [`../../works/v4/card.md`](../../works/v4/card.md) §9 步骤三)。
+v3 没有独立的 card↔session 表:card↔session 隐式在 `card.rounds[].session_id` 里。v4 把它显式化成 `card_sessions`(出处)+ 旁白 `questions[]`(canonical)。v3 card 投影进 v4 图时,其 `rounds` → 一条 `card_sessions`(见 [`../../designs/v4/card.md`](../../designs/v4/card.md) §9 步骤三)。

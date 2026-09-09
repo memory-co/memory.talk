@@ -1,4 +1,4 @@
-"""Collect —— 认知层的容器(docs/works/v5/collect.md)。
+"""Collect —— 认知层的容器(docs/designs/v5/collect.md)。
 
 对象 = 一个带后缀的目录 `<path>.<layer>/`,本体文件在里面;origin 是任何不带后缀的文件。
 一个对象的 id 就是它的 path(不含后缀)。
@@ -105,7 +105,7 @@ class InboxItem(BaseModel):
 
 class LayerCreate(BaseModel):
     name: str
-    schema_yaml: str = Field(description="schemas/<name>.yaml 的内容,见 docs/works/v5/collect-layer.md")
+    schema_yaml: str = Field(description="schemas/<name>.yaml 的内容,见 docs/designs/v5/collect-layer.md")
     reason: str = ""
 
 

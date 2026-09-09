@@ -1,4 +1,4 @@
-"""issue —— 议事层:问题 + 立场 + 论证 + IBIS 边(docs/works/v5/issue.md)。
+"""issue —— 议事层:问题 + 立场 + 论证 + IBIS 边(docs/designs/v5/issue.md)。
 对象 = `<path>.issue/issue.json`;manager 在同目录的 manager.json;id 就是 path。"""
 from __future__ import annotations
 

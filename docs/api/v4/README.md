@@ -4,7 +4,7 @@
 
 v4 只重做**卡子系统**（被治理的问题图）：一张卡 = **一个问题（Issue）+ 它的若干答案（Position）**，靠对 Position 的 review 顶/踩竞争出"当下用哪个答案"。其余面（sessions / sync / status / embedding）**沿用 v3**，不在本目录重复。
 
-- 机制 / 设计决策见 [`../../works/v4/card.md`](../../works/v4/card.md)
+- 机制 / 设计决策见 [`../../designs/v4/card.md`](../../designs/v4/card.md)
 - CLI 使用说明见 [`../../cli/v4/`](../../cli/v4/)
 - 数据结构 / schema 见 [`../../structure/v4/`](../../structure/v4/)
 
@@ -61,7 +61,7 @@ Sessions     GET    /v4/sessions/{session_id}/cards         反查：这个 sess
 | 409 | 写入冲突（显式传的 id 已存在） | `{"error": "<id> already exists"}` |
 | 500 | 内部错误（如 embedding provider 调用失败） | `{"error": "<message>"}` |
 
-**v4 没有"对象过期"概念**：不建模时间，卡 / Position 一律按"现在还活着"处理（过期如何处理见 [`../../works/v4/card.md`](../../works/v4/card.md) §5 / §12）。
+**v4 没有"对象过期"概念**：不建模时间，卡 / Position 一律按"现在还活着"处理（过期如何处理见 [`../../designs/v4/card.md`](../../designs/v4/card.md) §5 / §12）。
 
 ## 跟 v3 的差异
 
@@ -76,6 +76,6 @@ Sessions     GET    /v4/sessions/{session_id}/cards         反查：这个 sess
 | 当前答案 | —（一卡一立场） | 召回时 credence 最高的 Position（无 `accepted` 字段） |
 | 适用域 | 无 | `scope`（一句话软提示，非门禁） |
 
-**v3 → v4 的改名 / 迁移**（v3 卡整体改名 `insight` 腾出 `card_` 前缀给 v4）见 [`../../works/v4/card.md`](../../works/v4/card.md) §9。沿用 v3 的 `insight` 端点（`/v3/insights`，只读 + 搜索为主）由迁移产生，本目录不覆盖。
+**v3 → v4 的改名 / 迁移**（v3 卡整体改名 `insight` 腾出 `card_` 前缀给 v4）见 [`../../designs/v4/card.md`](../../designs/v4/card.md) §9。沿用 v3 的 `insight` 端点（`/v3/insights`，只读 + 搜索为主）由迁移产生，本目录不覆盖。
 
 详细的 CLI 命令文档见 [`../../cli/v4/`](../../cli/v4/)，数据结构定义见 [`../../structure/v4/`](../../structure/v4/)。

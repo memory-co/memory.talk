@@ -10,7 +10,7 @@
 - 卡↔卡用 IBIS 边(`card_links`)连图;答案出处(哪个 session 的哪几轮旁白)落 `card_sessions`。
 - 治理两条软约束:`scope`(一句话适用场景,软提示不挡)+ Position append-only(`forked_from_position_id` 记血缘)。
 
-**本页是 CLI 契约;机制与设计推理见 [`../../works/v4/card.md`](../../works/v4/card.md),写路径前端(逐 round 旁白标注)见 [`../../works/v4/session-annotation.md`](../../works/v4/session-annotation.md)。**
+**本页是 CLI 契约;机制与设计推理见 [`../../designs/v4/card.md`](../../designs/v4/card.md),写路径前端(逐 round 旁白标注)见 [`../../designs/v4/session-annotation.md`](../../designs/v4/session-annotation.md)。**
 
 ## 二、命令树
 
@@ -50,7 +50,7 @@ memory.talk
 
 ### 改名腾位
 
-v3 那套卡(`insight` 字段 + 论坛 stats)**整体改名 `insight`**(数据保留、只读可搜、不再是抽卡主路径),把 `card` 这个名字 + `card_` 前缀腾给 v4。迁移见 [`../../works/v4/card.md`](../../works/v4/card.md#9-与-v3--insight-的共存与迁移)。`memory.talk insight` = 原 v3 `card` 改名而来。
+v3 那套卡(`insight` 字段 + 论坛 stats)**整体改名 `insight`**(数据保留、只读可搜、不再是抽卡主路径),把 `card` 这个名字 + `card_` 前缀腾给 v4。迁移见 [`../../designs/v4/card.md`](../../designs/v4/card.md#9-与-v3--insight-的共存与迁移)。`memory.talk insight` = 原 v3 `card` 改名而来。
 
 ### card 从"陈述"变"问答"
 
@@ -72,7 +72,7 @@ v3 那套卡(`insight` 字段 + 论坛 stats)**整体改名 `insight`**(数据�
 
 ### 显式去掉(相对 v3 / 早期 v4 稿)
 
-v4 不存这些:`accepted`、`momentum`/势、`TimeScope`/时、`change_state` 状态机 / `superseded_by`、结构化 `scope`(收成一句话文本)、`credence` 存储列——全部改读时现算或不建模。**删除理由见 [`../../works/v4/card.md`](../../works/v4/card.md) §3 / §5 / §12。**
+v4 不存这些:`accepted`、`momentum`/势、`TimeScope`/时、`change_state` 状态机 / `superseded_by`、结构化 `scope`(收成一句话文本)、`credence` 存储列——全部改读时现算或不建模。**删除理由见 [`../../designs/v4/card.md`](../../designs/v4/card.md) §3 / §5 / §12。**
 
 ## 五、典型工作流
 
@@ -121,7 +121,7 @@ memory.talk card review --position pos_OLD --argument -1 --cite sess_xyz:4-9 --c
 
 ### 抽卡仍走 explore 工作台(沿用 v3)
 
-在 explore 目录里逐 round 旁白标注,`#问题` 自动建卡 / 关联;产物从"insight 卡"换成"v4 卡(问题 + 答案)"。机制见 [`../v3/explore.md`](../v3/explore.md) 与 [`../../works/v4/session-annotation.md`](../../works/v4/session-annotation.md)。
+在 explore 目录里逐 round 旁白标注,`#问题` 自动建卡 / 关联;产物从"insight 卡"换成"v4 卡(问题 + 答案)"。机制见 [`../v3/explore.md`](../v3/explore.md) 与 [`../../designs/v4/session-annotation.md`](../../designs/v4/session-annotation.md)。
 
 ## 六、命令详情
 
@@ -135,7 +135,7 @@ memory.talk card review --position pos_OLD --argument -1 --cite sess_xyz:4-9 --c
 | `setup` / `server` / `sync` / `session` | 沿用 v3,见 [`../v3/`](../v3/) |
 | `explore`(抽 v4 卡工作台) | v4 版下一轮;现状见 [`../v3/explore.md`](../v3/explore.md) |
 
-> 数据结构 / schema 见 [`../../structure/v4/`](../../structure/v4/);HTTP API 见 [`../../api/v4/`](../../api/v4/);**机制 / 设计决策** 见 [`../../works/v4/card.md`](../../works/v4/card.md)。
+> 数据结构 / schema 见 [`../../structure/v4/`](../../structure/v4/);HTTP API 见 [`../../api/v4/`](../../api/v4/);**机制 / 设计决策** 见 [`../../designs/v4/card.md`](../../designs/v4/card.md)。
 
 ## 七、设计原则
 

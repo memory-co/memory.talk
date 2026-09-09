@@ -2,7 +2,7 @@
 
 **LLM 主导的 card 维护工作台**:在一个隔离环境里启动 Claude Code,让它读会话、抽新 card 或给老 card 写 review。memory.talk 自己不抽不评 —— 抽 / 评是 LLM 的活,explore 负责**拉起 claude + 隔离 + 跟踪产出**。
 
-机制(cwd 隔离 + recall hook 真空区 + 无独立工作队列)详见 [`../../works/v3/explore-cwd-suppression.md`](../../works/v3/explore-cwd-suppression.md)。
+机制(cwd 隔离 + recall hook 真空区 + 无独立工作队列)详见 [`../../designs/v3/explore-cwd-suppression.md`](../../designs/v3/explore-cwd-suppression.md)。
 
 `settings.explore.cwd` 默认 `~/.memory.talk/explore`,由 setup wizard 创建。详见 [setup.md](setup.md)。
 

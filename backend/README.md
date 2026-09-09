@@ -1,6 +1,6 @@
 # backend(v5)
 
-memory.talk v5 的后端。**task 树、协议 server、Collect(origin / issue / card 三层 + 用户层)、manager 收件箱都有最简实现(自己实现的分层 git + 裸文件,FastAPI,真 tmux)。** 未做:鉴权网关、ttyd / 反代托管、`daemon` / `start` / `stop`、逐 round 标注、二进制 blob 外置、给人手工 `git commit` 用的 hook(服务进程是唯一写者)。 端点清单见 [docs/api/v5](../docs/api/v5/README.md);起服务 `python -m backend serve`,测试 `pytest`。 按 **models / services / controllers** 三层分目录,外加 **servers/**(每个协议一个 server)和 **layers/**(每个内置 layer 一个文件);services 下每个子包对应 [docs/works/v5](../docs/works/v5/README.md) 的一篇设计;底层逻辑照 shellbase `server/shellbase/` 原生实现。`backend/` 本身就是 Python 包根,不再套一层包名目录。
+memory.talk v5 的后端。**task 树、协议 server、Collect(origin / issue / card 三层 + 用户层)、manager 收件箱都有最简实现(自己实现的分层 git + 裸文件,FastAPI,真 tmux)。** 未做:鉴权网关、ttyd / 反代托管、`daemon` / `start` / `stop`、逐 round 标注、二进制 blob 外置、给人手工 `git commit` 用的 hook(服务进程是唯一写者)。 端点清单见 [docs/api/v5](../docs/api/v5/README.md);起服务 `python -m backend serve`,测试 `pytest`。 按 **models / services / controllers** 三层分目录,外加 **servers/**(每个协议一个 server)和 **layers/**(每个内置 layer 一个文件);services 下每个子包对应 [docs/designs/v5](../docs/designs/v5/README.md) 的一篇设计;底层逻辑照 shellbase `server/shellbase/` 原生实现。`backend/` 本身就是 Python 包根,不再套一层包名目录。
 
 ```
 backend/
@@ -16,7 +16,7 @@ backend/
 │   └── server.py             #   Server 契约:name + protocols(声明响应哪些协议)/ open(id, uri) → Window + Handle / handle / alive / destroy
 │
 ├── services/                 # 业务逻辑(每个子包对应一篇设计;**入口就是子包的 `__init__.py`**,导出该 service 类,main.py 按 `services/*` 扫描装配,不另加约定)
-│   ├── task/                 #   做事层 —— docs/works/v5/task.md
+│   ├── task/                 #   做事层 —— docs/designs/v5/task.md
 │   │   ├── __init__.py       #     入口:导出 TaskService(对外唯一门面)
 │   │   ├── tree.py           #     task 树:建节点、父子、状态、完成收拢
 │   │   ├── canvas.py         #     画布(24×16 网格剖分)—— task 的视图,可随时重排
@@ -25,18 +25,18 @@ backend/
 │   │   ├── rounds.py         #     agent 会话的 rounds.jsonl(append-only)
 │   │   ├── inbox.py          #     收件箱:manager.json 路由过来的变动(append-only)
 │   │   └── events.py         #     task 自己的 append-only 事件(开工/状态/做完)
-│   ├── servers/              #   server 的装载与分发 —— docs/works/v5/protocol-server.md
+│   ├── servers/              #   server 的装载与分发 —— docs/designs/v5/protocol-server.md
 │   │   ├── registry.py       #     协议 → server 寻址:先看谁声明了它,没人声明去 default
 │   │   ├── uri.py            #     块的 URI 解析
 │   │   ├── terminal.py       #     tmux 现场 + 终端类 server 基类(TerminalBase)
 │   │   ├── agent.py          #     agent 类 server 基类(AgentBase:终端把手 + 读 round)
 │   │   └── adapters/         #     读各平台会话记录:claude_code / codex / kimi
-│   ├── collect/              #   认知层 —— docs/works/v5/collect.md / manager.md
+│   ├── collect/              #   认知层 —— docs/designs/v5/collect.md / manager.md
 │   │   ├── repo.py           #     分层 git(自己实现):layer/<名> 权威分支 + stack merge 视图 + 路径归属守卫;纯 plumbing
 │   │   ├── manager.py        #     manager.json:最近祖先解析
 │   │   ├── catalog.py        #     一层的目录(按目录树列标题)+ 召回文本
 │   │   └── __init__.py       #     CollectService:层的装载(内置 + schemas/*.yaml)、对象 CRUD、历史、检索、树、行为、manager、投递到收件箱
-│   └── store/                #   存储 —— docs/works/v5/store.md
+│   └── store/                #   存储 —— docs/designs/v5/store.md
 │       ├── __init__.py       #     入口:导出 StoreService(git 仓库 + 裸文件根,其余 service 的依赖)
 │       ├── paths.py          #     ~/.memory.talk 布局
 │       ├── files.py          #     裸文件原语:原子写、单写者、无缓存直读(task 用)

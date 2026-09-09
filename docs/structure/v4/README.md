@@ -2,11 +2,11 @@
 
 v4 的数据模型 —— 描述对象 schema、字段语义、磁盘 / 数据库布局。
 
-v4 是 **card 的另一代**:一张卡不再是「一句陈述」,而是「**一个问题(Issue)+ 它的若干答案(Position)**」,所有卡连成一张**被治理的问题图**(IBIS + 现算 credence 投票)。机制 / 设计推理见 [`../../works/v4/card.md`](../../works/v4/card.md)。
+v4 是 **card 的另一代**:一张卡不再是「一句陈述」,而是「**一个问题(Issue)+ 它的若干答案(Position)**」,所有卡连成一张**被治理的问题图**(IBIS + 现算 credence 投票)。机制 / 设计推理见 [`../../designs/v4/card.md`](../../designs/v4/card.md)。
 
 - CLI 契约见 [`../../cli/v4/`](../../cli/v4/)
 - HTTP 契约见 [`../../api/v4/`](../../api/v4/)
-- 机制 / 设计决策见 [`../../works/v4/card.md`](../../works/v4/card.md)、写路径前端见 [`../../works/v4/session-annotation.md`](../../works/v4/session-annotation.md)
+- 机制 / 设计决策见 [`../../designs/v4/card.md`](../../designs/v4/card.md)、写路径前端见 [`../../designs/v4/session-annotation.md`](../../designs/v4/session-annotation.md)
 
 ## 对象清单
 
@@ -85,7 +85,7 @@ v4 把一批可派生的量留成**读时现算**、不落列:
 | 「当下答案」 | 召回时取 credence 最高的 Position(无 `accepted` 字段) |
 | 「相不相关」 | 召回那一刻向量 + FTS 现算 |
 
-为什么这样切(删 momentum / 时间维 / accepted / credence 列)见 [`../../works/v4/card.md`](../../works/v4/card.md) §3 / §5 / §12。
+为什么这样切(删 momentum / 时间维 / accepted / credence 列)见 [`../../designs/v4/card.md`](../../designs/v4/card.md) §3 / §5 / §12。
 
 ## 与 v3 / insight 的关系
 
@@ -98,7 +98,7 @@ v4 不改 v3 的卡,而是**另起一代**。v3 现有的那套卡(`insight` 字
 | 关联 | `source_cards`(创建即冻) | `card_links`(card↔card)+ `card_sessions`(card↔session) |
 | 命运 | 只读、慢慢下掉(可投影进 v4 图) | 新主路径 |
 
-v4 与 insight **物理隔离**(不同表、不同 collection、不同前缀),互不干扰共存。迁移见 [`../../works/v4/card.md`](../../works/v4/card.md) §9。
+v4 与 insight **物理隔离**(不同表、不同 collection、不同前缀),互不干扰共存。迁移见 [`../../designs/v4/card.md`](../../designs/v4/card.md) §9。
 
 ## 卡子系统跟 v3 的对象级差异
 

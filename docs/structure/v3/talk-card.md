@@ -2,8 +2,8 @@
 
 v3 的核心数据结构 —— 从对话中提炼出的记忆单元。**append-only**:payload 创建即冻结;stats 是 runtime 状态由后端实时维护。
 
-论坛动力学语义见 [`../../works/v3/forum-dynamics.md`](../../works/v3/forum-dynamics.md)。
-创建/删除流程见 [`../../works/v3/card-creation-flow.md`](../../works/v3/card-creation-flow.md) / [`../../works/v3/card-deletion-flow.md`](../../works/v3/card-deletion-flow.md)。
+论坛动力学语义见 [`../../designs/v3/forum-dynamics.md`](../../designs/v3/forum-dynamics.md)。
+创建/删除流程见 [`../../designs/v3/card-creation-flow.md`](../../designs/v3/card-creation-flow.md) / [`../../designs/v3/card-deletion-flow.md`](../../designs/v3/card-deletion-flow.md)。
 
 ## Schema
 
@@ -95,7 +95,7 @@ v3 的核心数据结构 —— 从对话中提炼出的记忆单元。**append-
 | `derives_from` | 本卡基于该 card 蒸馏 / 综述 |
 | `supersedes` | 本卡反驳并替代该 card(fork 语义) |
 
-后端遇未识别 `relation` 返回 400。lineage DAG 由"创建时必须存在"+ append-only 联合保证,见 [`../../works/v3/card-creation-flow.md`](../../works/v3/card-creation-flow.md)。
+后端遇未识别 `relation` 返回 400。lineage DAG 由"创建时必须存在"+ append-only 联合保证,见 [`../../designs/v3/card-creation-flow.md`](../../designs/v3/card-creation-flow.md)。
 
 ## Stats
 
@@ -106,9 +106,9 @@ v3 的核心数据结构 —— 从对话中提炼出的记忆单元。**append-
 | `review_neutral` | `score=0` review 数 |
 | `review_count` | review 总数(= up + down + neutral) |
 | `read_count` | `POST /v3/read` 命中本卡的次数 |
-| `recall_count` | `POST /v3/recall` 返回过本卡的次数(0.9.0 起 derived,见 [forum-dynamics.md](../../works/v3/forum-dynamics.md)) |
+| `recall_count` | `POST /v3/recall` 返回过本卡的次数(0.9.0 起 derived,见 [forum-dynamics.md](../../designs/v3/forum-dynamics.md)) |
 
-stats 的累加细节 + 公式怎么消费这些字段 见 [`../../works/v3/forum-dynamics.md`](../../works/v3/forum-dynamics.md) 和 [`../../works/v3/search-ranking.md`](../../works/v3/search-ranking.md)。
+stats 的累加细节 + 公式怎么消费这些字段 见 [`../../designs/v3/forum-dynamics.md`](../../designs/v3/forum-dynamics.md) 和 [`../../designs/v3/search-ranking.md`](../../designs/v3/search-ranking.md)。
 
 ## 存储
 
@@ -160,7 +160,7 @@ CREATE INDEX idx_csc_source ON card_source_cards(source_card_id);
 
 向量侧只 embed `insight`,索引在 `vectors/` 目录(LanceDB)。
 
-存储分层(file canonical + SQLite index)总体模式见 [`../../works/v3/file-canonical-pattern.md`](../../works/v3/file-canonical-pattern.md)。
+存储分层(file canonical + SQLite index)总体模式见 [`../../designs/v3/file-canonical-pattern.md`](../../designs/v3/file-canonical-pattern.md)。
 
 ## 跟 v2 的差异
 

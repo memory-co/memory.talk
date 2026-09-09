@@ -1,4 +1,4 @@
-"""TaskService:树、画布、会话(经 server 建现场)、痕迹、事件(docs/works/v5/task.md)。"""
+"""TaskService:树、画布、会话(经 server 建现场)、痕迹、事件(docs/designs/v5/task.md)。"""
 from __future__ import annotations
 
 from datetime import datetime

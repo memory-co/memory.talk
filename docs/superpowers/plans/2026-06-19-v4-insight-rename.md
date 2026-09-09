@@ -15,7 +15,7 @@
 - **Keep `card_<ulid>` ids** — do NOT rewrite id prefixes. `util/ids.py` `CARD_PREFIX`/`IdKind.CARD` stay.
 - **Frozen migrations:** do NOT edit `migrations/v1/*` or `migrations/v2/*` DDL bodies (they are historical snapshots). New work goes in `migrations/v3/` and `migrations/v4/`. (Exception: v1/v2 `run()` signatures gain a `data_root=None` kwarg in Task 2 — additive, ignored.)
 - **Pydantic, not dataclass**, for all value types. Scenario tests follow the `tests/<area>/<scenario>/{README.md, __init__.py, test.py}` layout; migration tests live under `tests/migration/<scenario>/`.
-- Design source of truth: `docs/works/v4/insight-migration.md`, `docs/works/v3/migration.md`.
+- Design source of truth: `docs/designs/v4/insight-migration.md`, `docs/designs/v3/migration.md`.
 
 ---
 
@@ -474,7 +474,7 @@ git commit -m "refactor(v3): retire unused review feature (service/api/cli/schem
 
 ### Task 13: doc sync
 
-**Files:** `docs/works/v4/card.md` §9 (lines ~324/326/334/339 — reviews→insight_reviews → "drop reviews; v4 takes the name"); any `docs/structure/v3/talk-card.md` references that should note the rename.
+**Files:** `docs/designs/v4/card.md` §9 (lines ~324/326/334/339 — reviews→insight_reviews → "drop reviews; v4 takes the name"); any `docs/structure/v3/talk-card.md` references that should note the rename.
 
 - [ ] **Step 1:** Update §9 table + prose to match the finalized design (drop reviews, keep card_ ids, rename_collection). Remove the `insight_reviews` mentions and the id-rewrite "连带重写 insight_reviews" note.
 - [ ] **Step 2:** `grep -rn "insight_reviews" docs/ → empty` (except historical/explicitly-archival mentions).

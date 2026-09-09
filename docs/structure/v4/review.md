@@ -6,7 +6,7 @@ v4 **沿用 v3 的 review**,只把 target 从 `card_id` 换成 `position_id`(顶
 
 > v3 用 `score`,v4 改叫 `argument`(语义对齐 IBIS,取值不变:`1`/`0`/`-1`)。
 
-机制见 [`../../works/v4/card.md`](../../works/v4/card.md) §3。被表态的 Position 见 [card.md](card.md)。
+机制见 [`../../designs/v4/card.md`](../../designs/v4/card.md) §3。被表态的 Position 见 [card.md](card.md)。
 
 ## Schema
 
@@ -52,7 +52,7 @@ v4 **沿用 v3 的 review**,只把 target 从 `card_id` 换成 `position_id`(顶
 | 何时产生 | hit 命中已有答案 → 一条 review | miss 建新卡、冲突建新竞争 Position → 一条 card_session |
 | target | `position_id` | `card_id`(+ 可选 `position_id`) |
 
-见 [card-session.md](card-session.md) 与 [`../../works/v4/card.md`](../../works/v4/card.md) §6。
+见 [card-session.md](card-session.md) 与 [`../../designs/v4/card.md`](../../designs/v4/card.md) §6。
 
 ## 存储
 
@@ -84,7 +84,7 @@ review **没有独立读取入口** —— 没有 `GET /v4/reviews/{id}`。想�
 ## 不变性
 
 - **不允许撤销 review**:append-only。表态错了就**再写一条相反 `argument` 的 review**(comment 说明原因)。
-- **`argument=0`(中立)单独计数**:不动 credence(不进 `up`/`down`);中立堆积可离线衍生出新 Position(机制见 [`../../works/v4/card.md`](../../works/v4/card.md) §3 末)。
+- **`argument=0`(中立)单独计数**:不动 credence(不进 `up`/`down`);中立堆积可离线衍生出新 Position(机制见 [`../../designs/v4/card.md`](../../designs/v4/card.md) §3 末)。
 
 ## 跟 v3 review 的差异
 

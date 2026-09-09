@@ -1,6 +1,6 @@
 # Task + Canvas + Session + Member + Round + Event
 
-做事层的六个对象,全部住在 `tasks/<task_id>/` 目录下,裸文件。机制见 [`../../works/v5/task.md`](../../works/v5/task.md)。
+做事层的六个对象,全部住在 `tasks/<task_id>/` 目录下,裸文件。机制见 [`../../designs/v5/task.md`](../../designs/v5/task.md)。
 
 ## Task
 
@@ -88,7 +88,7 @@ task 的一个会话 = 一个现场。**在 task 里打开就是它的**,归属�
 
 ## Member
 
-**人**,不是现场。谁在操作 / 操作过这个 task;只做可见性,**不做权限**(整个实例给一个团队用)。机制见 [`../../works/v5/member.md`](../../works/v5/member.md)。
+**人**,不是现场。谁在操作 / 操作过这个 task;只做可见性,**不做权限**(整个实例给一个团队用)。机制见 [`../../designs/v5/member.md`](../../designs/v5/member.md)。
 
 ```json
 {"user": "alice", "first_seen": "2026-09-06T08:00:00Z", "last_seen": "2026-09-06T09:12:40Z", "ops": 7}
@@ -152,4 +152,4 @@ tasks/<task_id>/
 └── sessions/<session_id>/rounds.jsonl   只追加
 ```
 
-读写纪律照 shellbase:单写者(服务进程)、无缓存直读、任何时刻磁盘上都是完整 JSON。**不进 git**——task 记的是过程,git 记的是决定(见 [`../../works/v5/store.md`](../../works/v5/store.md) §4)。
+读写纪律照 shellbase:单写者(服务进程)、无缓存直读、任何时刻磁盘上都是完整 JSON。**不进 git**——task 记的是过程,git 记的是决定(见 [`../../designs/v5/store.md`](../../designs/v5/store.md) §4)。

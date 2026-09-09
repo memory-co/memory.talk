@@ -2,9 +2,9 @@
 
 无意识召回事件(`RecallEvent`)的对象 schema + 存储位置。
 
-机制(file canonical / SQLite index / 派生 recall_count / 写入顺序 / dedup / SQLite 重建合约) 见 [`../../works/v3/recall-pipeline.md`](../../works/v3/recall-pipeline.md)。
-`session_id` 怎么算 见 [`../../works/v3/session-namespace.md`](../../works/v3/session-namespace.md)。
-跟 Review 的角色分工 见 [`../../works/v3/forum-dynamics.md`](../../works/v3/forum-dynamics.md)。
+机制(file canonical / SQLite index / 派生 recall_count / 写入顺序 / dedup / SQLite 重建合约) 见 [`../../designs/v3/recall-pipeline.md`](../../designs/v3/recall-pipeline.md)。
+`session_id` 怎么算 见 [`../../designs/v3/session-namespace.md`](../../designs/v3/session-namespace.md)。
+跟 Review 的角色分工 见 [`../../designs/v3/forum-dynamics.md`](../../designs/v3/forum-dynamics.md)。
 
 ## Schema
 

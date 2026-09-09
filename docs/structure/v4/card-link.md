@@ -2,7 +2,7 @@
 
 **card↔card 的有向边** —— 因 `card ≡ issue`,这就是 IBIS 里 issue↔issue 那套关系(细化 / 引出 / 质疑 / 取代 / 泛关联)。卡↔卡是问题图的**关联主干**;`position` 之间不直接结网。
 
-机制见 [`../../works/v4/card.md`](../../works/v4/card.md) §4。card↔session 的出处关系是另一张表,见 [card-session.md](card-session.md)。
+机制见 [`../../designs/v4/card.md`](../../designs/v4/card.md) §4。card↔session 的出处关系是另一张表,见 [card-session.md](card-session.md)。
 
 ## 形态
 
@@ -64,7 +64,7 @@ CREATE TABLE card_links (
 ```
 
 - **无 FOREIGN KEY**(SQLite 派生索引,容忍悬空)。`target_type`(`card` / `position`)从 `target_id` 前缀派生、单独落列——便于按对端类型过滤,免每次解析前缀。
-- 关系数据的 canonical 落点(是否也进文件罐)与图整体是否值得 file-canonical 一并待定,见 [`../../works/v4/card.md`](../../works/v4/card.md) §12。
+- 关系数据的 canonical 落点(是否也进文件罐)与图整体是否值得 file-canonical 一并待定,见 [`../../designs/v4/card.md`](../../designs/v4/card.md) §12。
 
 ## 反查
 

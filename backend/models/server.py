@@ -1,4 +1,4 @@
-"""server —— 认领协议、幂等建现场、交回窗 + 把手(docs/works/v5/protocol-server.md)。"""
+"""server —— 认领协议、幂等建现场、交回窗 + 把手(docs/designs/v5/protocol-server.md)。"""
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable

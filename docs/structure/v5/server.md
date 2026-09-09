@@ -1,6 +1,6 @@
 # Server + Window + Handle + Live
 
-把块变成现场的那一层。**运行时对象,不落盘**——落盘的是 task 的会话登记([task.md](task.md#session))。机制见 [`../../works/v5/protocol-server.md`](../../works/v5/protocol-server.md)。
+把块变成现场的那一层。**运行时对象,不落盘**——落盘的是 task 的会话登记([task.md](task.md#session))。机制见 [`../../designs/v5/protocol-server.md`](../../designs/v5/protocol-server.md)。
 
 ## ParsedUri
 

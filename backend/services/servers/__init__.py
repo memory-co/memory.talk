@@ -1,4 +1,4 @@
-"""ServerService:协议 → server 的请求入口(docs/works/v5/protocol-server.md)。
+"""ServerService:协议 → server 的请求入口(docs/designs/v5/protocol-server.md)。
 具体 server 住在 backend/servers/(各自声明响应哪些协议;没人声明的去 default),这里只做装载与寻址。"""
 from __future__ import annotations
 

@@ -11,13 +11,13 @@ memory.talk search <query> [--where DSL] [--top-k N] [--recall [--session SID]] 
 | 参数 | 默认 | 说明 |
 |---|---|---|
 | `<query>` | — | 检索文本。可为空字符串(配合 `--where` 做纯元数据 / stats 过滤) |
-| `--where`, `-w` | 无 | 元数据 / stats / type 过滤 DSL,见 [`../../works/v3/dsl.md`](../../works/v3/dsl.md) |
+| `--where`, `-w` | 无 | 元数据 / stats / type 过滤 DSL,见 [`../../designs/v3/dsl.md`](../../designs/v3/dsl.md) |
 | `--top-k` | `settings.search.default_top_k`(默认 10) | **总**结果数上限(card + session 合计) |
 | `--recall` | 关 | 切换到 recall 视角(cards-only,裸 RRF) |
 | `--session` | 无 | 仅 `--recall` 下生效,模拟该 session 的 dedup |
 | `--json` | 关 | 输出 JSON 而非默认 Markdown |
 
-排序公式 / `--recall` 调试视角 / DSL 语法见 [`../../works/v3/search-ranking.md`](../../works/v3/search-ranking.md) 和 [`../../works/v3/dsl.md`](../../works/v3/dsl.md)。
+排序公式 / `--recall` 调试视角 / DSL 语法见 [`../../designs/v3/search-ranking.md`](../../designs/v3/search-ranking.md) 和 [`../../designs/v3/dsl.md`](../../designs/v3/dsl.md)。
 
 ### Pager 行为
 
@@ -120,7 +120,7 @@ memory.talk search "" -w 'read_count > 10 AND review_count = 0'
 memory.talk search "LanceDB" -w 'type = "card"'
 ```
 
-完整字段 / 运算符 / 示例见 [`../../works/v3/dsl.md`](../../works/v3/dsl.md)。
+完整字段 / 运算符 / 示例见 [`../../designs/v3/dsl.md`](../../designs/v3/dsl.md)。
 
 ## 错误
 

@@ -1,4 +1,4 @@
-# Works (v4)
+# Designs (v4)
 
 机制 / pipeline / 设计决策 —— **做什么以及为什么**。目录分工同 [v3](../v3/README.md)。
 
@@ -12,4 +12,4 @@ v4 是一次**大改代**,目前只立机制、未实施。它的由头是**卡�
 | session 标注(以写代读的逐 round annotation + `#问题` 自动建卡/关联,card 写路径的前端,已设计未实施) | [session-annotation.md](session-annotation.md) |
 | v3 card → insight 迁移(腾名 + 保数据:表 / LanceDB collection / `card_*` id 前缀改名,catch-up 原地升级,已设计未实施) | [insight-migration.md](insight-migration.md) |
 
-> 接口层 [`docs/cli/v4/`](../../cli/v4/) / [`docs/api/v4/`](../../api/v4/) / [`docs/structure/v4/`](../../structure/v4/) 已起,记录命令 / 端点 / 数据结构契约;本目录(works)立机制与设计推理。
+> 接口层 [`docs/cli/v4/`](../../cli/v4/) / [`docs/api/v4/`](../../api/v4/) / [`docs/structure/v4/`](../../structure/v4/) 已起,记录命令 / 端点 / 数据结构契约;本目录(designs)立机制与设计推理。

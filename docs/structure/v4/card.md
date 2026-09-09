@@ -5,7 +5,7 @@ v4 的核心数据结构 —— 一张卡 = **一个 Card(问题,≡ Issue)+ 它
 - **Card** 是图节点 + 检索单元(embed `issue`)。**不可变核** create 即冻。
 - **Position** 是被顶/踩、按现算 credence 竞争的那个东西。`claim`(答案文本)不可变;顶踩计数 / `scope` / 血缘是 runtime 状态。
 
-机制 / 设计推理见 [`../../works/v4/card.md`](../../works/v4/card.md)(§2 问答化、§3 credence、§5 治理)。Review / CardLink / CardSession 各自独立,见 [review.md](review.md) / [card-link.md](card-link.md) / [card-session.md](card-session.md)。
+机制 / 设计推理见 [`../../designs/v4/card.md`](../../designs/v4/card.md)(§2 问答化、§3 credence、§5 治理)。Review / CardLink / CardSession 各自独立,见 [review.md](review.md) / [card-link.md](card-link.md) / [card-session.md](card-session.md)。
 
 ## Schema
 
@@ -88,7 +88,7 @@ v4 的核心数据结构 —— 一张卡 = **一个 Card(问题,≡ Issue)+ 它
 | `neutral_count` | integer | 收到的 `argument=0`(中立)review 数。对应 v3 的 `review_neutral` |
 | `review_count` | integer | review 总数 = `up_count` + `down_count` + `neutral_count`。**冗余缓存**,免每次求和 |
 
-这是 Position 上**唯一的质量轴**。沉默(没 review)和中立都不进 `up`/`down`,因此不影响 credence。中立堆多了可能触发离线衍生新 Position(机制见 [`../../works/v4/card.md`](../../works/v4/card.md) §3 末)。
+这是 Position 上**唯一的质量轴**。沉默(没 review)和中立都不进 `up`/`down`,因此不影响 credence。中立堆多了可能触发离线衍生新 Position(机制见 [`../../designs/v4/card.md`](../../designs/v4/card.md) §3 末)。
 
 ### 治理(runtime,SQLite 实时维护)
 
@@ -101,7 +101,7 @@ v4 的核心数据结构 —— 一张卡 = **一个 Card(问题,≡ Issue)+ 它
 
 | 量 | 怎么算 | 说明 |
 |---|---|---|
-| `credence` | `f(up_count, down_count)` | 校验分:`up−down`,或带样本量的 Wilson 下界(10顶0踩 > 1顶0踩)。具体公式见 [`../../works/v4/card.md`](../../works/v4/card.md) §12 待定 |
+| `credence` | `f(up_count, down_count)` | 校验分:`up−down`,或带样本量的 Wilson 下界(10顶0踩 > 1顶0踩)。具体公式见 [`../../designs/v4/card.md`](../../designs/v4/card.md) §12 待定 |
 | 「当下答案」 | 召回时取 credence 最高的 Position | 没有 `accepted` 字段;平手用最近更新(最后一条 review `created_at`)tiebreak |
 
 ## 存储
@@ -153,7 +153,7 @@ CREATE INDEX idx_pos_card ON positions(card_id);
 - `cards.position_count` / `cards.link_count` / `positions.review_count` 是**冗余计数**:分别从 `positions` / `card_links` / 顶踩计数重算得到,写时维护、免 join。
 - 向量侧 embed `cards.issue`(问题级)+ `positions.claim`(答案级)两个 collection,索引在 `vectors/`(LanceDB),见 [filesystem.md](filesystem.md)。
 
-存储分层(file canonical + SQLite index)总体模式见 [`../v3/filesystem.md`](../v3/filesystem.md) 与 [`../../works/v4/card.md`](../../works/v4/card.md) §8。
+存储分层(file canonical + SQLite index)总体模式见 [`../v3/filesystem.md`](../v3/filesystem.md) 与 [`../../designs/v4/card.md`](../../designs/v4/card.md) §8。
 
 ## 跟 v3 talk-card 的差异
 

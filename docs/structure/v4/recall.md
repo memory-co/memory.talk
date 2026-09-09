@@ -2,7 +2,7 @@
 
 `POST /v4/recall` 的返回结构 —— 召回阶段(hook 无意识注入)把命中卡底下的 Position 排好序、连 `scope` 软提示一起交给 LLM 的那份载荷。
 
-读路径机制见 [`../../works/v4/card.md`](../../works/v4/card.md) §7;API 见 [`../../api/v4/recall.md`](../../api/v4/recall.md);CLI 见 [`../../cli/v4/recall.md`](../../cli/v4/recall.md)。
+读路径机制见 [`../../designs/v4/card.md`](../../designs/v4/card.md) §7;API 见 [`../../api/v4/recall.md`](../../api/v4/recall.md);CLI 见 [`../../cli/v4/recall.md`](../../cli/v4/recall.md)。
 
 ## 召回怎么算出来的
 

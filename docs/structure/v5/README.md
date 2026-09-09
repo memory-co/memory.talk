@@ -1,6 +1,6 @@
 # Structure (v5)
 
-v5 的数据模型 —— 描述对象 schema、字段语义、磁盘布局。**是什么**;机制 / 为什么见 [`../../works/v5/`](../../works/v5/README.md),HTTP 契约见 [`../../api/v5/`](../../api/v5/README.md)。
+v5 的数据模型 —— 描述对象 schema、字段语义、磁盘布局。**是什么**;机制 / 为什么见 [`../../designs/v5/`](../../designs/v5/README.md),HTTP 契约见 [`../../api/v5/`](../../api/v5/README.md)。
 
 v5 的三层:**task**(做事,裸文件)、**issue**(议事,git)、**card**(记事,git),外加把块变成现场的 **server**。没有数据库、没有索引——磁盘上每个字节都是 canonical。
 

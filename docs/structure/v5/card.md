@@ -2,7 +2,7 @@
 
 > **存储 / id 已变**:card 现在是 Collect 的一个 layer,对象是任意位置的 `<path>.card/` 目录,id 就是 path;本篇里关于 `iss_…` id、`issues/` `cards/` 目录、`manager_task` 字段、`status` 的说法**作废**,以 [collect.md](collect.md) 为准。字段语义仍有效。
 
-记事层:一条事实,像维基的一个词条。markdown + 简单 frontmatter,住在 git 仓库里;**可以改,历史在 git**。机制见 [`../../works/v5/card.md`](../../works/v5/card.md)。
+记事层:一条事实,像维基的一个词条。markdown + 简单 frontmatter,住在 git 仓库里;**可以改,历史在 git**。机制见 [`../../designs/v5/card.md`](../../designs/v5/card.md)。
 
 ## Schema
 
@@ -26,7 +26,7 @@
 | `context` | string | 在哪成立:关于哪个项目 / 用户 / 场景。「本地论」在卡上的落法——不是治理字段,是事实陈述的一部分 |
 | `links[]` | string[] | 相关卡的 id(内链,只有一种类型) |
 | `issue` | string \| null | 讨论页:挂在这张卡上的 issue |
-| `status` | `active` \| `deprecated` | **待移除**(当前实现仍有):设计已定卡上不留状态位,废弃 = 删文件,历史在 git(见 [works card.md §4](../../works/v5/card.md)) |
+| `status` | `active` \| `deprecated` | **待移除**(当前实现仍有):设计已定卡上不留状态位,废弃 = 删文件,历史在 git(见 [works card.md §4](../../designs/v5/card.md)) |
 
 **没有的东西**:顶踩、可信度、沉浮、分数、版本号。对错在 issue 上争,历史在 git 里翻。
 

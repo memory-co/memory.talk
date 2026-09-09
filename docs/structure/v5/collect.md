@@ -1,6 +1,6 @@
 # Collect(层、对象、仓库)
 
-认知层的数据模型。机制见 [works collect.md](../../works/v5/collect.md);端点见 [api collect.md](../../api/v5/collect.md)。
+认知层的数据模型。机制见 [works collect.md](../../designs/v5/collect.md);端点见 [api collect.md](../../api/v5/collect.md)。
 
 > 本篇取代原来的 [issue.md](issue.md) / [card.md](card.md) 里关于**存哪、id 形态、提交**的部分——issue 和 card 现在是 Collect 的两个 layer,对象模型(字段)不变,只是住的地方和 id 变了。
 

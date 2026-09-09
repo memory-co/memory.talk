@@ -4,7 +4,7 @@ v3 的数据模型 —— 描述对象 schema、字段语义、磁盘 / 数据�
 
 - CLI 契约见 [`../../cli/v3/`](../../cli/v3/)
 - HTTP 契约见 [`../../api/v3/`](../../api/v3/)
-- 机制 / pipeline / 设计决策见 [`../../works/v3/`](../../works/v3/)
+- 机制 / pipeline / 设计决策见 [`../../designs/v3/`](../../designs/v3/)
 
 ## 对象清单
 

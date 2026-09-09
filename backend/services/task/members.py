@@ -1,4 +1,4 @@
-"""成员:谁在操作 / 操作过这个 task。只做可见性,不做权限(docs/works/v5/member.md)。
+"""成员:谁在操作 / 操作过这个 task。只做可见性,不做权限(docs/designs/v5/member.md)。
 
 任何对 task 的操作,只要请求带了身份,就 touch 一笔;「当前在操作」= 最近 ACTIVE_WINDOW 秒内 touch 过,现算。
 """

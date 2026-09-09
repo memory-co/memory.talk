@@ -79,4 +79,4 @@ review **没有独立读取入口** —— 不存在 `GET /v4/.../reviews/{id}`�
 ### 不变性
 
 - **没有"撤销 review"**：review append-only。表态错了就**再写一条相反 `argument` 的 review**(comment 说明原因)。
-- **`argument=0`(中立)单独计数**:不动 credence(不进 `up`/`down`);中立堆积可离线衍生出新 Position(机制见 [`../../works/v4/card.md`](../../works/v4/card.md) §3 末)。
+- **`argument=0`(中立)单独计数**:不动 credence(不进 `up`/`down`);中立堆积可离线衍生出新 Position(机制见 [`../../designs/v4/card.md`](../../designs/v4/card.md) §3 末)。

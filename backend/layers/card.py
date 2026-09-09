@@ -1,4 +1,4 @@
-"""card —— 记事层:维基式事实条目(docs/works/v5/card.md)。对象 = `<path>.card/card.md`。"""
+"""card —— 记事层:维基式事实条目(docs/designs/v5/card.md)。对象 = `<path>.card/card.md`。"""
 from __future__ import annotations
 
 from pydantic import BaseModel, Field

@@ -1,4 +1,4 @@
-"""task —— 把一件事做下去的载体,复杂的事是一棵树(docs/works/v5/task.md)。全部是裸文件。"""
+"""task —— 把一件事做下去的载体,复杂的事是一棵树(docs/designs/v5/task.md)。全部是裸文件。"""
 from __future__ import annotations
 
 from typing import Literal

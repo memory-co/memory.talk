@@ -17,13 +17,13 @@ Each plan produces working, testable software on its own. Later plans are writte
 | # | Plan | Scope | Key open decision |
 |---|---|---|---|
 | **1** | **Data foundation** (this doc) | models, ids, 5-table DDL, repository stores | — |
-| 2 | Migration | migration `v3` (rename v3 card→insight, free `card`/`cards`/`reviews`) + migration `v4` (create v4 tables, wire DDL into runner) | one-shot id-rewrite vs two-stage defer (see `docs/works/v4/insight-migration.md §5`) |
+| 2 | Migration | migration `v3` (rename v3 card→insight, free `card`/`cards`/`reviews`) + migration `v4` (create v4 tables, wire DDL into runner) | one-shot id-rewrite vs two-stage defer (see `docs/designs/v4/insight-migration.md §5`) |
 | 3 | Searchbase | `cards`(embed issue) + `positions`(embed claim) collections; upsert-on-create | — |
-| 4 | Service | `CardService` (create card / add position / review / link / session) + read/recall/search (credence computed here) | credence formula: `up−down` (default) vs Wilson (`docs/works/v4/card.md §12`) |
+| 4 | Service | `CardService` (create card / add position / review / link / session) + read/recall/search (credence computed here) | credence formula: `up−down` (default) vs Wilson (`docs/designs/v4/card.md §12`) |
 | 5 | API | `/v4` FastAPI routers (cards, positions, reviews, card-links, card-sessions, read, search, recall) | — |
 | 6 | CLI | `memory.talk card {create,position,review,link}`, `read`, `search`, `recall`, `insight` | — |
 
-**Contract source of truth:** `docs/structure/v4/{card,review,card-link,card-session,filesystem}.md`, `docs/works/v4/card.md`. Field names below are copied from those docs.
+**Contract source of truth:** `docs/structure/v4/{card,review,card-link,card-session,filesystem}.md`, `docs/designs/v4/card.md`. Field names below are copied from those docs.
 
 ---
 

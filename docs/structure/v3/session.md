@@ -3,10 +3,10 @@
 从平台导入的一段原始对话。append-only,只追加 round,**不回写**已有 round 的内容。
 
 `session_id` 算法 / sync 机制 / round 写入合约 / 向量索引补齐 见:
-- [`../../works/v3/session-namespace.md`](../../works/v3/session-namespace.md)
-- [`../../works/v3/sync-pipeline.md`](../../works/v3/sync-pipeline.md)
-- [`../../works/v3/session-rounds-write.md`](../../works/v3/session-rounds-write.md)
-- [`../../works/v3/index-backfill.md`](../../works/v3/index-backfill.md)
+- [`../../designs/v3/session-namespace.md`](../../designs/v3/session-namespace.md)
+- [`../../designs/v3/sync-pipeline.md`](../../designs/v3/sync-pipeline.md)
+- [`../../designs/v3/session-rounds-write.md`](../../designs/v3/session-rounds-write.md)
+- [`../../designs/v3/index-backfill.md`](../../designs/v3/index-backfill.md)
 
 ## Schema
 
@@ -59,7 +59,7 @@
 | `synced_at` | string | 最近一次 sync 落库的时间 |
 | `tags` | object | 0.8.x 新字段。string→string 字典,用户层面的标签。约束:key 匹配 `^[a-zA-Z][a-zA-Z0-9_.-]*$`,value ≤ 200 char,单 session 总 key 数 ≤ 50 |
 
-`metadata.cwd` 跟 explore 的交互见 [`../../works/v3/explore-cwd-suppression.md`](../../works/v3/explore-cwd-suppression.md)。
+`metadata.cwd` 跟 explore 的交互见 [`../../designs/v3/explore-cwd-suppression.md`](../../designs/v3/explore-cwd-suppression.md)。
 
 ## Round(Session 中)
 
@@ -145,7 +145,7 @@ CREATE TABLE sync_session_checkpoint (
 );
 ```
 
-`sync.db` 是 watcher 私有缓存,跟业务 `memory.db` 分库。删了不影响业务,只会触发下一次启动重新冷扫。详见 [sync-pipeline.md § sync.db checkpoint](../../works/v3/sync-pipeline.md#syncdb-checkpoint)。
+`sync.db` 是 watcher 私有缓存,跟业务 `memory.db` 分库。删了不影响业务,只会触发下一次启动重新冷扫。详见 [sync-pipeline.md § sync.db checkpoint](../../designs/v3/sync-pipeline.md#syncdb-checkpoint)。
 
 ## 跟其它对象的关系
 

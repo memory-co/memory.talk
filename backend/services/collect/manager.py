@@ -1,4 +1,4 @@
-"""manager.json:目录绑 task;变动往上找最近的一个,打到那个 task 的收件箱(docs/works/v5/manager.md)。"""
+"""manager.json:目录绑 task;变动往上找最近的一个,打到那个 task 的收件箱(docs/designs/v5/manager.md)。"""
 from __future__ import annotations
 
 import json

@@ -8,7 +8,7 @@ memory.talk setup
 
 数据根固定 `~/.memory.talk`,不暴露 `--data-root`。
 
-Pipeline 机制 / hook 安装内部流程 / Codex trust 流程见 [`../../works/v3/hook-installation.md`](../../works/v3/hook-installation.md) 和 [`../../works/v3/codex-trust-flow.md`](../../works/v3/codex-trust-flow.md)。
+Pipeline 机制 / hook 安装内部流程 / Codex trust 流程见 [`../../designs/v3/hook-installation.md`](../../designs/v3/hook-installation.md) 和 [`../../designs/v3/codex-trust-flow.md`](../../designs/v3/codex-trust-flow.md)。
 
 ---
 
@@ -93,7 +93,7 @@ Codex v0.133.0 — installed, awaiting TUI trust
 ? keep hook installed? (Y/n)
 ```
 
-Y 路径装 plugin + verify probe;N 路径卸 plugin。Codex 多一步 trust(详见 [codex-trust-flow.md](../../works/v3/codex-trust-flow.md))。
+Y 路径装 plugin + verify probe;N 路径卸 plugin。Codex 多一步 trust(详见 [codex-trust-flow.md](../../designs/v3/codex-trust-flow.md))。
 
 **非 TTY shell**(管道、CI、`runner.invoke` 测试):整步跳过,summary 标 `skipped: non-interactive shell`。
 

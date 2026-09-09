@@ -1,6 +1,6 @@
 # Collect API
 
-认知层。层由 schema 定义(内置 origin / issue / card,可加用户层);对象 = 带后缀的目录 `<path>.<层>/`,放在树的任何位置;origin = 不带后缀的文件。每个写动作一个 `[层名]` 提交,落在 `layer/<层>` 上再 merge 进 `stack`;碰了别的层的路径被守卫拒绝(409 `guard`)。机制见 [works collect.md](../../works/v5/collect.md) / [collect-layer.md](../../works/v5/collect-layer.md) / [manager.md](../../works/v5/manager.md)。
+认知层。层由 schema 定义(内置 origin / issue / card,可加用户层);对象 = 带后缀的目录 `<path>.<层>/`,放在树的任何位置;origin = 不带后缀的文件。每个写动作一个 `[层名]` 提交,落在 `layer/<层>` 上再 merge 进 `stack`;碰了别的层的路径被守卫拒绝(409 `guard`)。机制见 [works collect.md](../../designs/v5/collect.md) / [collect-layer.md](../../designs/v5/collect-layer.md) / [manager.md](../../designs/v5/manager.md)。
 
 `{path:path}` 直接放在 URL 里(可含 `/` 和中文)。固定子路径(`layers` `tree` `search` `manager` `managed` `history` `act`)先于 `{layer}`。
 
@@ -22,7 +22,7 @@
 
 ### POST /api/collect/layers
 
-加一个用户层:一份 YAML 字段表(格式见 [collect-layer.md §2](../../works/v5/collect-layer.md))。
+加一个用户层:一份 YAML 字段表(格式见 [collect-layer.md §2](../../designs/v5/collect-layer.md))。
 
 ```json
 {"name": "decision", "schema_yaml": "layer: decision\nformat: markdown+frontmatter\ntitle: title\nfields:\n  title: {type: string, required: true}\n  issue: {type: ref, layer: issue}\n", "reason": ""}

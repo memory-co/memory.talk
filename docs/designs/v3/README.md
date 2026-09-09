@@ -1,4 +1,4 @@
-# Works (v3)
+# Designs (v3)
 
 机制 / pipeline / 设计决策。**做什么以及为什么** —— 不重复在其他三个目录里讲的"接口长什么样"。
 
@@ -9,7 +9,7 @@
 | [`../../cli/v3/`](../../cli/v3/) | 命令调用、flag 表、输出示例、退出码、推荐姿势 | schema 摘要、机制解释、跨命令时序 |
 | [`../../api/v3/`](../../api/v3/) | endpoint 签名、请求/响应字段、status code、error shape | 算法描述、写入顺序、DAG 规则 |
 | [`../../structure/v3/`](../../structure/v3/) | 对象 schema、存储位置、字段语义("是什么") | 写入路径、事件链、迁移、"为什么不存 X" |
-| `works/v3/`(本目录) | pipeline、算法、设计决策 + 理由、多组件流程、不变量、设计史 | (catch-all) |
+| `designs/v3/`(本目录) | pipeline、算法、设计决策 + 理由、多组件流程、不变量、设计史 | (catch-all) |
 
 ## 文档清单
 

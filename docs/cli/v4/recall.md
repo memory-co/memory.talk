@@ -24,7 +24,7 @@ memory.talk recall --session <session_id> --prompt '<prompt>' [--json]
          (scope 是软提示,让模型自判语境合不合,不机械挡;跨界默认放行)
 ```
 
-**位不是门禁**:`scope` 不挡卡——它随答案一起注入,让 LLM 自己判当前语境合不合。一个过期 / 不太对的答案,只在它被后续 `review` 踩、credence 现算掉下去之后才不再浮上来。详见 [`../../works/v4/card.md`](../../works/v4/card.md#7-读路径--dto)。
+**位不是门禁**:`scope` 不挡卡——它随答案一起注入,让 LLM 自己判当前语境合不合。一个过期 / 不太对的答案,只在它被后续 `review` 踩、credence 现算掉下去之后才不再浮上来。详见 [`../../designs/v4/card.md`](../../designs/v4/card.md#7-读路径--dto)。
 
 ## 输出 — Markdown(默认)
 

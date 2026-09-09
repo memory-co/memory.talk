@@ -6,7 +6,7 @@ hook 阶段的**无意识召回**：拿当前 context 撞**问题 + 答案**（`
 
 跟 v3 recall 的关键差别：v4 召回到的是**答案候选(Position)**而非整卡，而且**位(scope)不再是门禁**——不机械挡卡，跨界默认放行，让 LLM 看着 scope 自己判语境。
 
-CLI 对应 [`recall`](../../cli/v4/recall.md)。读路径全貌见 [`../../works/v4/card.md`](../../works/v4/card.md) §7。
+CLI 对应 [`recall`](../../cli/v4/recall.md)。读路径全貌见 [`../../designs/v4/card.md`](../../designs/v4/card.md) §7。
 
 ### 请求体
 
@@ -63,7 +63,7 @@ CLI 对应 [`recall`](../../cli/v4/recall.md)。读路径全貌见 [`../../works
 ### 副作用
 
 - 记同 session 去重(沿用 v3 recall_log)。
-- **不回写任何 Position 字段**：recall / read 不进存储,相关性只在召回时由检索现算(理由见 [`../../works/v4/card.md`](../../works/v4/card.md) §3)。
+- **不回写任何 Position 字段**：recall / read 不进存储,相关性只在召回时由检索现算(理由见 [`../../designs/v4/card.md`](../../designs/v4/card.md) §3)。
 
 ### 错误
 

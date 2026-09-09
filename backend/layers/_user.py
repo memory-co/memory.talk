@@ -1,4 +1,4 @@
-"""用户自定义层:一份 YAML 字段表 → LayerSpec(docs/works/v5/collect-layer.md)。没有行为。"""
+"""用户自定义层:一份 YAML 字段表 → LayerSpec(docs/designs/v5/collect-layer.md)。没有行为。"""
 from __future__ import annotations
 
 from typing import Any

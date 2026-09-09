@@ -8,7 +8,7 @@
 | [`recall list`](#memorytalk-recall-list) | 排查:看哪些 session 有 recall 历史 |
 | [`recall read`](#memorytalk-recall-read-session_id) | 排查:看某个 session 的 recall 时间线 |
 
-机制 / 设计细节(去重、`--source` 命名空间、file vs SQLite 分层)见 [`../../works/v3/recall-pipeline.md`](../../works/v3/recall-pipeline.md) 和 [`../../works/v3/session-namespace.md`](../../works/v3/session-namespace.md)。
+机制 / 设计细节(去重、`--source` 命名空间、file vs SQLite 分层)见 [`../../designs/v3/recall-pipeline.md`](../../designs/v3/recall-pipeline.md) 和 [`../../designs/v3/session-namespace.md`](../../designs/v3/session-namespace.md)。
 
 ---
 

@@ -12,7 +12,7 @@ memory.talk card
 
 **读**一张卡(问题 + 它所有答案 + 边 + 出处)走 [`read <card_id>`](read.md);找卡走 [`search`](search.md);hook 召回走 [`recall`](recall.md)。
 
-> **参数风格:除 `read` / `search` 用位置参数(裸 id / query)外,所有命令的参数都是命名 flag(`--xx`)。** `card` 不带子命令直接打印 help。设计推理见 [`../../works/v4/card.md`](../../works/v4/card.md)。
+> **参数风格:除 `read` / `search` 用位置参数(裸 id / query)外,所有命令的参数都是命名 flag(`--xx`)。** `card` 不带子命令直接打印 help。设计推理见 [`../../designs/v4/card.md`](../../designs/v4/card.md)。
 
 ## card create
 
@@ -111,7 +111,7 @@ memory.talk card review --position <position_id> --argument <+1|0|-1> --cite <se
 
 ### 中立(`--argument 0`)堆多了 → 可能衍生新 Position
 
-一批中立 = 证据相关但不站现有任何答案的队,可能在为一个**还没说出来的答案**背书。可**离线**(人 / LLM 判)把它们聚类、`card position` 提一个新答案、再把这些 review 以 `+1` 重挂过去。**不自动**触发,见 [`../../works/v4/card.md`](../../works/v4/card.md#3-第二推credence--现算的质量分相关性只在召回时算)。
+一批中立 = 证据相关但不站现有任何答案的队,可能在为一个**还没说出来的答案**背书。可**离线**(人 / LLM 判)把它们聚类、`card position` 提一个新答案、再把这些 review 以 `+1` 重挂过去。**不自动**触发,见 [`../../designs/v4/card.md`](../../designs/v4/card.md#3-第二推credence--现算的质量分相关性只在召回时算)。
 
 ### 读取 / 推荐姿势
 
