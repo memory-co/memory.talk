@@ -44,6 +44,8 @@ v5 把主语换掉:**memory.talk 是一个工作台,工作在它里面发生**�
 
 ### 2.1 work:盛放 code agent session 的工作单元
 
+> 这一层原叫 task,改名 work 的理由见 [work.md §0](work.md):对标 Codex work;task 在 agent 生态里指「一次调用」,而这里是「一件事」,可以跨天、可以是一棵树。
+
 work 是 v5 的顶层对象,**取代 session 成为 memory.talk 的入口**。一个 work 就是 shellbase 里那个 window 的原生版本:一块可分割的画布,每个块由一个虚拟 URI 定位(`claude:///workspace/proj`、`codex:///workspace/proj`、`bash://`、`file://`、`https://`),块背后是 tmux 里活着的一个进程,断线重入现场无损。
 
 - **work 里的每个 agent 块 = 一个 code agent session**。shellbase 那套「块即 URI、后端是状态唯一权威、无中生有 + 重入」的底层逻辑在 memory.talk 里**原生实现、完全一致**;shellbase 作为独立项目到此为止,memory.talk 不重新发明 agent 运行时,只是把这个运行时收进自己家。

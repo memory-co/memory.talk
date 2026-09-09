@@ -11,6 +11,19 @@
 
 ---
 
+## 0. 名字:为什么叫 work,不叫 task
+
+这一层最初叫 task,2026-09-09 改名 work。改的只是名字,机制一字没动;但名字选错会一直误导读它的人,所以把理由记下来:
+
+- **定位对标的就是 Codex 的 work。** [README §1](README.md) 说 memory.talk v5 像 Codex work 一样是一个工作台;做事层的名字直接用 work,别再翻译一层。
+- **task 在 agent 生态里已经被用滥,而且指的都是「一次调用」。** agent 的一次 task、子 agent 的 task、Kimi 记录里的 `task.started`、Codex 记录里的 `task_complete`——它们都是一轮执行:发一个 prompt、跑完、结束。memory.talk 的这个单位大得多:**一件事**,可以跨几天,可以是一棵树,里面盛放着好几个 agent 会话。叫 task,读者会本能地把它当成一次 agent 调用,然后对「会话是它的成员」「它有父子」「它做完要往上收拢」感到别扭。
+- **work 和另外两层对仗。** issue 是**议**,card 是**记**,work 是**做**;member 是谁在干活,session 是在哪干活——「干活」的名词就该是 work。
+- **task 这个词留给它该指的东西**:agent 记录文件里那些平台自己的事件名(`task.started`、`task_complete`)原样保留,不改;它们是会话痕迹里的原文,不是 memory.talk 的对象。
+
+代码里对应的改名:`/api/works`、`work_<id>`、`works/` 目录、`X-Memory-Talk-Work`、`spawned_works`、`WorkService`。
+
+---
+
 ## 1. 一句话:work 是「把一件事做下去」的载体,复杂的事就是一棵 work 树
 
 一个 work 对应**一件要做成的事**。这件事可以很小——修一个 bug;也可以很大——把某个功能从设计做到上线。大事是由小事组成的,所以 **work 可以有子 work,一件复杂的事就是一棵 work 树**:根是「把 X 做出来」,往下拆成几步,每一步再拆,叶子是真正坐下来干的那一件小事。
