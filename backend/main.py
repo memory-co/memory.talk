@@ -20,7 +20,7 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
                   description="work 树 + Collections(origin / issue / card 三层,可加用户层)+ 协议 server。")
 
     store = StoreService(config)
-    collect_svc = CollectionsService(config, store.works)
+    collect_svc = CollectionsService(config, store.work_repo)
     server_svc = ServerService(runtime)
     work_svc = WorkService(store, server_svc)
     app.state.config, app.state.runtime = config, runtime

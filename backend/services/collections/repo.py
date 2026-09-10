@@ -104,11 +104,13 @@ class Repo:
             except FileNotFoundError:
                 pass
 
-    def commit_tree(self, tree: str, parents: list[str], message: str) -> str:
+    def commit_tree(self, tree: str, parents: list[str], message: str, author: str | None = None) -> str:
+        """author = 做这个动作的 user(commit 的 author 就是人,user.md §5);没有则用仓库配置的默认名。"""
         args = ["commit-tree", tree]
         for p in parents:
             args += ["-p", p]
-        return self._git(*args, stdin=message.encode()).strip()
+        env = {"GIT_AUTHOR_NAME": author, "GIT_AUTHOR_EMAIL": f"{author}@memory.talk"} if author else None
+        return self._git(*args, stdin=message.encode(), env=env).strip()
 
     def update_ref(self, ref: str, new: str, old: str | None = None) -> None:
         args = ["update-ref", ref, new] + ([old] if old else [])
@@ -187,7 +189,7 @@ class Repo:
     # ------------------------------------------------------------ 写
 
     def commit(self, layer: str, message: str, puts: dict[str, bytes], deletes: list[str] = (),
-               layer_of=None) -> str:
+               layer_of=None, author: str | None = None) -> str:
         """一批 ops → layer/<layer> 上一个提交 + stack 上一个 merge 节点。守卫在这里。"""
         layers = self.layers() or []
         if layer not in layers:
@@ -221,7 +223,7 @@ class Repo:
             tree = self.write_tree(entries)
             if tree == self._git("rev-parse", f"{tip}^{{tree}}").strip():
                 raise GuardError("这批改动没有产生任何变化", 400)
-            new = self.commit_tree(tree, [tip], message)
+            new = self.commit_tree(tree, [tip], message, author)
             self.update_ref(ref, new, tip)
             # stack:同一批 ops 应用到并集树上,打 merge 节点(parents = [stack, 层提交]),信息逐字相同
             union = self.tree_map(self.stack)
@@ -229,7 +231,7 @@ class Repo:
                 union.pop(p, None)
             for p in puts:
                 union[p] = entries[p]
-            merge = self.commit_tree(self.write_tree(union), [stack_tip, new], message)
+            merge = self.commit_tree(self.write_tree(union), [stack_tip, new], message, author)
             self.update_ref(self.stack, merge, stack_tip)
             self._sync_worktree()
             return new

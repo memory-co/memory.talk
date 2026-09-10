@@ -1,6 +1,6 @@
 # backend(v5)
 
-memory.talk v5 的后端。**work 树、协议 server、Collections(origin / issue / card 三层 + 用户层)、manager 收件箱都有最简实现(自己实现的分层 git + 裸文件,FastAPI,真 tmux)。** 未做:鉴权网关、ttyd / 反代托管、`daemon` / `start` / `stop`、逐 round 标注、二进制 blob 外置、给人手工 `git commit` 用的 hook(服务进程是唯一写者)。 端点清单见 [docs/api/v5](../docs/api/v5/README.md);起服务 `python -m backend serve`,测试 `pytest`。 按 **models / services / controllers** 三层分目录,外加 **servers/**(每个协议一个 server)和 **layers/**(每个内置 layer 一个文件);services 下每个子包对应 [docs/designs/v5](../docs/designs/v5/README.md) 的一篇设计;底层逻辑照 shellbase `server/shellbase/` 原生实现。`backend/` 本身就是 Python 包根,不再套一层包名目录。
+memory.talk v5 的后端。**work 树(带 created_by 与 users)、协议 server、Collections(origin / issue / card 三层 + 用户层,提交 author = user)、manager 收件箱、存储 provider(LocalFS / SQLite,测试两种都跑)都有最简实现。** 未做:鉴权网关、ttyd / 反代托管、`daemon` / `start` / `stop`、逐 round 标注、二进制 blob 外置、给人手工 `git commit` 用的 hook(服务进程是唯一写者)。 端点清单见 [docs/api/v5](../docs/api/v5/README.md);起服务 `python -m backend serve`,测试 `pytest`。 按 **models / services / controllers** 三层分目录,外加 **servers/**(每个协议一个 server)和 **layers/**(每个内置 layer 一个文件);services 下每个子包对应 [docs/designs/v5](../docs/designs/v5/README.md) 的一篇设计;底层逻辑照 shellbase `server/shellbase/` 原生实现。`backend/` 本身就是 Python 包根,不再套一层包名目录。
 
 ```
 backend/
@@ -11,7 +11,7 @@ backend/
 ├── gateway.py                # AuthGate + 静态托管 + 反代(/tty、/proxy/<port>)
 │
 ├── models/                   # 数据模型(纯结构,不含 IO)
-│   ├── work.py               #   Work 节点(目标、状态、父子)、Canvas、Session、Round、Event
+│   ├── work.py               #   Work 节点(目标、created_by、状态、父子)、Canvas、Session、WorkUser、Round、Event
 │   ├── collections.py            #   LayerInfo / Obj / Revision / SearchHit / Catalog / Tree / Manager / InboxItem
 │   └── server.py             #   Server 契约:name + protocols(声明响应哪些协议)/ open(id, uri) → Window + Handle / handle / alive / destroy
 │
@@ -21,7 +21,8 @@ backend/
 │   │   ├── tree.py           #     work 树:建节点、父子、状态、完成收拢
 │   │   ├── canvas.py         #     画布(24×16 网格剖分)—— work 的视图,可随时重排
 │   │   ├── sessions.py       #     会话(现场)登记:会话 id ↔ URI ↔ server ↔ 活着(唯一权威,脱离布局)
-│   │   ├── members.py        #     成员(人):谁在操作 / 操作过,只做可见性不做权限(身份来自 X-Memory-Talk-User)
+│   │   ├── users.py          #     user:谁动过这个 work,只做可见性不做权限(身份来自 X-Memory-Talk-User)
+│   │   ├── repo.py           #     WorkRepo:业务仓储接口 + fs 版 / db 版两份实现(业务概念在这,provider 只见字节 / 表)
 │   │   ├── rounds.py         #     agent 会话的 rounds.jsonl(append-only)
 │   │   ├── inbox.py          #     收件箱:manager.json 路由过来的变动(append-only)
 │   │   └── events.py         #     work 自己的 append-only 事件(开工/状态/做完)
@@ -40,7 +41,11 @@ backend/
 │       ├── __init__.py       #     入口:导出 StoreService(git 仓库 + 裸文件根,其余 service 的依赖)
 │       ├── paths.py          #     ~/.memory.talk 布局
 │       ├── files.py          #     裸文件原语:原子写、单写者、无缓存直读(work 用)
-│       └── (git 的部分在 services/collections/repo.py)
+│       └── __init__.py       #     装配:按 MEMORY_TALK_STORE 选 provider,按族建 work 仓储
+│
+├── providers/                # 存储介质的两族基类(只有介质原语,没有业务)—— docs/designs/v5/provider.md
+│   ├── fs.py                 #   FileSystemProvider(read/write/append/list/…,能力 local_path)+ LocalFS
+│   └── db.py                 #   DatabaseProvider(表定义 + 链式 select/insert/update/delete,方言在内)+ SQLite
 │
 ├── layers/                   # 每个内置 layer 一个文件;用户层来自仓库里的 schemas/<name>.yaml
 │   ├── _spec.py              #   LayerSpec:名字 + 形态(后缀 / 本体文件 / 格式)+ schema + 行为

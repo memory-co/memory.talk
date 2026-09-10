@@ -2,15 +2,17 @@
 from __future__ import annotations
 
 from datetime import datetime
-from models.work import (Canvas, CanvasPut, Event, Members, Round, Session, SessionView, Work, WorkCreate,
+from models.work import (Canvas, CanvasPut, Event, Round, Session, SessionView, Work, WorkCreate, WorkUsers,
                          WorkNode, WorkUpdate)
 from services.servers import ServerService
 from services.store import StoreService
 
+from .repo import WorkRepo
+
 from .canvas import CanvasStore
 from .events import Events
 from .inbox import Inbox
-from .members import MemberRegistry
+from .users import WorkUserRegistry
 from .sessions import SessionNotFound, SessionRegistry
 from .rounds import Rounds
 from .tree import WorkConflict, WorkNotFound, WorkTree
@@ -19,25 +21,25 @@ from .tree import WorkConflict, WorkNotFound, WorkTree
 class WorkService:
     def __init__(self, store: StoreService, servers: ServerService) -> None:
         self.servers = servers
-        self.tree = WorkTree(store.works)
-        self.canvas = CanvasStore(store.works)
-        self.sessions = SessionRegistry(store.works)
-        self.round_log = Rounds(store.works)
-        self.events = Events(store.works)
-        self.members = MemberRegistry(store.works)
-        self.inbox = Inbox(store.works)
-        self.layout = store.works
+        self.repo: WorkRepo = store.work_repo
+        self.tree = WorkTree(self.repo)
+        self.canvas = CanvasStore(self.repo)
+        self.sessions = SessionRegistry(self.repo)
+        self.round_log = Rounds(self.repo)
+        self.events = Events(self.repo)
+        self.users = WorkUserRegistry(self.repo)
+        self.inbox = Inbox(self.repo)
 
-    # ---- 成员(人):谁在操作 / 操作过。只记,不拦 ----
+    # ---- user:谁在操作 / 操作过。只记,不拦 ----
 
     def touch(self, work_id: str, user: str | None) -> None:
         if user:
             self.tree.get(work_id)
-            self.members.touch(work_id, user)
+            self.users.touch(work_id, user)
 
-    def list_members(self, work_id: str) -> Members:
+    def list_users(self, work_id: str) -> WorkUsers:
         self.tree.get(work_id)
-        return self.members.list(work_id)
+        return self.users.list(work_id)
 
     # ---- 收件箱 / manager:work 自己的变动沿树打给管它的 work ----
 
@@ -47,27 +49,17 @@ class WorkService:
 
     def manager_of(self, work_id: str) -> str | None:
         """works/<id>/manager.json 里的 work;没有 → 父 work;根没有 → None。"""
-        import json
-        from services.store import read_text
-        text = read_text(self.layout.manager_json(work_id))
-        if text:
-            try:
-                t = json.loads(text).get("work")
-                if t:
-                    return t
-            except json.JSONDecodeError:
-                pass
+        doc = self.repo.get_doc(work_id, "manager")
+        if doc and doc.get("work"):
+            return doc["work"]
         return self.tree.get(work_id).parent
 
     def set_manager(self, work_id: str, work: str | None) -> str | None:
-        import json
-        from services.store import atomic_write
         self.tree.get(work_id)
-        p = self.layout.manager_json(work_id)
         if work:
-            atomic_write(p, json.dumps({"work": work}) + "\n")
-        elif p.exists():
-            p.unlink()
+            self.repo.put_doc(work_id, "manager", {"work": work})
+        else:
+            self.repo.del_doc(work_id, "manager")
         return self.manager_of(work_id)
 
     def _deliver(self, work_id: str, subject: str, by: str | None = None) -> None:
@@ -76,22 +68,25 @@ class WorkService:
         target = self.manager_of(work_id)
         if not target or target == work_id:
             return
+        explicit = bool(self.repo.get_doc(work_id, "manager"))
         self.inbox.put(target, InboxItem(ts=now(), layer="work", path=work_id, subject=subject, by=by,
-                                         routed_by=work_id if self.layout.manager_json(work_id).exists() else "parent"))
+                                         routed_by=work_id if explicit else "parent"))
 
     # ---- 树 ----
 
-    def create(self, req: WorkCreate) -> Work:
-        work = self.tree.create(req)
-        self.events.emit(work.id, "created", goal=work.goal, parent=work.parent)
-        self._deliver(work.id, f"created: {work.goal[:60]}")
+    def create(self, req: WorkCreate, created_by: str | None = None) -> Work:
+        work = self.tree.create(req, created_by)
+        self.events.emit(work.id, "created", goal=work.goal, parent=work.parent, by=created_by)
+        self._deliver(work.id, f"created: {work.goal[:60]}", by=created_by)
+        if created_by:
+            self.users.touch(work.id, created_by)      # 建它的人自动是 users 里的第一个
         return work
 
     def get(self, work_id: str) -> Work:
         return self.tree.get(work_id)
 
-    def forest(self, root: str | None = None) -> list[WorkNode]:
-        return self.tree.forest(root)
+    def forest(self, root: str | None = None, created_by: str | None = None) -> list[WorkNode]:
+        return self.tree.forest(root, created_by)
 
     def update(self, work_id: str, req: WorkUpdate) -> Work:
         before = self.tree.get(work_id)
@@ -148,13 +143,7 @@ class WorkService:
         return SessionView(**m.model_dump(), alive=True, window=live.window, handle=live.handle)
 
     def _set_cwd(self, work_id: str, m: Session, cwd: str) -> Session:
-        sessions = self.sessions._load(work_id)
-        for i, x in enumerate(sessions):
-            if x.id == m.id:
-                sessions[i] = x.model_copy(update={"cwd": cwd})
-                self.sessions._save(work_id, sessions)
-                return sessions[i]
-        return m
+        return self.sessions.replace(work_id, m.model_copy(update={"cwd": cwd}))
 
     def list_sessions(self, work_id: str) -> list[SessionView]:
         self.tree.get(work_id)
@@ -201,4 +190,4 @@ def _epoch(iso: str) -> float:
     return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
 
 
-__all__ = ["WorkService", "WorkNotFound", "WorkConflict", "SessionNotFound"]
+__all__ = ["WorkService", "WorkNotFound", "WorkConflict", "SessionNotFound", "WorkRepo"]

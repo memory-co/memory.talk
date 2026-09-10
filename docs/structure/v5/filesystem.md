@@ -19,7 +19,7 @@
 │       ├── work.json                 ←   目标 / 父 / 状态
 │       ├── canvas.json               ←   画布(视图);不存在 = 空画布
 │       ├── sessions.json             ←   会话登记(数组,现场)
-│       ├── members.json              ←   成员(人):谁在操作 / 操作过,只做可见性
+│       ├── users.json                ←   user:谁动过,只做可见性
 │       ├── manager.json              ←   这棵子树的变动打给谁(可选;没有 → 父 work)
 │       ├── events.jsonl              ←   work 时间线,只追加
 │       ├── inbox.jsonl               ←   收件箱:manager.json 路由过来的变动,只追加
@@ -37,7 +37,9 @@
 - **并发**:进程内一把锁串行化提交。多进程写同一仓库不在 v5 范围内。
 - **不进 git 的**:works/ 的一切。
 
-## works/(裸文件)
+## works/(裸文件;MEMORY_TALK_STORE=fs)
+
+介质可换:`MEMORY_TALK_STORE=sqlite` 时这一半全在 `memory.sqlite`(`MEMORY_TALK_SQLITE` 可改路径)的三张表里,业务层不感知(见 [designs provider.md](../../designs/v5/provider.md))。
 
 - **原子写**:`work.json` / `canvas.json` / `sessions.json` / `members.json` / `manager.json` 写临时文件后 `os.replace`。
 - **只追加**:`events.jsonl` / `inbox.jsonl` / `rounds.jsonl`,从不改既有行。
@@ -56,6 +58,8 @@
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `MEMORY_TALK_HOME` | `~/.memory.talk` | 根 |
+| `MEMORY_TALK_STORE` | `fs` | work / user 记录的介质:`fs` / `sqlite` |
+| `MEMORY_TALK_SQLITE` | `<HOME>/memory.sqlite` | sqlite 文件路径 |
 | `MEMORY_TALK_AUTHOR` / `MEMORY_TALK_EMAIL` | `memory.talk` / `memory.talk@localhost` | git author |
 | `MEMORY_TALK_WORKSPACE` | `~/workspace` | 终端类 URI 省略 path 时的 cwd |
 | `MEMORY_TALK_TMUX_SOCKET` | `memorytalk` | tmux socket 名 |

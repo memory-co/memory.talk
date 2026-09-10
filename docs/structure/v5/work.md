@@ -1,4 +1,4 @@
-# Work + Canvas + Session + Member + Round + Event
+# Work + Canvas + Session + WorkUser + Round + Event
 
 做事层的六个对象,全部住在 `works/<work_id>/` 目录下,裸文件。机制见 [`../../designs/v5/work.md`](../../designs/v5/work.md)。
 
@@ -10,6 +10,7 @@
 {
   "id": "work_202609052302072f2f",
   "goal": "把 v5 做出来",
+  "created_by": "alice",
   "parent": null,
   "status": "doing",
   "created_at": "2026-09-05T23:02:07Z",
@@ -21,6 +22,7 @@
 |---|---|---|
 | `id` | string | `work_<时间戳><4hex>`,自动 |
 | `goal` | string | 它是什么事(一句话) |
+| `created_by` | string \| null | 谁建的(归属,建时定下不改;**不是权限**,见 [designs user.md](../../designs/v5/user.md)) |
 | `parent` | string \| null | 属于哪件更大的事;`null` = 根。**work 之间只有这一种直接关系**——没有 project 之类的分组字段,横向关系靠 issue |
 | `status` | `todo` \| `doing` \| `done` \| `abandoned` | 三层里只有 work 有状态 |
 | `created_at` | ISO 8601 | |
@@ -86,9 +88,9 @@ work 的一个会话 = 一个现场。**在 work 里打开就是它的**,归属�
 
 一个会话只属于一个 work、一个确定节点。要在别的事里用它的结论,走 issue / card,不搬会话。
 
-## Member
+## WorkUser(users)
 
-**人**,不是现场。谁在操作 / 操作过这个 work;只做可见性,**不做权限**(整个实例给一个团队用)。机制见 [`../../designs/v5/member.md`](../../designs/v5/member.md)。
+**人**,不是现场。谁动过这个 work;只做可见性,**不做权限**(整个实例给一个团队用)。机制见 [`../../designs/v5/user.md`](../../designs/v5/user.md)。建 work 的人自动是名单第一个。
 
 ```json
 {"user": "alice", "first_seen": "2026-09-06T08:00:00Z", "last_seen": "2026-09-06T09:12:40Z", "ops": 7}
@@ -100,7 +102,7 @@ work 的一个会话 = 一个现场。**在 work 里打开就是它的**,归属�
 | `first_seen` / `last_seen` | 第一次 / 最近一次操作这个 work |
 | `ops` | 操作次数(带身份的、会动这个 work 的请求 + 打开 + 心跳) |
 
-**读视图 `Members`**:`{"current": [MemberView], "history": [MemberView]}`,`MemberView` = Member + `active`(最近 120 秒内动过,现算)。`current` 是 `history` 里 `active` 的子集;`history` 按最近活动倒序。
+**读视图 `WorkUsers`**:`{"current": [WorkUserView], "history": [WorkUserView]}`,`WorkUserView` = WorkUser + `active`(最近 120 秒内动过,现算)。`current` 是 `history` 里 `active` 的子集;`history` 按最近活动倒序。
 
 不带身份的请求照样能操作,只是不记名。
 
@@ -147,9 +149,9 @@ works/<work_id>/
 ├── work.json         原子写(临时文件 + rename)
 ├── canvas.json       原子写;不存在 = 空画布 version 0
 ├── sessions.json     原子写;数组(现场)
-├── members.json      原子写;数组(人)
+├── users.json        原子写;数组(人)
 ├── events.jsonl      只追加
 └── sessions/<session_id>/rounds.jsonl   只追加
 ```
 
-读写纪律照 shellbase:单写者(服务进程)、无缓存直读、任何时刻磁盘上都是完整 JSON。**不进 git**——work 记的是过程,git 记的是决定(见 [`../../designs/v5/collections-store.md`](../../designs/v5/collections-store.md) §4)。
+以上是 `MEMORY_TALK_STORE=fs` 时的形态;`sqlite` 时同样的记录在 `works` / `work_docs` / `work_logs` 三张表里,业务层不感知(见 [designs provider.md](../../designs/v5/provider.md))。读写纪律照 shellbase:单写者(服务进程)、无缓存直读、任何时刻磁盘上都是完整 JSON。**不进 git**——work 记的是过程,git 记的是决定(见 [`../../designs/v5/collections-store.md`](../../designs/v5/collections-store.md) §4)。

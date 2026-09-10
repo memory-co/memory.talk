@@ -53,8 +53,7 @@ def test_claude_session_rounds(client, home, monkeypatch):
     with open(p, "a") as f:
         f.write(json.dumps({"type": "assistant", "uuid": "a2", "message": {"content": [{"type": "text", "text": "改完了"}]}}) + "\n")
     assert [r["id"] for r in client.get(f"/api/works/{t['id']}/sessions/{m['id']}/rounds").json()][-1] == "a2"
-    jsonl = home / "home" / "works" / t["id"] / "sessions" / m["id"] / "rounds.jsonl"
-    assert len(jsonl.read_text().splitlines()) == 5
+    assert len(client.app.state.works.repo.read(t["id"], "rounds", sub=m["id"])) == 5
 
 
 def test_codex_adapter_parses(home):

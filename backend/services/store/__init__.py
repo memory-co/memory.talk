@@ -1,17 +1,17 @@
-"""StoreService:works 根(裸文件)。认知层的 git 仓库由 services.collections 管。"""
+"""StoreService:装配存储——按 MEMORY_TALK_STORE 选 provider(fs / sqlite),按族建 work 仓储。
+collections 的分层 git 仓库由 services.collections 自己管(它的介质就是 git)。"""
 from __future__ import annotations
 
 from config import Config
-
-from .files import append_line, atomic_write, read_lines, read_text
-from .paths import WorksLayout
+from providers import load_store
+from services.work.repo import WorkRepo, make_work_repo
 
 
 class StoreService:
     def __init__(self, config: Config) -> None:
         self.config = config
-        config.works_dir.mkdir(parents=True, exist_ok=True)
-        self.works = WorksLayout(config.works_dir)
+        self.provider = load_store(config.home)
+        self.work_repo: WorkRepo = make_work_repo(self.provider)
 
 
-__all__ = ["StoreService", "WorksLayout", "atomic_write", "read_text", "append_line", "read_lines"]
+__all__ = ["StoreService"]

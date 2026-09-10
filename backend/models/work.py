@@ -13,6 +13,7 @@ WorkStatus = Literal["todo", "doing", "done", "abandoned"]
 class Work(BaseModel):
     id: str
     goal: str = Field(description="它是什么事(一句话)")
+    created_by: str | None = Field(None, description="谁建的(归属,建时定下不改;不是权限)")
     parent: str | None = Field(None, description="属于哪件更大的事")
     status: WorkStatus = "todo"
     created_at: str
@@ -98,19 +99,19 @@ class Event(BaseModel):
 WorkNode.model_rebuild()
 
 
-# ---- 成员:人 ↔ work。只做可见性,不做权限(整个实例给一个团队用) ----
+# ---- user ↔ work:谁动过。只做可见性,不做权限(整个实例给一个团队用) ----
 
-class Member(BaseModel):
+class WorkUser(BaseModel):
     user: str = Field(description="团队里的一个人,由客户端在请求头 X-Memory-Talk-User 里自报")
     first_seen: str
     last_seen: str
     ops: int = Field(0, description="对这个 work 的操作次数")
 
 
-class MemberView(Member):
+class WorkUserView(WorkUser):
     active: bool = Field(False, description="最近一段时间内操作过 = 当前正在操作(现算)")
 
 
-class Members(BaseModel):
-    current: list[MemberView] = Field(default_factory=list, description="当前正在操作的人")
-    history: list[MemberView] = Field(default_factory=list, description="历史操作过的人(含当前),按最近活动倒序")
+class WorkUsers(BaseModel):
+    current: list[WorkUserView] = Field(default_factory=list, description="当前正在操作的人")
+    history: list[WorkUserView] = Field(default_factory=list, description="历史操作过的人(含当前),按最近活动倒序")

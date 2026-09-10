@@ -11,7 +11,8 @@ from config import Config
 from layers._spec import LayerSpec
 from models.collections import (CatalogDir, InboxItem, LayerInfo, Manager, Obj, Revision, SearchHit,
                             TreeItem)
-from services.store import WorksLayout, append_line
+from services.work.inbox import Inbox
+from services.work.repo import WorkRepo
 
 from .catalog import build, render
 from .manager import FILE as MANAGER_FILE
@@ -39,9 +40,9 @@ def _now() -> str:
 
 
 class CollectionsService:
-    def __init__(self, config: Config, works: WorksLayout) -> None:
+    def __init__(self, config: Config, work_repo: WorkRepo) -> None:
         self.config = config
-        self.works = works
+        self.inbox = Inbox(work_repo)
         self.repo = Repo(config.collections_dir, config.git_author_name, config.git_author_email)
         self.layers: dict[str, LayerSpec] = {}
         self.order: list[str] = []
@@ -185,8 +186,6 @@ class CollectionsService:
             trailers.append(f"Reason: {reason}")
         if ctx.work:
             trailers.append(f"Work: {ctx.work}")
-        if ctx.user:
-            trailers.append(f"By: {ctx.user}")
         if extra:
             trailers.append(extra)
         return f"[{layer}] {subject}" + ("\n\n" + "\n".join(trailers) if trailers else "")
@@ -195,7 +194,7 @@ class CollectionsService:
                extra_trailer: str | None = None) -> str:
         try:
             sha = self.repo.commit(layer, self._message(layer, subject, reason, ctx, extra_trailer), puts, deletes,
-                                   layer_of=self.layer_of_path)
+                                   layer_of=self.layer_of_path, author=ctx.user)
         except GuardError as e:
             raise CollectionsError("guard", str(e), e.status) from None
         self._deliver(layer, list(puts) + list(deletes), subject, sha, ctx)
@@ -318,9 +317,9 @@ class CollectionsService:
             item = InboxItem(ts=_now(), layer=layer, path=path, subject=subject, sha=sha, by=ctx.user,
                              routed_by=m.dir if m else "")
             if m is None:
-                append_line(self.works.root.parent / "unmanaged.jsonl", item.model_dump_json())
+                self.inbox.put_unmanaged(item)
             elif m.work != ctx.work:
-                append_line(self.works.work_dir(m.work) / "inbox.jsonl", item.model_dump_json())
+                self.inbox.put(m.work, item)
 
 
 __all__ = ["CollectionsService", "CollectionsError", "Ctx"]

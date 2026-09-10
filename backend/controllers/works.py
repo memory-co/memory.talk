@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.responses import PlainTextResponse
 
 from models.collections import InboxItem
-from models.work import (Canvas, CanvasPut, Event, Members, Round, Session, SessionCreate, SessionView,
-                         Work, WorkCreate, WorkNode, WorkUpdate)
+from models.work import (Canvas, CanvasPut, Event, Round, Session, SessionCreate, SessionView, Work,
+                         WorkCreate, WorkNode, WorkUpdate, WorkUsers)
 from services.collections import CollectionsService
 from services.work import WorkService
 
@@ -26,16 +26,14 @@ def user(x_memory_talk_user: str | None = Header(None, alias="X-Memory-Talk-User
     return x_memory_talk_user
 
 
-@router.get("", response_model=list[WorkNode], summary="work 树(森林;root= 只看一棵)")
-def forest(root: str | None = None, svc: WorkService = Depends(works)):
-    return svc.forest(root)
+@router.get("", response_model=list[WorkNode], summary="work 树(森林;root= 只看一棵;created_by= 只看某人建的)")
+def forest(root: str | None = None, created_by: str | None = None, svc: WorkService = Depends(works)):
+    return svc.forest(root, created_by)
 
 
 @router.post("", response_model=Work, status_code=201, summary="开工:建一个 work(parent= 挂到树上)")
 def create(req: WorkCreate, svc: WorkService = Depends(works), who: str | None = Depends(user)):
-    t = svc.create(req)
-    svc.touch(t.id, who)
-    return t
+    return svc.create(req, created_by=who)
 
 
 @router.get("/{work_id}", response_model=Work, summary="读一个 work(带身份 = 打开它,记一笔在操作)")
@@ -80,16 +78,16 @@ def put_manager(work_id: str, req: dict, svc: WorkService = Depends(works)) -> d
     return {"work": svc.set_manager(work_id, req.get("work"))}
 
 
-@router.get("/{work_id}/members", response_model=Members,
-            summary="成员(人):谁当前正在操作(current)、谁历史操作过(history)。只做可见性,不做权限")
-def members(work_id: str, svc: WorkService = Depends(works)):
-    return svc.list_members(work_id)
+@router.get("/{work_id}/users", response_model=WorkUsers,
+            summary="user:谁当前正在操作(current)、谁历史操作过(history)。只做可见性,不做权限")
+def users(work_id: str, svc: WorkService = Depends(works)):
+    return svc.list_users(work_id)
 
 
-@router.post("/{work_id}/members/touch", response_model=Members, summary="我在操作这个 work(心跳;身份来自 X-Memory-Talk-User)")
+@router.post("/{work_id}/users/touch", response_model=WorkUsers, summary="我在操作这个 work(心跳;身份来自 X-Memory-Talk-User)")
 def touch(work_id: str, svc: WorkService = Depends(works), who: str | None = Depends(user)):
     svc.touch(work_id, who)
-    return svc.list_members(work_id)
+    return svc.list_users(work_id)
 
 
 @router.get("/{work_id}/canvas", response_model=Canvas, summary="画布(视图,随时可重排)")

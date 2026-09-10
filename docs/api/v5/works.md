@@ -1,6 +1,6 @@
 # Works API
 
-work 树、画布、会话(现场)、成员(人)、痕迹、事件、召回。带 `X-Memory-Talk-User` 头的请求,凡会动某个 work 的(建、改、重排画布、开 / 重入 / 关会话、打开 work 本身),都会把这个人记进该 work 的成员名单。字段语义见 [`../../structure/v5/work.md`](../../structure/v5/work.md)。
+work 树、画布、会话(现场)、user、痕迹、事件、召回。带 `X-Memory-Talk-User` 头的请求,凡会动某个 work 的(建、改、重排画布、开 / 重入 / 关会话、打开 work 本身),都会把这个人记进该 work 的users 名单。字段语义见 [`../../structure/v5/work.md`](../../structure/v5/work.md)。
 
 ---
 
@@ -11,10 +11,11 @@ work 树(森林)。
 | 参数 | 说明 |
 |---|---|
 | `root` | 可选;只返回这个 work 为根的一棵(不存在 → 404) |
+| `created_by` | 可选;只看某人建的 |
 
 ```json
 [
-  {"id": "work_…2f2f", "goal": "把 v5 做出来", "parent": null,
+  {"id": "work_…2f2f", "goal": "把 v5 做出来", "created_by": "alice", "parent": null,
    "status": "doing", "created_at": "…", "done_at": null,
    "children": [
      {"id": "work_…a1b2", "goal": "实现 issue", "parent": "work_…2f2f", "status": "done",
@@ -38,7 +39,7 @@ work 树(森林)。
 | `goal` | 是 | 一句话 |
 | `parent` | 否 | 挂到哪个 work 下;不存在 → 404 |
 
-**201** 返回 Work(`status: "todo"`)。副作用:`works/<id>/work.json` + 一条 `created` 事件。
+**201** 返回 Work(`status: "todo"`,`created_by` = 请求头里的 user,没带则 `null`)。副作用:`works/<id>/work.json` + 一条 `created` 事件。
 
 ## GET /api/works/{work_id}
 
@@ -106,9 +107,9 @@ memory.talk/
 
 ---
 
-## GET /api/works/{work_id}/members
+## GET /api/works/{work_id}/users
 
-成员(**人**):谁当前正在操作、谁历史操作过。只做可见性,不做权限。
+user:谁当前正在操作、谁历史操作过。只做可见性,不做权限。
 
 ```json
 {"current": [{"user": "alice", "first_seen": "…", "last_seen": "…", "ops": 7, "active": true}],
@@ -118,7 +119,7 @@ memory.talk/
 
 `active` = 最近 120 秒内动过;`current` 是 `history` 里 active 的那些;`history` 按最近活动倒序。
 
-## POST /api/works/{work_id}/members/touch
+## POST /api/works/{work_id}/users/touch
 
 心跳:「我在操作这个 work」。身份来自 `X-Memory-Talk-User`;不带头则什么都不记。返回同上。前端开着 work 页面时每 30 秒调一次。
 

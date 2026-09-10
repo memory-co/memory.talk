@@ -1,19 +1,20 @@
-"""收件箱:变动打过来的地方(manager.md §4)。append-only,不进 git。"""
+"""收件箱:变动打过来的地方(manager.md §4)。append-only。"""
 from __future__ import annotations
 
 from models.collections import InboxItem
-from services.store import WorksLayout, append_line, read_lines
+
+from .repo import WorkRepo
 
 
 class Inbox:
-    def __init__(self, layout: WorksLayout) -> None:
-        self.layout = layout
-
-    def path(self, work_id: str):
-        return self.layout.work_dir(work_id) / "inbox.jsonl"
+    def __init__(self, repo: WorkRepo) -> None:
+        self.repo = repo
 
     def read(self, work_id: str) -> list[InboxItem]:
-        return [InboxItem.model_validate_json(l) for l in read_lines(self.path(work_id))]
+        return [InboxItem(**l) for l in self.repo.read(work_id, "inbox")]
 
     def put(self, work_id: str, item: InboxItem) -> None:
-        append_line(self.path(work_id), item.model_dump_json())
+        self.repo.append(work_id, "inbox", item.model_dump())
+
+    def put_unmanaged(self, item: InboxItem) -> None:
+        self.repo.append_unmanaged(item.model_dump())

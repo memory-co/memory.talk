@@ -1,4 +1,4 @@
-"""运行配置:全部来自环境变量,没有配置文件(store.md:磁盘上只有 git 仓库和裸文件)。"""
+"""运行配置:全部来自环境变量,没有配置文件。存储介质由 MEMORY_TALK_STORE 选(providers)。"""
 from __future__ import annotations
 
 import os
@@ -13,12 +13,9 @@ class Config:
     git_author_email: str
 
     @property
-    def collections_dir(self) -> Path:   # git 仓库:cards/ + issues/
+    def collections_dir(self) -> Path:   # 分层 git 仓库(collections)
         return self.home / "collections"
 
-    @property
-    def works_dir(self) -> Path:    # 裸文件:work 树(本轮未实现)
-        return self.home / "works"
 
 
 def load_config() -> Config:

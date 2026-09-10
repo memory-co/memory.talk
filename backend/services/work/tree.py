@@ -1,11 +1,12 @@
-"""work 树:节点、父子、状态、完成收拢(work.md §2)。每个 work 一个目录,work.json 原子写。"""
+"""work 树:节点、父子、状态、完成收拢(work.md §2)。IO 走仓储。"""
 from __future__ import annotations
 
 import secrets
 from datetime import datetime, timezone
 
 from models.work import Work, WorkCreate, WorkNode, WorkStatus, WorkUpdate
-from services.store import WorksLayout, atomic_write, read_text
+
+from .repo import WorkRepo
 
 
 class WorkNotFound(LookupError):
@@ -25,33 +26,24 @@ def _new_id() -> str:
 
 
 class WorkTree:
-    def __init__(self, layout: WorksLayout) -> None:
-        self.layout = layout
-
-    # ---- 读 ----
+    def __init__(self, repo: WorkRepo) -> None:
+        self.repo = repo
 
     def get(self, work_id: str) -> Work:
-        text = read_text(self.layout.work_json(work_id))
-        if text is None:
+        data = self.repo.get_work(work_id)
+        if data is None:
             raise WorkNotFound(work_id)
-        return Work.model_validate_json(text)
+        return Work(**data)
 
-    def all(self) -> list[Work]:
-        out = []
-        if not self.layout.root.is_dir():
-            return out
-        for d in sorted(self.layout.root.iterdir()):
-            text = read_text(d / "work.json")
-            if text is not None:
-                out.append(Work.model_validate_json(text))
-        return out
+    def all(self, created_by: str | None = None) -> list[Work]:
+        return [Work(**w) for w in self.repo.list_works(created_by=created_by)]
 
     def children(self, work_id: str) -> list[Work]:
-        return [t for t in self.all() if t.parent == work_id]
+        return [Work(**w) for w in self.repo.list_works(parent=work_id)]
 
-    def forest(self, root: str | None = None) -> list[WorkNode]:
-        works = self.all()
-        nodes = {t.id: WorkNode(**t.model_dump()) for t in works}
+    def forest(self, root: str | None = None, created_by: str | None = None) -> list[WorkNode]:
+        works = self.all(created_by)
+        nodes = {w.id: WorkNode(**w.model_dump()) for w in works}
         roots = []
         for n in nodes.values():
             if n.parent and n.parent in nodes:
@@ -64,15 +56,13 @@ class WorkTree:
             raise WorkNotFound(root)
         return [nodes[root]]
 
-    # ---- 写 ----
-
     def _save(self, work: Work) -> None:
-        atomic_write(self.layout.work_json(work.id), work.model_dump_json(indent=2) + "\n")
+        self.repo.put_work(work.id, work.model_dump())
 
-    def create(self, req: WorkCreate) -> Work:
+    def create(self, req: WorkCreate, created_by: str | None = None) -> Work:
         if req.parent:
             self.get(req.parent)
-        work = Work(id=_new_id(), goal=req.goal, parent=req.parent, created_at=now())
+        work = Work(id=_new_id(), goal=req.goal, created_by=created_by, parent=req.parent, created_at=now())
         self._save(work)
         return work
 

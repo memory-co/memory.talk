@@ -11,8 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 
-@pytest.fixture
-def home(tmp_path, monkeypatch):
+@pytest.fixture(params=["fs", "sqlite"])
+def home(tmp_path, monkeypatch, request):
+    monkeypatch.setenv("MEMORY_TALK_STORE", request.param)
     monkeypatch.setenv("MEMORY_TALK_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("MEMORY_TALK_WORKSPACE", str(tmp_path / "ws"))
     monkeypatch.setenv("MEMORY_TALK_CLAUDE_PROJECTS", str(tmp_path / "claude"))

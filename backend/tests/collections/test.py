@@ -57,7 +57,10 @@ def test_layers_and_objects(client):
     assert first.startswith(f"[card] write {cp}") and f"[issue] decide {ip}#p2" in log
     dec = [l for l in log.splitlines() if l.startswith("Decision:")]
     assert len(dec) == 2 and dec[0] == dec[1]
-    assert "By: alice" in log and "Reason: 环境变量够用" in log
+    assert "Reason: 环境变量够用" in log and "By:" not in log
+    authors = subprocess.run(["git", "log", "--format=%an <%ae>", "-2", "stack"], cwd=client.app.state.collections.repo.root,
+                             capture_output=True, text=True).stdout.split("\n")
+    assert authors[0] == "alice <alice@memory.talk>" and authors[1] == "alice <alice@memory.talk>"   # 两个提交都是这个人
     assert "[card]" not in _log(client, "layer/issue") and "[issue]" not in _log(client, "layer/card")
     assert client.post(f"/api/collections/act/issue/decide/{ip}", json={"position": "p2", "card": cp}).status_code == 409
 

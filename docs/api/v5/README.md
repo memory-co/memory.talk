@@ -8,8 +8,8 @@
 | 方法 | 端点 | 说明 |
 |---|---|---|
 | `GET` | `/api/system/health` | 健康检查 |
-| `GET` | `/api/system/info` | 运行信息:路径、tmux socket、有没有窗 |
-| `GET` | `/api/works` | work 树(森林;root= 只看一棵) |
+| `GET` | `/api/system/info` | 运行信息:路径、存储 provider、tmux socket、有没有窗 |
+| `GET` | `/api/works` | work 树(森林;root= 只看一棵;created_by= 只看某人建的) |
 | `POST` | `/api/works` | 开工:建一个 work(parent= 挂到树上) |
 | `GET` | `/api/works/{work_id}` | 读一个 work(带身份 = 打开它,记一笔在操作) |
 | `PATCH` | `/api/works/{work_id}` | 改目标 / 状态;done 要求子 work 全完;结束后会话冻结 |
@@ -19,12 +19,12 @@
 | `GET` | `/api/works/{work_id}/inbox` | 收件箱:被 manager.json 路由过来的变动(Collections 的对象、子 work 的状态) |
 | `GET` | `/api/works/{work_id}/manager` | 这个 work 的变动打给谁:manager.json,没有则父 work |
 | `PUT` | `/api/works/{work_id}/manager` | 改写默认:这棵子树的变动打给指定 work(null = 删掉,回到父) |
-| `GET` | `/api/works/{work_id}/members` | 成员(人):谁当前正在操作(current)、谁历史操作过(history)。只做可见性,不做权限 |
 | `GET` | `/api/works/{work_id}/recall` | 开工注入:card 目录文本(card → work 的接口) |
 | `GET` | `/api/works/{work_id}/sessions` | 会话清单(含活没活着) |
 | `POST` | `/api/works/{work_id}/sessions` | 在 work 里打开一个块:协议 → server 建现场,登记会话,交回窗 + 把手 |
-| `POST` | `/api/works/{work_id}/members/touch` | 我在操作这个 work(心跳;身份来自 X-Memory-Talk-User) |
+| `GET` | `/api/works/{work_id}/users` | user:谁当前正在操作(current)、谁历史操作过(history)。只做可见性,不做权限 |
 | `DELETE` | `/api/works/{work_id}/sessions/{session_id}` | 关闭即回收:销毁现场 + 删登记 |
+| `POST` | `/api/works/{work_id}/users/touch` | 我在操作这个 work(心跳;身份来自 X-Memory-Talk-User) |
 | `POST` | `/api/works/{work_id}/sessions/{session_id}/attach` | 重入:幂等取回同一个现场 |
 | `GET` | `/api/works/{work_id}/sessions/{session_id}/capture` | 观测:抓终端屏幕(把手 capture) |
 | `GET` | `/api/works/{work_id}/sessions/{session_id}/rounds` | 痕迹:agent 会话的 round(先从把手同步新 round,再读 rounds.jsonl) |
@@ -60,7 +60,7 @@
   | 422 | `invalid` | 对象不符合层的 schema(或 FastAPI 默认校验) |
   | 502 | `platform` | tmux 起不来 |
 
-- **身份自报、不做权限**:`X-Memory-Talk-User: <名字>` 是谁在操作(记进 work 成员名单、进 commit 的 `By:`);`X-Memory-Talk-Work: <work_id>` 是在哪个 work 里操作(进 `Work:`;**自己造成的变动不投给自己的收件箱**)。不带照样能操作。
+- **身份自报、不做权限**:`X-Memory-Talk-User: <名字>` 是谁在操作——建 work 时写进 `created_by`,动 work 时记进它的 users,collections 的每个 commit 以它为 **author**(`<名字>@memory.talk`);`X-Memory-Talk-Work: <work_id>` 是在哪个 work 里操作(进 `Work:`;**自己造成的变动不投给自己的收件箱**)。不带照样能操作。
 - **Collections 的每个写动作一个 `[层名]` 提交**,写请求可带 `reason`(进 `Reason:`)。跨层的决定是两个相邻提交 + 同一个 `Decision:` / `Discussion:` trailer。
 - **时间**:ISO 8601 UTC。**无分页**。**没有鉴权、没有网关**。
 
@@ -76,8 +76,9 @@
 
 ```
 ~/.memory.talk/collections/   分层 git 仓库(Collections):layer/origin、layer/issue、layer/card(+ 用户层)、stack;工作树跟着 stack
-~/.memory.talk/works/    裸文件:<work_id>/{work,canvas,sessions,members,manager}.json + events/inbox.jsonl + sessions/<sid>/rounds.jsonl
+~/.memory.talk/works/    work / user 的记录(MEMORY_TALK_STORE=fs 时):<work_id>/{work,canvas,sessions,users,manager}.json + events/inbox.jsonl + sessions/<sid>/rounds.jsonl
 ~/.memory.talk/unmanaged.jsonl   没人管的变动
+~/.memory.talk/memory.sqlite     MEMORY_TALK_STORE=sqlite 时,上面两样都在这里(works / work_docs / work_logs 三张表)
 ```
 
 环境变量见 [`../../structure/v5/filesystem.md`](../../structure/v5/filesystem.md)。

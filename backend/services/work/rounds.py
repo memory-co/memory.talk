@@ -1,26 +1,25 @@
-"""agent 会话的 rounds.jsonl:append-only;从把手拉新 round 追加进来。"""
+"""agent 会话的 round:append-only;从把手拉新 round 追加进来。"""
 from __future__ import annotations
 
 from models.work import Round
-from services.store import WorksLayout, append_line, read_lines
+
+from .repo import WorkRepo
 
 
 class Rounds:
-    def __init__(self, layout: WorksLayout) -> None:
-        self.layout = layout
+    def __init__(self, repo: WorkRepo) -> None:
+        self.repo = repo
 
     def read(self, work_id: str, session_id: str) -> list[Round]:
-        return [Round.model_validate_json(l) for l in read_lines(self.layout.rounds_jsonl(work_id, session_id))]
+        return [Round(**l) for l in self.repo.read(work_id, "rounds", sub=session_id)]
 
     def sync(self, work_id: str, session_id: str, fresh: list[Round]) -> int:
-        """把把手读到的 round 里还没记的追加进来,返回新增条数。"""
-        path = self.layout.rounds_jsonl(work_id, session_id)
         seen = {r.id for r in self.read(work_id, session_id)}
         added = 0
         for r in fresh:
             if r.id in seen:
                 continue
-            append_line(path, r.model_dump_json())
+            self.repo.append(work_id, "rounds", r.model_dump(), sub=session_id)
             seen.add(r.id)
             added += 1
         return added
