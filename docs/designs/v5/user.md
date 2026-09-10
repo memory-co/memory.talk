@@ -77,7 +77,7 @@ collections 的每个动作是一个 commit;做这个动作的 user 就是 commi
 
 - **不是 session。** session 是现场(在哪干活),user 是人(谁干活)。一个 user 可以开很多 session,一个 session 只被一个 work 拥有、但可以被多个 user attach。
 - **不是 manager。** manager 是 work,不是人——变动打给一个 work 的收件箱,由那个 work 里的 agent 或人去推。要知道「那个 work 里是谁」,看它的 `users`。
-- **不是 agent。** agent 是在 session 里跑的程序,它的产出记在它所在 work 的名下;agent 做的 collections 提交,author 是**驱动它的 user**(请求头里那个),不是 agent 的名字。要区分「人写的还是 agent 写的」,看提交 body 里的 `Task:`(在哪个 work 的会话里做的)——本篇不给 agent 单独立身份,列在 §7。
+- **不是 agent。** agent 是在 session 里跑的程序,它的产出记在它所在 work 的名下;agent 做的 collections 提交,author 是**驱动它的 user**(请求头里那个),不是 agent 的名字。要区分「人写的还是 agent 写的」,看提交 body 里的 `Work:`(在哪个 work 的会话里做的)——本篇不给 agent 单独立身份,列在 §7。
 
 ---
 

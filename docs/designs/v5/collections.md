@@ -114,7 +114,7 @@ origin 在最底、issue 在中、card 在上:issue 从 origin 消化出来,card
 
 ## 5. 谁做的:commit 的 author 就是 user
 
-collections 的每个动作是一个 commit,做它的人(请求头 `X-Memory-Talk-User`)就是 commit 的 **author**——立场谁提的、论证谁给的、卡谁改的,全在 `git log` / `git blame` 里,对象里不另存 user 字段。agent 做的提交挂在驱动它的 user 名下,body 的 `Task:` 记它在哪个 work 里做的。没带身份的提交 author 退回服务配置的默认名。详见 [user.md §5](user.md)。
+collections 的每个动作是一个 commit,做它的人(请求头 `X-Memory-Talk-User`)就是 commit 的 **author**——立场谁提的、论证谁给的、卡谁改的,全在 `git log` / `git blame` 里,对象里不另存 user 字段。agent 做的提交挂在驱动它的 user 名下,body 的 `Work:` 记它在哪个 work 里做的。没带身份的提交 author 退回服务配置的默认名。详见 [user.md §5](user.md)。
 
 ---
 
@@ -144,7 +144,7 @@ git log --first-parent stack
 | issue / card 的对象模型 | issue.md / card.md | **不变** |
 | 文件形态与路径 | `issues/<id>.json`、`cards/**/<slug>.md`(按层分目录) | **对象变目录、带后缀、放哪都行**:`<名>.issue/issue.json`、`<名>.card/card.md`;不再有按层分的顶层目录 |
 | 提交信息 | `card: write …` / `issue: argue …` | `[card] write …` / `[issue] argue …`(动词不变,层名前置) |
-| 跨对象的决定 | 一个 commit | 两个相邻提交 + 同一个 `Decision:` trailer(§5) |
+| 跨对象的决定 | 一个 commit | 两个相邻提交 + 同一个 `Decision:` trailer(§6) |
 | 历史 | `git log -- <path>` | 同,外加 `git log layer/<名>` 看整层 |
 | 加一种新对象 | 改 backend | 写一份 schema + `layers` 里加一行 |
 | 谁改不动谁 | 靠代码纪律 | hook 守着:上层改不动下层,跨层提交被拒 |
@@ -159,5 +159,5 @@ store.md 的两条原则不变:**认知层进 git,现场层用裸文件**。Coll
 - **通用 API 的形状**:`/api/collections/<class>/...` 一套 CRUD + 历史 + 检索,内置 layer 的专用端点(`/api/issues/...` `/api/cards/...`)是不是它上面的别名。
 - ~~要不要把 rounds 纳入 Collections 当事实层~~:已定——地板是 [origin](origin.md)(外部材料),rounds 整体仍不进 git;要留的几轮摘录进 origin。
 - **跨 layer 引用要不要校验**:card.issue 指向的 issue 必须存在吗;删时要不要检查反向引用。collectbase 明确「不管文件之间的关系」,这是 memory.talk 自己的事;倾向只在写时校验存在、不做级联。
-- **两个提交的事务**(§5):第一个成、第二个败时的回退,是 `reset` 权威分支(需要绕过「只进不退」)还是补一个反向提交。倾向后者,历史更诚实。
+- **两个提交的事务**(§6):第一个成、第二个败时的回退,是 `reset` 权威分支(需要绕过「只进不退」)还是补一个反向提交。倾向后者,历史更诚实。
 - **`stack` 之外要不要给每个 layer 一条工作分支**:collectbase 说站在 `stack` 上声明哪层都行;memory.talk 的服务进程是唯一写者,站 `stack` 就够。
