@@ -68,6 +68,8 @@ work 那边的动作(开工、拆子 work、状态变化、做完)**不进 git**
 
 ## 4. 裸文件那半:work 沿用 shellbase 的状态模型
 
+> **介质可换**:这一半的记录(work / user)不绑定文件系统——[provider.md](provider.md) 把上层需要的操作抽成 Documents / Logs 两个小接口,文件系统是默认 provider,数据库是另一个;两者接口有差异(路径 vs 查询),用显式能力让上层感知。本节下面说的「裸文件」是 fs provider 的形态。
+
 work 的存储就是 shellbase 的 state 目录,原生实现、逻辑一致([work.md §3](work.md)):
 
 - **每个 work 一个目录**,树用目录嵌套或父指针表达(布局细节后议);里面是 work 自己的元信息(目标、状态、父子)、画布(布局 + 每块的 URI)、终端登记、以及每个会话的 `rounds.jsonl`。
