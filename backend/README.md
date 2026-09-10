@@ -37,9 +37,8 @@ backend/
 │   │   ├── manager.py        #     manager.json:最近祖先解析
 │   │   ├── catalog.py        #     一层的目录(按目录树列标题)+ 召回文本
 │   │   └── __init__.py       #     CollectionsService:层的装载(内置 + schemas/*.yaml)、对象 CRUD、历史、检索、树、行为、manager、投递到收件箱
-│   └── store/                #   存储 —— docs/designs/v5/collections-store.md
-│       ├── __init__.py       #     入口:导出 StoreService(git 仓库 + 裸文件根,其余 service 的依赖)
-│       └── __init__.py       #     装配:按 MEMORY_TALK_STORE 选 provider,按族建 work 仓储
+│   └── store/                #   装配 —— docs/designs/v5/provider.md
+│       └── __init__.py       #     StoreService:按 MEMORY_TALK_STORE 选 provider,按族建 work 仓储
 │
 ├── providers/                # 存储介质的两族基类(只有介质原语,没有业务)—— docs/designs/v5/provider.md
 │   ├── fs.py                 #   FileSystemProvider(read/write/append/list/…,能力 local_path)+ LocalFS
