@@ -1,4 +1,4 @@
-"""Collect 仓库:分层 git,自己实现(语义对齐 collectbase:层即分支、路径不相交、stack 是 merge 视图)。
+"""Collections 仓库:分层 git,自己实现(语义对齐 collectbase:层即分支、路径不相交、stack 是 merge 视图)。
 
 拓扑
     始祖 ●──┬── layer/origin  ●──●      权威。线性,只放这一层的文件
@@ -19,7 +19,7 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
-from models.collect import Revision
+from models.collections import Revision
 
 ANCHOR = "layers"                     # 根上的层清单:一行一个,最底在前
 
@@ -139,7 +139,7 @@ class Repo:
         if cur is None:
             text = "\n".join(names) + "\n"
             tree = self.write_tree({ANCHOR: Entry("100644", self.hash_object(text.encode()), ANCHOR)})
-            start = self.commit_tree(tree, [], f"[{names[0]}] collect: init\n\nlayers: {', '.join(names)}")
+            start = self.commit_tree(tree, [], f"[{names[0]}] collections: init\n\nlayers: {', '.join(names)}")
             for n in names:
                 self.update_ref(self.layer_ref(n), start)
             self.update_ref(self.stack, start)
@@ -154,7 +154,7 @@ class Repo:
             if self.resolve(self.layer_ref(n)) is None:
                 self.update_ref(self.layer_ref(n), start)
         new = [*cur, *missing]
-        self.commit(cur[0], f"[{cur[0]}] collect: add layers {', '.join(missing)}",
+        self.commit(cur[0], f"[{cur[0]}] collections: add layers {', '.join(missing)}",
                     {ANCHOR: ("\n".join(new) + "\n").encode()}, [], layer_of=lambda p: cur[0])
 
     # ------------------------------------------------------------ 归属

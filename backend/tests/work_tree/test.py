@@ -37,8 +37,8 @@ def test_tree_status_canvas_events(client):
     types = [e["type"] for e in client.get(f"/api/works/{root['id']}/events").json()]
     assert types == ["created", "status", "frozen"]
 
-    # 召回 = card 目录(Collect)
-    client.post("/api/collect/card/memory.talk/配置只来自环境变量", json={"data": {"title": "配置只来自环境变量"}})
+    # 召回 = card 目录(Collections)
+    client.post("/api/collections/card/memory.talk/配置只来自环境变量", json={"data": {"title": "配置只来自环境变量"}})
     assert "配置只来自环境变量" in client.get(f"/api/works/{root['id']}/recall").text
 
     # 子 work 的变动沿树打到父的收件箱;manager.json 可改写

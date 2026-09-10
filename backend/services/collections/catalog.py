@@ -1,7 +1,7 @@
 """目录:某一层的对象按目录树列出标题(store.md §5:召回 = 给一张目录)。"""
 from __future__ import annotations
 
-from models.collect import CatalogDir, CatalogEntry
+from models.collections import CatalogDir, CatalogEntry
 
 
 def build(objects: list[tuple[str, str]], root: str = "") -> CatalogDir:

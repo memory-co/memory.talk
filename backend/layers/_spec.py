@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 from pydantic import BaseModel
 
-from models.collect import FieldSpec, LayerInfo
+from models.collections import FieldSpec, LayerInfo
 
 _FM = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.S)
 

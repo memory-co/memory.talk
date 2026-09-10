@@ -5,9 +5,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from config import Config, RuntimeConfig, load_config, load_runtime_config
-from controllers import collect, servers, system, works
+from controllers import collections, servers, system, works
 from models.server import ServerError
-from services.collect import CollectError, CollectService
+from services.collections import CollectionsError, CollectionsService
 from services.servers import ServerService
 from services.store import StoreService
 from services.work import SessionNotFound, WorkConflict, WorkNotFound, WorkService
@@ -17,17 +17,17 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
     config = config or load_config()
     runtime = runtime or load_runtime_config()
     app = FastAPI(title="memory.talk v5", version="5.0.0a0",
-                  description="work 树 + Collect(origin / issue / card 三层,可加用户层)+ 协议 server。")
+                  description="work 树 + Collections(origin / issue / card 三层,可加用户层)+ 协议 server。")
 
     store = StoreService(config)
-    collect_svc = CollectService(config, store.works)
+    collect_svc = CollectionsService(config, store.works)
     server_svc = ServerService(runtime)
     work_svc = WorkService(store, server_svc)
     app.state.config, app.state.runtime = config, runtime
-    app.state.store, app.state.collect = store, collect_svc
+    app.state.store, app.state.collections = store, collect_svc
     app.state.servers, app.state.works = server_svc, work_svc
 
-    for r in (system.router, works.router, servers.router, collect.router):
+    for r in (system.router, works.router, servers.router, collections.router):
         app.include_router(r)
 
     def _err(status: int, code: str):
@@ -39,8 +39,8 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
         app.add_exception_handler(exc_type, _err(404, "not_found"))
     app.add_exception_handler(WorkConflict, _err(409, "conflict"))
 
-    @app.exception_handler(CollectError)
-    async def _collect(_: Request, exc: CollectError):
+    @app.exception_handler(CollectionsError)
+    async def _collect(_: Request, exc: CollectionsError):
         return JSONResponse({"error": exc.code, "message": str(exc)}, status_code=exc.status)
 
     @app.exception_handler(ServerError)

@@ -4,10 +4,10 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.responses import PlainTextResponse
 
-from models.collect import InboxItem
+from models.collections import InboxItem
 from models.work import (Canvas, CanvasPut, Event, Members, Round, Session, SessionCreate, SessionView,
                          Work, WorkCreate, WorkNode, WorkUpdate)
-from services.collect import CollectService
+from services.collections import CollectionsService
 from services.work import WorkService
 
 router = APIRouter(prefix="/api/works", tags=["works"])
@@ -17,8 +17,8 @@ def works(request: Request) -> WorkService:
     return request.app.state.works
 
 
-def collect(request: Request) -> CollectService:
-    return request.app.state.collect
+def collections(request: Request) -> CollectionsService:
+    return request.app.state.collections
 
 
 def user(x_memory_talk_user: str | None = Header(None, alias="X-Memory-Talk-User")) -> str | None:
@@ -59,13 +59,13 @@ def events(work_id: str, svc: WorkService = Depends(works)):
 @router.get("/{work_id}/recall", response_class=PlainTextResponse,
             summary="开工注入:card 目录文本(card → work 的接口)")
 def recall(work_id: str, dir: str = "", layer: str = "card", svc: WorkService = Depends(works),
-           c: CollectService = Depends(collect)):
+           c: CollectionsService = Depends(collections)):
     svc.get(work_id)
     return c.recall_text(layer, dir)
 
 
 @router.get("/{work_id}/inbox", response_model=list[InboxItem],
-            summary="收件箱:被 manager.json 路由过来的变动(Collect 的对象、子 work 的状态)")
+            summary="收件箱:被 manager.json 路由过来的变动(Collections 的对象、子 work 的状态)")
 def inbox(work_id: str, svc: WorkService = Depends(works)):
     return svc.read_inbox(work_id)
 

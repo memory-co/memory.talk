@@ -14,22 +14,22 @@ class Card(BaseModel):
     body: str = ""
 
 
-def discuss(collect, path: str, payload: dict, ctx) -> dict:
+def discuss(collections, path: str, payload: dict, ctx) -> dict:
     """对这张卡不同意:开一个 issue 挂上去当讨论页。两个相邻提交:[issue] raise + [card] link。
     payload: issue (issue 的 path), question, origin?, reason?"""
     from layers.issue import Issue
-    from services.collect import CollectError
-    card = collect.get("card", path).body
+    from services.collections import CollectionsError
+    card = collections.get("card", path).body
     issue_path = payload["issue"]
-    if collect.exists("issue", issue_path):
-        raise CollectError("exists", f"issue 已存在:{issue_path}", 409)
+    if collections.exists("issue", issue_path):
+        raise CollectionsError("exists", f"issue 已存在:{issue_path}", 409)
     issue = Issue(question=payload["question"], origin=payload.get("origin"), card=path).model_dump()
     trailer = f"Discussion: {path}"
-    collect.create("issue", issue_path, issue, payload.get("reason", ""), ctx, subject=f"raise {issue_path}: {issue['question'][:60]}",
+    collections.create("issue", issue_path, issue, payload.get("reason", ""), ctx, subject=f"raise {issue_path}: {issue['question'][:60]}",
                    extra_trailer=trailer)
     card["issue"] = issue_path
-    collect.write("card", path, card, f"link {path} -> issue {issue_path}", payload.get("reason", ""), ctx, extra_trailer=trailer)
-    return collect.get("issue", issue_path).body
+    collections.write("card", path, card, f"link {path} -> issue {issue_path}", payload.get("reason", ""), ctx, extra_trailer=trailer)
+    return collections.get("issue", issue_path).body
 
 
 LAYER = LayerSpec(

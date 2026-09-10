@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 
-from models.collect import Manager
+from models.collections import Manager
 
 FILE = "manager.json"
 

@@ -13,8 +13,8 @@ class Config:
     git_author_email: str
 
     @property
-    def memory_dir(self) -> Path:   # git 仓库:cards/ + issues/
-        return self.home / "memory"
+    def collections_dir(self) -> Path:   # git 仓库:cards/ + issues/
+        return self.home / "collections"
 
     @property
     def works_dir(self) -> Path:    # 裸文件:work 树(本轮未实现)

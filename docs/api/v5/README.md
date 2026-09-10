@@ -16,7 +16,7 @@
 | `GET` | `/api/works/{work_id}/canvas` | 画布(视图,随时可重排) |
 | `PUT` | `/api/works/{work_id}/canvas` | 全量写画布(version 乐观锁) |
 | `GET` | `/api/works/{work_id}/events` | work 自己的时间线 |
-| `GET` | `/api/works/{work_id}/inbox` | 收件箱:被 manager.json 路由过来的变动(Collect 的对象、子 work 的状态) |
+| `GET` | `/api/works/{work_id}/inbox` | 收件箱:被 manager.json 路由过来的变动(Collections 的对象、子 work 的状态) |
 | `GET` | `/api/works/{work_id}/manager` | 这个 work 的变动打给谁:manager.json,没有则父 work |
 | `PUT` | `/api/works/{work_id}/manager` | 改写默认:这棵子树的变动打给指定 work(null = 删掉,回到父) |
 | `GET` | `/api/works/{work_id}/members` | 成员(人):谁当前正在操作(current)、谁历史操作过(history)。只做可见性,不做权限 |
@@ -29,24 +29,24 @@
 | `GET` | `/api/works/{work_id}/sessions/{session_id}/capture` | 观测:抓终端屏幕(把手 capture) |
 | `GET` | `/api/works/{work_id}/sessions/{session_id}/rounds` | 痕迹:agent 会话的 round(先从把手同步新 round,再读 rounds.jsonl) |
 | `GET` | `/api/servers` | server 清单及各自响应的协议 |
-| `GET` | `/api/collect/layers` | 有哪些层(最底在前)、各自的 schema 与行为 |
-| `POST` | `/api/collect/layers` | 加一个用户层:一份 schema YAML |
-| `GET` | `/api/collect/managed` | 某个 work 管的所有对象;不传 work = 没人管的对象 |
-| `GET` | `/api/collect/manager` | 这个路径归谁管(最近的 manager.json) |
-| `PUT` | `/api/collect/manager` | 在这个目录(或对象)下放 manager.json,绑到一个 work |
-| `DELETE` | `/api/collect/manager` | 解绑:删这个目录的 manager.json |
-| `GET` | `/api/collect/search` | git grep 整个 Collect(可限定层) |
-| `GET` | `/api/collect/tree` | 浏览目录树:对象(带后缀的目录折成一项)、目录、origin 文件 |
-| `GET` | `/api/collect/{layer}` | 一层的目录(按目录树列标题) |
-| `GET` | `/api/collect/{layer}/recall` | 目录渲染成可注入 agent 的文本 |
-| `GET` | `/api/collect/{layer}/{path}` | 读一个对象(rev= 读历史版本) |
-| `POST` | `/api/collect/{layer}/{path}` | 建一个对象(一个 [layer] 提交) |
-| `PUT` | `/api/collect/{layer}/{path}` | 改一个对象(字段合并;origin 整体替换) |
-| `DELETE` | `/api/collect/{layer}/{path}` | 删一个对象(历史在 git) |
-| `GET` | `/api/collect/history/{layer}/{path}` | 一个对象的 git log(这一层的分支上) |
-| `POST` | `/api/collect/act/{layer}/{action}/{path}` | 行为:schema 之上的领域动作(issue: position / argue / link / spawn / decide;card: discuss) |
+| `GET` | `/api/collections/layers` | 有哪些层(最底在前)、各自的 schema 与行为 |
+| `POST` | `/api/collections/layers` | 加一个用户层:一份 schema YAML |
+| `GET` | `/api/collections/managed` | 某个 work 管的所有对象;不传 work = 没人管的对象 |
+| `GET` | `/api/collections/manager` | 这个路径归谁管(最近的 manager.json) |
+| `PUT` | `/api/collections/manager` | 在这个目录(或对象)下放 manager.json,绑到一个 work |
+| `DELETE` | `/api/collections/manager` | 解绑:删这个目录的 manager.json |
+| `GET` | `/api/collections/search` | git grep 整个 Collections(可限定层) |
+| `GET` | `/api/collections/tree` | 浏览目录树:对象(带后缀的目录折成一项)、目录、origin 文件 |
+| `GET` | `/api/collections/{layer}` | 一层的目录(按目录树列标题) |
+| `GET` | `/api/collections/{layer}/recall` | 目录渲染成可注入 agent 的文本 |
+| `GET` | `/api/collections/{layer}/{path}` | 读一个对象(rev= 读历史版本) |
+| `POST` | `/api/collections/{layer}/{path}` | 建一个对象(一个 [layer] 提交) |
+| `PUT` | `/api/collections/{layer}/{path}` | 改一个对象(字段合并;origin 整体替换) |
+| `DELETE` | `/api/collections/{layer}/{path}` | 删一个对象(历史在 git) |
+| `GET` | `/api/collections/history/{layer}/{path}` | 一个对象的 git log(这一层的分支上) |
+| `POST` | `/api/collections/act/{layer}/{action}/{path}` | 行为:schema 之上的领域动作(issue: position / argue / link / spawn / decide;card: discuss) |
 
-分页面:[system.md](system.md) · [works.md](works.md) · [servers.md](servers.md) · [collect.md](collect.md)
+分页面:[system.md](system.md) · [works.md](works.md) · [servers.md](servers.md) · [collections.md](collections.md)
 
 ## 通用约定
 
@@ -61,7 +61,7 @@
   | 502 | `platform` | tmux 起不来 |
 
 - **身份自报、不做权限**:`X-Memory-Talk-User: <名字>` 是谁在操作(记进 work 成员名单、进 commit 的 `By:`);`X-Memory-Talk-Work: <work_id>` 是在哪个 work 里操作(进 `Work:`;**自己造成的变动不投给自己的收件箱**)。不带照样能操作。
-- **Collect 的每个写动作一个 `[层名]` 提交**,写请求可带 `reason`(进 `Reason:`)。跨层的决定是两个相邻提交 + 同一个 `Decision:` / `Discussion:` trailer。
+- **Collections 的每个写动作一个 `[层名]` 提交**,写请求可带 `reason`(进 `Reason:`)。跨层的决定是两个相邻提交 + 同一个 `Decision:` / `Discussion:` trailer。
 - **时间**:ISO 8601 UTC。**无分页**。**没有鉴权、没有网关**。
 
 ## ID
@@ -69,13 +69,13 @@
 | 对象 | 形态 |
 |---|---|
 | work | `work_<时间戳><4hex>`;会话 `<work_id>-s<n>` |
-| Collect 对象 | **路径**(不含后缀):`memory.talk/配置/该走文件还是环境变量` ↔ 目录 `….issue/`;origin 就是文件路径 |
+| Collections 对象 | **路径**(不含后缀):`memory.talk/配置/该走文件还是环境变量` ↔ 目录 `….issue/`;origin 就是文件路径 |
 | position / argument | issue 内顺序编号 `p<n>` / `a<n>` |
 
 ## 磁盘
 
 ```
-~/.memory.talk/memory/   分层 git 仓库(Collect):layer/origin、layer/issue、layer/card(+ 用户层)、stack;工作树跟着 stack
+~/.memory.talk/collections/   分层 git 仓库(Collections):layer/origin、layer/issue、layer/card(+ 用户层)、stack;工作树跟着 stack
 ~/.memory.talk/works/    裸文件:<work_id>/{work,canvas,sessions,members,manager}.json + events/inbox.jsonl + sessions/<sid>/rounds.jsonl
 ~/.memory.talk/unmanaged.jsonl   没人管的变动
 ```

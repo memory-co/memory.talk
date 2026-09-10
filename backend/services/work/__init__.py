@@ -71,7 +71,7 @@ class WorkService:
         return self.manager_of(work_id)
 
     def _deliver(self, work_id: str, subject: str, by: str | None = None) -> None:
-        from models.collect import InboxItem
+        from models.collections import InboxItem
         from .tree import now
         target = self.manager_of(work_id)
         if not target or target == work_id:

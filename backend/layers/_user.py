@@ -1,4 +1,4 @@
-"""用户自定义层:一份 YAML 字段表 → LayerSpec(docs/designs/v5/collect-layer.md)。没有行为。"""
+"""用户自定义层:一份 YAML 字段表 → LayerSpec(docs/designs/v5/collections-layer.md)。没有行为。"""
 from __future__ import annotations
 
 from typing import Any
@@ -6,7 +6,7 @@ from typing import Any
 import yaml
 from pydantic import Field, create_model
 
-from models.collect import FieldSpec
+from models.collections import FieldSpec
 from ._spec import LayerSpec
 
 _TYPES: dict[str, Any] = {"string": str, "int": int, "bool": bool, "ref": str,

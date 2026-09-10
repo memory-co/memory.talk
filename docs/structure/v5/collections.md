@@ -1,13 +1,13 @@
-# Collect(层、对象、仓库)
+# Collections(层、对象、仓库)
 
-认知层的数据模型。机制见 [designs collect.md](../../designs/v5/collect.md);端点见 [api collect.md](../../api/v5/collect.md)。
+认知层的数据模型。机制见 [designs collections.md](../../designs/v5/collections.md);端点见 [api collections.md](../../api/v5/collections.md)。
 
-> issue 和 card 是 Collect 的两个内置 layer,它们的字段就在本篇里(§对象);不再各自单独成篇。
+> issue 和 card 是 Collections 的两个内置 layer,它们的字段就在本篇里(§对象);不再各自单独成篇。
 
 ## 仓库:分层 git
 
 ```
-~/.memory.talk/memory/           一个 git 仓库,自己实现的分层拓扑(语义对齐 collectbase,不依赖它)
+~/.memory.talk/collections/           一个 git 仓库,自己实现的分层拓扑(语义对齐 collectbase,不依赖它)
   refs/heads/layer/origin        权威分支:只放这一层的文件,线性
   refs/heads/layer/issue
   refs/heads/layer/card

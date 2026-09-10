@@ -1,4 +1,4 @@
-"""CollectService:认知层。layer 由 spec 定义;对象按 path 读写;每个动作一个 `[layer]` 提交;变动投递给 manager。"""
+"""CollectionsService:认知层。layer 由 spec 定义;对象按 path 读写;每个动作一个 `[layer]` 提交;变动投递给 manager。"""
 from __future__ import annotations
 
 import json
@@ -9,7 +9,7 @@ from typing import Any
 import layers as layer_pkg
 from config import Config
 from layers._spec import LayerSpec
-from models.collect import (CatalogDir, InboxItem, LayerInfo, Manager, Obj, Revision, SearchHit,
+from models.collections import (CatalogDir, InboxItem, LayerInfo, Manager, Obj, Revision, SearchHit,
                             TreeItem)
 from services.store import WorksLayout, append_line
 
@@ -21,7 +21,7 @@ from .repo import GuardError, Repo
 SCHEMAS_DIR = "schemas"
 
 
-class CollectError(RuntimeError):
+class CollectionsError(RuntimeError):
     def __init__(self, code: str, message: str, status: int = 400) -> None:
         super().__init__(message)
         self.code, self.status = code, status
@@ -38,11 +38,11 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-class CollectService:
+class CollectionsService:
     def __init__(self, config: Config, works: WorksLayout) -> None:
         self.config = config
         self.works = works
-        self.repo = Repo(config.memory_dir, config.git_author_name, config.git_author_email)
+        self.repo = Repo(config.collections_dir, config.git_author_name, config.git_author_email)
         self.layers: dict[str, LayerSpec] = {}
         self.order: list[str] = []
         self.managers = ManagerIndex(self.repo)
@@ -65,7 +65,7 @@ class CollectService:
             else:
                 text = self.repo.read(f"{SCHEMAS_DIR}/{name}.yaml")
                 if text is None:
-                    raise CollectError("bad_layer", f"层 {name} 在 layers 里,但没有 {SCHEMAS_DIR}/{name}.yaml", 500)
+                    raise CollectionsError("bad_layer", f"层 {name} 在 layers 里,但没有 {SCHEMAS_DIR}/{name}.yaml", 500)
                 specs[name] = layer_pkg.from_yaml(text.decode())
         self.layers, self.order = specs, names
 
@@ -73,17 +73,17 @@ class CollectService:
         try:
             return self.layers[name]
         except KeyError:
-            raise CollectError("no_layer", f"没有这一层:{name}(有:{', '.join(self.order)})", 404) from None
+            raise CollectionsError("no_layer", f"没有这一层:{name}(有:{', '.join(self.order)})", 404) from None
 
     def layer_infos(self) -> list[LayerInfo]:
         return [self.layers[n].info(i) for i, n in enumerate(self.order)]
 
     def add_layer(self, name: str, schema_yaml: str, reason: str, ctx: Ctx) -> LayerInfo:
         if name in self.layers:
-            raise CollectError("exists", f"层已存在:{name}", 409)
+            raise CollectionsError("exists", f"层已存在:{name}", 409)
         spec = layer_pkg.from_yaml(schema_yaml)
         if spec.name != name:
-            raise CollectError("bad_layer", f"schema 里的 layer 是 {spec.name!r},不是 {name!r}")
+            raise CollectionsError("bad_layer", f"schema 里的 layer 是 {spec.name!r},不是 {name!r}")
         # schema 文件归最底层(机制,不是证据);然后重跑 init 把新层加在最上
         self.repo.commit(self.order[0], f"[{self.order[0]}] layer: add {name}\n\n{('Reason: ' + reason) if reason else ''}".strip(),
                          {f"{SCHEMAS_DIR}/{name}.yaml": schema_yaml.encode()}, [], layer_of=self.layer_of_path)
@@ -111,7 +111,7 @@ class CollectService:
         spec = self.layer(layer)
         data = self.repo.read(spec.body_path(path), rev)
         if data is None:
-            raise CollectError("not_found", f"{layer}:{path} 不存在", 404)
+            raise CollectionsError("not_found", f"{layer}:{path} 不存在", 404)
         body = spec.parse(data)
         return Obj(layer=layer, path=path, title=spec.title_of(body, path), body=self._view(spec, body))
 
@@ -142,7 +142,7 @@ class CollectService:
     def history(self, layer: str, path: str) -> list[Revision]:
         spec = self.layer(layer)
         if not self.exists(layer, path):
-            raise CollectError("not_found", f"{layer}:{path} 不存在", 404)
+            raise CollectionsError("not_found", f"{layer}:{path} 不存在", 404)
         return self.repo.log(self.repo.layer_ref(layer), spec.obj_dir(path))
 
     def search(self, query: str, layer: str | None = None) -> list[SearchHit]:
@@ -197,7 +197,7 @@ class CollectService:
             sha = self.repo.commit(layer, self._message(layer, subject, reason, ctx, extra_trailer), puts, deletes,
                                    layer_of=self.layer_of_path)
         except GuardError as e:
-            raise CollectError("guard", str(e), e.status) from None
+            raise CollectionsError("guard", str(e), e.status) from None
         self._deliver(layer, list(puts) + list(deletes), subject, sha, ctx)
         return sha
 
@@ -205,11 +205,11 @@ class CollectService:
                extra_trailer: str | None = None) -> Obj:
         spec = self.layer(layer)
         if self.exists(layer, path):
-            raise CollectError("exists", f"{layer}:{path} 已存在", 409)
+            raise CollectionsError("exists", f"{layer}:{path} 已存在", 409)
         try:
             content = spec.serialize(data)
         except Exception as e:
-            raise CollectError("invalid", f"{layer} 的 schema 校验失败:{e}", 422) from None
+            raise CollectionsError("invalid", f"{layer} 的 schema 校验失败:{e}", 422) from None
         self.commit(layer, subject or f"write {path}", {spec.body_path(path): content}, [], reason, ctx, extra_trailer)
         return self.get(layer, path)
 
@@ -220,7 +220,7 @@ class CollectService:
         try:
             content = spec.serialize(data)
         except Exception as e:
-            raise CollectError("invalid", f"{layer} 的 schema 校验失败:{e}", 422) from None
+            raise CollectionsError("invalid", f"{layer} 的 schema 校验失败:{e}", 422) from None
         self.commit(layer, subject, {spec.body_path(path): content}, [], reason, ctx, extra_trailer)
         return self.get(layer, path)
 
@@ -228,7 +228,7 @@ class CollectService:
         spec = self.layer(layer)
         cur = self.repo.read(spec.body_path(path))
         if cur is None:
-            raise CollectError("not_found", f"{layer}:{path} 不存在", 404)
+            raise CollectionsError("not_found", f"{layer}:{path} 不存在", 404)
         if spec.format == "raw":
             data = patch
         else:
@@ -239,7 +239,7 @@ class CollectService:
     def delete(self, layer: str, path: str, reason: str, ctx: Ctx) -> None:
         spec = self.layer(layer)
         if not self.exists(layer, path):
-            raise CollectError("not_found", f"{layer}:{path} 不存在", 404)
+            raise CollectionsError("not_found", f"{layer}:{path} 不存在", 404)
         if spec.format == "raw":
             files = [path]
         else:
@@ -250,7 +250,7 @@ class CollectService:
         spec = self.layer(layer)
         fn = spec.behaviors.get(action)
         if fn is None:
-            raise CollectError("no_action", f"层 {layer} 没有行为 {action}(有:{', '.join(sorted(spec.behaviors)) or '无'})", 404)
+            raise CollectionsError("no_action", f"层 {layer} 没有行为 {action}(有:{', '.join(sorted(spec.behaviors)) or '无'})", 404)
         return fn(self, path, payload, ctx)
 
     # ================================================================ manager
@@ -277,7 +277,7 @@ class CollectService:
         dir_ = self._as_dir(dir_)
         file = manager_path(dir_)
         if not self.repo.exists(file):
-            raise CollectError("not_found", f"{file} 不存在", 404)
+            raise CollectionsError("not_found", f"{file} 不存在", 404)
         self.commit(self.layer_of_path(file), f"unmanage {dir_ or '/'}", {}, [file], reason, ctx)
 
     def managed_by(self, work: str) -> list[TreeItem]:
@@ -323,4 +323,4 @@ class CollectService:
                 append_line(self.works.work_dir(m.work) / "inbox.jsonl", item.model_dump_json())
 
 
-__all__ = ["CollectService", "CollectError", "Ctx"]
+__all__ = ["CollectionsService", "CollectionsError", "Ctx"]

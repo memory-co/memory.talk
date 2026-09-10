@@ -1,7 +1,7 @@
 """收件箱:变动打过来的地方(manager.md §4)。append-only,不进 git。"""
 from __future__ import annotations
 
-from models.collect import InboxItem
+from models.collections import InboxItem
 from services.store import WorksLayout, append_line, read_lines
 
 
