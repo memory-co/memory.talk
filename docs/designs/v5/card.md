@@ -6,7 +6,7 @@
 - v5 总设计(work / issue / card 三层): [README.md](README.md)
 - v5 issue(card 的「讨论页」:争议在这里,不在卡上): [issue.md](issue.md)
 - v5 work 树(卡被召回进它;做事时查它): [work.md](work.md)
-- v5 collect(card 在认知层里是一个 layer:`layer/card`;对象是任意位置的 `<名>.card/` 目录,在 issue 之上): [collect.md](collect.md)
+- v5 collections(card 在认知层里是一个 layer:`layer/card`;对象是任意位置的 `<名>.card/` 目录,在 issue 之上): [collections.md](collections.md)
 - v5 manager(所在文件夹的 `manager.json` 管这一片:卡变了,变动打给绑定的 work): [manager.md](manager.md)
 - v4 card(问题 + 竞争答案 + 治理——v5 把争的部分全给了 issue,卡只留事实): [../v4/card.md](../v4/card.md)
 - v3 论坛动力学(沉浮 + 三轴 stats——**v5 的 card 彻底不用这套**): [../v3/forum-dynamics.md](../v3/forum-dynamics.md)
@@ -35,7 +35,7 @@ card 上**没有**:顶踩计数、可信度、沉浮、竞争的候选、状态�
 |---|---|---|
 | 正文 | 词条:陈述事实,不带立场 | **card**:一条事实 |
 | 讨论页 | 争论、举证、达成共识 | **issue**:立场 + 论证,IBIS 结构 |
-| 改正文 | 讨论页有了共识,编辑词条 | issue 里某个立场站住了,写成 / 改一张 card(两个相邻提交:`[issue] decide` + `[card] write`,见 [collect.md §5](collect.md)) |
+| 改正文 | 讨论页有了共识,编辑词条 | issue 里某个立场站住了,写成 / 改一张 card(两个相邻提交:`[issue] decide` + `[card] write`,见 [collections.md §5](collections.md)) |
 | 争议未决 | 正文挂「争议」模板,或者先不写 | 事实还没定,**不写卡**,留在 issue |
 
 所以卡和 issue 的分工是干净的:**issue 装还在争的,card 装争完的**。一张卡通常来自某个 issue(那个 issue 就是它的讨论页),但卡也可以直接写——有些事实根本没什么可争(「这个仓库用 Python 3.12」),不必先开一个 issue 走一遍流程。要是后来有人不同意这张卡,那时再开 issue,issue 挂在这张卡上当它的讨论页。
@@ -56,7 +56,7 @@ card 上**没有**:顶踩计数、可信度、沉浮、竞争的候选、状态�
 
 ## 4. 卡可以改,改的历史留着
 
-这是跟 v4「只增不改」最大的不同。v4 的卡是治理对象,改一次等于一次信念变更,所以要 append-only + 分叉血缘;v5 的卡是词条,**写错了就改,改了留版本**,跟维基的编辑历史一样。有了 Collect([collect.md](collect.md))之后这一点更彻底:**卡上不需要任何不可变约束、也不需要任何状态位**——git 记录所有事实,卡本身只管当前内容。
+这是跟 v4「只增不改」最大的不同。v4 的卡是治理对象,改一次等于一次信念变更,所以要 append-only + 分叉血缘;v5 的卡是词条,**写错了就改,改了留版本**,跟维基的编辑历史一样。有了 Collections([collections.md](collections.md))之后这一点更彻底:**卡上不需要任何不可变约束、也不需要任何状态位**——git 记录所有事实,卡本身只管当前内容。
 
 - 事实变了(项目后来加了配置文件)→ **改卡**,旧内容进历史,不另起一张。
 - 事实说得不准 → 改措辞,同上。
@@ -65,7 +65,7 @@ card 上**没有**:顶踩计数、可信度、沉浮、竞争的候选、状态�
 
 没有沉浮,一张卡就不会「自己掉下去」。它要么在、要么改了、要么废了,都是明确的编辑动作,不是分数慢慢降的结果。这比沉浮更像维基,也更好解释:一张卡为什么长这样,翻历史就知道。
 
-在 Collect 里,改卡就是一个 `[card]` 提交,落在 `layer/card` 上;`git log layer/card` 是所有卡的编辑史,`git log -- <路径>.card/` 是这一张的。card 是 issue 之上的 layer,**改卡的提交碰不到任何 `.issue/` 目录里的东西**——想改讨论页里的记录,那是另一个 `[issue]` 提交,而且立场、论证本来就只增不改。
+在 Collections 里,改卡就是一个 `[card]` 提交,落在 `layer/card` 上;`git log layer/card` 是所有卡的编辑史,`git log -- <路径>.card/` 是这一张的。card 是 issue 之上的 layer,**改卡的提交碰不到任何 `.issue/` 目录里的东西**——想改讨论页里的记录,那是另一个 `[issue]` 提交,而且立场、论证本来就只增不改。
 
 ---
 
@@ -104,9 +104,9 @@ card 是 v5 的召回单元。work 开工时拿目标去查,agent 干活途中�
 
 ---
 
-## 8. card 在 Collect 里:一个 layer
+## 8. card 在 Collections 里:一个 layer
 
-card 是 Collect([collect.md](collect.md))里内置的一个 **layer**:
+card 是 Collections([collections.md](collections.md))里内置的一个 **layer**:
 
 | | |
 |---|---|

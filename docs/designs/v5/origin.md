@@ -1,19 +1,19 @@
 # origin —— 事实层:外部来的东西先落在这里,它是地板(v5 设计)
 
-> **状态:框架稿,未实施。** 本篇在 Collect 里再加一个内置的 layer:**origin**。外部来的各种东西——文档、网页、别人给的材料、导出的聊天记录——还没被消化成 issue 或 card 之前,先原样放在这里。它是 Collect 的**最下层**,collectbase 意义上的事实层:上层引用它、改不动它。总定位见 [README.md](README.md)。
+> **状态:框架稿,未实施。** 本篇在 Collections 里再加一个内置的 layer:**origin**。外部来的各种东西——文档、网页、别人给的材料、导出的聊天记录——还没被消化成 issue 或 card 之前,先原样放在这里。它是 Collections 的**最下层**,collectbase 意义上的事实层:上层引用它、改不动它。总定位见 [README.md](README.md)。
 
 相关:
-- v5 collect(层即 layer;本篇补上此前缺的那块「地板」): [collect.md](collect.md)
-- v5 collect layer(层怎么定义——origin 也照这套,只是它是内置的、最底的): [collect-layer.md](collect-layer.md)
+- v5 collections(层即 layer;本篇补上此前缺的那块「地板」): [collections.md](collections.md)
+- v5 collections layer(层怎么定义——origin 也照这套,只是它是内置的、最底的): [collections-layer.md](collections-layer.md)
 - v5 issue / card(消化 origin 的去处;它们的出处指回 origin): [issue.md](issue.md) / [card.md](card.md)
-- v5 store(work 的痕迹是裸文件,不在 Collect——它和 origin 的边界见 §6): [store.md](store.md)
+- v5 store(work 的痕迹是裸文件,不在 Collections——它和 origin 的边界见 §6): [store.md](store.md)
 - collectbase 的事实层(只读、`chmod a-w`、智能体不写): [DESIGN.md §1](https://github.com/memory-co/collectbase/blob/main/docs/v2/DESIGN.md)
 
 ---
 
 ## 1. 一句话:origin 是认知层的地板
 
-[collect.md §4](collect.md) 曾说:memory.talk 的 Collect 里没有 collectbase 意义上的「事实层」——最底下是 issue,而 issue 已经是推论(争的过程)了。现在补上:
+[collections.md §4](collections.md) 曾说:memory.talk 的 Collections 里没有 collectbase 意义上的「事实层」——最底下是 issue,而 issue 已经是推论(争的过程)了。现在补上:
 
 ```
 上   card       ← 争完的结论
@@ -83,7 +83,7 @@ origin(原文)──逐段标注、#问题──▶ issue(问题 + 立场 + 论�
 
 work 的 rounds、屏幕、事件是**本实例自己的过程**,它们是裸文件、不进 git([store.md §4](store.md))。origin 收的是**外部来的**。两者都是「事实」,但一个是过程、一个是材料,分开放:
 
-| | work 的痕迹(`works/<id>/…`) | origin(Collect 里不带层后缀的一切) |
+| | work 的痕迹(`works/<id>/…`) | origin(Collections 里不带层后缀的一切) |
 |---|---|---|
 | 从哪来 | 本实例的 agent 会话跑出来的 | 外面来的 |
 | 体量 | 大、持续增长、每一轮都记 | 一份一份的,进来就定 |
@@ -99,7 +99,7 @@ work 的 rounds、屏幕、事件是**本实例自己的过程**,它们是裸文
 
 ## 7. 形态:没限制,文件或目录都行
 
-origin **没有形态约束**:Collect 目录树里任何**不带层后缀**的文件或目录,都是 origin。一份 markdown、一个 PDF(软链到 blob)、一个装着十几个文件的文件夹——放进来就是。
+origin **没有形态约束**:Collections 目录树里任何**不带层后缀**的文件或目录,都是 origin。一份 markdown、一个 PDF(软链到 blob)、一个装着十几个文件的文件夹——放进来就是。
 
 ```
 memory.talk/
@@ -126,7 +126,7 @@ meta 是**可选的**:想记「从哪来、什么时候、谁放的」,在旁边
 layers:  origin, issue, card           ← origin 永远第一个(最底)
 ```
 
-按 [collect-layer.md §2](collect-layer.md) 的规则「引用谁就排在谁上面」:所有层都会引用 origin(它是出处),没有层被 origin 引用,所以它在最底。用户自定义的层同样排在它之上。
+按 [collections-layer.md §2](collections-layer.md) 的规则「引用谁就排在谁上面」:所有层都会引用 origin(它是出处),没有层被 origin 引用,所以它在最底。用户自定义的层同样排在它之上。
 
 ---
 
@@ -135,5 +135,5 @@ layers:  origin, issue, card           ← origin 永远第一个(最底)
 - **rounds 摘录的粒度**(§6):按轮、按段、还是整个会话;摘录要不要保留工具调用的原始输出。
 - **去重**:同一份文档两次进来(抓两次网页、两个人各放一份)——按内容哈希合并,还是各放各的、让上层引用其中一份。倾向后者:origin 不做聪明事,重复也是事实。
 - **大材料**:一本 200 页的 PDF 进 origin,是整本(blob)+ 抽出的文本,还是只抽文本。倾向两者都留:原件 blob、文本 content。
-- **采集器**:谁把网页抓成 origin、谁把外部工具的会话同步进来——是 memory.talk 的一部分,还是外部脚本直接往 Collect 里 commit(`[origin]`)。collectbase 说「不做采集」;倾向 memory.talk 先只提供「放进来」的端点,采集是外部的。
+- **采集器**:谁把网页抓成 origin、谁把外部工具的会话同步进来——是 memory.talk 的一部分,还是外部脚本直接往 Collections 里 commit(`[origin]`)。collectbase 说「不做采集」;倾向 memory.talk 先只提供「放进来」的端点,采集是外部的。
 - **过期**:材料旧了要不要标。不标——它是原文,旧也是事实;上层的 card 说「这条已过时」。

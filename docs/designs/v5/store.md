@@ -10,13 +10,13 @@
 
 ---
 
-> **后续演进**:memory/ 这个 git 仓库在 [collect.md](collect.md) 里被做成一个 collectbase 仓库——issue / card 各是一层(layer),`[层名]` 声明、hook 守卫、每类一条权威分支。本篇说的「一个决定一个 commit」在那里变成「两个相邻提交 + 同一个 Decision trailer」(collect.md §5)。其余不变。
+> **后续演进**:memory/ 这个 git 仓库在 [collections.md](collections.md) 里被做成一个 collectbase 仓库——issue / card 各是一层(layer),`[层名]` 声明、hook 守卫、每类一条权威分支。本篇说的「一个决定一个 commit」在那里变成「两个相邻提交 + 同一个 Decision trailer」(collections.md §5)。其余不变。
 
 ## 1. 一句话:认知层进 git,现场层用裸文件,没有别的
 
 ```
 ~/.memory.talk/
-├── memory/          ← 一个 git 仓库(Collect):按主题组织的目录树,原文 / .issue/ / .card/ 并排。认知的 canonical,连同全部历史
+├── memory/          ← 一个 git 仓库(Collections):按主题组织的目录树,原文 / .issue/ / .card/ 并排。认知的 canonical,连同全部历史
 └── works/           ← 裸文件:work 树、画布、会话 round。现场的 canonical,原子写,不进 git
 ```
 

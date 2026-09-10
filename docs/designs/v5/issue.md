@@ -5,7 +5,7 @@
 相关:
 - v5 总设计(work / issue / card 三层): [README.md](README.md)
 - v5 work 树(issue 的原料来源、管理者所在、派活的去处): [work.md](work.md)
-- v5 collect(issue 在认知层里是一个 layer:`layer/issue`;对象是任意位置的 `<名>.issue/` 目录): [collect.md](collect.md)
+- v5 collections(issue 在认知层里是一个 layer:`layer/issue`;对象是任意位置的 `<名>.issue/` 目录): [collections.md](collections.md)
 - v5 manager(issue 目录下的 `manager.json` 决定谁管它、变动打给谁): [manager.md](manager.md)
 - v4 问题图(issue / position / argument、IBIS 边、credence 现算——本篇机制的来源): [../v4/card.md](../v4/card.md)
 - v4 逐 round 标注 + `#问题`(issue 的主入口): [../v4/session-annotation.md](../v4/session-annotation.md)
@@ -52,7 +52,7 @@ issue 是一个带 `.issue/` 后缀的目录,放在它相关的东西旁边—�
 - **manager work 是议这个问题的现场**。在它的画布里开 agent 会话去梳理立场、找资料、判断现有论证够不够、决定下一步要验什么。这个 work 的 session 痕迹就是这个 issue 的**议事记录**。
 - **manager work 是普通 work**。它跟别的 work 一样有画布、有成员、有状态、有父子;唯一多出来的是变动先到它这里。它没有更大的权限([member.md](member.md):不做权限)。
 - **一个 issue 同一时间只有一个 manager**(最近的那个 `manager.json`);**一个 work 可以管多个 issue**。
-- **可以继承、可以换、可以没有**。issue 自己目录下没有 `manager.json`,就往上找——所在主题文件夹的 `manager.json`(它管这个文件夹里所有层的东西,不只 issue),再往上是 Collect 根上的兜底;所以「一个 work 管这个主题下所有还没人专门管的问题」只要在那个文件夹里放一个文件。换绑 = 改这个文件(一次 `[issue]` 提交,`git log manager.json` 就是换绑史);一路都找不到 = **没人管的问题**,这是有用的状态——issue 列表里一眼看出哪些在推、哪些搁着。
+- **可以继承、可以换、可以没有**。issue 自己目录下没有 `manager.json`,就往上找——所在主题文件夹的 `manager.json`(它管这个文件夹里所有层的东西,不只 issue),再往上是 Collections 根上的兜底;所以「一个 work 管这个主题下所有还没人专门管的问题」只要在那个文件夹里放一个文件。换绑 = 改这个文件(一次 `[issue]` 提交,`git log manager.json` 就是换绑史);一路都找不到 = **没人管的问题**,这是有用的状态——issue 列表里一眼看出哪些在推、哪些搁着。
 
 > 出处 work 和 manager work 是两回事:前者是**冒出**这个问题的地方(可能是在做别的事时顺手撞见的),后者是**推进**这个问题的地方。它们常常是同一个节点;不是的时候,通常是「在叶子上撞见、但该由父节点来管」——比如做功能 A 的某一步时发现「数据库该不该换」,这个问题比 A 大,该挂到 A 的父节点去管。
 
@@ -107,15 +107,15 @@ issue 图和 work 树是**两套层级,各管各的**:work 树表达「事怎么
 
 issue 和 card 的关系就是维基的讨论页和正文(见 [card.md §2](card.md)):争在 issue 里争,争出结果——某个立场站住了——就把它**写成一张 card**(或者改一张已有的卡)。card 上没有立场、没有计数,只有事实;card 链接回它的 issue,顺着能一路挖回 manager work 的议事记录和论证 work 的证据。
 
-在 Collect 里这是**两个相邻的提交,各在自己的 layer**([collect.md §5](collect.md)):`[issue] decide iss_…#p2 -> card …`(issue 记下「这个立场写成了卡」)+ `[card] write …`(卡的正文),带同一个 `Decision:` trailer。issue 在下、card 在上——写卡、改卡的提交碰不到任何 `.issue/` 目录里的文件,hook 守着;所以「立场只增不改」不靠代码纪律,靠层。
+在 Collections 里这是**两个相邻的提交,各在自己的 layer**([collections.md §5](collections.md)):`[issue] decide iss_…#p2 -> card …`(issue 记下「这个立场写成了卡」)+ `[card] write …`(卡的正文),带同一个 `Decision:` trailer。issue 在下、card 在上——写卡、改卡的提交碰不到任何 `.issue/` 目录里的文件,hook 守着;所以「立场只增不改」不靠代码纪律,靠层。
 
 写卡不等于关闭 issue:issue 继续开着当讨论页;后面若另一个立场翻盘,回来改卡,旧内容进卡的历史。反过来,一张直接写的卡后来有人不同意,就开一个 issue 挂到这张卡上当它的讨论页——同样是两个提交:`[issue] raise …`(新 issue,`card` 指向那张卡)+ `[card] link …`(卡的 `issue` 指回来)。
 
 ---
 
-## 8. issue 在 Collect 里:一个 layer
+## 8. issue 在 Collections 里:一个 layer
 
-issue 是 Collect([collect.md](collect.md))里内置的一个 **layer**:
+issue 是 Collections([collections.md](collections.md))里内置的一个 **layer**:
 
 | | |
 |---|---|

@@ -5,7 +5,7 @@
 相关:
 - v5 work 树(manager 绑的是 work;父子本身就是一条隐式的 manager 链): [work.md](work.md)
 - v5 issue(原来的 `manager_work` 字段由本篇取代): [issue.md](issue.md)
-- v5 collect(认知层的目录在 git 里,「变动」= 触碰这些路径的 commit): [collect.md](collect.md)
+- v5 collections(认知层的目录在 git 里,「变动」= 触碰这些路径的 commit): [collections.md](collections.md)
 - v5 member(manager 是 work 不是人;谁在那个 work 里干活看 member): [member.md](member.md)
 
 ---
@@ -37,11 +37,11 @@ issue.md 原来的做法是每个 issue 记一个 `manager_work`。它有三个�
 | | 字段 `manager_work` | 目录里的 `manager.json` |
 |---|---|---|
 | 作用范围 | 一个对象 | 一个目录及其下所有东西 |
-| 谁能有 | 只有 issue | 任何目录:一片卡、一个 issue、一棵 work 子树、整个 Collect |
+| 谁能有 | 只有 issue | 任何目录:一片卡、一个 issue、一棵 work 子树、整个 Collections |
 | 可见性 | 要读对象 | `ls` 就看见;`git log manager.json` 就是换 manager 的历史 |
 | 继承 | 无 | 子目录没有就往上找(§3) |
 
-而且它和被管的东西**同处一地**:在 Collect 里它跟着 issue / card 进 git、进那一层;在 work 目录里它是裸文件。不另立一张「谁管谁」的表——**规则和事实是同一份数据**(这句是 collectbase 的原话,在这里同样成立)。
+而且它和被管的东西**同处一地**:在 Collections 里它跟着 issue / card 进 git、进那一层;在 work 目录里它是裸文件。不另立一张「谁管谁」的表——**规则和事实是同一份数据**(这句是 collectbase 的原话,在这里同样成立)。
 
 ---
 
@@ -50,7 +50,7 @@ issue.md 原来的做法是每个 issue 记一个 `manager_work`。它有三个�
 一个路径变了,往上找**最近的一个 `manager.json`**,那就是它的 manager:
 
 ```
-manager.json                                     ← Collect 根:管一切(默认)
+manager.json                                     ← Collections 根:管一切(默认)
 memory.talk/manager.json                         ← 管这个主题文件夹;比上一个近,优先
 memory.talk/配置/配置只来自环境变量.card/card.md    ← 变了 → 打到 memory.talk/manager.json 绑的 work
 memory.talk/配置/旧的 settings 方案.md             ← origin 变了(新放进来)→ 同上,同一个 work
@@ -59,7 +59,7 @@ memory.talk/配置/旧的 settings 方案.md             ← origin 变了(新�
 
 `manager.json` **不分层**:一个主题文件夹里的原文、讨论页、词条,变动都打到同一个 work——这正是把它们摆在一起的意思。
 
-- **根上的 `manager.json` 就是全局默认**——整个 Collect 的「兜底管理者」。
+- **根上的 `manager.json` 就是全局默认**——整个 Collections 的「兜底管理者」。
 - **一路都没有**:这个变动**没人管**。它不会丢,会进一份「无人管的变动」清单——跟 issue.md 说的「没人管的 issue 是有用的状态」一个意思:看得见哪些地方没人接。
 - **work 树里,父子就是隐式的 manager**:一个 work 目录下没有 `manager.json`,它的变动默认打到**父 work**。所以子 work 做完、父 work 收到,这条链不用另外配;放一个 `manager.json` 是为了**改写**这个默认——比如让一棵子树的变动打到另一个专门盯着它的 work。
 
@@ -71,7 +71,7 @@ memory.talk/配置/旧的 settings 方案.md             ← origin 变了(新�
 
 | 在哪 | 变动 = | 谁产生 |
 |---|---|---|
-| Collect(git) | 一个 commit 触碰了这个目录下的路径 | collectbase 的 post-commit 就是天然的信号源;一个 commit 一条变动,带 `[层名]`、动词、路径、trailer |
+| Collections(git) | 一个 commit 触碰了这个目录下的路径 | collectbase 的 post-commit 就是天然的信号源;一个 commit 一条变动,带 `[层名]`、动词、路径、trailer |
 | work 目录(裸文件) | work 的事件:状态变了、新 session、新 round、做完 | work 层的 events.jsonl 就是信号源 |
 
 **打过去**:变动**投递**到 manager work 的**收件箱**——work 目录下一个 append-only 的 `inbox.jsonl`。每条:什么时候、哪个路径、什么变动、谁干的、以及**它是被哪个 `manager.json` 路由过来的**(便于回答「为什么这事到我这」)。
@@ -106,14 +106,14 @@ manager 机制不规定动作。但把它接到 v5 已有的几条线上,会自�
 | `GET /api/issues?manager_work=` / `unmanaged=` | 按字段过滤 | 按 `manager.json` 解析:「这个 work 管哪些 issue」= 所有路由到它的 issue;「没人管」= 一路找不到 `manager.json` |
 | issue.md §4 派出论证 work | `positions[].spawned_works` | 不变——派出是 issue 的领域动作,不是 manager 机制的事;派出的 work 默认挂在 manager work 下 |
 | work 树的父子 | 只表达「事怎么拆」 | 同时是**隐式的 manager 链**:子的变动默认打到父 |
-| issue / card 的存储形态 | `issues/<id>.json`、`cards/**/<slug>.md`,按层分目录 | 都变成**带后缀的目录**,放哪都行:`<名>.issue/issue.json`、`<名>.card/card.md`,自己目录里可放 `manager.json`([collect.md §1](collect.md)) |
+| issue / card 的存储形态 | `issues/<id>.json`、`cards/**/<slug>.md`,按层分目录 | 都变成**带后缀的目录**,放哪都行:`<名>.issue/issue.json`、`<名>.card/card.md`,自己目录里可放 `manager.json`([collections.md §1](collections.md)) |
 | collectbase 分层 | `[issue]` / `[card]` 各自路径 | `manager.json` 是**机制文件**(同 collectbase 的 `layers`),不是证据:在 `.issue/` 里随 `[issue]` 提交,在 `.card/` 里随 `[card]` 提交,在普通文件夹里归最底层但**不受 444 保护**——memory.talk 把它登记为机制例外 |
 
 ---
 
 ## 7. 这篇有意不定的事
 
-- ~~单文件对象要不要变目录~~:已定——issue、card 都是带后缀的目录([collect.md §1](collect.md)),自己身上就能放 `manager.json`;origin 文件或目录都行,管它就管它所在的文件夹。
+- ~~单文件对象要不要变目录~~:已定——issue、card 都是带后缀的目录([collections.md §1](collections.md)),自己身上就能放 `manager.json`;origin 文件或目录都行,管它就管它所在的文件夹。
 - **投递形式**:收件箱(拉)还是推进会话(推)。§4 按收件箱写;推的那半等把手开驱动再说。
 - **变动粒度**:一个 commit 一条,还是一个「决定」(两个相邻提交)合成一条。倾向按 commit,由消费方自己合并——投递侧不做聪明事。
 - **`manager.json` 里还要不要别的**:现在只有 `work`。要不要 `only: ["argue", "write"]` 这类过滤、要不要 `until`(临时代管)——先不要,一个字段起步。
