@@ -2,7 +2,7 @@
 
 认知层的数据模型。机制见 [designs collect.md](../../designs/v5/collect.md);端点见 [api collect.md](../../api/v5/collect.md)。
 
-> 本篇取代原来的 [issue.md](issue.md) / [card.md](card.md) 里关于**存哪、id 形态、提交**的部分——issue 和 card 现在是 Collect 的两个 layer,对象模型(字段)不变,只是住的地方和 id 变了。
+> issue 和 card 是 Collect 的两个内置 layer,它们的字段就在本篇里(§对象);不再各自单独成篇。
 
 ## 仓库:分层 git
 
@@ -34,21 +34,70 @@
 
 对象目录里还可以放 `manager.json`(谁管它)和附件。目录树按主题组织,原文、`.issue/`、`.card/` 并排。
 
-### issue 的 body
+### issue 层(内置)
+
+`<path>.issue/issue.json`。问题 + 立场 + 论证 + IBIS 边;立场 / 论证只增不改(行为保证,层守卫兜底)。机制见 [designs issue.md](../../designs/v5/issue.md)。
 
 ```json
-{"question": "…", "origin": {"work_id": "work_a", "rounds": [3], "origin": null},
+{"question": "memory.talk v5 的配置该走文件还是环境变量?",
+ "origin": {"work_id": "work_a", "rounds": [3, 4], "origin": null},
  "card": "memory.talk/配置/配置只来自环境变量",
- "positions": [{"id": "p1", "claim": "…", "origin": null,
-                "arguments": [{"id": "a1", "stance": 1, "comment": "", "evidence": {…}, "work_id": "work_try", "created_at": "…"}],
-                "spawned_works": ["work_try"], "created_at": "…"}],
- "links": [{"type": "specializes", "target": "<issue path>"}],
+ "positions": [
+   {"id": "p2", "claim": "只用环境变量,不要配置文件", "origin": null,
+    "arguments": [{"id": "a1", "stance": 1, "comment": "试了一遍,环境变量够用",
+                   "evidence": {"work_id": "work_try", "rounds": [9]}, "work_id": "work_try", "created_at": "…"}],
+    "spawned_works": ["work_try"], "created_at": "…",
+    "up": 1, "down": 0, "neutral": 0, "credence": 1}],
+ "links": [{"type": "specializes", "target": "memory.talk/配置/更大的那个问题"}],
  "created_at": "…"}
 ```
 
-读视图每个立场附现算 `up / down / neutral / credence`,按 credence 倒序。**没有 `manager_work` 字段**——谁管它看目录下的 `manager.json`。`origin` / `evidence` 可以指 work 的 rounds,也可以指 origin 层的一个路径。
+**Issue**
 
-### card 的 body
+| 字段 | 类型 | 改不改 | 说明 |
+|---|---|---|---|
+| `question` | string | 不改 | 问题本身;也是标题(目录 / 召回用) |
+| `origin` | Origin \| null | 不改 | 从哪冒出来:work 的哪些 round,或 origin 层的一个路径。**出处不是归属** |
+| `card` | string \| null | 改 | 争完写成的卡的 path(`decide` 写入),或这个 issue 挂在哪张卡上当讨论页(`discuss` 写入) |
+| `positions[]` | Position[] | 只增 | |
+| `links[]` | IssueLink[] | 只增 | 同 `(type, target)` 不重复 |
+| `created_at` | ISO 8601 | 不改 | |
+
+没有 `manager_work` 字段:谁管它看同目录的 `manager.json`。没有 id 字段:id 就是 path。
+
+**Origin**:`{"work_id": "…", "rounds": [int], "origin": "<origin 层路径>"}`,三项都可空;`rounds` 是 `rounds.jsonl` 里的下标。
+
+**Position**
+
+| 字段 | 说明 |
+|---|---|
+| `id` | `p<n>`,issue 内顺序编号 |
+| `claim` | 立场文本 |
+| `origin` | 这个立场从哪来(Origin \| null) |
+| `arguments[]` | 只增 |
+| `spawned_works[]` | 为验证这个立场派出的 work id;去重 |
+| `created_at` | |
+
+读视图多四个**现算**字段:`up` / `down` / `neutral` = `stance` 为 `1` / `-1` / `0` 的论证数;`credence = up - down`;立场按 credence 倒序。不存、不回写。
+
+**Argument**
+
+| 字段 | 说明 |
+|---|---|
+| `id` | `a<n>`,立场内顺序编号 |
+| `stance` | `1` 支持 / `0` 中立 / `-1` 反对;`≠0` 的就是 IBIS Argument |
+| `comment` | 一句话 |
+| `evidence` | Origin \| null:证据在哪 |
+| `work_id` | 若来自派出的论证 work,记它 |
+| `created_at` | |
+
+**IssueLink**:`{"type", "target"}`。`type` ∈ `specializes`(本 issue 是 target 的子问题)/ `suggested_by`(被 target 引出,target 可写 `<path>#<position_id>`)/ `questions`(质疑 target 的前提)/ `replaces`(重述并取代 target)/ `related`;`target` 是对端 issue 的 path。
+
+**沉默不算数**:没有论证就没有计数;`0` 也不进 credence。
+
+### card 层(内置)
+
+`<path>.card/card.md`。维基式事实条目:可改、可删,历史在 git;**没有分数、没有状态位**。机制见 [designs card.md](../../designs/v5/card.md)。
 
 ```markdown
 ---
@@ -58,10 +107,18 @@ links: memory.talk/配置/另一张卡
 issue: memory.talk/配置/该走文件还是环境变量
 ---
 
-正文
+只用环境变量。配置文件是多出来的一份状态,要同步。
 ```
 
-读出来是 `{"title", "context", "links": [...], "issue", "body"}`。**没有 status**:删就是删,历史在 git。
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `title` | string | 维基式规范标题——它出现在目录里,召回靠它 |
+| `context` | string | 在哪成立:关于哪个项目 / 用户 / 场景。「本地论」在卡上的落法——不是治理字段,是事实陈述的一部分 |
+| `links[]` | string[] | 相关卡的 path(内链,只有一种类型) |
+| `issue` | string \| null | 讨论页:挂在这张卡上的 issue 的 path |
+| `body` | string | 正文,可以比一句话长;但**一张卡讲一件事** |
+
+frontmatter 只有 `key: value` 行;`links` 逗号分隔;空值不写。读出来是 `{"title", "context", "links": [...], "issue", "body"}`。没有 `status`:删就是删,历史在 git;没有 id:id 就是 path。
 
 ### 用户层的 schema
 
