@@ -1,119 +1,126 @@
-# provider —— user 和 work 的存储介质可换,上层不动(v5 设计)
+# provider —— 存储介质的两族基类:文件系统型、数据库型(v5 设计)
 
-> **状态:框架稿,未实施。** 本篇立存储 provider 这层抽象:**user 和 work 这两类记录**(裸文件那一半)不绑定特定介质——本地 JSON 可以,MySQL 也可以;介质以 provider 的形式提供,上层用的东西不变。但**文件系统 provider 和数据库 provider 的接口不会完全一样**,所以上层要在少数几处显式感知——本篇把「一样的部分」和「不一样的部分」划清。总定位见 [README.md](README.md)。
+> **状态:框架稿,未实施。** 本篇立 **provider** 这层抽象:它是**介质原语**,和业务无关。两族、两个基类——**文件系统型**(本地文件系统、OSS、S3……)和**数据库型**(SQLite、MySQL、PostgreSQL……)。具体介质各自实现自己那一族的基类;上层业务(work / user 的记录)按族写一份仓储,用 provider 的原语落地。provider 里**没有** work、user、document 这类词——那是业务,和底层无关。总定位见 [README.md](README.md)。
 
 相关:
-- v5 store(认知层进 git、现场层用裸文件——本篇只动「裸文件」那一半的介质): [collections-store.md](collections-store.md)
-- v5 user / work(被存的两类记录): [user.md](user.md) / [work.md](work.md)
-- v5 collections(**不在本篇范围**:它的介质就是 git): [collections.md](collections.md)
+- v5 collections store(认知层的介质就是 git,不在本篇范围): [collections-store.md](collections-store.md)
+- v5 user / work(用 provider 落地的两类业务记录): [user.md](user.md) / [work.md](work.md)
 
 ---
 
-## 1. 一句话:两类记录、两个小接口、介质由 provider 给
-
-memory.talk 落盘的东西分两半([collections-store.md §1](collections-store.md)):
-
-| 半 | 是什么 | 介质 |
-|---|---|---|
-| collections | 认知层:分层 git 仓库 | **就是 git**,不换。它的价值(历史、因果、层)全在 git 上,换介质等于换掉它本身 |
-| **works + users** | 现场层的记录:work 节点、画布、会话登记、谁动过、事件、收件箱、round;以及 user 的资料 | **本篇**:今天是 `~/.memory.talk/works/` 下的 JSON / JSONL;将来可以是 MySQL / PostgreSQL / SQLite——**由 provider 提供** |
-
-上层(WorkService、user 那套、manager 的投递)**不直接 open 文件、不直接写 SQL**,只对着两个小接口说话:
+## 1. 一句话:provider 只回答「字节怎么存」,不回答「存的是什么」
 
 ```
-Documents   一份份小记录:work.json / canvas.json / sessions.json / users.json / manager.json / 用户资料
-            get / put(带版本) / delete / list(按父、按 created_by、按类型)
-Logs        只追加的流:events.jsonl / inbox.jsonl / rounds.jsonl
-            append / read(从某个位置起)
+业务层     WorkService / user 那套 / manager 投递          ← 只认业务仓储的接口,不知道介质
+仓储层     WorkRepo(fs 版)   WorkRepo(db 版)               ← 业务概念在这里:work.json、rounds.jsonl、works 表
+provider   FileSystemProvider 基类   DatabaseProvider 基类  ← 介质原语:字节、路径、行、SQL
+介质       LocalFS / OSS / S3        SQLite / MySQL / PostgreSQL
 ```
 
-就这两个。它们是**从上层今天真正在用的操作里抽出来的**,不是一个通用 KV 或 ORM——接口越小,两种介质越容易都满足。
+三条边界:
+
+- **provider 不认识业务。** 它的接口里只有路径、字节、表、行、SQL——没有 work、没有 user、没有 document、没有 log。
+- **两族是真的不一样,所以两个基类,不硬合成一个。** 文件系统给的是「路径 + 字节」,数据库给的是「表 + 查询」;假装它们一样,结果是在文件系统上模拟查询(慢到不可用)或在数据库上模拟路径(根本没有)。
+- **同一族之内可换,上层零感知。** 本地文件系统换成 S3,数据库从 SQLite 换成 MySQL——仓储不动;换族(文件系统 → 数据库)是换一份仓储实现,业务层不动。
 
 ---
 
-## 2. 为什么现在就要这层
+## 2. 文件系统型:`FileSystemProvider`
 
-- **单机单团队用 JSON 够了,但不是永远够。** 团队大了、多台机器共用一个实例、要按 user 查「我的 work」跨几千个目录——扫文件系统就慢了,这时要数据库。
-- **上层不该为此改一遍。** work 树、user 名单、收件箱投递这些逻辑和介质无关;今天写死 `open()`,明天换库就是全改。现在就把介质隔开,代价很小(两个 Protocol)。
-- **但也不能假装两种介质一样。** 文件系统能给出**路径**——agent 的把手读 `rounds.jsonl`、ttyd 的 attach 脚本看登记文件、人 `cat` 一下;数据库给不了路径,但能给**查询**——按 user、按状态、按时间过滤,文件系统只能扫。这两样差异是本质的,藏起来只会让上层在错的地方假设。
-
----
-
-## 3. 一样的部分:核心接口
-
-两种 provider **都必须实现**。上层的绝大多数代码只碰这里。
+**一族**:本地文件系统、OSS、S3、以及任何「按路径存字节」的东西。基类定的是这一族的公共原语:
 
 ```python
-class Documents(Protocol):
-    def get(self, kind: str, id: str) -> Doc | None            # Doc = {id, kind, parent, created_by, version, data}
-    def put(self, kind: str, id: str, data: dict, *, expect_version: int | None = None) -> Doc
-    def delete(self, kind: str, id: str) -> None
-    def list(self, kind: str, *, parent: str | None = None, created_by: str | None = None) -> list[Doc]
-
-class Logs(Protocol):
-    def append(self, stream: str, id: str, line: dict) -> None     # stream = events | inbox | rounds
-    def read(self, stream: str, id: str, since: int = 0) -> list[dict]
+class FileSystemProvider:
+    def read(self, path: str) -> bytes | None
+    def write(self, path: str, data: bytes) -> None        # 整体替换;对调用方而言是原子的(要么旧的要么新的)
+    def append(self, path: str, data: bytes) -> None       # 追加到末尾
+    def delete(self, path: str) -> None
+    def exists(self, path: str) -> bool
+    def list(self, prefix: str) -> list[str]               # 前缀下的全部路径
+    def stat(self, path: str) -> Stat | None               # size / mtime
+    # 能力(不是每个实现都有):
+    def local_path(self, path: str) -> Path | None         # 本机真实路径;只有 LocalFS 有
+    def watch(self, prefix: str, callback) -> Handle | None
 ```
 
-要点:
+| 实现 | `write` | `append` | `local_path` | 备注 |
+|---|---|---|---|---|
+| **LocalFS**(默认) | 临时文件 + rename | `open(a)` | 有 | 今天 `~/.memory.talk/works/` 的那套纪律就是它 |
+| **S3 / OSS** | PutObject(天然整体替换) | **对象存储没有原生 append**:实现上要么读回 + 拼接 + 写回(小文件可以),要么一行一个对象再按前缀 list——由实现选,基类只要求语义 | 没有 | 适合把 rounds 这类只增的痕迹和 blob 放远端 |
 
-- **`kind` 就是今天的文件名**:`work` / `canvas` / `sessions` / `users` / `manager` / `user`(资料)。`id` 是 work id(或 user 名)。文件系统 provider 把 `(kind, id)` 映射成 `works/<id>/<kind>.json`;数据库 provider 映射成一张表一行。
-- **`put` 带版本**:画布已经在用乐观锁(`version`),把它提到接口上,两种介质都能给——文件系统用文件里的版本号,数据库用行版本列。
-- **`list` 只按三样过滤**:`kind`、`parent`(work 树的父子)、`created_by`(user 的归属)。这是上层今天真正需要的全部;数据库能建索引,文件系统扫目录——**结果一样,快慢不同**,上层不用管。
-- **原子性只到单份文档 / 单条追加**:文件系统就是这么保证的(原子写、追加),数据库也按行保证。**不承诺跨文档事务**——上层今天就没依赖它(work 结束时逐个销毁会话就是这么写的),将来也别依赖。
+`local_path` 是这一族里唯一的能力差异:agent 的把手、attach 脚本、人 `cat` 需要一个本机路径;远端对象存储给不了。仓储层要用它时先问一句,没有就退回 `read`。
 
 ---
 
-## 4. 不一样的部分:能力
+## 3. 数据库型:`DatabaseProvider`
 
-两种 provider **不必都有**的东西,上层用之前要问一句。
-
-| 能力 | 谁有 | 上层哪里用 | 没有时怎么办 |
-|---|---|---|---|
-| **`paths`**:一份文档 / 一条流对应的**本机路径** | 文件系统 | agent 把手直接读 `rounds.jsonl`;attach 脚本校验登记;人 `cat` | 数据库 provider 没有。上层改走 `Logs.read`(把手已经是通过接口读的,只有「给外部进程一个路径」的地方需要它);真要路径,provider 可以**spool**——把那条流导出到临时文件,用完丢 |
-| **`query`**:任意条件过滤 / 排序 / 分页 | 数据库 | 「按 user 看最近 30 天的 work」「全团队正在动的 work」这类视图 | 文件系统 provider 没有。上层退回 `list` + 内存过滤;数据量小时够用,大了就是换库的信号 |
-| **`watch`**:某条流有新行时通知 | 文件系统(inotify)可有;数据库看实现 | 前端实时看收件箱、rounds 流出来 | 都没有就轮询 |
-
-上层这样感知:
+**一族**:SQLite、MySQL、PostgreSQL、以及任何「表 + SQL」的东西。基类定的是这一族的公共原语:
 
 ```python
-store = load_provider(config)           # fs | mysql | …
-if store.has("paths"):
-    handle = server.open(..., rounds_path=store.paths.log("rounds", session_id))
-else:
-    handle = server.open(..., rounds=lambda: store.logs.read("rounds", session_id))
+class DatabaseProvider:
+    def execute(self, sql: str, params: Sequence = ()) -> int          # 写;返回受影响行数
+    def query(self, sql: str, params: Sequence = ()) -> list[Row]      # 读
+    def transaction(self) -> ContextManager                            # 一组语句要么全成要么全不成
+    def ensure_schema(self, ddl: list[str]) -> None                    # 建表 / 升级,幂等
+    dialect: str                                                       # sqlite | mysql | postgresql:方言差异(占位符、自增、JSON 列)由实现吸收
 ```
 
-**只在这几处感知,别处一律只用核心接口。** 能力是显式的、可探的、有降级的——这比把两种介质硬压成一个接口、然后在文件系统上假装能查询(慢到不可用)或在数据库上假装有路径(根本没有)诚实得多。
+| 实现 | 备注 |
+|---|---|
+| **SQLite** | 单文件,零依赖;单机想要查询能力时的第一选择 |
+| **MySQL / PostgreSQL** | 多机共用一个实例、多写者时用;连接串从环境变量来(行为不来自文件,同 `*muxd` 的规矩) |
+
+方言差异(`?` vs `%s`、自增列、JSON 类型、`RETURNING`)由各实现吸收;仓储层写的 SQL 尽量只用交集,真绕不开的地方按 `dialect` 分支。
 
 ---
 
-## 5. 两个 provider 长什么样
+## 4. 仓储层:业务概念住在这里,按族各写一份
 
-| | fs(默认) | mysql(将来;PostgreSQL / SQLite 同理) |
+work / user 的记录(work 节点、画布、会话登记、谁动过、事件、收件箱、round、user 资料)是**业务**。业务层需要的操作定成一个接口——它长什么样是业务层的事,provider 不管;然后**按族各实现一份**:
+
+| | fs 版仓储(用 `FileSystemProvider`) | db 版仓储(用 `DatabaseProvider`) |
 |---|---|---|
-| Documents | `works/<id>/<kind>.json`,原子写(临时文件 + rename),`version` 存在文件里;`user` 资料在 `users/<名>.json` | 一张 `documents(kind, id, parent, created_by, version, data JSON)` 表,或每 kind 一张表——由 provider 定,上层不感知 |
-| Logs | `works/<id>/{events,inbox}.jsonl`、`works/<id>/sessions/<sid>/rounds.jsonl`,append | `logs(stream, id, seq, line JSON)`,`seq` 自增 |
-| 能力 | `paths`、可选 `watch` | `query`、可选 `watch` |
-| 配置 | 无(默认) | `MEMORY_TALK_STORE=mysql` + DSN——**行为不来自文件**,同 `*muxd` 的规矩 |
-| 迁移 | 两边都实现 `dump()` / `load()`(走核心接口),介质之间搬家就是导出再导入 | 同 |
+| work 节点 | `works/<id>/work.json`,`read` / `write` | `works` 表,一行 |
+| 画布 | `works/<id>/canvas.json`,版本号在文件里 | `canvases` 表,版本列 |
+| 会话登记 / 谁动过 / manager | 各一个 JSON | 各一张表 |
+| 事件 / 收件箱 / round | JSONL,`append` / `read` | `events` / `inbox` / `rounds` 表,自增 `seq` |
+| 「按父列子」「按 created_by 列」 | `list` 前缀 + 读每个 `work.json` 在内存里过滤 | `WHERE parent = ?` / `WHERE created_by = ?`,走索引 |
+| 把路径交给外部进程(agent 读 rounds) | `local_path`(LocalFS 有;S3 没有 → 退回 `read`) | 没有路径;把手改成通过仓储读 |
 
-**rounds 特殊**:它大、增长快、每轮都记。即使用了数据库,rounds 也可以**留在文件系统**——provider 允许**按流混搭**(`rounds` 用 fs,其余用 mysql)。这是 [origin.md §6](origin.md) 说的「痕迹和材料分开放」在介质上的体现:过程留在本机,记录进库。混搭是 provider 的配置,上层看到的还是 `Logs`。
+两点要说清:
+
+- **业务接口一份,实现两份**——不是一份实现套两种 provider。因为两族的「自然写法」不同:文件系统就该整文件读写,数据库就该 SQL 查询;硬用一份代码适配两族,就是在其中一族上写别扭的代码。
+- **同一族之内不用再分**:fs 版仓储对 LocalFS 和 S3 一视同仁(只在 `local_path` 上问一句);db 版仓储对 SQLite 和 MySQL 一视同仁(方言在 provider 里吸收)。
+
+---
+
+## 5. 选哪个:配置定,业务层不感知
+
+```
+MEMORY_TALK_STORE=fs            (默认)  → LocalFS,根在 MEMORY_TALK_HOME
+MEMORY_TALK_STORE=s3   + bucket / 凭证  → S3
+MEMORY_TALK_STORE=sqlite + 文件路径     → SQLite
+MEMORY_TALK_STORE=mysql  + DSN          → MySQL
+```
+
+启动时按配置装配:选族 → 选实现 → 建对应的仓储 → 交给业务层。业务层拿到的是仓储接口,不知道底下是文件还是表。
+
+**混搭**:某些流可以指定另一个 provider——典型是 rounds:主存储用 MySQL,rounds 仍用 LocalFS(大、只增、要给 agent 一个路径)。这是装配时的事,仓储层收到两个 provider,业务层仍只看到一份接口。
 
 ---
 
 ## 6. 和 collections 的边界
 
-collections **不走 provider**。理由已经在 [collections-store.md §2](collections-store.md):它要的是历史、因果、层——那是 git 本身,不是「一种介质上的记录」。真要把认知层放到别处,答案是 git remote(push / pull),不是换成表。
+collections 的介质就是 git([collections-store.md](collections-store.md)),**不走 provider**。git 需要本机文件系统,这是硬要求。
 
-两边的引用照旧是裸 id:collections 里的 `Work:` trailer、issue 的 `work_id`,指向 works 那半;works 的收件箱条目指向 collections 的路径。介质换了,id 不变,引用不变。
+但 provider 在 collections 那边有一个天然的位置:**blob 外置**。collectbase 把二进制放到 `blob/` 目录、原地留软链;那个 `blob/` 正是一个 `FileSystemProvider` 该管的东西——本地时是 LocalFS,想把大文件放远端时换 S3,collections 仓库里的软链不变。这是将来做 blob 外置时顺手的事,本篇记一笔。
 
 ---
 
 ## 7. 这篇有意不定的事
 
-- **user 资料要不要现在就落成 Documents 的一个 kind**:[user.md §7](user.md) 说 user 现在只是名字,没有清单。倾向先把 `kind="user"` 留在接口里,fs provider 下 `users/<名>.json` 可以为空目录——接口有、内容等需求。
-- **rounds 的 `since`**:文件系统按行号,数据库按 `seq`。要不要统一成「provider 给一个不透明的 cursor」——倾向是,`since` 就是 cursor,上层原样带回。
-- **`watch` 要不要进核心接口**:前端实时性会要;但两种介质实现难度差很多。先放能力。
-- **多进程 / 多实例写同一个 provider**:文件系统 provider 假设单写者;数据库天然多写者。上层今天按单写者写的(进程内锁),换库后要不要放开——放开就得处理并发,先不。
-- **provider 的粒度**:一个 provider 管全部 kind + stream,还是可以每个 kind 指定(§5 的混搭)。倾向:一个主 provider + 少数流可覆盖(`rounds`),别做成每 kind 一个。
+- **对象存储的 `append` 怎么做**:读回拼接(简单,小文件够用)还是一行一对象(可扩展,list 成本高)。先按前者;rounds 这种大流本来就建议留 LocalFS。
+- **`watch` 要不要进基类**:前端实时性会要;LocalFS 用 inotify,S3 没有,数据库看实现。先作为能力,不进必须项。
+- **db 版仓储的表结构**:一张宽表 `documents(kind, id, parent, created_by, version, data JSON)` 省事,每类一张表查询好;倾向每类一张表——既然选了数据库就把它的长处用上。
+- **多写者**:LocalFS 假设单写者(进程内锁);数据库天然多写者。换到数据库后业务层要不要放开并发——放开就得处理 work 树上的竞争,先不。
+- **迁移**:两份仓储都实现 `dump()` / `load()`,介质之间搬家就是导出再导入。格式定成什么(JSONL 一行一记录?)等要搬的时候再定。

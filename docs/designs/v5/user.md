@@ -84,7 +84,7 @@ collections 的每个动作是一个 commit;做这个动作的 user 就是 commi
 ## 7. 这篇有意不定的事
 
 - **身份从哪来**:现在是请求头自报。前端要不要让人第一次打开时填个名字存本地;将来接了登录态,是替换还是叠加。
-- **要不要有 user 清单**:现在 user 只是散落在各处的名字,没有一份「团队里有谁」的表。倾向先不要——从 work 的 `users` 和 git author 里能汇总出来;真要头像、邮箱、显示名,再加 `kind="user"` 的资料文档(存哪由 [provider.md](provider.md) 定)。
+- **要不要有 user 清单**:现在 user 只是散落在各处的名字,没有一份「团队里有谁」的表。倾向先不要——从 work 的 `users` 和 git author 里能汇总出来;真要头像、邮箱、显示名,再加 user 资料这一类记录(存哪由仓储 + [provider.md](provider.md) 定)。
 - **git author 的邮箱**:只有名字时邮箱填什么——倾向 `<名字>@memory.talk`,稳定且可辨认。
 - **agent 要不要单独立身份**:agent 的提交现在挂在驱动它的 user 名下。如果实践里「这是人定的还是 agent 定的」真成了问题,再给 agent 一个可辨认的 author(比如 `alice+codex`)。
 - **活跃窗口 N**:2 分钟是拍的,跟前端心跳间隔一起调。
