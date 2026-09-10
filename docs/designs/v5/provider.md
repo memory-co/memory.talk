@@ -3,7 +3,7 @@
 > **状态:框架稿,未实施。** 本篇立存储 provider 这层抽象:**user 和 work 这两类记录**(裸文件那一半)不绑定特定介质——本地 JSON 可以,MySQL 也可以;介质以 provider 的形式提供,上层用的东西不变。但**文件系统 provider 和数据库 provider 的接口不会完全一样**,所以上层要在少数几处显式感知——本篇把「一样的部分」和「不一样的部分」划清。总定位见 [README.md](README.md)。
 
 相关:
-- v5 store(认知层进 git、现场层用裸文件——本篇只动「裸文件」那一半的介质): [store.md](store.md)
+- v5 store(认知层进 git、现场层用裸文件——本篇只动「裸文件」那一半的介质): [collections-store.md](collections-store.md)
 - v5 user / work(被存的两类记录): [user.md](user.md) / [work.md](work.md)
 - v5 collections(**不在本篇范围**:它的介质就是 git): [collections.md](collections.md)
 
@@ -11,7 +11,7 @@
 
 ## 1. 一句话:两类记录、两个小接口、介质由 provider 给
 
-memory.talk 落盘的东西分两半([store.md §1](store.md)):
+memory.talk 落盘的东西分两半([collections-store.md §1](collections-store.md)):
 
 | 半 | 是什么 | 介质 |
 |---|---|---|
@@ -104,7 +104,7 @@ else:
 
 ## 6. 和 collections 的边界
 
-collections **不走 provider**。理由已经在 [store.md §2](store.md):它要的是历史、因果、层——那是 git 本身,不是「一种介质上的记录」。真要把认知层放到别处,答案是 git remote(push / pull),不是换成表。
+collections **不走 provider**。理由已经在 [collections-store.md §2](collections-store.md):它要的是历史、因果、层——那是 git 本身,不是「一种介质上的记录」。真要把认知层放到别处,答案是 git remote(push / pull),不是换成表。
 
 两边的引用照旧是裸 id:collections 里的 `Work:` trailer、issue 的 `work_id`,指向 works 那半;works 的收件箱条目指向 collections 的路径。介质换了,id 不变,引用不变。
 

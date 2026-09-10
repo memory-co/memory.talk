@@ -1,6 +1,6 @@
-# store —— git 存认知,裸文件存现场,没有数据库(v5 设计)
+# collections store —— 认知层存在 git 里:时间线里有因果(v5 设计)
 
-> **状态:框架稿,未实施。** 本篇只立 v5 存储的大框架:card 和 issue 放进一个 git 仓库,work 用裸文件,SQLite 和搜索索引整个去掉——存储只有这两样。目录布局、文件格式、commit 规范后续分篇。总定位见 [README.md](README.md)。
+> **状态:框架稿,已有实现。** 本篇讲 **collections 的存储**:认知层(origin / issue / card / 用户层)放进一个 git 仓库,为什么是 git、什么算一个 commit、为什么不要数据库和索引。**它不是整个 memory.talk 的存储**——现场层(work / user 的记录)的介质在 [provider.md](provider.md),本篇只带一笔。总定位见 [README.md](README.md)。
 
 相关:
 - v5 三层(存的就是这三样): [work.md](work.md) / [issue.md](issue.md) / [card.md](card.md)
@@ -12,7 +12,7 @@
 
 > **后续演进**:memory/ 这个 git 仓库在 [collections.md](collections.md) 里被做成一个 collectbase 仓库——issue / card 各是一层(layer),`[层名]` 声明、hook 守卫、每类一条权威分支。本篇说的「一个决定一个 commit」在那里变成「两个相邻提交 + 同一个 Decision trailer」(collections.md §6)。其余不变。
 
-## 1. 一句话:认知层进 git,现场层用裸文件,没有别的
+## 1. 一句话:认知层进 git,没有别的
 
 ```
 ~/.memory.talk/
@@ -66,17 +66,9 @@ work 那边的动作(开工、拆子 work、状态变化、做完)**不进 git**
 
 ---
 
-## 4. 裸文件那半:work 沿用 shellbase 的状态模型
+## 4. 另一半:work / user 的记录不在这里
 
-> **介质可换**:这一半的记录(work / user)不绑定文件系统——[provider.md](provider.md) 把上层需要的操作抽成 Documents / Logs 两个小接口,文件系统是默认 provider,数据库是另一个;两者接口有差异(路径 vs 查询),用显式能力让上层感知。本节下面说的「裸文件」是 fs provider 的形态。
-
-work 的存储就是 shellbase 的 state 目录,原生实现、逻辑一致([work.md §3](work.md)):
-
-- **每个 work 一个目录**,树用目录嵌套或父指针表达(布局细节后议);里面是 work 自己的元信息(目标、状态、父子)、画布(布局 + 每块的 URI)、终端登记、以及每个会话的 `rounds.jsonl`。
-- **原子写、单写者、无缓存直读**——shellbase 的三条读写纪律原样继承。
-- **会话 round 是 append-only 的裸文件**,跟 v3 一样;它体量大、增长快、不需要「为什么」,所以不进 git。work 自己的时间线(什么时候开的、什么时候变状态、什么时候完)由 work 目录下一个小的 append-only 事件文件记着——这是 v3 events.jsonl 在 v5 唯一保留的地方。
-
-为什么 work 不进 git,再说一遍:git 记的是**决定**,work 记的是**过程**。把画布每次重排、终端每次 attach、agent 每一轮输出都提交进 git,时间线会被淹没,真正的因果反而找不到。
+work 树、画布、会话登记、谁动过、事件、收件箱、round——这些是**现场层**的记录,不进 git。它们今天是 `~/.memory.talk/works/` 下的裸文件(原子写、只追加、单写者),将来可以是数据库;介质由 [provider.md](provider.md) 抽象。本篇只说一句为什么它们不进 git:**git 记的是决定,现场记的是过程**——把画布每次重排、终端每次 attach、agent 每一轮输出都提交进 git,时间线会被淹没,真正的因果反而找不到。
 
 ---
 

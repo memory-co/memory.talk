@@ -152,4 +152,4 @@ works/<work_id>/
 └── sessions/<session_id>/rounds.jsonl   只追加
 ```
 
-读写纪律照 shellbase:单写者(服务进程)、无缓存直读、任何时刻磁盘上都是完整 JSON。**不进 git**——work 记的是过程,git 记的是决定(见 [`../../designs/v5/store.md`](../../designs/v5/store.md) §4)。
+读写纪律照 shellbase:单写者(服务进程)、无缓存直读、任何时刻磁盘上都是完整 JSON。**不进 git**——work 记的是过程,git 记的是决定(见 [`../../designs/v5/collections-store.md`](../../designs/v5/collections-store.md) §4)。

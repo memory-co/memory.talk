@@ -6,7 +6,7 @@
 - v5 collections(层即 layer;本篇补上此前缺的那块「地板」): [collections.md](collections.md)
 - v5 collections layer(层怎么定义——origin 也照这套,只是它是内置的、最底的): [collections-layer.md](collections-layer.md)
 - v5 issue / card(消化 origin 的去处;它们的出处指回 origin): [issue.md](issue.md) / [card.md](card.md)
-- v5 store(work 的痕迹是裸文件,不在 Collections——它和 origin 的边界见 §6): [store.md](store.md)
+- v5 store(work 的痕迹是裸文件,不在 Collections——它和 origin 的边界见 §6): [collections-store.md](collections-store.md)
 - collectbase 的事实层(只读、`chmod a-w`、智能体不写): [DESIGN.md §1](https://github.com/memory-co/collectbase/blob/main/docs/v2/DESIGN.md)
 
 ---
@@ -81,7 +81,7 @@ origin(原文)──逐段标注、#问题──▶ issue(问题 + 立场 + 论�
 
 ## 6. 边界:origin 和 work 的痕迹
 
-work 的 rounds、屏幕、事件是**本实例自己的过程**,它们是裸文件、不进 git([store.md §4](store.md))。origin 收的是**外部来的**。两者都是「事实」,但一个是过程、一个是材料,分开放:
+work 的 rounds、屏幕、事件是**本实例自己的过程**,它们是裸文件、不进 git([collections-store.md §4](collections-store.md))。origin 收的是**外部来的**。两者都是「事实」,但一个是过程、一个是材料,分开放:
 
 | | work 的痕迹(`works/<id>/…`) | origin(Collections 里不带层后缀的一切) |
 |---|---|---|

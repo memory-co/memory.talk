@@ -1,6 +1,6 @@
 # Filesystem (v5)
 
-`~/.memory.talk/` 下只有两样:一个分层 git 仓库,一堆裸文件。**没有数据库,没有索引**;每个字节都是 canonical。为什么见 [`../../designs/v5/store.md`](../../designs/v5/store.md)。
+`~/.memory.talk/` 下只有两样:一个分层 git 仓库,一堆裸文件。**没有数据库,没有索引**;每个字节都是 canonical。为什么见 [`../../designs/v5/collections-store.md`](../../designs/v5/collections-store.md)。
 
 ```
 ~/.memory.talk/                       ← MEMORY_TALK_HOME

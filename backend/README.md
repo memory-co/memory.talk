@@ -36,7 +36,7 @@ backend/
 │   │   ├── manager.py        #     manager.json:最近祖先解析
 │   │   ├── catalog.py        #     一层的目录(按目录树列标题)+ 召回文本
 │   │   └── __init__.py       #     CollectionsService:层的装载(内置 + schemas/*.yaml)、对象 CRUD、历史、检索、树、行为、manager、投递到收件箱
-│   └── store/                #   存储 —— docs/designs/v5/store.md
+│   └── store/                #   存储 —— docs/designs/v5/collections-store.md
 │       ├── __init__.py       #     入口:导出 StoreService(git 仓库 + 裸文件根,其余 service 的依赖)
 │       ├── paths.py          #     ~/.memory.talk 布局
 │       ├── files.py          #     裸文件原语:原子写、单写者、无缓存直读(work 用)

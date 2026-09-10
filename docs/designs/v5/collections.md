@@ -3,7 +3,7 @@
 > **状态:框架稿,未实施。** 本篇引入 **Collections** 这个抽象:memory.talk 的认知层不再是「issue 和 card 两套存储」,而是一个 **Collections**——一个 [collectbase](https://github.com/memory-co/collectbase) 仓库;issue 和 card 各是其中的一个 **layer**;layer 由 **schema** 定义,用户写清 schema 就能加自己的 layer。字段 / 命令后续分篇。总定位见 [README.md](README.md)。
 
 相关:
-- v5 store(git 存认知层——本篇把「怎么用 git」交给 collectbase): [store.md](store.md)
+- v5 store(git 存认知层——本篇把「怎么用 git」交给 collectbase): [collections-store.md](collections-store.md)
 - v5 issue / card(Collections 里内置的两个 layer): [issue.md](issue.md) / [card.md](card.md)
 - v5 collections layer(用户怎么设计一个自己的层): [collections-layer.md](collections-layer.md)
 - v5 origin(最底层:外部来的、未消化的原文;上层改不动): [origin.md](origin.md)
@@ -25,7 +25,7 @@
 
 ## 1. 一句话:collections 是认知层,layer 由 schema 定义
 
-[store.md](store.md) 定了「card 和 issue 放进一个 git 仓库」。collectbase 正好是「把 git 做成分层记录文件系统」的工具:**每一层一条权威分支、层与层路径不相交、`[层名]` 声明归属、hook 守卫**。v5 不自己再造一套,直接把那个 git 仓库**变成一个 collectbase 仓库**,并给它一个名字:
+[collections-store.md](collections-store.md) 定了「card 和 issue 放进一个 git 仓库」。collectbase 正好是「把 git 做成分层记录文件系统」的工具:**每一层一条权威分支、层与层路径不相交、`[层名]` 声明归属、hook 守卫**。v5 不自己再造一套,直接把那个 git 仓库**变成一个 collectbase 仓库**,并给它一个名字:
 
 > **Collections** = memory.talk 的认知层。它是一个 collectbase 仓库;它的每一个 **layer** = 一个名字 + 一段路径 + 一份 **schema**。
 
@@ -64,7 +64,7 @@ issue 和 card **只是两个内置的 layer**。它们的对象模型([issue.md
 
 ## 2. 为什么要这一层抽象
 
-三个理由,都是 store.md 想要而裸 git 给不了的:
+三个理由,都是 collections-store.md 想要而裸 git 给不了的:
 
 - **每个 layer 自己一条历史。** `git log layer/card` 只有卡的变化,`git log layer/issue` 只有辩论序列;`git log --first-parent stack` 是全部认知的时间线,每一行自带 `[issue]` / `[card]` 标注。裸 git 里这些要靠路径过滤去拼,而且分支上什么都混在一起。
 - **layer 与 layer 之间路径不相交,由 hook 守着。** 一个声明 `[card]` 的提交碰了某个 `.issue/` 目录里的文件,当场拒绝——包括 `--no-verify`、`reset`、`cherry-pick` 都绕不过。这就是 collectbase 说的「认知卫生」在 memory.talk 里的形态:**不会有一次提交把「争的过程」和「争完的结论」搅在一起**。
@@ -88,7 +88,7 @@ schema 决定的事:
 
 - **读**:通用的读 / 列 / 历史 / 检索,按 schema 解析文件就能做,不需要为每个 layer 写代码。
 - **写**:通用的建 / 改 / 删,按 schema 校验后落盘 + `[layer 名]` 提交。删也是提交——文件没了,历史在。
-- **引用**:schema 里标出「这个字段指向哪个 layer 的对象」,于是 card.issue、issue.card、card.links 这些跨 layer 的边有了统一的表达;顺链接走(store.md §5 的检索方式)靠它。
+- **引用**:schema 里标出「这个字段指向哪个 layer 的对象」,于是 card.issue、issue.card、card.links 这些跨 layer 的边有了统一的表达;顺链接走(collections-store.md §5 的检索方式)靠它。
 - **目录**:哪个字段是标题、按什么分目录——召回时给 agent 的那份目录由此生成。
 
 内置 layer 除了 schema 还带**行为**:issue 的「加立场 / 表态 / 绑 manager / 派活」、card 的「从 issue 写卡 / 对卡开讨论页」,这些是 schema 之上的领域动作,有自己的端点。**用户自定义的 layer 只有 schema,没有行为**——通用 CRUD 就是它的全部;真需要行为,那就是一个新的内置 layer。
@@ -107,7 +107,7 @@ collectbase 的层是有序的:**事实在最下,推论在上;上层改不动下
 
 origin 在最底、issue 在中、card 在上:issue 从 origin 消化出来,card 从 issue 争出来;改 card 不能顺手改 issue 的记录,改 issue 不能碰 origin 的原文。origin 就是 collectbase 意义上的**事实层**——「智能体够不着的地板」。两点说明:
 
-- **work 的痕迹(rounds)仍不在 Collections 里**——它是本实例自己的过程,裸文件([store.md §4](store.md));值得长期当证据的那几轮,摘录一份进 origin([origin.md §6](origin.md))。
+- **work 的痕迹(rounds)仍不在 Collections 里**——它是本实例自己的过程,裸文件([collections-store.md §4](collections-store.md));值得长期当证据的那几轮,摘录一份进 origin([origin.md §6](origin.md))。
 - **用户自定义的 layer 排在哪**,按 [collections-layer.md §2](collections-layer.md):引用谁就排在谁上面;所有层都引用 origin,所以都在它之上。
 
 ---
@@ -120,7 +120,7 @@ collections 的每个动作是一个 commit,做它的人(请求头 `X-Memory-Tal
 
 ## 6. 「一个决定一个 commit」怎么变
 
-store.md 说:争出结果写卡,issue 记结论 + card 建正文,**同一个 commit**。collectbase 说:**一个提交只能属于一层**——跨层的提交恰好就是把过程和结论搅在一起的那个动作,必须拆。
+collections-store.md 说:争出结果写卡,issue 记结论 + card 建正文,**同一个 commit**。collectbase 说:**一个提交只能属于一层**——跨层的提交恰好就是把过程和结论搅在一起的那个动作,必须拆。
 
 两条都对,取 collectbase 的:**一个决定 = 两个相邻的提交,各在自己的层**。
 
@@ -149,7 +149,7 @@ git log --first-parent stack
 | 加一种新对象 | 改 backend | 写一份 schema + `layers` 里加一行 |
 | 谁改不动谁 | 靠代码纪律 | hook 守着:上层改不动下层,跨层提交被拒 |
 
-store.md 的两条原则不变:**认知层进 git,现场层用裸文件**。Collections 只是把「进 git」这一半做成了有层语义的。
+collections-store.md 的两条原则不变:**认知层进 git,现场层用裸文件**。Collections 只是把「进 git」这一半做成了有层语义的。
 
 ---
 
