@@ -13,14 +13,14 @@
 ```
 业务层     WorkService / user 那套 / manager 投递          ← 只认业务仓储的接口,不知道介质
 仓储层     WorkRepo(fs 版)   WorkRepo(db 版)               ← 业务概念在这里:work.json、rounds.jsonl、works 表
-provider   FileSystemProvider 基类   DatabaseProvider 基类  ← 介质原语:字节、路径、行、SQL
+provider   FileSystemProvider 基类   DatabaseProvider 基类  ← 介质原语:路径 + 字节 / 表 + 链式查询(方言在里面)
 介质       LocalFS / OSS / S3        SQLite / MySQL / PostgreSQL
 ```
 
 三条边界:
 
-- **provider 不认识业务。** 它的接口里只有路径、字节、表、行、SQL——没有 work、没有 user、没有 document、没有 log。
-- **两族是真的不一样,所以两个基类,不硬合成一个。** 文件系统给的是「路径 + 字节」,数据库给的是「表 + 查询」;假装它们一样,结果是在文件系统上模拟查询(慢到不可用)或在数据库上模拟路径(根本没有)。
+- **provider 不认识业务。** 它的接口里只有路径、字节、表、列、链式查询——没有 work、没有 user、没有 document、没有 log。
+- **两族是真的不一样,所以两个基类,不硬合成一个。** 文件系统给的是「路径 + 字节」,数据库给的是「表 + 链式查询」;假装它们一样,结果是在文件系统上模拟查询(慢到不可用)或在数据库上模拟路径(根本没有)。
 - **同一族之内可换,上层零感知。** 本地文件系统换成 S3,数据库从 SQLite 换成 MySQL——仓储不动;换族(文件系统 → 数据库)是换一份仓储实现,业务层不动。
 
 ---
@@ -54,15 +54,27 @@ class FileSystemProvider:
 
 ## 3. 数据库型:`DatabaseProvider`
 
-**一族**:SQLite、MySQL、PostgreSQL、以及任何「表 + SQL」的东西。基类定的是这一族的公共原语:
+**一族**:SQLite、MySQL、PostgreSQL、以及任何「表 + 查询」的东西。基类**做到 ORM 这一层**:对外释放的是表定义和**链式的查询构造**,不是 SQL 字符串——方言差异(占位符、自增、JSON 列、`RETURNING`、`LIMIT` 语法)全部在 provider 内部吸收,仓储层**一行 SQL 都不写**。
 
 ```python
 class DatabaseProvider:
-    def execute(self, sql: str, params: Sequence = ()) -> int          # 写;返回受影响行数
-    def query(self, sql: str, params: Sequence = ()) -> list[Row]      # 读
-    def transaction(self) -> ContextManager                            # 一组语句要么全成要么全不成
-    def ensure_schema(self, ddl: list[str]) -> None                    # 建表 / 升级,幂等
-    dialect: str                                                       # sqlite | mysql | postgresql:方言差异(占位符、自增、JSON 列)由实现吸收
+    # 表:仓储层用列声明表,provider 负责建 / 升级(幂等)
+    def table(self, name: str, *columns: Column) -> Table          # Column(name, type, primary=…, index=…, nullable=…)
+    # 查询构造:链式,最后 .all() / .one() / .run() 才落地成方言 SQL 执行
+    def select(self, table: Table) -> Select      # .where(col == v, col.in_(…), …).order_by(col.desc()).limit(n).offset(m).all() / .one()
+    def insert(self, table: Table) -> Insert      # .values(**row).run() → 主键
+    def update(self, table: Table) -> Update      # .where(…).set(**changes).run() → 受影响行数
+    def delete(self, table: Table) -> Delete      # .where(…).run()
+    def transaction(self) -> ContextManager       # 一组操作要么全成要么全不成
+```
+
+仓储层的写法长这样,在三种数据库上一字不改:
+
+```python
+works = db.table("works", Column("id", str, primary=True), Column("parent", str, index=True, nullable=True),
+                 Column("created_by", str, index=True), Column("status", str), Column("data", JSON))
+db.select(works).where(works.c.created_by == user, works.c.status != "done").order_by(works.c.created_at.desc()).all()
+db.update(works).where(works.c.id == wid, works.c.version == expect).set(status="done", version=expect + 1).run()
 ```
 
 | 实现 | 备注 |
@@ -70,7 +82,12 @@ class DatabaseProvider:
 | **SQLite** | 单文件,零依赖;单机想要查询能力时的第一选择 |
 | **MySQL / PostgreSQL** | 多机共用一个实例、多写者时用;连接串从环境变量来(行为不来自文件,同 `*muxd` 的规矩) |
 
-方言差异(`?` vs `%s`、自增列、JSON 类型、`RETURNING`)由各实现吸收;仓储层写的 SQL 尽量只用交集,真绕不开的地方按 `dialect` 分支。
+要点:
+
+- **列类型是一小组抽象类型**(`str` / `int` / `bool` / `float` / `datetime` / `JSON` / `text`),每个实现映射成自己的原生类型;仓储层不见 `VARCHAR(255)` 这种东西。
+- **条件、排序、分页都是构造出来的对象**,不是拼字符串——所以没有注入问题,也没有方言问题。
+- **不做关系映射**(没有对象图、没有懒加载):它是查询构造器 + 表定义,够仓储层用;真要 ORM 的对象那一半,仓储层自己在上面包。
+- **底下用什么实现构造器**是实现细节:自己写一层薄的,或者包 SQLAlchemy Core——都行,基类的面不变。
 
 ---
 
@@ -84,13 +101,13 @@ work / user 的记录(work 节点、画布、会话登记、谁动过、事件�
 | 画布 | `works/<id>/canvas.json`,版本号在文件里 | `canvases` 表,版本列 |
 | 会话登记 / 谁动过 / manager | 各一个 JSON | 各一张表 |
 | 事件 / 收件箱 / round | JSONL,`append` / `read` | `events` / `inbox` / `rounds` 表,自增 `seq` |
-| 「按父列子」「按 created_by 列」 | `list` 前缀 + 读每个 `work.json` 在内存里过滤 | `WHERE parent = ?` / `WHERE created_by = ?`,走索引 |
+| 「按父列子」「按 created_by 列」 | `list` 前缀 + 读每个 `work.json` 在内存里过滤 | `select(works).where(works.c.parent == pid)`,走索引 |
 | 把路径交给外部进程(agent 读 rounds) | `local_path`(LocalFS 有;S3 没有 → 退回 `read`) | 没有路径;把手改成通过仓储读 |
 
 两点要说清:
 
-- **业务接口一份,实现两份**——不是一份实现套两种 provider。因为两族的「自然写法」不同:文件系统就该整文件读写,数据库就该 SQL 查询;硬用一份代码适配两族,就是在其中一族上写别扭的代码。
-- **同一族之内不用再分**:fs 版仓储对 LocalFS 和 S3 一视同仁(只在 `local_path` 上问一句);db 版仓储对 SQLite 和 MySQL 一视同仁(方言在 provider 里吸收)。
+- **业务接口一份,实现两份**——不是一份实现套两种 provider。因为两族的「自然写法」不同:文件系统就该整文件读写,数据库就该用查询构造器按条件取;硬用一份代码适配两族,就是在其中一族上写别扭的代码。
+- **同一族之内不用再分**:fs 版仓储对 LocalFS 和 S3 一视同仁(只在 `local_path` 上问一句);db 版仓储对 SQLite 和 MySQL 一视同仁(方言在 provider 的 ORM 层里吸收,仓储层不写 SQL)。
 
 ---
 
@@ -121,6 +138,7 @@ collections 的介质就是 git([collections-store.md](collections-store.md)),**
 
 - **对象存储的 `append` 怎么做**:读回拼接(简单,小文件够用)还是一行一对象(可扩展,list 成本高)。先按前者;rounds 这种大流本来就建议留 LocalFS。
 - **`watch` 要不要进基类**:前端实时性会要;LocalFS 用 inotify,S3 没有,数据库看实现。先作为能力,不进必须项。
-- **db 版仓储的表结构**:一张宽表 `documents(kind, id, parent, created_by, version, data JSON)` 省事,每类一张表查询好;倾向每类一张表——既然选了数据库就把它的长处用上。
+- **db 版仓储的表结构**:一张宽表省事,每类一张表查询好;倾向每类一张表——既然选了数据库就把它的长处用上。
+- **查询构造器自己写还是包 SQLAlchemy Core**:自己写面最小、零依赖,但要自己吸收三种方言;包 SQLAlchemy 省事、方言现成,多一个依赖。倾向先包,面收在基类里,将来想换随时换。
 - **多写者**:LocalFS 假设单写者(进程内锁);数据库天然多写者。换到数据库后业务层要不要放开并发——放开就得处理 work 树上的竞争,先不。
 - **迁移**:两份仓储都实现 `dump()` / `load()`,介质之间搬家就是导出再导入。格式定成什么(JSONL 一行一记录?)等要搬的时候再定。
