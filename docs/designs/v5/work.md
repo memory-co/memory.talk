@@ -17,7 +17,7 @@
 
 - **定位对标的就是 Codex 的 work。** [README §1](README.md) 说 memory.talk v5 像 Codex work 一样是一个工作台;做事层的名字直接用 work,别再翻译一层。
 - **task 在 agent 生态里已经被用滥,而且指的都是「一次调用」。** agent 的一次 task、子 agent 的 task、Kimi 记录里的 `task.started`、Codex 记录里的 `task_complete`——它们都是一轮执行:发一个 prompt、跑完、结束。memory.talk 的这个单位大得多:**一件事**,可以跨几天,可以是一棵树,里面盛放着好几个 agent 会话。叫 task,读者会本能地把它当成一次 agent 调用,然后对「会话是它的成员」「它有父子」「它做完要往上收拢」感到别扭。
-- **work 和另外两层对仗。** issue 是**议**,card 是**记**,work 是**做**;member 是谁在干活,session 是在哪干活——「干活」的名词就该是 work。
+- **work 和另外两层对仗。** issue 是**议**,card 是**记**,work 是**做**;user 是谁在干活,session 是在哪干活——「干活」的名词就该是 work。
 - **task 这个词留给它该指的东西**:agent 记录文件里那些平台自己的事件名(`task.started`、`task_complete`)原样保留,不改;它们是会话痕迹里的原文,不是 memory.talk 的对象。
 
 代码里对应的改名:`/api/works`、`work_<id>`、`works/` 目录、`X-Memory-Talk-Work`、`spawned_works`、`WorkService`。
@@ -84,7 +84,7 @@ work 的会话是**现场**(一个活着的、可以回去看的东西),不限�
 
 关键是:**它们都是同一件事的一部分**。在画布上它们是并排的几个块;在 work 的意义上它们是「做这件事时打开过的所有东西」。一个 work 里可以同时跑多个 agent 会话(一个 Claude Code 写代码、一个 Codex 做 review),它们互相看得见对方的工作目录,也共享 work 的目的。
 
-work 本身还有一点自己的东西,不多:**它是什么事**(一句话目标)、**属于哪件更大的事**(父 work)、**做到哪了**(状态)、**什么时候开的、什么时候算完**。work 不做认知,不打分,不抽卡——那是 issue 和 card 的事。
+work 本身还有一点自己的东西,不多:**它是什么事**(一句话目标)、**谁建的**(`created_by`,归属,建时定下不改——不是权限,见 [user.md §2](user.md))、**属于哪件更大的事**(父 work)、**做到哪了**(状态)、**什么时候开的、什么时候算完**;另有一份**谁动过**的名单(`users`,可见性,[user.md §3](user.md))。work 不做认知,不打分,不抽卡——那是 issue 和 card 的事。
 
 **work 没有「项目」这个字段。** 工作目录是每个会话自己的事(`codex:///w/a` 和 `bash:///w/b` 可以在同一个 work 里);work 不按目录归类。理由见 §2 末。
 

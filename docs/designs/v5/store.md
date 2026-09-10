@@ -10,7 +10,7 @@
 
 ---
 
-> **后续演进**:memory/ 这个 git 仓库在 [collections.md](collections.md) 里被做成一个 collectbase 仓库——issue / card 各是一层(layer),`[层名]` 声明、hook 守卫、每类一条权威分支。本篇说的「一个决定一个 commit」在那里变成「两个相邻提交 + 同一个 Decision trailer」(collections.md §5)。其余不变。
+> **后续演进**:memory/ 这个 git 仓库在 [collections.md](collections.md) 里被做成一个 collectbase 仓库——issue / card 各是一层(layer),`[层名]` 声明、hook 守卫、每类一条权威分支。本篇说的「一个决定一个 commit」在那里变成「两个相邻提交 + 同一个 Decision trailer」(collections.md §6)。其余不变。
 
 ## 1. 一句话:认知层进 git,现场层用裸文件,没有别的
 

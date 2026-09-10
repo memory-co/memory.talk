@@ -50,7 +50,7 @@ issue 是一个带 `.issue/` 后缀的目录,放在它相关的东西旁边—�
 - **manager 就是树上正卡在这个问题上的 work**。做「把 X 做出来」这件事时冒出「数据库该不该换」,那 X 这个节点(或它下面正做到这一步的那个子节点)就是这个 issue 的 manager。不必为了管一个问题专门开 work——问题是在做事时冒出来的,管它的就是正在做那件事的节点。
 - **issue 的每一次变动都打到 manager work 的收件箱**:新立场、新论证、新的边、被写成了卡——manager work 里的 agent 看到变动,决定下一步(派活取证、写卡、换绑)。这是「有人管」的实际含义:**不是名单上有个名字,是变动会到它手里**。
 - **manager work 是议这个问题的现场**。在它的画布里开 agent 会话去梳理立场、找资料、判断现有论证够不够、决定下一步要验什么。这个 work 的 session 痕迹就是这个 issue 的**议事记录**。
-- **manager work 是普通 work**。它跟别的 work 一样有画布、有成员、有状态、有父子;唯一多出来的是变动先到它这里。它没有更大的权限([member.md](member.md):不做权限)。
+- **manager work 是普通 work**。它跟别的 work 一样有画布、有归属、有状态、有父子;唯一多出来的是变动先到它这里。它没有更大的权限([user.md](user.md):不做权限)。
 - **一个 issue 同一时间只有一个 manager**(最近的那个 `manager.json`);**一个 work 可以管多个 issue**。
 - **可以继承、可以换、可以没有**。issue 自己目录下没有 `manager.json`,就往上找——所在主题文件夹的 `manager.json`(它管这个文件夹里所有层的东西,不只 issue),再往上是 Collections 根上的兜底;所以「一个 work 管这个主题下所有还没人专门管的问题」只要在那个文件夹里放一个文件。换绑 = 改这个文件(一次 `[issue]` 提交,`git log manager.json` 就是换绑史);一路都找不到 = **没人管的问题**,这是有用的状态——issue 列表里一眼看出哪些在推、哪些搁着。
 
@@ -107,7 +107,7 @@ issue 图和 work 树是**两套层级,各管各的**:work 树表达「事怎么
 
 issue 和 card 的关系就是维基的讨论页和正文(见 [card.md §2](card.md)):争在 issue 里争,争出结果——某个立场站住了——就把它**写成一张 card**(或者改一张已有的卡)。card 上没有立场、没有计数,只有事实;card 链接回它的 issue,顺着能一路挖回 manager work 的议事记录和论证 work 的证据。
 
-在 Collections 里这是**两个相邻的提交,各在自己的 layer**([collections.md §5](collections.md)):`[issue] decide iss_…#p2 -> card …`(issue 记下「这个立场写成了卡」)+ `[card] write …`(卡的正文),带同一个 `Decision:` trailer。issue 在下、card 在上——写卡、改卡的提交碰不到任何 `.issue/` 目录里的文件,hook 守着;所以「立场只增不改」不靠代码纪律,靠层。
+在 Collections 里这是**两个相邻的提交,各在自己的 layer**([collections.md §6](collections.md)):`[issue] decide iss_…#p2 -> card …`(issue 记下「这个立场写成了卡」)+ `[card] write …`(卡的正文),带同一个 `Decision:` trailer。issue 在下、card 在上——写卡、改卡的提交碰不到任何 `.issue/` 目录里的文件,hook 守着;所以「立场只增不改」不靠代码纪律,靠层。
 
 写卡不等于关闭 issue:issue 继续开着当讨论页;后面若另一个立场翻盘,回来改卡,旧内容进卡的历史。反过来,一张直接写的卡后来有人不同意,就开一个 issue 挂到这张卡上当它的讨论页——同样是两个提交:`[issue] raise …`(新 issue,`card` 指向那张卡)+ `[card] link …`(卡的 `issue` 指回来)。
 

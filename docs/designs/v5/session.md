@@ -53,7 +53,7 @@ panel(画布上的格子) ──装着──▶ session(现场的身份) ──�
 - **server 建它,work 记它**。server 只回答「这个 id 的现场活没活着、怎么看、怎么驱动」,**不记 work**;session 属于哪个 work、什么时候开的、最近什么时候重入,全在 work 目录的 `sessions.json`。server 重启后,work 层拿登记去 server 那里把现场一个个取回来([protocol-server.md §4](protocol-server.md))。
 - **session 不是会话记录,会话记录是它留下的痕迹**。v3 的 session 是「事后导入的对话记录」;v5 的 session 是活的现场,agent 类 session 跑着的时候,它的 round 从平台记录文件里流出来,追加进 `sessions/<session_id>/rounds.jsonl`。session 是活的现场,rounds 是它的痕迹;session 销毁了,痕迹留着。
 
-一句话:**panel 是怎么摆,session 是它是谁,server 是怎么建,rounds 是它留下了什么。** 至于**谁**在操作这个 work,那是 [member.md](member.md) 的事——member 是人,session 是现场,两个词别混。
+一句话:**panel 是怎么摆,session 是它是谁,server 是怎么建,rounds 是它留下了什么。** 至于**谁**在操作这个 work,那是 [user.md](user.md) 的事——user 是人,session 是现场,两个词别混。
 
 ---
 

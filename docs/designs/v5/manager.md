@@ -6,7 +6,7 @@
 - v5 work 树(manager 绑的是 work;父子本身就是一条隐式的 manager 链): [work.md](work.md)
 - v5 issue(原来的 `manager_work` 字段由本篇取代): [issue.md](issue.md)
 - v5 collections(认知层的目录在 git 里,「变动」= 触碰这些路径的 commit): [collections.md](collections.md)
-- v5 member(manager 是 work 不是人;谁在那个 work 里干活看 member): [member.md](member.md)
+- v5 user(manager 是 work 不是人;谁在那个 work 里干活看它的 users): [user.md](user.md)
 
 ---
 
@@ -94,7 +94,7 @@ manager 机制不规定动作。但把它接到 v5 已有的几条线上,会自�
 | 子 work 做完 | 看兄弟节点完了没;都完了推进父 work 的状态,或写下一步的子 work |
 | 一片卡里加了新卡 | 更新目录 / 合并重复的卡 |
 
-这些都是「把事情往下做」——manager work 是**在推进**,不是在**审批**。它没有比别人更大的权限(member.md:不做权限),只是变动先到它这里、它先动手。
+这些都是「把事情往下做」——manager work 是**在推进**,不是在**审批**。它没有比别人更大的权限(user.md:不做权限),只是变动先到它这里、它先动手。
 
 ---
 

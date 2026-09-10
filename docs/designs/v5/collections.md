@@ -15,7 +15,7 @@
 
 这一层最初叫 Collect(动词,「收拢」),2026-09-10 改名 **collections**。理由和 [work.md §0](work.md) 一样,名字要和别的层对齐:
 
-- **名词,不是动词。** works、sessions、members、layers 都是名词;认知层的容器也该是一个名词——它是「收拢起来的那些东西」,不是「收拢」这个动作。
+- **名词,不是动词。** works、sessions、users、layers 都是名词;认知层的容器也该是一个名词——它是「收拢起来的那些东西」,不是「收拢」这个动作。
 - **有复数形态。** 它装的是很多份材料、很多个问题、很多张卡,而且还能分出很多个 layer;复数说的就是这个。磁盘上、API 上也一律用复数:`~/.memory.talk/collections/`、`/api/collections/`,和 `works/`、`/api/works/` 一个样。
 - **和 collectbase 分开。** collectbase 是被参考的那个工具(v5 不依赖它,自己实现了同样语义的分层 git);collections 是 memory.talk 自己的对象。两个词长得像,但一个是别人的项目名,一个是我们的层名。
 
@@ -112,7 +112,13 @@ origin 在最底、issue 在中、card 在上:issue 从 origin 消化出来,card
 
 ---
 
-## 5. 「一个决定一个 commit」怎么变
+## 5. 谁做的:commit 的 author 就是 user
+
+collections 的每个动作是一个 commit,做它的人(请求头 `X-Memory-Talk-User`)就是 commit 的 **author**——立场谁提的、论证谁给的、卡谁改的,全在 `git log` / `git blame` 里,对象里不另存 user 字段。agent 做的提交挂在驱动它的 user 名下,body 的 `Task:` 记它在哪个 work 里做的。没带身份的提交 author 退回服务配置的默认名。详见 [user.md §5](user.md)。
+
+---
+
+## 6. 「一个决定一个 commit」怎么变
 
 store.md 说:争出结果写卡,issue 记结论 + card 建正文,**同一个 commit**。collectbase 说:**一个提交只能属于一层**——跨层的提交恰好就是把过程和结论搅在一起的那个动作,必须拆。
 
@@ -130,7 +136,7 @@ git log --first-parent stack
 
 ---
 
-## 6. 跟现有设计的关系
+## 7. 跟现有设计的关系
 
 | | 之前 | 引入 Collections 之后 |
 |---|---|---|
@@ -147,7 +153,7 @@ store.md 的两条原则不变:**认知层进 git,现场层用裸文件**。Coll
 
 ---
 
-## 7. 这篇有意不定的事
+## 8. 这篇有意不定的事
 
 - **schema 用什么写**:JSON Schema、一份 YAML 字段表、还是直接一个 pydantic 类文件。内置 layer 现在就是 pydantic 类;用户的 layer 要能不写 Python——倾向 YAML 字段表 + 少量约定(哪个字段是标题、哪个是引用)。
 - **通用 API 的形状**:`/api/collections/<class>/...` 一套 CRUD + 历史 + 检索,内置 layer 的专用端点(`/api/issues/...` `/api/cards/...`)是不是它上面的别名。
