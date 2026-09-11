@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Header, Query, Request
 from fastapi.responses import PlainTextResponse
 
 from models.collections import InboxItem
+from models.work_server import WorkServerInfo
 from models.work import (Canvas, CanvasPut, Event, Round, Session, SessionCreate, SessionView, Work,
                          WorkCreate, WorkNode, WorkUpdate, WorkUsers)
 from services.collections import CollectionsService
@@ -29,6 +30,12 @@ def user(x_memory_talk_user: str | None = Header(None, alias="X-Memory-Talk-User
 @router.get("", response_model=list[WorkNode], summary="work 树(森林;root= 只看一棵;created_by= 只看某人建的)")
 def forest(root: str | None = None, created_by: str | None = None, svc: WorkService = Depends(works)):
     return svc.forest(root, created_by)
+
+
+@router.get("/servers", response_model=list[WorkServerInfo],
+            summary="有哪些 work server(bash / claude / codex / kimi / http / default)及各自响应的协议;attach 时按协议去找它们")
+def servers(request: Request):
+    return request.app.state.work_servers.list()
 
 
 @router.post("", response_model=Work, status_code=201, summary="开工:建一个 work(parent= 挂到树上)")

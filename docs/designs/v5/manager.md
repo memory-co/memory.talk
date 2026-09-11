@@ -77,7 +77,7 @@ memory.talk/配置/旧的 settings 方案.md             ← origin 变了(新�
 **打过去**:变动**投递**到 manager work 的**收件箱**——work 目录下一个 append-only 的 `inbox.jsonl`。每条:什么时候、哪个路径、什么变动、谁干的、以及**它是被哪个 `manager.json` 路由过来的**(便于回答「为什么这事到我这」)。
 
 - 收件箱是 work 的痕迹的一部分,跟 rounds / events 一样只追加、不进 git。
-- work 里的 agent 怎么消费收件箱——开工时读一遍、干活中轮询、还是直接推进会话——是 [protocol-server.md §7](protocol-server.md) 那条「把手要不要开驱动」的问题,本篇不定;**最小形态是收件箱 + agent 自己去读**。
+- work 里的 agent 怎么消费收件箱——开工时读一遍、干活中轮询、还是直接推进会话——是 [work-server.md §7](work-server.md) 那条「把手要不要开驱动」的问题,本篇不定;**最小形态是收件箱 + agent 自己去读**。
 - **manager work 自己造成的变动不投递给自己**:它写了一张卡,这张卡的变动路由回它自己——跳过,否则自激。变动记「谁干的」(git author / work 的 session)就能判。
 
 ---

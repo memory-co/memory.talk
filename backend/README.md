@@ -26,7 +26,7 @@ backend/
 │   │   ├── rounds.py         #     agent 会话的 rounds.jsonl(append-only)
 │   │   ├── inbox.py          #     收件箱:manager.json 路由过来的变动(append-only)
 │   │   └── events.py         #     work 自己的 append-only 事件(开工/状态/做完)
-│   ├── protocol_servers/     #   协议 server 的装载与寻址 —— docs/designs/v5/protocol-server.md
+│   ├── work_servers/         #   work server 的装载与寻址 —— docs/designs/v5/work-server.md
 │   │   ├── registry.py       #     协议 → server 寻址:先看谁声明了它,没人声明去 default
 │   │   ├── uri.py            #     块的 URI 解析
 │   │   ├── terminal.py       #     tmux 现场 + 终端类 server 基类(TerminalBase)
@@ -51,7 +51,7 @@ backend/
 │   ├── issue.py              #   <名>.issue/issue.json;行为 position / argue / link / spawn / decide
 │   └── card.py               #   <名>.card/card.md;行为 discuss
 │
-├── protocol_servers/         # 每个协议 server 一个文件,自己声明响应哪些协议(自动扫描);没人声明的协议去 default
+├── work_servers/             # 每个 work server 一个文件,自己声明响应哪些协议(自动扫描);没人声明的协议去 default
 │   ├── bash.py               #   bash
 │   ├── claude.py             #   claude     Claude Code
 │   ├── codex.py              #   codex      Codex
@@ -61,7 +61,7 @@ backend/
 │
 ├── controllers/              # HTTP 面(FastAPI 路由;只做参数/响应,不含逻辑)
 │   ├── works.py              #   /api/works/…
-│   ├── protocol_servers.py   #   /api/protocol-servers(有哪些协议 server、各自响应哪些协议)
+│   ├── protocol_servers.py   #   /api/works/servers(有哪些协议 server、各自响应哪些协议)
 │   ├── collections.py            #   /api/collections/…(层、树、检索、manager、对象 CRUD、历史、行为)
 │   ├── auth.py               #   /api/auth/{login,verify,logout,me}
 │   └── system.py             #   /api/system/{info,health}

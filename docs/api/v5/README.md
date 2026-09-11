@@ -11,6 +11,7 @@
 | `GET` | `/api/system/info` | 运行信息:路径、存储 provider、tmux socket、有没有窗 |
 | `GET` | `/api/works` | work 树(森林;root= 只看一棵;created_by= 只看某人建的) |
 | `POST` | `/api/works` | 开工:建一个 work(parent= 挂到树上) |
+| `GET` | `/api/works/servers` | 有哪些 work server(bash / claude / codex / kimi / http / default)及各自响应的协议;attach 时按协议去找它们 |
 | `GET` | `/api/works/{work_id}` | 读一个 work(带身份 = 打开它,记一笔在操作) |
 | `PATCH` | `/api/works/{work_id}` | 改目标 / 状态;done 要求子 work 全完;结束后会话冻结 |
 | `GET` | `/api/works/{work_id}/canvas` | 画布(视图,随时可重排) |
@@ -28,7 +29,6 @@
 | `POST` | `/api/works/{work_id}/sessions/{session_id}/attach` | 重入:幂等取回同一个现场 |
 | `GET` | `/api/works/{work_id}/sessions/{session_id}/capture` | 观测:抓终端屏幕(把手 capture) |
 | `GET` | `/api/works/{work_id}/sessions/{session_id}/rounds` | 痕迹:agent 会话的 round(先从把手同步新 round,再读 rounds.jsonl) |
-| `GET` | `/api/protocol-servers` | server 清单及各自响应的协议 |
 | `GET` | `/api/collections/layers` | 有哪些层(最底在前)、各自的 schema 与行为 |
 | `POST` | `/api/collections/layers` | 加一个用户层:一份 schema YAML |
 | `GET` | `/api/collections/managed` | 某个 work 管的所有对象;不传 work = 没人管的对象 |
@@ -46,7 +46,7 @@
 | `GET` | `/api/collections/history/{layer}/{path}` | 一个对象的 git log(这一层的分支上) |
 | `POST` | `/api/collections/act/{layer}/{action}/{path}` | 行为:schema 之上的领域动作(issue: position / argue / link / spawn / decide;card: discuss) |
 
-分页面:[system.md](system.md) · [works.md](works.md) · [protocol-servers.md](protocol-servers.md) · [collections.md](collections.md)
+分页面:[system.md](system.md) · [works.md](works.md) · [collections.md](collections.md)
 
 ## 通用约定
 

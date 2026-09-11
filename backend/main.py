@@ -5,10 +5,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from config import Config, RuntimeConfig, load_config, load_runtime_config
-from controllers import collections, protocol_servers, system, works
-from models.protocol_server import ProtocolServerError
+from controllers import collections, system, works
+from models.work_server import WorkServerError
 from services.collections import CollectionsError, CollectionsService
-from services.protocol_servers import ProtocolServerService
+from services.work_servers import WorkServerService
 from services.store import StoreService
 from services.work import SessionNotFound, WorkConflict, WorkNotFound, WorkService
 
@@ -21,13 +21,13 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
 
     store = StoreService(config)
     collect_svc = CollectionsService(config, store.work_repo)
-    protocol_server_svc = ProtocolServerService(runtime)
-    work_svc = WorkService(store, protocol_server_svc)
+    work_server_svc = WorkServerService(runtime)
+    work_svc = WorkService(store, work_server_svc)
     app.state.config, app.state.runtime = config, runtime
     app.state.store, app.state.collections = store, collect_svc
-    app.state.protocol_servers, app.state.works = protocol_server_svc, work_svc
+    app.state.work_servers, app.state.works = work_server_svc, work_svc
 
-    for r in (system.router, works.router, protocol_servers.router, collections.router):
+    for r in (system.router, works.router, collections.router):
         app.include_router(r)
 
     def _err(status: int, code: str):
@@ -43,8 +43,8 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
     async def _collect(_: Request, exc: CollectionsError):
         return JSONResponse({"error": exc.code, "message": str(exc)}, status_code=exc.status)
 
-    @app.exception_handler(ProtocolServerError)
-    async def _server(_: Request, exc: ProtocolServerError):
+    @app.exception_handler(WorkServerError)
+    async def _server(_: Request, exc: WorkServerError):
         status = {"bad_uri": 400, "cmd_not_found": 400, "no_server": 400, "platform": 502}.get(exc.code, 500)
         return JSONResponse({"error": exc.code, "message": str(exc)}, status_code=status)
 

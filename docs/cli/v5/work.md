@@ -19,7 +19,8 @@ memory.talk work
 ├── manager  <work_id> [--set <work_id> | --unset]
 ├── users    <work_id>
 ├── touch    <work_id>
-└── recall   <work_id> [--layer card] [--dir <路径>]
+├── recall   <work_id> [--layer card] [--dir <路径>]
+└── servers                                       # 有哪些 work server、各自响应哪些协议
 ```
 
 ## work create
@@ -92,6 +93,10 @@ memory.talk work manager work_… --unset    # 回到父
 ## work users / touch
 
 `users`:谁当前在动(current)、谁动过(history),只做可见性不做权限。`touch`:心跳(`--user` 必须有)。
+
+## work servers
+
+`GET /api/works/servers`:这个实例有哪些 work server(bash / claude / codex / kimi / http / default)及各自响应的协议。`work attach <uri>` 时协议去找谁,看这张表;平时几乎不用。
 
 ## work recall
 

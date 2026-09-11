@@ -12,17 +12,18 @@ memory.talk
 ├── work     create | list | show | set               # work 树
 │            attach | sessions | detach | capture | rounds   # 会话(现场)
 │            inbox | manager | users | touch | recall  # 收件箱 / manager / user / 召回
+│            servers                                    # 有哪些 work server(bash / claude / codex / kimi / http / default)及各自响应的协议
 ├── collection                                          # 认知层(API 是 /api/collections)
 │            layers | tree | ls | recall | search
 │            read | write | edit | rm | log             # 对象 CRUD + 历史
 │            act                                        # 行为:issue position / argue / link / spawn / decide;card discuss
 │            manager | managed                          # manager.json
-└── protocols                                            # 有哪些协议 server(bash / claude / codex / kimi / http / default)及各自响应的协议
+
 ```
 
 **命令组名用单数**(`work` / `collection`),像 `docker container`;它们操作的是 API 里的复数资源(`/api/works` / `/api/collections`)。`col` 是 `collection` 的别名。
 
-分页面:[protocol-server.md](protocol-server.md) · [work.md](work.md) · [collection.md](collection.md)
+分页面:[work-server.md](work-server.md) · [work.md](work.md) · [collection.md](collection.md)
 
 ## 二、全局约定
 

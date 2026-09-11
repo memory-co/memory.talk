@@ -37,7 +37,7 @@ class Live(BaseModel):
     command: list[str] | None = None
 
 
-class ProtocolServerInfo(BaseModel):
+class WorkServerInfo(BaseModel):
     name: str
     protocols: list[str] = Field(default_factory=list, description="它响应哪些协议;空 = 不声明(default 只当兜底)")
     description: str = ""
@@ -49,7 +49,7 @@ class Handle(Protocol):
     def alive(self) -> bool: ...
 
 
-class ProtocolServerError(RuntimeError):
+class WorkServerError(RuntimeError):
     """server 侧的失败,必须说清楚(M12):code 指向不同的下一步。"""
 
     def __init__(self, code: str, message: str) -> None:

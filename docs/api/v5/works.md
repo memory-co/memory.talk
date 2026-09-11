@@ -41,6 +41,19 @@ work 树(森林)。
 
 **201** 返回 Work(`status: "todo"`,`created_by` = 请求头里的 user,没带则 `null`)。副作用:`works/<id>/work.json` + 一条 `created` 事件。
 
+## GET /api/works/servers
+
+有哪些 work server 及各自响应的协议。**固定路径,先于 `/{work_id}`。**
+
+```json
+[{"name": "bash", "protocols": ["bash"], "description": "…"},
+ {"name": "claude", "protocols": ["claude"], "description": "…"},
+ {"name": "http", "protocols": ["http", "https"], "description": "…"},
+ {"name": "default", "protocols": [], "description": "兜底:没有专门 server 的协议,把协议名当命令名在 tmux 里跑"}]
+```
+
+一项 = `backend/work_servers/` 下一个文件。`protocols` 是它自己声明的;`default` 不声明、永远排最后。**寻址在 `POST /api/works/{id}/sessions` 时自动发生**,没有单独的 resolve 端点。
+
 ## GET /api/works/{work_id}
 
 返回 Work。404 `not_found`。

@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from urllib.parse import parse_qsl, unquote, urlsplit
 
-from models.protocol_server import ParsedUri, ProtocolServerError
+from models.work_server import ParsedUri, WorkServerError
 
 
 def parse_uri(raw: str) -> ParsedUri:
     s = urlsplit(raw)
     if not s.scheme:
-        raise ProtocolServerError("bad_uri", f"URI 没有协议: {raw!r}")
+        raise WorkServerError("bad_uri", f"URI 没有协议: {raw!r}")
     return ParsedUri(
         raw=raw, scheme=s.scheme.lower(), path=unquote(s.path or ""),
         host=s.hostname or "", port=s.port,

@@ -1,8 +1,8 @@
 """kimi:// —— Kimi Code CLI:终端 + 读 ~/.kimi-code/sessions 的 wire 记录。"""
 from __future__ import annotations
 
-from services.protocol_servers.adapters import KimiAdapter
-from services.protocol_servers.agent import AgentBase
+from services.work_servers.adapters import KimiAdapter
+from services.work_servers.agent import AgentBase
 
 
 class KimiServer(AgentBase):

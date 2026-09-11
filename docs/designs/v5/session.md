@@ -4,7 +4,7 @@
 
 相关:
 - v5 work 树(session 住在 work 里): [work.md](work.md)
-- v5 protocol server(session 是 server 建出来的): [protocol-server.md](protocol-server.md)
+- v5 protocol server(session 是 server 建出来的): [work-server.md](work-server.md)
 - v5 issue(issue 的出处和证据指向 session 留下的 round): [issue.md](issue.md)
 - shellbase 的会话身份(`window` + `block` 位置参数——本篇有意偏离它的那一点): [uri.md §4](https://github.com/memory-co/shellbase/blob/main/docs/v1/works/uri.md)
 
@@ -28,7 +28,7 @@ shellbase 里没有 session 这个概念。块的身份写在 URI 的 `window` +
 
 v5 的 work 不是画布,画布只是它的视图([work.md §3](work.md)):**布局可以随时重排,重排不改变 work**。这就要求现场的身份**不能挂在格子上**——否则把 Codex 那块从左边拖到右边,后端就认为你关了一个会话又开了一个新的,round 断成两截,issue 指回来的出处也断了。
 
-所以 v5 把「现场的身份」从块里抽出来,单独立一个对象:**session**。它是 v5 原生实现时**唯一有意偏离 shellbase** 的地方([protocol-server.md §2](protocol-server.md)):
+所以 v5 把「现场的身份」从块里抽出来,单独立一个对象:**session**。它是 v5 原生实现时**唯一有意偏离 shellbase** 的地方([work-server.md §2](work-server.md)):
 
 | | shellbase 的块 | v5 的 session |
 |---|---|---|
@@ -50,7 +50,7 @@ panel(画布上的格子) ──装着──▶ session(现场的身份) ──�
 ```
 
 - **panel 是视图,session 是实体**。panel 记 `{id, uri, session, x, y, w, h}`,其中 `session` 指向一个会话;panel 可以删、可以重排、可以整张画布清空重画,session 不动。反过来,session 也不要求有 panel——一个会话可以暂时没被摆在画布上(比如画布重画时),它还活着。
-- **server 建它,work 记它**。server 只回答「这个 id 的现场活没活着、怎么看、怎么驱动」,**不记 work**;session 属于哪个 work、什么时候开的、最近什么时候重入,全在 work 目录的 `sessions.json`。server 重启后,work 层拿登记去 server 那里把现场一个个取回来([protocol-server.md §4](protocol-server.md))。
+- **server 建它,work 记它**。server 只回答「这个 id 的现场活没活着、怎么看、怎么驱动」,**不记 work**;session 属于哪个 work、什么时候开的、最近什么时候重入,全在 work 目录的 `sessions.json`。server 重启后,work 层拿登记去 server 那里把现场一个个取回来([work-server.md §4](work-server.md))。
 - **session 不是会话记录,会话记录是它留下的痕迹**。v3 的 session 是「事后导入的对话记录」;v5 的 session 是活的现场,agent 类 session 跑着的时候,它的 round 从平台记录文件里流出来,追加进 `sessions/<session_id>/rounds.jsonl`。session 是活的现场,rounds 是它的痕迹;session 销毁了,痕迹留着。
 
 一句话:**panel 是怎么摆,session 是它是谁,server 是怎么建,rounds 是它留下了什么。** 至于**谁**在操作这个 work,那是 [user.md](user.md) 的事——user 是人,session 是现场,两个词别混。

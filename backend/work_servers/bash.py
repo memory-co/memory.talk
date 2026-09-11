@@ -1,7 +1,7 @@
 """bash:// —— 到某目录起一个 bash(tmux 会话)。"""
 from __future__ import annotations
 
-from services.protocol_servers.terminal import TerminalBase
+from services.work_servers.terminal import TerminalBase
 
 
 class BashServer(TerminalBase):

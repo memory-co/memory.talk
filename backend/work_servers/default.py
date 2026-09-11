@@ -2,8 +2,8 @@
 `vim:///notes.md` = cd 到父目录 && vim notes.md;`htop://` = htop。调用方不用感知它背后是 bash。"""
 from __future__ import annotations
 
-from models.protocol_server import ParsedUri
-from services.protocol_servers.terminal import TerminalBase
+from models.work_server import ParsedUri
+from services.work_servers.terminal import TerminalBase
 
 
 class DefaultServer(TerminalBase):

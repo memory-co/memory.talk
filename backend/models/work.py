@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from .protocol_server import HandleInfo, Window
+from .work_server import HandleInfo, Window
 
 WorkStatus = Literal["todo", "doing", "done", "abandoned"]
 
