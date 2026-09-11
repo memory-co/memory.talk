@@ -39,7 +39,7 @@ def test_tree_status_canvas_events(client):
 
     # 召回 = card 目录(Collections)
     client.post("/api/collections/card/memory.talk/配置只来自环境变量", json={"data": {"title": "配置只来自环境变量"}})
-    assert "配置只来自环境变量" in client.get(f"/api/works/{root['id']}/recall").text
+    assert "配置只来自环境变量" in client.get(f"/api/works/{root['id']}/recall").json()
 
     # 子 work 的变动沿树打到父的收件箱;manager.json 可改写
     c = client.post("/api/works", json={"goal": "子", "parent": root["id"]}).json()

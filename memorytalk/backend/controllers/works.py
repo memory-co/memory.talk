@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Header, Query, Request
-from fastapi.responses import PlainTextResponse
 
 from memorytalk.backend.models.collections import InboxItem
 from memorytalk.backend.models.work_server import WorkServerInfo
@@ -63,7 +62,7 @@ def events(work_id: str, svc: WorkService = Depends(works)):
     return svc.history(work_id)
 
 
-@router.get("/{work_id}/recall", response_class=PlainTextResponse,
+@router.get("/{work_id}/recall",
             summary="开工注入:card 目录文本(card → work 的接口)")
 def recall(work_id: str, dir: str = "", layer: str = "card", svc: WorkService = Depends(works),
            c: CollectionsService = Depends(collections)):
@@ -129,13 +128,13 @@ def reattach(work_id: str, session_id: str, svc: WorkService = Depends(works), w
     return svc.reattach(work_id, session_id)
 
 
-@router.delete("/{work_id}/sessions/{session_id}", status_code=204, summary="关闭即回收:销毁现场 + 删登记")
+@router.delete("/{work_id}/sessions/{session_id}", summary="关闭即回收:销毁现场 + 删登记")
 def detach(work_id: str, session_id: str, svc: WorkService = Depends(works), who: str | None = Depends(user)):
     svc.touch(work_id, who)
     svc.detach(work_id, session_id)
 
 
-@router.get("/{work_id}/sessions/{session_id}/capture", response_class=PlainTextResponse,
+@router.get("/{work_id}/sessions/{session_id}/capture",
             summary="观测:抓终端屏幕(把手 capture)")
 def capture(work_id: str, session_id: str, lines: int = Query(200, ge=1, le=5000),
             svc: WorkService = Depends(works)):

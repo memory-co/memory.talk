@@ -7,6 +7,7 @@ memorytalk/backend/           # 服务本体;memorytalk/cli.py 是它的命令�
 ├── main.py                   # FastAPI 实例、路由挂载、启动钩子
 ├── config.py                 # 环境变量与路径(~/.memory.talk/{memory,works})
 ├── gateway.py                # AuthGate + 静态托管 + 反代(/tty、/proxy/<port>)
+├── envelope.py               # 响应信封中间件:所有 /api/* → {"data", "message"[, "error"]}
 │
 ├── models/                   # 数据模型(纯结构,不含 IO)
 │   ├── users.py              #   User(档案,存)/ UserView / UserProfile(带派生统计)

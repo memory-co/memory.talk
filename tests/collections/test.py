@@ -80,7 +80,7 @@ def test_layers_and_objects(client):
     old = client.get(f"/api/collections/card/{cp}", params={"rev": hist[1]["sha"]}).json()
     assert old["body"]["body"] == "只用环境变量"
     assert client.get("/api/collections/card").json()["subdirs"][0]["dir"] == "memory.talk"
-    assert "只用环境变量" in client.get("/api/collections/card/recall").text
+    assert "只用环境变量" in client.get("/api/collections/card/recall").json()
     hits = client.get("/api/collections/search", params={"q": "一份状态", "layer": "card"}).json()
     assert hits and hits[0]["path"] == cp
     assert {h["layer"] for h in client.get("/api/collections/search", params={"q": "环境变量"}).json()} == {"issue", "card"}
@@ -91,7 +91,7 @@ def test_layers_and_objects(client):
     assert client.get(f"/api/collections/card/{cp}").json()["body"]["issue"] == "memory.talk/配置/要不要加配置文件"
     assert "Discussion:" in _log(client)
 
-    assert client.delete(f"/api/collections/origin/memory.talk/配置/旧方案.md").status_code == 204
+    assert client.delete(f"/api/collections/origin/memory.talk/配置/旧方案.md").status_code == 200
     assert client.get("/api/collections/origin/memory.talk/配置/旧方案.md").status_code == 404
     assert client.get("/api/collections/nope").status_code == 404
 
@@ -124,7 +124,7 @@ def test_manager_and_inbox(client):
     assert client.get("/api/collections/manager", params={"path": ip}).json() == {"dir": f"{ip}.issue", "work": t2["id"]}
     client.post(f"/api/collections/act/issue/position/{ip}", json={"claim": "b"})
     assert client.get(f"/api/works/{t2['id']}/inbox").json()[-1]["path"] == ip
-    assert client.delete("/api/collections/manager", params={"path": ip}).status_code == 204
+    assert client.delete("/api/collections/manager", params={"path": ip}).status_code == 200
     assert client.get("/api/collections/manager", params={"path": ip}).json()["work"] == t["id"]
     # manager.json 在 .issue/ 里随 [issue] 提交,在普通目录里归最底层
     log = _log(client)

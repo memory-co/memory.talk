@@ -87,7 +87,7 @@ work 树(森林)。
 
 ## GET /api/works/{work_id}/recall
 
-card → work 的接口:开工时注入的目录文本(`GET /api/collections/{layer}/recall` 的别名)。`text/plain`。
+card → work 的接口:开工时注入的目录文本(`GET /api/collections/{layer}/recall` 的别名)。`data` 是那段文本。
 
 | 参数 | 说明 |
 |---|---|
@@ -209,11 +209,11 @@ user:谁当前正在操作、谁历史操作过。只做可见性,不做权限�
 
 ## DELETE /api/works/{work_id}/sessions/{session_id}
 
-关闭即回收:销毁现场(`tmux kill-session`)+ 删登记 + 事件 `session.detached`。**204**。
+关闭即回收:销毁现场(`tmux kill-session`)+ 删登记 + 事件 `session.detached`。**200**,`data: null`。
 
 ## GET /api/works/{work_id}/sessions/{session_id}/capture
 
-把手 `capture`:抓终端屏幕,`text/plain`。
+把手 `capture`:抓终端屏幕,`data` 是那段文本。
 
 | 参数 | 说明 |
 |---|---|

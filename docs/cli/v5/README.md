@@ -1,6 +1,6 @@
 # CLI Reference (v5)
 
-`memory.talk` 命令行是本地 API(`/api/…`)的客户端:**CLI 不含业务逻辑**,每条命令对应一个或几个端点。机制见 [`../../designs/v5/`](../../designs/v5/README.md),端点见 [`../../api/v5/`](../../api/v5/README.md)。
+`memory.talk` 命令行是本地 API(`/api/…`)的客户端:**CLI 不含业务逻辑**,每条命令对应一个或几个端点(响应信封 `{data, message}` 由 CLI 解开,`--json` 输出的是 `data`)。机制见 [`../../designs/v5/`](../../designs/v5/README.md),端点见 [`../../api/v5/`](../../api/v5/README.md)。
 
 > **状态:契约稿,未实施。** v5 的 CLI 重写,不沿用 v3 / v4 的任何命令(`card` / `insight` / `sync` / `explore` 都退役)。
 

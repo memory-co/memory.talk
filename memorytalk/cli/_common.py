@@ -78,15 +78,13 @@ class Api:
             r = self.c.request(method, path, params={k: v for k, v in (params or {}).items() if v is not None}, json=json_body)
         except httpx.ConnectError:
             raise Fail(f"连不上 {self.base};先 `memory.talk server start`", 3)
+        try:
+            body = r.json()
+        except ValueError:
+            body = None
         if r.status_code >= 400:
-            try:
-                body = r.json()
-                msg = f"{body.get('error', r.status_code)}: {body.get('message', body)}"
-            except ValueError:
-                msg = f"{r.status_code}: {r.text[:200]}"
+            msg = f"{body.get('error', r.status_code)}: {body.get('message')}" if isinstance(body, dict) else f"{r.status_code}: {r.text[:200]}"
             raise Fail(msg, 1)
-        if r.status_code == 204:
-            return None
-        return r.text if text else r.json()
+        return body["data"] if isinstance(body, dict) and "data" in body else body   # 信封:{"data", "message"}
 
 

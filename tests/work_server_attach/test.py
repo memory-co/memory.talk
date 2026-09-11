@@ -51,7 +51,7 @@ def test_terminal_session_lifecycle(client, home):
     # 把手能看见;重入幂等
     subprocess.run(["tmux", "-L", sock, "send-keys", "-t", f"{m['id']}:", "echo hello-v5", "Enter"])
     time.sleep(0.3)
-    assert "hello-v5" in client.get(f"/api/works/{t['id']}/sessions/{m['id']}/capture").text
+    assert "hello-v5" in client.get(f"/api/works/{t['id']}/sessions/{m['id']}/capture").json()
     again = client.post(f"/api/works/{t['id']}/sessions/{m['id']}/attach").json()
     assert again["id"] == m["id"] and again["alive"]
     assert len(client.get(f"/api/works/{t['id']}/sessions").json()) == 1
@@ -64,7 +64,7 @@ def test_terminal_session_lifecycle(client, home):
     client.delete(f"/api/works/{t['id']}/sessions/{d.json()['id']}")
 
     # 关闭即回收
-    assert client.delete(f"/api/works/{t['id']}/sessions/{m['id']}").status_code == 204
+    assert client.delete(f"/api/works/{t['id']}/sessions/{m['id']}").status_code == 200
     assert subprocess.run(["tmux", "-L", sock, "has-session", "-t", f"={m['id']}"]).returncode != 0
     assert client.get(f"/api/works/{t['id']}/sessions").json() == []
     assert client.get(f"/api/works/{t['id']}/sessions/{m['id']}/capture").status_code == 404

@@ -4,7 +4,6 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, Query, Request
-from fastapi.responses import PlainTextResponse
 
 from memorytalk.backend.models.collections import (CatalogDir, InboxItem, LayerCreate, LayerInfo, Manager, ManagerPut, Obj,
                             ObjCreate, ObjUpdate, Revision, SearchHit, TreeItem)
@@ -56,7 +55,7 @@ def put_manager(req: ManagerPut, path: str = "", svc: CollectionsService = Depen
     return svc.set_manager(path, req.work, req.reason, c)
 
 
-@router.delete("/manager", status_code=204, summary="解绑:删这个目录的 manager.json")
+@router.delete("/manager", summary="解绑:删这个目录的 manager.json")
 def delete_manager(path: str = "", reason: str = "", svc: CollectionsService = Depends(collections), c: Ctx = Depends(ctx)):
     svc.unset_manager(path, reason, c)
 
@@ -84,7 +83,7 @@ def catalog(layer: str, dir: str = "", svc: CollectionsService = Depends(collect
     return svc.catalog(layer, dir)
 
 
-@router.get("/{layer}/recall", response_class=PlainTextResponse, summary="目录渲染成可注入 agent 的文本")
+@router.get("/{layer}/recall", summary="目录渲染成可注入 agent 的文本")
 def recall(layer: str, dir: str = "", svc: CollectionsService = Depends(collections)):
     return svc.recall_text(layer, dir)
 
@@ -106,6 +105,6 @@ def update(layer: str, path: str, req: ObjUpdate, svc: CollectionsService = Depe
     return svc.update(layer, path, patch, req.reason, c)
 
 
-@router.delete("/{layer}/{path:path}", status_code=204, summary="删一个对象(历史在 git)")
+@router.delete("/{layer}/{path:path}", summary="删一个对象(历史在 git)")
 def delete(layer: str, path: str, reason: str = "", svc: CollectionsService = Depends(collections), c: Ctx = Depends(ctx)):
     svc.delete(layer, path, reason, c)

@@ -54,7 +54,7 @@
 
 ### GET /api/collections/{layer}/recall?dir=
 
-同上,渲染成缩进文本(`text/plain`),给 agent 直接读。work 开工注入的是 `GET /api/works/{id}/recall`(默认 card 层)。
+同上,渲染成缩进文本(`data` 是那段文本),给 agent 直接读。work 开工注入的是 `GET /api/works/{id}/recall`(默认 card 层)。
 
 ---
 
@@ -80,7 +80,7 @@
 
 ### DELETE /api/collections/{layer}/{path}?reason=
 
-删对象(整个目录)/ origin 文件。**204**。历史在 git。
+删对象(整个目录)/ origin 文件。**200**,`data: null`。历史在 git。
 
 ### GET /api/collections/history/{layer}/{path}
 
@@ -128,7 +128,7 @@ payload 是 JSON 对象,按行为不同。返回该行为的结果(issue 的行�
 
 ### DELETE /api/collections/manager?path=&reason=
 
-删这个目录的 `manager.json`,解析回到上一级。**204**。
+删这个目录的 `manager.json`,解析回到上一级。**200**,`data: null`。
 
 ### GET /api/collections/managed?work=
 

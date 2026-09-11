@@ -105,7 +105,7 @@ def server_status(a) -> None:
     elif not ok:
         print("memory.talk 没在跑" + (f"(instance.json 里有 pid {inst['pid']},但进程或健康检查不通过)" if inst else ""))
     else:
-        info = httpx.get(f"{inst['url']}/api/system/info", timeout=2).json()
+        info = httpx.get(f"{inst['url']}/api/system/info", timeout=2).json()["data"]
         print(f"memory.talk 运行中(pid {inst['pid']})\n  地址     {inst['url']}\n  存储     {info['store']['backend']}  {info['home']}\n"
               f"  启动于   {inst['started_at']}\n  健康     ok\n  停止     memory.talk server stop")
     if not ok:

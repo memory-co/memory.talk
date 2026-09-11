@@ -4,8 +4,22 @@ import sys
 import uuid
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
+
+_orig_json = httpx.Response.json
+
+
+def _unwrap(self, **kw):
+    """API 响应是 {data, message[, error]} 信封:成功时 .json() 直接给 data,出错时给整个信封(测试看 error 码)。"""
+    body = _orig_json(self, **kw)
+    if isinstance(body, dict) and "data" in body and "message" in body and "error" not in body:
+        return body["data"]
+    return body
+
+
+httpx.Response.json = _unwrap
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
