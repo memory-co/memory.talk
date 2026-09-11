@@ -1,77 +1,68 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [project]
 name = "memorytalk"
-version = "1.1.0"
-description = "Persistent cross-session memory for AI agents — Talk-Card architecture with forum-dynamics sinking/floating (v3)"
+version = "5.0.0a0"
+description = "memory.talk v5 — work / collections / user 三个顶层对象的工作台:跑 code agent 的 work 树,git 分层的认知层,注册的团队成员"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
-dependencies = [
-    "click>=8.1.0",
-    "pydantic>=2.0.0",
-    "fastapi>=0.109.0",
-    "uvicorn>=0.27.0",
-    "httpx>=0.25.0",
-    "lancedb>=0.6.0",
-    "numpy>=1.24.0",
-    "python-ulid>=2.0.0",
-    "jieba>=0.42.1",
-    "pyarrow>=14.0.0",
-    "aiosqlite>=0.19.0",
-    "aiofiles>=23.0.0",
-    "rich>=13.0.0",
-    "questionary>=2.0.0",
-    "watchdog>=4.0.0",
+authors = [{ name = "twwwwwy", email = "twwwwwy@gmail.com" }]
+keywords = ["agent", "memory", "workspace", "tmux", "git", "fastapi"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Framework :: FastAPI",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
 ]
-
-[project.scripts]
-# Quoted key — TOML treats bare ``memory.talk`` as nested table
-# (``project.scripts.memory.talk``), so we must quote to keep the dot
-# literal in the entry-point name.
-"memory.talk" = "memorytalk.cli:main"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "pyyaml>=6",
+    "httpx>=0.27",          # CLI 调本地 API
+]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7.4.0",
-    "pytest-cov>=4.1.0",
-    "pytest-asyncio>=0.23.0",
-]
-local = [
-    "sentence-transformers>=2.2.0",
-]
+dev = ["pytest>=8", "httpx>=0.27"]
 
-[tool.setuptools.packages.find]
-include = ["memorytalk*"]
-exclude = ["memorytalk.tests*"]
+[project.urls]
+Homepage = "https://github.com/memory-co/memory.talk"
+Repository = "https://github.com/memory-co/memory.talk"
+Issues = "https://github.com/memory-co/memory.talk/issues"
 
-[tool.setuptools.package-data]
-# Plugin assets injected by ``setup`` into host AI CLIs (Claude Code,
-# Codex, …). Setuptools' glob silently skips dotted dirs like
-# ``.claude-plugin`` / ``.codex-plugin`` / ``.agents``, so we list each
-# path that hosts CLIs actually need. Keep in sync with anything new
-# we add under ``memorytalk/hook_assets/``.
-memorytalk = [
-    "hook_assets/claude_code/.claude-plugin/marketplace.json",
-    "hook_assets/claude_code/plugins/*/.claude-plugin/plugin.json",
-    "hook_assets/claude_code/plugins/*/hooks/hooks.json",
-    "hook_assets/codex/.agents/plugins/marketplace.json",
-    "hook_assets/codex/plugins/*/.codex-plugin/plugin.json",
-    "hook_assets/codex/plugins/*/hooks/hooks.json",
-]
-
-[build-system]
-requires = ["setuptools>=68.0"]
-build-backend = "setuptools.build_meta"
+[project.scripts]
+# 引号:TOML 里裸的 memory.talk 会被当成嵌套表
+"memory.talk" = "memorytalk.cli:main"
 
 [tool.pytest.ini_options]
-testpaths = ["memorytalk/tests"]
-python_files = ["test_*.py", "test.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = "-v --tb=short"
-asyncio_mode = "auto"
-filterwarnings = [
-    # TestClient doesn't support per-request timeout, but api() passes one —
-    # harmless (in-process calls need no timeout). Keep the prod code simple.
-    "ignore:You should not use the 'timeout' argument with the TestClient:DeprecationWarning",
+testpaths = ["tests"]
+python_files = ["test_*.py", "test.py"]   # 场景住在 tests/<名字>/test.py
+addopts = "--import-mode=importlib"
+
+[tool.hatch.build.targets.wheel]
+packages = ["memorytalk"]
+# 前端源码不进 wheel;构建产物(memorytalk/frontend/dist,`cd memorytalk/frontend && npm run build`)随包分发
+exclude = [
+    "memorytalk/frontend/src",
+    "memorytalk/frontend/apps",
+    "memorytalk/frontend/public",
+    "memorytalk/frontend/node_modules",
+    "memorytalk/frontend/package*.json",
+    "memorytalk/frontend/*.ts",
+    "memorytalk/frontend/*.js",
+    "memorytalk/frontend/index.html",
 ]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["memorytalk/frontend/node_modules", "memorytalk/frontend/dist"]

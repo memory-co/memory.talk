@@ -1,232 +1,77 @@
 # memory.talk
 
-> 给 AI agent 跨会话的持久记忆
+> 跑 code agent 的工作台,记忆是它的副产物。
 
-memory.talk 把你跟 Claude Code、Codex 等 AI 平台的对话历史压缩成**可搜索的认知卡片**(Talk-Card),让下一次会话能"想起"之前的决定、踩过的坑、架构选型。本地存储,零配置启动,可插拔到 Qdrant / PostgreSQL 等后端。
+memory.talk v5 有三个顶层对象:
 
-[English](README-EN.md) · [CLI 文档](docs/cli/v2/README.md)
+- **work** —— 做事。一件事是一个 work,复杂的事是一棵 work 树;每个 work 里盛放若干个现场(session):Claude Code / Codex / Kimi 会话、终端、网页,按 URI 打开,由对应的 work server 建出来,活得比连接久。
+- **collections** —— 认知。一个分层的 git 仓库:`origin`(外部来的原文,只读)/ `issue`(问题 + 立场 + 论证,IBIS)/ `card`(争完的事实,维基式词条),还可以用一份 YAML schema 加自己的层。每个动作一个 `[层]` 提交,跨层被守卫拒绝;目录下的 `manager.json` 把变动打给某个 work 的收件箱。
+- **user** —— 人。注册的实体,和 work 平级;work 谁建的、谁在动,collections 的提交谁做的。**不做权限**:一个实例给一个团队用。
 
----
+**没有数据库、没有索引**:认知层在 git 里,work / user 的记录走可换的存储 provider(本地文件系统或 SQLite,将来 S3 / MySQL)。
 
-## 它解决什么问题
+设计文档见 [`docs/designs/v5/`](docs/designs/v5/README.md);数据结构 [`docs/structure/v5/`](docs/structure/v5/README.md);HTTP API [`docs/api/v5/`](docs/api/v5/README.md);CLI [`docs/cli/v5/`](docs/cli/v5/README.md)。
 
-你每次开新会话都要给 AI 复述项目背景、再次走过同样的弯路 —— 因为每次会话都是空白。memory.talk 让这个过程变成:
-
-1. **导入**过去的会话(`memory.talk sync`)
-2. **提炼**对话成 cards(LLM 通过 `card` 命令落地)
-3. AI 启动时 hook **自动召回**相关记忆(`recall`)
-4. AI 思考过程中**主动检索**(`search`)
-
-不是又一个 RAG 库 —— memory.talk 把 retrieval 拆成"无意识召回"和"有意识检索"两种正交的语义。
-
-## 快速开始
-
-### 安装
-
-**一键脚本(推荐,在 `~/.memory.talk/venv/` 里建独立 venv,跟系统 Python 隔离)**:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/memory-co/memory.talk/main/install.sh | bash
-```
-
-或者克隆后跑:
-
-```bash
-git clone https://github.com/memory-co/memory.talk.git
-cd memory.talk
-./install.sh
-```
-
-装完后**自动**在 `~/.local/bin/memory.talk` 建符号链接指向 venv 入口。`~/.local/bin` 不在 PATH 时,脚本会打印精确的 `export PATH=...` 行让你贴进 shell rc(zsh / bash)。
-
-装完之后**自动进 `memory.talk setup` 交互向导**(写 settings.json + 选 embedder + 可选启动 server)。CI / 脚本场景里走 `MEMORY_TALK_NO_SETUP=1` 跳过。
-
-环境变量:
-- `MEMORY_TALK_INSTALL_DIR=/some/where` — 装到别处(默认 `~/.memory.talk/`)
-- `MEMORY_TALK_BIN_DIR=/some/where` — 改 launcher 目录(默认 `~/.local/bin/`)
-- `MEMORY_TALK_NO_BIN_LINK=1` — 不创建全局 launcher(自己管 PATH)
-- `MEMORY_TALK_NO_SETUP=1` — 装完不自动跑 setup wizard
-- `MEMORY_TALK_INDEX_URL=https://...` — 强制指定 PyPI 镜像。**默认自动探测** pypi.org 和阿里云速度,选快的;失败 fallback 到 pip 默认
-
-**已有 Python 环境,自己管 venv** —— 直接 pip:
+## 安装
 
 ```bash
 pip install memorytalk
+memory.talk server start          # 本地 API:http://127.0.0.1:8000/docs
 ```
 
-或从源码:
+需要 `git` 和 `tmux`(终端 / agent 现场跑在 tmux 里);要在浏览器里看终端再装 `ttyd`,并设 `MEMORY_TALK_TTYD_URL`。
+
+## 用起来
 
 ```bash
-git clone https://github.com/memory-co/memory.talk.git
-cd memory.talk
-pip install -e .
+memory.talk user add alice                                    # 注册(一次)
+export MEMORY_TALK_USER=alice
+
+W=$(memory.talk work create --goal '把配置改成环境变量' --json | jq -r .id)
+memory.talk work attach $W codex:///home/alice/memory.talk    # 在 work 里开一个 Codex 会话
+memory.talk work recall $W                                    # 开工注入:card 目录
+
+memory.talk collection write issue memory.talk/配置/该走文件还是环境变量 --field question='配置该走文件还是环境变量?'
+memory.talk collection act   issue position memory.talk/配置/该走文件还是环境变量 --field claim='只用环境变量'
+memory.talk collection act   issue decide   memory.talk/配置/该走文件还是环境变量 \
+    --field position=p1 --field card=memory.talk/配置/配置只来自环境变量
+memory.talk work set $W --status done
 ```
 
-后续升级走 `memory.talk upgrade`(自动找对的 pip,详见 [`docs/cli/v3/upgrade.md`](docs/cli/v3/upgrade.md))。
-
-### 初始化
-
-```bash
-memory.talk setup
-```
-
-交互式 wizard 会问你 embedding provider(`local` / `openai`)、port、向量库、关系库等,自动写 `~/.memory.talk/settings.json`,可选立刻启动后台服务,顺便建一个 `memory.talk` 软链(等价于 `memory.talk`)。
-
-> setup 可重复跑 —— 第二次会进"修改模式",每个字段默认就是当前值,Enter 跳过,改了就询问是否重启服务。
-
-#### Recall hook 注入(Claude Code / Codex)
-
-wizard 末尾会探测你机器上的 AI CLI(Claude Code / Codex / …),用一个 **multi-select 列表**让你按需勾选:勾上 = 装 `memory.talk recall --hook` 进对应 host 的 plugin 里,取消勾选已装的 = 卸载。默认全勾。
-
-```
-── Recall hooks ──
-  [x] Claude Code  v2.1.157   absent — will install
-  [x] Codex        v0.133.0   absent — will install
-```
-
-实现要点:
-- 用 host 自己的 plugin 系统(`claude plugin install`、`codex plugin add`),**不动用户的 `~/.claude/settings.json` 或 `~/.codex/config.toml` 的 `hooks` 块**
-- Plugin 资源跟 wheel 一起发,wizard 把它实体化到 `~/.memory.talk/hook_plugins/<host>/`
-- 装完默认跑一次 probe 端到端验证(用一个 magic token,无需 API key 也能验)
-- **Codex 多一步**: trust 必须在 TUI 里按 `t`(Codex 的安全模型,memory.talk 不会替你绕过)。wizard 会暂停 + 引导 + 等你回 Enter + 重读 config 验证 trust hash 已落地
-
-幂等:再跑一次 setup,这个 step 会展示当前状态(`installed-verified` / `installed but bundle changed` / `installed-untrusted` 等),Enter 不动则保持现状。
-
-### 跑起来
-
-```bash
-# 从 Claude Code / Codex 平台导入历史会话
-memory.talk sync
-
-# 搜索一下
-memory.talk search "LanceDB 选型"
-
-# 读一条 card 详情
-memory.talk view card_01jz8k2m
-
-# 看一条 session 的生命周期事件
-memory.talk log sess_xxx
-```
-
-完整命令列表 → [docs/cli/v2/](docs/cli/v2/README.md)
-
----
-
-## 核心概念
-
-### Talk-Card
-
-一张压缩的认知单元(≤1024 tokens),由 LLM 从 session 的特定 round 中提炼:
-
-- **Summary** —— 一句话,作为 embedding 锚点
-- **Rounds** —— 关键决策 / 推理片段
-- **Links** —— 跟其它 cards / sessions 的语义关联
-- **Default Link** —— 每张 card 自动跟它的来源 session 关联,生死跟随 card
-
-> cards 是"已经想过的东西",sessions 是"原始对话"。
-
-### Search vs Recall
-
-| | `search` | `recall` |
-|---|---|---|
-| 触发 | AI 思考时主动调用 | harness hook 自动调用 |
-| 意识形态 | 有意识 / 决定要查 | 无意识 / 看到 prompt 即浮现 |
-| 输出 | 完整结构(snippets / links / tags) | 极简(`memory.talk view <id>  # summary`) |
-| 去重 | 无 | 同 session 已召回过的不再返回 |
-
-底层都建在 **hybrid FTS + 向量** 之上(LanceDB)。
-
-### 存储布局
+## 存储
 
 ```
 ~/.memory.talk/
-├── settings.json
-├── sessions/<source>/<bucket>/<sess_id>/
-│   ├── meta.json
-│   ├── rounds.jsonl              # 对话流(append-only)
-│   └── events.jsonl              # 生命周期事件
-├── cards/<bucket>/<card_id>/
-│   ├── card.json
-│   └── events.jsonl
-├── links/<bucket>/<link_id>.json
-├── vectors/                       # LanceDB
-├── memory.db                      # SQLite(派生索引)
-└── logs/search/<UTC-day>.jsonl
+├── collections/     分层 git 仓库:layer/origin、layer/issue、layer/card(+ 用户层)、stack
+├── works/           work 树、画布、会话、收件箱、round(MEMORY_TALK_STORE=fs 时)
+└── users/           user 档案
 ```
 
-**文件层是 source of truth**,SQLite + LanceDB 都是从文件可重建的派生索引。`memory.talk rebuild` 随时可以从文件重建出全部索引。
-
----
-
-## 输出格式
-
-CLI 默认输出 **Markdown**,运行时按 stdout 是否 TTY 自动决定渲染:
-
-- TTY 终端 → 用 `rich` 渲染成带样式的输出
-- 管道 / 脚本 / LLM 消费 → 原始 Markdown(LLM 训练里 Markdown 本就是常见格式)
-- `--json` → 结构化 JSON,机器友好
-
-错误也跟着走:Markdown 模式 `**error:** <msg>` 写到 stderr,JSON 模式写到 stdout。
-
----
-
-## 设计原则
-
-- **Python 不调 LLM**:数据层只做 CRUD / embedding / 向量检索,不做认知。LLM 通过 CLI 调用,认知发生在外部。
-- **可插拔的 storage 抽象**:`provider/storage.py` 定义统一原语(write/read/append/list/delete),local-fs 是当前实现,后续可加 S3。Domain ops(write_session_meta 等)在 `repository/<domain>.py` 里调原语,不直接 open 文件。
-- **rebuild 永远可行**:任何时候删掉 `memory.db` + `vectors/` 跑 `memory.talk rebuild`,从文件层完整还原。
-- **rebuild 期间 server 进入维护模式**:除了 `/v2/status`,所有 API 503 拦掉,避免读到撕裂的中间态。
-
----
-
-## 命令一览
-
-| 命令 | 用途 |
-|---|---|
-| [`setup`](docs/cli/v2/setup.md) | 交互式安装 / 改配置 / 重启 |
-| [`sync`](docs/cli/v2/sync.md) | 从 Claude Code 等平台导入 session |
-| [`search`](docs/cli/v2/search.md) | 有意识检索(混合 FTS + 向量) |
-| [`recall`](docs/cli/v2/recall.md) | hook 自动召回(极简形式) |
-| [`view`](docs/cli/v2/view.md) | 读单条 card / session |
-| [`log`](docs/cli/v2/log.md) | 看对象生命周期事件流 |
-| [`card`](docs/cli/v2/card.md) | 创建 card |
-| [`tag`](docs/cli/v2/tag.md) | 给 session 打 tag |
-| [`link`](docs/cli/v2/link.md) | 写用户 link |
-| [`server`](docs/cli/v2/server.md) | 管理本地 API 服务 |
-| [`rebuild`](docs/cli/v2/rebuild.md) | 从文件层重建索引 |
-
----
+`MEMORY_TALK_STORE=sqlite` 时 works / users 进 `memory.sqlite`;collections 永远是 git。全部环境变量见 [`docs/structure/v5/filesystem.md`](docs/structure/v5/filesystem.md)。
 
 ## 开发
 
 ```bash
 pip install -e ".[dev]"
-pytest memorytalk/tests/
+pytest                       # 每个场景在 fs 和 sqlite 两种 store 下各跑一遍
+cd memorytalk/frontend && npm install && npm run dev     # 前端(Vite + React;骨架,未实现)
 ```
 
-跑搜索质量回归(用真 DashScope embedding):
+发布前先 `cd memorytalk/frontend && npm run build`(产物 `dist/` 随 wheel 分发),再 `python -m build && twine upload dist/*`。
 
-```bash
-export QWEN_KEY=sk-...
-pytest memorytalk/tests/search/
-```
-
-测试套结构:
+## 布局
 
 ```
-memorytalk/tests/
-├── api/            # FastAPI TestClient
-├── cli/            # 真 CLI(ASGI 路由 + subprocess)
-├── service/        # 服务层(真 SQLite + LanceDB + dummy embedder)
-├── provider/       # storage / embedding 原语
-├── config/         # Config 加载 + 校验
-├── util/           # dsl / ids / snippet / ttl
-└── search/         # 搜索质量回归(5 档评分:Excellent/Acceptable/Marginal/Degraded/Failed)
+memorytalk/              ← Python 包(pip: memorytalk;命令 memory.talk)
+├── main.py cli.py config.py gateway.py
+├── models/ services/ controllers/     ← 三层
+├── providers/           ← 存储介质:FileSystemProvider(LocalFS)/ DatabaseProvider(SQLite)
+├── layers/              ← 内置 layer:origin / issue / card
+├── work_servers/        ← 每个协议一个 work server:bash / claude / codex / kimi / http / default
+└── frontend/            ← Vite + React(骨架)
+tests/                   ← 按场景组织
+docs/                    ← designs / structure / api / cli
 ```
-
-184+ 个测试,场景化目录(每个测试用例一个目录,带自己的 README + test.py)。详见 [tests/](memorytalk/tests/)。
-
----
 
 ## License
 
