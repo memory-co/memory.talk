@@ -1,8 +1,8 @@
 # Servers API
 
-server 是建现场、交回窗 + 把手的那层。**每个 server 自己声明响应哪些协议**,一个可以多个;没人声明的协议去 **default**(背后是 bash 把协议名当命令跑,调用方不感知)。本页只有观测端点——**建现场走 [`POST /api/works/{id}/sessions`](works.md#post-apiworkswork_idsessions)**,因为现场总是某个 work 的会话。字段见 [`../../structure/v5/server.md`](../../structure/v5/server.md)。
+server 是建现场、交回窗 + 把手的那层。**每个 server 自己声明响应哪些协议**,一个可以多个;没人声明的协议去 **default**(背后是 bash 把协议名当命令跑,调用方不感知)。本页只有观测端点——**建现场走 [`POST /api/works/{id}/sessions`](works.md#post-apiworkswork_idsessions)**,因为现场总是某个 work 的会话。字段见 [`../../structure/v5/protocol-server.md`](../../structure/v5/protocol-server.md)。
 
-## GET /api/servers
+## GET /api/protocol-servers
 
 ```json
 [
@@ -15,6 +15,6 @@ server 是建现场、交回窗 + 把手的那层。**每个 server 自己声明
 ]
 ```
 
-一项 = `backend/servers/` 下一个文件。`protocols` 是它自己声明的;`default` 不声明、永远排最后。
+一项 = `backend/protocol_servers/` 下一个文件。`protocols` 是它自己声明的;`default` 不声明、永远排最后。
 
 没有「先问一下这个 URI 归谁」的端点。**寻址在打开会话那一刻自动发生**(`POST /api/works/{id}/sessions`):协议在哪个 server 的 `protocols` 里就去哪个,没有就 default;调用方拿到的是窗和把手,不需要、也看不到是谁建的。

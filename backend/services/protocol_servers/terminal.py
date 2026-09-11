@@ -11,7 +11,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from models.server import HandleInfo, Live, ParsedUri, ServerError, ServerInfo, Window
+from models.protocol_server import HandleInfo, Live, ParsedUri, ProtocolServerError, ProtocolServerInfo, Window
 
 
 class Tmux:
@@ -28,7 +28,7 @@ class Tmux:
         cwd.mkdir(parents=True, exist_ok=True)
         p = self._run("new-session", "-d", "-s", name, "-c", str(cwd), shlex.join(cmd))
         if p.returncode != 0:
-            raise ServerError("platform", f"tmux new-session 失败: {p.stderr.strip()}")
+            raise ProtocolServerError("platform", f"tmux new-session 失败: {p.stderr.strip()}")
 
     def kill(self, name: str) -> None:
         self._run("kill-session", "-t", f"={name}")
@@ -69,8 +69,8 @@ class TerminalBase:
     def __init__(self, tmux: Tmux, workspace: Path, ttyd_url: str | None) -> None:
         self.tmux, self.workspace, self.ttyd_url = tmux, workspace, ttyd_url
 
-    def info(self) -> ServerInfo:
-        return ServerInfo(name=self.name, protocols=self.protocols, description=self.description)
+    def info(self) -> ProtocolServerInfo:
+        return ProtocolServerInfo(name=self.name, protocols=self.protocols, description=self.description)
 
     def command(self, uri: ParsedUri) -> str:
         """要跑的命令名;默认 = server 名。default server 改成用协议名。"""
@@ -79,7 +79,7 @@ class TerminalBase:
     def resolve(self, uri: ParsedUri) -> tuple[Path, list[str]]:
         cmd = self.command(uri)
         if shutil.which(cmd) is None:
-            raise ServerError("cmd_not_found", f"PATH 里没有 {cmd!r};装上它")
+            raise ProtocolServerError("cmd_not_found", f"PATH 里没有 {cmd!r};装上它")
         path = Path(uri.path) if uri.path and uri.path != "/" else self.workspace
         if path.is_file():
             return path.parent, [cmd, path.name]

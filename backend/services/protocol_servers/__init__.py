@@ -1,23 +1,23 @@
-"""ServerService:协议 → server 的请求入口(docs/designs/v5/protocol-server.md)。
+"""ProtocolServerService:协议 → server 的请求入口(docs/designs/v5/protocol-server.md)。
 具体 server 住在 backend/servers/(各自声明响应哪些协议;没人声明的去 default),这里只做装载与寻址。"""
 from __future__ import annotations
 
 from pathlib import Path
 
 from config import RuntimeConfig
-from models.server import Live, ServerError, ServerInfo
+from models.protocol_server import Live, ProtocolServerError, ProtocolServerInfo
 
 from .registry import Registry
 from .uri import parse_uri
 
 
-class ServerService:
+class ProtocolServerService:
     def __init__(self, rt: RuntimeConfig) -> None:
-        import servers  # backend/servers/
+        import protocol_servers  # backend/protocol_servers/
         self.rt = rt
-        self.registry = Registry(servers.load(rt))
+        self.registry = Registry(protocol_servers.load(rt))
 
-    def list(self) -> list[ServerInfo]:
+    def list(self) -> list[ProtocolServerInfo]:
         return self.registry.infos()
 
     def resolve(self, raw_uri: str):
@@ -38,4 +38,4 @@ class ServerService:
         self.registry.by_name(server_name).destroy(session_id)
 
 
-__all__ = ["ServerService", "ServerError", "parse_uri"]
+__all__ = ["ProtocolServerService", "ProtocolServerError", "parse_uri"]

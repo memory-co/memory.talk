@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from config import RuntimeConfig
-from services.servers.terminal import Tmux
+from services.protocol_servers.terminal import Tmux
 
 DEFAULT = "default"
 

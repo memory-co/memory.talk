@@ -14,9 +14,9 @@
 | `host` / `port` | http 类:`localhost` / `127.0.0.1` + 端口 → 本地服务 |
 | `query` | 参数字典(v5 没有身份参数——身份在会话 id 上) |
 
-## ServerInfo
+## ProtocolServerInfo
 
-`GET /api/servers` 每项:
+`GET /api/protocol-servers` 每项:
 
 ```json
 {"name": "http", "protocols": ["http", "https"], "description": "网页块:外链直嵌,本地服务经网关代理;把手为空"}
@@ -24,7 +24,7 @@
 
 | 字段 | 说明 |
 |---|---|
-| `name` | server 名;`backend/servers/<name>.py` |
+| `name` | server 名;`backend/protocol_servers/<name>.py` |
 | `protocols[]` | 它响应哪些协议,**server 自己声明**;一个 server 可以多个。`default` 的为空——它不声明,专收没人声明的 |
 
 寻址:协议在某个 server 的 `protocols` 里 → 那个;否则 → `default`。列表里 `default` 永远排最后。
@@ -76,7 +76,7 @@
 
 `POST /api/works/{id}/sessions` 把它并进 `SessionView` 返回(`window` / `handle` 两个字段)。
 
-## ServerError
+## ProtocolServerError
 
 | `code` | HTTP | 意思 | 下一步 |
 |---|---|---|---|

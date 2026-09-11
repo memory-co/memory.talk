@@ -1,8 +1,8 @@
 """codex:// —— Codex CLI:终端 + 读 ~/.codex/sessions 的 rollout 记录。"""
 from __future__ import annotations
 
-from services.servers.adapters import CodexAdapter
-from services.servers.agent import AgentBase
+from services.protocol_servers.adapters import CodexAdapter
+from services.protocol_servers.agent import AgentBase
 
 
 class CodexServer(AgentBase):

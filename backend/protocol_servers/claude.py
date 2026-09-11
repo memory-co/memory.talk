@@ -1,8 +1,8 @@
 """claude:// —— Claude Code:终端 + 读 ~/.claude/projects 的会话记录。"""
 from __future__ import annotations
 
-from services.servers.adapters import ClaudeCodeAdapter
-from services.servers.agent import AgentBase
+from services.protocol_servers.adapters import ClaudeCodeAdapter
+from services.protocol_servers.agent import AgentBase
 
 
 class ClaudeServer(AgentBase):

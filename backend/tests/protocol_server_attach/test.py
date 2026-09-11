@@ -9,15 +9,15 @@ needs_tmux = pytest.mark.skipif(shutil.which("tmux") is None, reason="需要 tmu
 
 
 def test_registry_and_resolve(client):
-    infos = {s["name"]: s["protocols"] for s in client.get("/api/servers").json()}
+    infos = {s["name"]: s["protocols"] for s in client.get("/api/protocol-servers").json()}
     assert infos == {"bash": ["bash"], "claude": ["claude"], "codex": ["codex"], "kimi": ["kimi"],
                      "http": ["http", "https"], "default": []}
-    assert [s["name"] for s in client.get("/api/servers").json()][-1] == "default"
-    assert client.get("/api/servers/resolve").status_code == 404        # 寻址不是端点,open 时自动做
+    assert [s["name"] for s in client.get("/api/protocol-servers").json()][-1] == "default"
+    assert client.get("/api/protocol-servers/resolve").status_code == 404        # 寻址不是端点,open 时自动做
 
     # 寻址是内部的:服务层按协议找到声明它的 server,没人声明 → default
-    from services.servers.uri import parse_uri
-    reg = client.app.state.servers.registry
+    from services.protocol_servers.uri import parse_uri
+    reg = client.app.state.protocol_servers.registry
     assert reg.resolve(parse_uri("codex:///w/p")).name == "codex"
     assert reg.resolve(parse_uri("https://x.y/z")).name == "http"
     assert reg.resolve(parse_uri("vim:///w/a.txt")).name == "default"

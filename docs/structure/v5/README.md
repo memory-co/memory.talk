@@ -18,7 +18,7 @@ v5 的三层:**work**(做事,裸文件)、**issue**(议事,git)、**card**(记�
 | ↳ issue 层:Issue / Position / Argument / IssueLink | 问题 + 立场 + 论证 + IBIS 边;立场 / 论证只增不改 | `<path>.issue/issue.json` | [collections.md](collections.md#issue-层内置) |
 | ↳ card 层:Card | 维基式事实条目:标题 + 正文 + 语境 + 链接;可改可删,历史在 git | `<path>.card/card.md` | [collections.md](collections.md#card-层内置) |
 | ↳ origin 层 | 不带后缀的一切文件,原文 | 任意路径 | [collections.md](collections.md#对象带后缀的目录) |
-| Server / Window / Handle / Live | 声明响应哪些协议(没人声明的去 default);建现场、交回窗 + 把手 | 不落盘(运行时对象) | [server.md](server.md) |
+| Server / Window / Handle / Live | 声明响应哪些协议(没人声明的去 default);建现场、交回窗 + 把手 | 不落盘(运行时对象) | [protocol-server.md](protocol-server.md) |
 
 ## ID
 

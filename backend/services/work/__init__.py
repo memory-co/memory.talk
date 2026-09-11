@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from models.work import (Canvas, CanvasPut, Event, Round, Session, SessionView, Work, WorkCreate, WorkUsers,
                          WorkNode, WorkUpdate)
-from services.servers import ServerService
+from services.protocol_servers import ProtocolServerService
 from services.store import StoreService
 
 from .repo import WorkRepo
@@ -19,8 +19,8 @@ from .tree import WorkConflict, WorkNotFound, WorkTree
 
 
 class WorkService:
-    def __init__(self, store: StoreService, servers: ServerService) -> None:
-        self.servers = servers
+    def __init__(self, store: StoreService, servers: ProtocolServerService) -> None:
+        self.protocol_servers = servers
         self.repo: WorkRepo = store.work_repo
         self.tree = WorkTree(self.repo)
         self.canvas = CanvasStore(self.repo)
@@ -102,7 +102,7 @@ class WorkService:
         """做完:会话冻结——现场销毁,登记留着(可回去看痕迹,不再是干活的地方)。"""
         for m in self.sessions.list(work_id):
             try:
-                self.servers.destroy(m.server, m.id)
+                self.protocol_servers.destroy(m.server, m.id)
             except Exception:
                 pass
         self.events.emit(work_id, "frozen")
@@ -123,10 +123,10 @@ class WorkService:
         work = self.tree.get(work_id)
         if work.status in ("done", "abandoned"):
             raise WorkConflict(f"{work_id} 已结束,不再是干活的地方")
-        uri, server = self.servers.resolve(raw_uri)
+        uri, server = self.protocol_servers.resolve(raw_uri)
         m = self.sessions.add(work_id, raw_uri, uri.scheme, server.name, None)
         try:
-            live, _ = self.servers.open(m.id, raw_uri, since_mtime=_epoch(m.created_at))
+            live, _ = self.protocol_servers.open(m.id, raw_uri, since_mtime=_epoch(m.created_at))
         except Exception:
             self.sessions.remove(work_id, m.id)      # 现场没建起来,登记不能留
             raise
@@ -138,7 +138,7 @@ class WorkService:
     def reattach(self, work_id: str, session_id: str) -> SessionView:
         """重入:同一会话再次打开,幂等地取回同一个现场。"""
         m = self.sessions.get(work_id, session_id)
-        live, _ = self.servers.open(m.id, m.uri, since_mtime=_epoch(m.created_at))
+        live, _ = self.protocol_servers.open(m.id, m.uri, since_mtime=_epoch(m.created_at))
         m = self.sessions.touch(work_id, session_id)
         return SessionView(**m.model_dump(), alive=True, window=live.window, handle=live.handle)
 
@@ -149,14 +149,14 @@ class WorkService:
         self.tree.get(work_id)
         out = []
         for m in self.sessions.list(work_id):
-            alive = self.servers.alive(m.server, m.id)
+            alive = self.protocol_servers.alive(m.server, m.id)
             out.append(SessionView(**m.model_dump(), alive=alive))
         return out
 
     def detach(self, work_id: str, session_id: str) -> None:
         """关闭即回收:销毁现场 + 删登记。"""
         m = self.sessions.get(work_id, session_id)
-        self.servers.destroy(m.server, m.id)
+        self.protocol_servers.destroy(m.server, m.id)
         self.sessions.remove(work_id, session_id)
         self.events.emit(work_id, "session.detached", session=session_id)
 
@@ -179,7 +179,7 @@ class WorkService:
         return self.round_log.read(work_id, session_id)
 
     def _handle(self, m: Session):
-        return self.servers.handle(m.server, m.id, m.uri, m.cwd, _epoch(m.created_at))
+        return self.protocol_servers.handle(m.server, m.id, m.uri, m.cwd, _epoch(m.created_at))
 
     def history(self, work_id: str) -> list[Event]:
         self.tree.get(work_id)

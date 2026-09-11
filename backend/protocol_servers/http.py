@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from models.server import HandleInfo, Live, ParsedUri, ServerInfo, Window
+from models.protocol_server import HandleInfo, Live, ParsedUri, ProtocolServerInfo, Window
 
 
 class NoHandle:
@@ -20,8 +20,8 @@ class HttpServer:
     protocols = ["http", "https"]
     description = "网页块:外链直嵌,本地服务经网关代理;把手为空"
 
-    def info(self) -> ServerInfo:
-        return ServerInfo(name=self.name, protocols=self.protocols, description=self.description)
+    def info(self) -> ProtocolServerInfo:
+        return ProtocolServerInfo(name=self.name, protocols=self.protocols, description=self.description)
 
     def open(self, session_id: str, uri: ParsedUri, since_mtime: float = 0.0) -> tuple[Live, NoHandle]:
         local = uri.host in ("localhost", "127.0.0.1")

@@ -51,7 +51,7 @@ backend/
 │   ├── issue.py              #   <名>.issue/issue.json;行为 position / argue / link / spawn / decide
 │   └── card.py               #   <名>.card/card.md;行为 discuss
 │
-├── servers/                  # 每个 server 一个文件,自己声明响应哪些协议(自动扫描);没人声明的协议去 default
+├── protocol_servers/         # 每个协议 server 一个文件,自己声明响应哪些协议(自动扫描);没人声明的协议去 default
 │   ├── bash.py               #   bash
 │   ├── claude.py             #   claude     Claude Code
 │   ├── codex.py              #   codex      Codex
@@ -61,7 +61,7 @@ backend/
 │
 ├── controllers/              # HTTP 面(FastAPI 路由;只做参数/响应,不含逻辑)
 │   ├── works.py              #   /api/works/…
-│   ├── servers.py            #   /api/servers/attach?uri=…、DELETE
+│   ├── servers.py            #   /api/protocol-servers/attach?uri=…、DELETE
 │   ├── collections.py            #   /api/collections/…(层、树、检索、manager、对象 CRUD、历史、行为)
 │   ├── auth.py               #   /api/auth/{login,verify,logout,me}
 │   └── system.py             #   /api/system/{info,health}
