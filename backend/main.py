@@ -10,7 +10,7 @@ from models.work_server import WorkServerError
 from services.collections import CollectionsError, CollectionsService
 from services.work_servers import WorkServerService
 from services.store import StoreService
-from services.users import UserNotFound, UserService
+from services.users import UserExists, UserNotFound, UserService
 from services.work import SessionNotFound, WorkConflict, WorkNotFound, WorkService
 
 
@@ -24,7 +24,8 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
     collect_svc = CollectionsService(config, store.work_repo)
     work_server_svc = WorkServerService(runtime)
     work_svc = WorkService(store, work_server_svc)
-    user_svc = UserService(store.work_repo, collect_svc)
+    user_svc = UserService(store.user_repo, store.work_repo, collect_svc)
+    collect_svc.author_of = user_svc.author
     app.state.config, app.state.runtime = config, runtime
     app.state.store, app.state.collections = store, collect_svc
     app.state.work_servers, app.state.works = work_server_svc, work_svc
@@ -41,6 +42,7 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
     for exc_type in (WorkNotFound, SessionNotFound, UserNotFound):
         app.add_exception_handler(exc_type, _err(404, "not_found"))
     app.add_exception_handler(WorkConflict, _err(409, "conflict"))
+    app.add_exception_handler(UserExists, _err(409, "exists"))
 
     @app.exception_handler(CollectionsError)
     async def _collect(_: Request, exc: CollectionsError):

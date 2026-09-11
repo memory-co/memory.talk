@@ -1,31 +1,39 @@
 # user
 
-人。和 work、collection 平级的顶层对象;**不注册、不做权限**——在系统里出现过的名字就是 user。对应 [`/api/users`](../../api/v5/users.md)。机制见 [`../../designs/v5/user.md`](../../designs/v5/user.md)。
+人。和 work、collection 平级的顶层对象,**注册的实体**:有自己的存储(fs 或数据库,走 provider)和档案(名字、显示名、邮箱)。**不做权限**——注册解决「你是谁」,不解决「你能干什么」。对应 [`/api/users`](../../api/v5/users.md)。机制见 [`../../designs/v5/user.md`](../../designs/v5/user.md)。
 
 ```
 memory.talk user
-├── list                 # 所有出现过的 user,按最近活动倒序
-├── show <name>          # 一个 user:建的 / 动过的 work、最近的提交
-└── whoami               # 我是谁(--user / MEMORY_TALK_USER),以及我的 work 和提交
+├── add    <name> [--display-name '<…>'] [--email <…>]   # 注册
+├── list                                                # 所有注册的 user,带活动统计,按最近活动倒序
+├── show   <name>                                       # 档案 + 建的 / 动过的 work、最近的提交
+├── set    <name> [--display-name '<…>'] [--email <…>]   # 改档案
+└── whoami                                              # --user / MEMORY_TALK_USER 对应的 show
 ```
+
+## user add
+
+```bash
+memory.talk user add alice --display-name 'Alice' --email alice@example.com
+```
+
+`name` 是唯一 id(`[A-Za-z0-9_.-]`,最长 64),之后 `--user` / `MEMORY_TALK_USER` 就写它。已存在 → exit 1 `exists`。邮箱用作 collection 提交的 author 邮箱,不填则 `<name>@memory.talk`。
 
 ## user list
 
 ```
-alice   建 3 / 动 5 个 work   12 次提交   正在动 work_…2f2f   最近 2 分钟前
-bob     建 0 / 动 2 个 work    4 次提交                       最近 1 小时前
+alice   Alice   建 3 / 动 5 个 work   12 次提交   正在动 work_…2f2f   最近 2 分钟前
+bob             建 0 / 动 2 个 work    4 次提交                       最近 1 小时前
+carol           建 0 / 动 0 个 work    0 次提交                       (还没动过)
 ```
 
-汇总自 work 的 `created_by` / users 名单和 collections 的 commit author;服务默认 author(匿名提交)不算。
+档案是存的;统计是从 work 和 collection 现算的。注册了但没动过的也在。
 
-## user show
+## user show / set
 
-```bash
-memory.talk user show bob
-```
-
-建的 work、动过的 work(各带状态)、最近 20 条 collections 提交(sha / 时间 / subject)。不存在的名字 → exit 1。
+`show <name>`:档案、建的 work、动过的 work(各带状态)、最近 20 条 collection 提交。不存在 → exit 1。
+`set <name> --display-name … --email …`:改档案。
 
 ## user whoami
 
-`--user` / `MEMORY_TALK_USER` 对应的 user 的 `show`;没设 → 提示怎么设,exit 2。名字是新的(还没出现过)→ 打印名字和「还没做过任何事」。
+`--user` / `MEMORY_TALK_USER` 对应的 `show`;没设 → 提示怎么设,exit 2;设了但没注册 → exit 1,提示 `user add`。

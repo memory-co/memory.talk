@@ -43,6 +43,7 @@ class CollectionsService:
     def __init__(self, config: Config, work_repo: WorkRepo) -> None:
         self.config = config
         self.inbox = Inbox(work_repo)
+        self.author_of = lambda name: (name, f"{name}@memory.talk") if name else None   # 由 UserService 接管
         self.repo = Repo(config.collections_dir, config.git_author_name, config.git_author_email)
         self.layers: dict[str, LayerSpec] = {}
         self.order: list[str] = []
@@ -194,7 +195,7 @@ class CollectionsService:
                extra_trailer: str | None = None) -> str:
         try:
             sha = self.repo.commit(layer, self._message(layer, subject, reason, ctx, extra_trailer), puts, deletes,
-                                   layer_of=self.layer_of_path, author=ctx.user)
+                                   layer_of=self.layer_of_path, author=self.author_of(ctx.user))
         except GuardError as e:
             raise CollectionsError("guard", str(e), e.status) from None
         self._deliver(layer, list(puts) + list(deletes), subject, sha, ctx)

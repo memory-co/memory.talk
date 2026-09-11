@@ -11,7 +11,8 @@ v5 的三层:**work**(做事,裸文件)、**issue**(议事,git)、**card**(记�
 | Work | 树上一个节点:目标、父、状态(没有 project) | `works/<id>/work.json` | [work.md](work.md) |
 | Canvas / Panel | work 的画布:24×16 网格上的块;**视图,可随时重排** | `works/<id>/canvas.json` | [work.md](work.md#canvas) |
 | Session | work 的会话 = 一个现场:URI + 建它的 server;**身份脱离布局** | `works/<id>/sessions.json` | [work.md](work.md#session) |
-| WorkUser | **人**:谁动过这个 work;只做可见性,不做权限;work 另有 `created_by` 归属 | `works/<id>/users.json` | [work.md](work.md#workuserusers) |
+| **User** | 注册的实体,和 work 平级:名字 / 显示名 / 邮箱 / 注册时间;不做权限 | `users/<name>.json`(或 `users` 表) | [api users.md](../../api/v5/users.md) |
+| WorkUser | 谁动过这个 work;只做可见性;work 另有 `created_by` 归属(指向一个注册的 User) | `works/<id>/users.json` | [work.md](work.md#workuserusers) |
 | Round | agent 会话的会话痕迹,append-only | `works/<id>/sessions/<session>/rounds.jsonl` | [work.md](work.md#round) |
 | Event | work 自己的时间线,append-only | `works/<id>/events.jsonl` | [work.md](work.md#event) |
 | **Collections**:层 / 对象 / 分层仓库 / manager.json | 认知层。origin / issue / card 三个内置 layer + 用户层;对象 = 带后缀的目录,放哪都行 | `memory/`(分层 git) | [collections.md](collections.md) |

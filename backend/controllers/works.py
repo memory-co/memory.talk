@@ -22,8 +22,10 @@ def collections(request: Request) -> CollectionsService:
     return request.app.state.collections
 
 
-def user(x_memory_talk_user: str | None = Header(None, alias="X-Memory-Talk-User")) -> str | None:
-    """谁在操作:客户端自报,不校验(整个实例给一个团队用,不做权限)。"""
+def user(request: Request, x_memory_talk_user: str | None = Header(None, alias="X-Memory-Talk-User")) -> str | None:
+    """谁在操作:请求头里的名字必须是注册过的 user(身份,不是权限);没带 = 匿名。"""
+    if x_memory_talk_user:
+        request.app.state.users.get(x_memory_talk_user)        # 未注册 → 404 not_found
     return x_memory_talk_user
 
 

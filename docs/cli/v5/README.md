@@ -13,7 +13,7 @@ memory.talk
 │            attach | sessions | detach | capture | rounds   # 会话(现场)
 │            inbox | manager | users | touch | recall  # 收件箱 / manager / user / 召回
 │            servers                                    # 有哪些 work server(bash / claude / codex / kimi / http / default)及各自响应的协议
-├── user     list | show | whoami                       # 人:谁出现过、各自建了 / 动了什么(不注册、不做权限)
+├── user     add | list | show | set | whoami           # 人:注册的实体,和 work 平级;不做权限
 ├── collection                                          # 认知层(API 是 /api/collections)
 │            layers | tree | ls | recall | search
 │            read | write | edit | rm | log             # 对象 CRUD + 历史
@@ -31,7 +31,7 @@ memory.talk
 | 全局 flag | 环境变量 | 默认 | 说明 |
 |---|---|---|---|
 | `--server <url>` | `MEMORY_TALK_SERVER` | `http://127.0.0.1:8000` | API 在哪 |
-| `--user <名字>` | `MEMORY_TALK_USER` | 无 | **我是谁**:进 `X-Memory-Talk-User`。建 work 时写进 `created_by`,动 work 时记进 users,collection 的提交以它为 author。不带照样能用,只是不记名 |
+| `--user <名字>` | `MEMORY_TALK_USER` | 无 | **我是谁**:进 `X-Memory-Talk-User`,**必须是 `user add` 注册过的名字**(否则 exit 1)。建 work 时写进 `created_by`,动 work 时记进 users,collection 的提交以它为 author(名字 + 档案里的邮箱)。不带照样能用,只是匿名 |
 | `--work <id>` | `MEMORY_TALK_WORK` | 无 | **在哪个 work 里操作**:进 `X-Memory-Talk-Work`。自己造成的变动不投给自己的收件箱。agent 会话由 work 拉起时,这个变量已经在它的环境里 |
 | `--json` | — | 关 | 结构化输出(机器 / LLM 用);默认 Markdown,TTY 下用 rich 渲染 |
 
@@ -43,8 +43,9 @@ memory.talk
 ## 三、典型一天
 
 ```bash
-export MEMORY_TALK_USER=alice
 memory.talk server start                                     # 起服务(一次)
+memory.talk user add alice --email alice@example.com         # 注册(一次)
+export MEMORY_TALK_USER=alice
 W=$(memory.talk work create --goal '把配置改成环境变量' --json | jq -r .id)
 memory.talk work attach $W codex:///home/alice/memory.talk   # 在这个 work 里开一个 Codex 会话,打印窗地址
 memory.talk work recall $W                                   # 开工注入:card 目录

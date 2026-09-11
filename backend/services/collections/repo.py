@@ -104,12 +104,12 @@ class Repo:
             except FileNotFoundError:
                 pass
 
-    def commit_tree(self, tree: str, parents: list[str], message: str, author: str | None = None) -> str:
-        """author = 做这个动作的 user(commit 的 author 就是人,user.md §5);没有则用仓库配置的默认名。"""
+    def commit_tree(self, tree: str, parents: list[str], message: str, author: tuple[str, str] | None = None) -> str:
+        """author = (名字, 邮箱):做这个动作的 user 的档案(commit 的 author 就是人,user.md §5);没有则用仓库配置的默认名。"""
         args = ["commit-tree", tree]
         for p in parents:
             args += ["-p", p]
-        env = {"GIT_AUTHOR_NAME": author, "GIT_AUTHOR_EMAIL": f"{author}@memory.talk"} if author else None
+        env = {"GIT_AUTHOR_NAME": author[0], "GIT_AUTHOR_EMAIL": author[1]} if author else None
         return self._git(*args, stdin=message.encode(), env=env).strip()
 
     def update_ref(self, ref: str, new: str, old: str | None = None) -> None:
@@ -189,7 +189,7 @@ class Repo:
     # ------------------------------------------------------------ 写
 
     def commit(self, layer: str, message: str, puts: dict[str, bytes], deletes: list[str] = (),
-               layer_of=None, author: str | None = None) -> str:
+               layer_of=None, author: tuple[str, str] | None = None) -> str:
         """一批 ops → layer/<layer> 上一个提交 + stack 上一个 merge 节点。守卫在这里。"""
         layers = self.layers() or []
         if layer not in layers:

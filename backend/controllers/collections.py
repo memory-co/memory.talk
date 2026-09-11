@@ -17,8 +17,10 @@ def collections(request: Request) -> CollectionsService:
     return request.app.state.collections
 
 
-def ctx(x_memory_talk_user: str | None = Header(None, alias="X-Memory-Talk-User"),
+def ctx(request: Request, x_memory_talk_user: str | None = Header(None, alias="X-Memory-Talk-User"),
         x_memory_talk_work: str | None = Header(None, alias="X-Memory-Talk-Work")) -> Ctx:
+    if x_memory_talk_user:
+        request.app.state.users.get(x_memory_talk_user)        # 未注册 → 404 not_found
     return Ctx(user=x_memory_talk_user, work=x_memory_talk_work)
 
 

@@ -32,4 +32,6 @@ def client(home):
     from main import create_app
     app = create_app(load_config(), load_runtime_config())
     with TestClient(app) as c:
+        for name in ("alice", "bob", "carol"):          # 场景里用到的 user 先注册
+            c.post("/api/users", json={"name": name})
         yield c

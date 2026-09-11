@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from config import Config
 from providers import load_store
+from services.users.repo import UserRepo, make_user_repo
 from services.work.repo import WorkRepo, make_work_repo
 
 
@@ -12,6 +13,7 @@ class StoreService:
         self.config = config
         self.provider = load_store(config.home)
         self.work_repo: WorkRepo = make_work_repo(self.provider)
+        self.user_repo: UserRepo = make_user_repo(self.provider)
 
 
 __all__ = ["StoreService"]

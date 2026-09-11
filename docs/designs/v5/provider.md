@@ -93,11 +93,12 @@ db.update(works).where(works.c.id == wid, works.c.version == expect).set(status=
 
 ## 4. 仓储层:业务概念住在这里,按族各写一份
 
-work / user 的记录(work 节点、画布、会话登记、谁动过、事件、收件箱、round、user 资料)是**业务**。业务层需要的操作定成一个接口——它长什么样是业务层的事,provider 不管;然后**按族各实现一份**:
+work / user 的记录(work 节点、画布、会话登记、谁动过、事件、收件箱、round;user 的档案)是**业务**。业务层需要的操作定成一个接口——它长什么样是业务层的事,provider 不管;然后**按族各实现一份**:
 
 | | fs 版仓储(用 `FileSystemProvider`) | db 版仓储(用 `DatabaseProvider`) |
 |---|---|---|
 | work 节点 | `works/<id>/work.json`,`read` / `write` | `works` 表,一行 |
+| user 档案 | `users/<name>.json` | `users` 表,一行 |
 | 画布 | `works/<id>/canvas.json`,版本号在文件里 | `canvases` 表,版本列 |
 | 会话登记 / 谁动过 / manager | 各一个 JSON | 各一张表 |
 | 事件 / 收件箱 / round | JSONL,`append` / `read` | `events` / `inbox` / `rounds` 表,自增 `seq` |
@@ -135,6 +136,8 @@ collections 的介质就是 git([collections-store.md](collections-store.md)),**
 ---
 
 ## 7. 这篇有意不定的事
+
+- ~~user 资料放哪~~:已定——user 是注册的实体,档案走仓储(fs `users/<name>.json` / db `users` 表),和 work 一样按族各一份实现。
 
 - **对象存储的 `append` 怎么做**:读回拼接(简单,小文件够用)还是一行一对象(可扩展,list 成本高)。先按前者;rounds 这种大流本来就建议留 LocalFS。
 - **`watch` 要不要进基类**:前端实时性会要;LocalFS 用 inotify,S3 没有,数据库看实现。先作为能力,不进必须项。

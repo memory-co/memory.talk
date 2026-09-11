@@ -29,9 +29,11 @@
 | `POST` | `/api/works/{work_id}/sessions/{session_id}/attach` | 重入:幂等取回同一个现场 |
 | `GET` | `/api/works/{work_id}/sessions/{session_id}/capture` | 观测:抓终端屏幕(把手 capture) |
 | `GET` | `/api/works/{work_id}/sessions/{session_id}/rounds` | 痕迹:agent 会话的 round(先从把手同步新 round,再读 rounds.jsonl) |
-| `GET` | `/api/users` | 所有出现过的 user(从 work 与 collections 汇总),按最近活动倒序 |
-| `GET` | `/api/users/me` | 我是谁:X-Memory-Talk-User 对应的 user(没带 → null) |
-| `GET` | `/api/users/{name}` | 一个 user:建的 / 动过的 work、最近的提交 |
+| `GET` | `/api/users` | 所有注册的 user,带活动统计,按最近活动倒序 |
+| `POST` | `/api/users` | 注册一个 user(name 唯一;之后请求头 X-Memory-Talk-User 用它) |
+| `GET` | `/api/users/me` | 我是谁:X-Memory-Talk-User 对应的 user 档案(没带 → null) |
+| `GET` | `/api/users/{name}` | 一个 user 的档案 + 建的 / 动过的 work、最近的提交 |
+| `PUT` | `/api/users/{name}` | 改档案(display_name / email) |
 | `GET` | `/api/collections/layers` | 有哪些层(最底在前)、各自的 schema 与行为 |
 | `POST` | `/api/collections/layers` | 加一个用户层:一份 schema YAML |
 | `GET` | `/api/collections/managed` | 某个 work 管的所有对象;不传 work = 没人管的对象 |

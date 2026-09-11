@@ -35,13 +35,22 @@ def test_users_visibility(client):
 
 
 def test_users_top_level(client):
+    # 注册是显式的;没注册的名字不能当身份用
+    assert client.post("/api/users", json={"name": "alice"}).status_code == 409
+    assert client.post("/api/users", json={"name": "bad name"}).status_code == 422
+    assert client.post("/api/works", json={"goal": "x"}, headers={"X-Memory-Talk-User": "nobody"}).status_code == 404
+    assert client.post("/api/collections/card/x/y", json={"data": {"title": "y"}}, headers={"X-Memory-Talk-User": "nobody"}).status_code == 404
+    d = client.post("/api/users", json={"name": "dave", "display_name": "Dave", "email": "dave@example.com"}).json()
+    assert d["display_name"] == "Dave" and d["created_at"]
+    assert client.put("/api/users/dave", json={"display_name": "David"}).json()["display_name"] == "David"
+
     a = client.post("/api/works", json={"goal": "A 的事"}, headers={"X-Memory-Talk-User": "alice"}).json()
     client.patch(f"/api/works/{a['id']}", json={"status": "doing"}, headers={"X-Memory-Talk-User": "bob"})
     client.post("/api/collections/card/x/一张卡", json={"data": {"title": "一张卡"}}, headers={"X-Memory-Talk-User": "bob"})
     client.post("/api/collections/card/x/匿名卡", json={"data": {"title": "匿名卡"}})          # 没带身份:不算 user
 
     users = {u["name"]: u for u in client.get("/api/users").json()}
-    assert set(users) == {"alice", "bob"}
+    assert set(users) == {"alice", "bob", "carol", "dave"}          # 注册的都在,包括没动过的
     assert users["alice"]["works_created"] == 1 and users["alice"]["works_touched"] == 1
     assert users["bob"]["works_created"] == 0 and users["bob"]["works_touched"] == 1 and users["bob"]["commits"] == 1
     assert users["alice"]["active_works"] == [a["id"]]
@@ -51,4 +60,10 @@ def test_users_top_level(client):
     assert client.get("/api/users/nobody").status_code == 404
     assert client.get("/api/users/me").json() is None
     assert client.get("/api/users/me", headers={"X-Memory-Talk-User": "alice"}).json()["works_created_ids"] == [a["id"]]
-    assert client.get("/api/users/me", headers={"X-Memory-Talk-User": "carol"}).json()["name"] == "carol"   # 新名字:存在但空白
+    assert client.get("/api/users/me", headers={"X-Memory-Talk-User": "carol"}).json()["works_created"] == 0   # 注册了、没动过
+    # commit author 用档案里的邮箱
+    client.post("/api/collections/card/x/戴夫的卡", json={"data": {"title": "戴夫的卡"}}, headers={"X-Memory-Talk-User": "dave"})
+    import subprocess
+    who = subprocess.run(["git", "log", "-1", "--format=%an <%ae>", "stack"], cwd=client.app.state.collections.repo.root,
+                         capture_output=True, text=True).stdout.strip()
+    assert who == "dave <dave@example.com>"

@@ -28,7 +28,7 @@ v5 把主语换掉:**memory.talk 是一个工作台,工作在它里面发生**�
 
 > **memory.talk v5 = 一个跑 code agent 的工作台,它把「做事」「议事」「记事」三层接成一个闭环。**
 
-这三层就是 v5 的三个抽象:**work、issue、card**——issue 和 card 后来收进了 **collections**(认知层的容器,[collections.md](collections.md)),所以 memory.talk 的顶层对象是三个:**work、collections、user**。user 是「谁」:work 谁建的、谁在动,collections 的提交谁做的([user.md](user.md),§2.4)。
+这三层就是 v5 的三个抽象:**work、issue、card**——issue 和 card 后来收进了 **collections**(认知层的容器,[collections.md](collections.md)),所以 memory.talk 的顶层对象是三个:**work、collections、user**。user 是「谁」:注册的实体,work 谁建的、谁在动,collections 的提交谁做的([user.md](user.md),§2.4)。
 
 ---
 
@@ -76,7 +76,7 @@ card 是记事层:**一条事实,像维基百科的一个词条**。一个事实
 
 ### 2.4 user:谁
 
-work、issue、card 说的都是**事**;user 说的是**人**,和它们平级,不是谁的附属。一个 memory.talk 实例给一个团队用,团队里的每个人是一个 user——不注册,第一次带着名字操作它就存在了。它出现在三处:
+work、issue、card 说的都是**事**;user 说的是**人**,和它们平级,不是谁的附属。一个 memory.talk 实例给一个团队用,团队里的每个人是一个 user——**注册的实体**,有自己的存储(fs 或数据库,走 provider)和档案;请求头里的名字必须是注册过的。它出现在三处:
 
 - **work 有归属**:`created_by`,建时定下不改;另有一份 `users` 名单记谁动过、最近什么时候。
 - **collections 的每个提交以它为 author**:立场谁提的、卡谁改的,`git log` 里有,对象里不另存。

@@ -1,6 +1,6 @@
 # user —— 人:谁建的、谁在动、谁定的(v5 设计)
 
-> **状态:框架稿,部分已实现(原 member 机制)。** 本篇把「人」立成一个概念:**user**。它出现在三处——work 是谁**建**的、work 现在谁**在动 / 动过**、collections 里每个提交是谁**做的**。它**不做权限**:整个实例给一个团队用,团队内不限制。原来叫 member 的那套「谁在操作 / 操作过某个 work」的可见性记录,并入本篇,名字统一叫 user。字段见 [`../../structure/v5/work.md`](../../structure/v5/work.md),端点见 [`../../api/v5/works.md`](../../api/v5/works.md)。
+> **状态:框架稿,已有实现。** 本篇把「人」立成一个顶层对象:**user**。它是**注册的实体**——和 work 平级,有自己的存储(fs 或数据库,走 [provider.md](provider.md) 的仓储),有档案(名字、显示名、邮箱)。它出现在三处——work 是谁**建**的、work 现在谁**在动 / 动过**、collections 里每个提交是谁**做的**。它**不做权限**:整个实例给一个团队用,团队内不限制;注册解决的是「你是谁」,不是「你能干什么」。原来叫 member 的那套「谁在操作 / 操作过某个 work」的可见性记录,并入本篇,名字统一叫 user。字段见 [`../../structure/v5/work.md`](../../structure/v5/work.md),端点见 [`../../api/v5/works.md`](../../api/v5/works.md)。
 
 相关:
 - v5 work(user 归属挂在 work 上): [work.md](work.md)
@@ -14,7 +14,7 @@
 
 一个 memory.talk 实例是**给一个团队用的**。同一棵 work 树、同一份认知层,团队里的人都在上面干活。于是每个对象都有一个自然的问题:**这是谁的、谁在动、谁定的**。user 就是这个「谁」。
 
-它不是一个要先注册的账号,是**在系统里出现过的一个名字**:第一次带着这个名字操作,它就存在了。三处会记它:
+它是**先注册、再使用**的:`POST /api/users` 建一个 user(名字唯一,可带显示名、邮箱),档案落在自己的存储里——fs 时是 `users/<name>.json`,数据库时是 `users` 表。之后请求头 `X-Memory-Talk-User` 里写的名字**必须是注册过的**,否则 404;不带头 = 匿名,照样能操作。三处会记它:
 
 | 在哪 | 记什么 | 回答的问题 |
 |---|---|---|
@@ -54,7 +54,7 @@ work 上还记一份名单:**谁动过这个 work、第一次和最近一次什�
 这是本篇最重要的一条边界。**所有 work 谁都能操作,所有 collections 谁都能写**;user 只是让人看得见,不是门。
 
 - 没有 owner-only、没有 assignee、没有「只有 X 能改」。想接手别人的 work,直接动;名单上多一个名字,别人一看就知道。
-- 没有登录。身份是客户端**自报**的(请求头 `X-Memory-Talk-User`),服务端不校验、不拒绝。团队内互相信任,自报够用;真到了需要鉴权的那天,换成从登录态取名字,user 这层一行不用改。
+- 没有登录。身份是客户端**自报**的(请求头 `X-Memory-Talk-User`),服务端只查这个名字**注册过没有**,不验证「你真的是他」。团队内互相信任,自报够用;真到了需要鉴权的那天,换成从登录态取名字,user 这层一行不用改——档案、归属、author 都还是那一套。
 - 不带身份的请求照样能操作,只是不记名——commit author 退回服务配置的默认名,work 的 `created_by` 为空。
 
 为什么这样定:权限系统的成本是永远的,每个端点都要判、每种角色都要维护;一个团队用一个实例,这些成本换不来什么。**看得见就够了**;看得见还出问题,那是沟通问题,不是权限问题。
@@ -67,7 +67,7 @@ collections 的每个动作是一个 commit;做这个动作的 user 就是 commi
 
 - `git log layer/issue` 一眼看到每个立场、每条论证是谁提的;`git blame` 一张卡,每一行是谁写的。
 - 「这条认知是谁定的」不需要在对象里再记一个字段——对象里不存 user,历史里有。
-- 没带身份的提交,author 是服务配置的默认名(`MEMORY_TALK_AUTHOR`),等于「匿名」。
+- author 的名字和邮箱来自 user 的**档案**(邮箱没填就用 `<name>@memory.talk`)。没带身份的提交,author 是服务配置的默认名(`MEMORY_TALK_AUTHOR`),等于「匿名」。
 
 和 work 那边对上:work 的 `created_by`、`users` 里的名字,和 commit author 用的是**同一个名字**(请求头里那个),所以「这件事谁在做」和「这个结论谁下的」能对得上。
 
@@ -81,19 +81,21 @@ collections 的每个动作是一个 commit;做这个动作的 user 就是 commi
 
 ---
 
-## 7. user 是顶层对象:有自己的 API 和命令
+## 7. user 是顶层对象:有自己的存储、API 和命令
 
 user 和 work、collections 平级,所以它有自己的面——不是挂在 work 下面的一个子资源:
 
-- **API**:`GET /api/users`(所有出现过的 user,从 work 的 `created_by` / `users` 和 collections 的 commit author 汇总,按最近活动倒序)、`GET /api/users/{name}`(建的 / 动过的 work、最近的提交)、`GET /api/users/me`(请求头里那个名字对应的 user)。
-- **CLI**:`memory.talk user list | show <name> | whoami`。
-- **汇总,不注册**:没有 users 表、没有建 user 的端点;一个名字出现在任何一处,它就在清单里。这和 §1 说的「在系统里出现过的一个名字」是一回事。服务配置的默认 author(匿名提交)不算 user。
+- **存储**:user 的档案是**存的**,走和 work 一样的仓储 / provider 机制([provider.md](provider.md)):fs 时 `users/<name>.json`,数据库时 `users` 表。档案只有名字、显示名、邮箱、注册时间;**活动统计不存**(建了几个 work、动过几个、提交数、正在动哪些)——它们从 work 和 collections 现算,是档案上的派生视图。
+- **API**:`POST /api/users`(注册)、`GET /api/users`(所有注册的 user,带统计,按最近活动倒序)、`GET /api/users/{name}`(档案 + 建的 / 动过的 work、最近的提交)、`PUT /api/users/{name}`(改显示名 / 邮箱)、`GET /api/users/me`。
+- **CLI**:`memory.talk user add | list | show | set | whoami`。
+- **不删**:先不给删 user 的口子——它的名字已经写进 work 的 `created_by` 和 collections 的历史,删了引用就悬空。真要「离开」,是将来的一个状态,不是删。
 
 ## 8. 这篇有意不定的事
 
 - **身份从哪来**:现在是请求头自报。前端要不要让人第一次打开时填个名字存本地;将来接了登录态,是替换还是叠加。
-- **要不要有 user 清单**:现在 user 只是散落在各处的名字,没有一份「团队里有谁」的表。倾向先不要——从 work 的 `users` 和 git author 里能汇总出来;真要头像、邮箱、显示名,再加 user 资料这一类记录(存哪由仓储 + [provider.md](provider.md) 定)。
-- **git author 的邮箱**:只有名字时邮箱填什么——倾向 `<名字>@memory.talk`,稳定且可辨认。
+- **档案还要什么**:现在是名字、显示名、邮箱。头像、时区、通知偏好之类等前端需要了再加——档案是存的,加字段不难。
+- **要不要「离开」状态**:见 §7 末。
+- ~~git author 的邮箱~~:已定——档案里的邮箱,没填用 `<名字>@memory.talk`。
 - **agent 要不要单独立身份**:agent 的提交现在挂在驱动它的 user 名下。如果实践里「这是人定的还是 agent 定的」真成了问题,再给 agent 一个可辨认的 author(比如 `alice+codex`)。
 - **活跃窗口 N**:2 分钟是拍的,跟前端心跳间隔一起调。
 - **history 要不要衰减**:一个 work 活几个月,名单上可能有十几个人。先不管。

@@ -14,6 +14,8 @@
 │       ├── 某份原文.md                ←   origin:不带后缀的文件
 │       ├── 某个问题.issue/            ←   issue:issue.json + 可选 manager.json + 附件
 │       └── 某张卡.card/              ←   card:card.md + 可选 manager.json + 附件
+├── users/                            ← user 档案(注册的实体;MEMORY_TALK_STORE=fs 时)
+│   └── <name>.json                   ←   name / display_name / email / created_at
 ├── works/                            ← 裸文件(现场层)
 │   └── <work_id>/
 │       ├── work.json                 ←   目标 / 父 / 状态
@@ -39,7 +41,7 @@
 
 ## works/(裸文件;MEMORY_TALK_STORE=fs)
 
-介质可换:`MEMORY_TALK_STORE=sqlite` 时这一半全在 `memory.sqlite`(`MEMORY_TALK_SQLITE` 可改路径)的三张表里,业务层不感知(见 [designs provider.md](../../designs/v5/provider.md))。
+介质可换:`MEMORY_TALK_STORE=sqlite` 时这一半(连同 users/)全在 `memory.sqlite`(`MEMORY_TALK_SQLITE` 可改路径)的四张表里(`users` / `works` / `work_docs` / `work_logs`),业务层不感知(见 [designs provider.md](../../designs/v5/provider.md))。
 
 - **原子写**:`work.json` / `canvas.json` / `sessions.json` / `members.json` / `manager.json` 写临时文件后 `os.replace`。
 - **只追加**:`events.jsonl` / `inbox.jsonl` / `rounds.jsonl`,从不改既有行。
