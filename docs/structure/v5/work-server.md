@@ -24,7 +24,7 @@
 
 | 字段 | 说明 |
 |---|---|
-| `name` | server 名;`backend/work_servers/<name>.py` |
+| `name` | server 名;`memorytalk/work_servers/<name>.py` |
 | `protocols[]` | 它响应哪些协议,**server 自己声明**;一个 server 可以多个。`default` 的为空——它不声明,专收没人声明的 |
 
 寻址:协议在某个 server 的 `protocols` 里 → 那个;否则 → `default`。列表里 `default` 永远排最后。

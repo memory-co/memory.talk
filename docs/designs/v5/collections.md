@@ -146,7 +146,7 @@ git log --first-parent stack
 | 提交信息 | `card: write …` / `issue: argue …` | `[card] write …` / `[issue] argue …`(动词不变,层名前置) |
 | 跨对象的决定 | 一个 commit | 两个相邻提交 + 同一个 `Decision:` trailer(§6) |
 | 历史 | `git log -- <path>` | 同,外加 `git log layer/<名>` 看整层 |
-| 加一种新对象 | 改 backend | 写一份 schema + `layers` 里加一行 |
+| 加一种新对象 | 改代码 | 写一份 schema + `layers` 里加一行 |
 | 谁改不动谁 | 靠代码纪律 | hook 守着:上层改不动下层,跨层提交被拒 |
 
 collections-store.md 的两条原则不变:**认知层进 git,现场层用裸文件**。Collections 只是把「进 git」这一半做成了有层语义的。

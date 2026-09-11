@@ -62,6 +62,9 @@ exclude = [
     "memorytalk/frontend/*.ts",
     "memorytalk/frontend/*.js",
     "memorytalk/frontend/index.html",
+    "memorytalk/frontend/tsconfig.json",
+    "memorytalk/frontend/.gitignore",
+    "memorytalk/frontend/README.md",
 ]
 
 [tool.hatch.build.targets.sdist]

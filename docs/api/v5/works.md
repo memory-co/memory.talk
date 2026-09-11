@@ -52,7 +52,7 @@ work 树(森林)。
  {"name": "default", "protocols": [], "description": "兜底:没有专门 server 的协议,把协议名当命令名在 tmux 里跑"}]
 ```
 
-一项 = `backend/work_servers/` 下一个文件。`protocols` 是它自己声明的;`default` 不声明、永远排最后。**寻址在 `POST /api/works/{id}/sessions` 时自动发生**,没有单独的 resolve 端点。
+一项 = `memorytalk/work_servers/` 下一个文件。`protocols` 是它自己声明的;`default` 不声明、永远排最后。**寻址在 `POST /api/works/{id}/sessions` 时自动发生**,没有单独的 resolve 端点。
 
 ## GET /api/works/{work_id}
 

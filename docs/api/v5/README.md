@@ -1,6 +1,6 @@
 # API Reference (v5)
 
-本地 API,全部挂在 `/api/` 下,请求 / 响应 JSON。起服务 `cd backend && python -m backend serve`,`http://127.0.0.1:8000/docs` 有 OpenAPI。
+本地 API,全部挂在 `/api/` 下,请求 / 响应 JSON。起服务 `memory.talk server start`,`http://127.0.0.1:8000/docs` 有 OpenAPI。
 
 - 机制 / 设计决策见 [`../../designs/v5/`](../../designs/v5/README.md)
 - 数据结构 / schema 见 [`../../structure/v5/`](../../structure/v5/README.md)

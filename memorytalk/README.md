@@ -1,12 +1,11 @@
-# backend(v5)
+# memorytalk(v5 包)
 
-memory.talk v5 的后端。**work 树(带 created_by 与 users)、协议 server、Collections(origin / issue / card 三层 + 用户层,提交 author = user)、manager 收件箱、存储 provider(LocalFS / SQLite,测试两种都跑)都有最简实现。** 未做:鉴权网关、ttyd / 反代托管、`daemon` / `start` / `stop`、逐 round 标注、二进制 blob 外置、给人手工 `git commit` 用的 hook(服务进程是唯一写者)。 端点清单见 [docs/api/v5](../docs/api/v5/README.md);起服务 `python -m backend serve`,测试 `pytest`。 按 **models / services / controllers** 三层分目录,外加 **servers/**(每个协议一个 server)和 **layers/**(每个内置 layer 一个文件);services 下每个子包对应 [docs/designs/v5](../docs/designs/v5/README.md) 的一篇设计;底层逻辑照 shellbase `server/shellbase/` 原生实现。`backend/` 本身就是 Python 包根,不再套一层包名目录。
+memory.talk v5 的 Python 包(pip:`memorytalk`,命令 `memory.talk`)。**work 树(带 created_by 与 users)、协议 server、Collections(origin / issue / card 三层 + 用户层,提交 author = user)、manager 收件箱、存储 provider(LocalFS / SQLite,测试两种都跑)都有最简实现。** 未做:鉴权网关、ttyd / 反代托管、`daemon` / `start` / `stop`、逐 round 标注、二进制 blob 外置、给人手工 `git commit` 用的 hook(服务进程是唯一写者)。 端点清单见 [docs/api/v5](../docs/api/v5/README.md);起服务 `memory.talk server start`,测试在仓库根 `pytest`。 按 **models / services / controllers** 三层分目录,外加 **servers/**(每个协议一个 server)和 **layers/**(每个内置 layer 一个文件);services 下每个子包对应 [docs/designs/v5](../docs/designs/v5/README.md) 的一篇设计;底层逻辑照 shellbase `server/shellbase/` 原生实现。
 
 ```
-backend/
-├── pyproject.toml            # 独立分发(hatchling);前端产物随包
+memorytalk/                   # 根 pyproject 打包它;frontend/dist 随 wheel 分发
 ├── main.py                   # FastAPI 实例、路由挂载、启动钩子
-├── cli.py                    # start / stop / status / daemon / serve(照 shellbase cli)
+├── cli.py                    # memory.talk 命令行:server start/stop/restart/status/daemon、work、user、collection(docs/cli/v5)
 ├── config.py                 # 环境变量与路径(~/.memory.talk/{memory,works})
 ├── gateway.py                # AuthGate + 静态托管 + 反代(/tty、/proxy/<port>)
 │
@@ -70,5 +69,5 @@ backend/
 │   ├── auth.py               #   /api/auth/{login,verify,logout,me}
 │   └── system.py             #   /api/system/{info,health}
 │
-└── tests/                    # 按场景组织,每个目录一个场景(照 shellbase tests/)
+└── frontend/                 # Vite + React 骨架(未实现);tests/ 在仓库根
 ```
