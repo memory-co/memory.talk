@@ -26,7 +26,7 @@ backend/
 │   │   ├── rounds.py         #     agent 会话的 rounds.jsonl(append-only)
 │   │   ├── inbox.py          #     收件箱:manager.json 路由过来的变动(append-only)
 │   │   └── events.py         #     work 自己的 append-only 事件(开工/状态/做完)
-│   ├── servers/              #   server 的装载与分发 —— docs/designs/v5/protocol-server.md
+│   ├── protocol_servers/     #   协议 server 的装载与寻址 —— docs/designs/v5/protocol-server.md
 │   │   ├── registry.py       #     协议 → server 寻址:先看谁声明了它,没人声明去 default
 │   │   ├── uri.py            #     块的 URI 解析
 │   │   ├── terminal.py       #     tmux 现场 + 终端类 server 基类(TerminalBase)
