@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "memorytalk"
-version = "5.0.0a0"
+version = "5.0.0"
 description = "memory.talk v5 — work / collections / user 三个顶层对象的工作台:跑 code agent 的 work 树,git 分层的认知层,注册的团队成员"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -13,7 +13,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "twwwwwy", email = "twwwwwy@gmail.com" }]
 keywords = ["agent", "memory", "workspace", "tmux", "git", "fastapi"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Environment :: Web Environment",
     "Framework :: FastAPI",
