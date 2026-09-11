@@ -16,7 +16,7 @@ def test_registry_and_resolve(client):
     assert client.get("/api/works/servers/resolve").status_code == 404        # 寻址不是端点,open 时自动做
 
     # 寻址是内部的:服务层按协议找到声明它的 server,没人声明 → default
-    from memorytalk.services.work_servers.uri import parse_uri
+    from memorytalk.backend.services.work_servers.uri import parse_uri
     reg = client.app.state.work_servers.registry
     assert reg.resolve(parse_uri("codex:///w/p")).name == "codex"
     assert reg.resolve(parse_uri("https://x.y/z")).name == "http"

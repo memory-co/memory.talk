@@ -58,7 +58,7 @@ def test_claude_session_rounds(client, home, monkeypatch):
 
 def test_codex_adapter_parses(home):
     from pathlib import Path
-    from memorytalk.services.work_servers.adapters import CodexAdapter
+    from memorytalk.backend.services.work_servers.adapters import CodexAdapter
     root = home / "codex" / "2026" / "09" / "05"; root.mkdir(parents=True)
     p = root / "rollout-2026-09-05T10-00-00-abc.jsonl"
     rows = [
@@ -78,7 +78,7 @@ def test_codex_adapter_parses(home):
 
 def test_kimi_adapter_parses(home):
     from pathlib import Path
-    from memorytalk.services.work_servers.adapters import KimiAdapter
+    from memorytalk.backend.services.work_servers.adapters import KimiAdapter
     sd = home / "kimi" / "wd_u_abc" / "session_1"; (sd / "agents" / "main").mkdir(parents=True)
     (sd / "state.json").write_text(json.dumps({"workDir": "/w/p", "createdAt": "2026-09-06T00:00:00Z"}))
     wire = sd / "agents" / "main" / "wire.jsonl"

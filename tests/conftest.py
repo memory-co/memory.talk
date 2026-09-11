@@ -28,8 +28,8 @@ def home(tmp_path, monkeypatch, request):
 
 @pytest.fixture
 def client(home):
-    from memorytalk.config import load_config, load_runtime_config
-    from memorytalk.main import create_app
+    from memorytalk.backend.config import load_config, load_runtime_config
+    from memorytalk.backend.main import create_app
     app = create_app(load_config(), load_runtime_config())
     with TestClient(app) as c:
         for name in ("alice", "bob", "carol"):          # 场景里用到的 user 先注册

@@ -65,7 +65,7 @@ def test_layers_and_objects(client):
     assert client.post(f"/api/collections/act/issue/decide/{ip}", json={"position": "p2", "card": cp}).status_code == 409
 
     # 守卫:改卡的提交碰不到 .issue/ 里的文件(服务层直接试)
-    from memorytalk.services.collections import CollectionsError, Ctx
+    from memorytalk.backend.services.collections import CollectionsError, Ctx
     svc = client.app.state.collections
     try:
         svc.commit("card", "touch", {f"{ip}.issue/issue.json": b"{}"}, [], "", Ctx())
@@ -160,7 +160,7 @@ fields:
     tree = client.get("/api/collections/tree", params={"path": "memory.talk/配置"}).json()
     assert tree[0]["name"] == "定了用环境变量.decision" and tree[0]["layer"] == "decision"
     # 重启后层还在(layers 文件 + schemas/ 都在仓库里)
-    from memorytalk.config import load_config, load_runtime_config
-    from memorytalk.main import create_app
+    from memorytalk.backend.config import load_config, load_runtime_config
+    from memorytalk.backend.main import create_app
     app2 = create_app(load_config(), load_runtime_config())
     assert app2.state.collections.order[-1] == "decision"

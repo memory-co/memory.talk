@@ -63,11 +63,12 @@ cd memorytalk/frontend && npm install && npm run dev     # 前端(Vite + React;�
 
 ```
 memorytalk/              ← Python 包(pip: memorytalk;命令 memory.talk)
-├── main.py cli.py config.py gateway.py
-├── models/ services/ controllers/     ← 三层
-├── providers/           ← 存储介质:FileSystemProvider(LocalFS)/ DatabaseProvider(SQLite)
-├── layers/              ← 内置 layer:origin / issue / card
-├── work_servers/        ← 每个协议一个 work server:bash / claude / codex / kimi / http / default
+├── cli.py               ← 命令行(本地 API 的客户端)
+├── backend/             ← 服务:main.py config.py gateway.py
+│   ├── models/ services/ controllers/     ← 三层
+│   ├── providers/       ← 存储介质:FileSystemProvider(LocalFS)/ DatabaseProvider(SQLite)
+│   ├── layers/          ← 内置 layer:origin / issue / card
+│   └── work_servers/    ← 每个协议一个 work server:bash / claude / codex / kimi / http / default
 └── frontend/            ← Vite + React(骨架)
 tests/                   ← 按场景组织
 docs/                    ← designs / structure / api / cli

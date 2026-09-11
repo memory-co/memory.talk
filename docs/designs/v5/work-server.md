@@ -65,7 +65,7 @@ server **不做**的事同样重要:它**不记 work**——哪个块属于哪�
 
 ## 5. v5 首批 server:bash、claude、codex、kimi、http、default
 
-一个 server 一个文件,`memorytalk/work_servers/<name>.py`:
+一个 server 一个文件,`memorytalk/backend/work_servers/<name>.py`:
 
 | server | 响应的协议 | 现场 | 窗 | 把手 | 蓝本 |
 |---|---|---|---|---|---|

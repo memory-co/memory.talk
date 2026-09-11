@@ -203,7 +203,7 @@ def server_status(a) -> None:
 
 def server_daemon(a) -> None:
     import uvicorn
-    uvicorn.run("memorytalk.main:create_app", factory=True, host=a.host, port=a.port, log_level="info")
+    uvicorn.run("memorytalk.backend.main:create_app", factory=True, host=a.host, port=a.port, log_level="info")
 
 
 # ================================================================ work
