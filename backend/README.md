@@ -61,7 +61,7 @@ backend/
 │
 ├── controllers/              # HTTP 面(FastAPI 路由;只做参数/响应,不含逻辑)
 │   ├── works.py              #   /api/works/…
-│   ├── servers.py            #   /api/protocol-servers/attach?uri=…、DELETE
+│   ├── protocol_servers.py   #   /api/protocol-servers(有哪些协议 server、各自响应哪些协议)
 │   ├── collections.py            #   /api/collections/…(层、树、检索、manager、对象 CRUD、历史、行为)
 │   ├── auth.py               #   /api/auth/{login,verify,logout,me}
 │   └── system.py             #   /api/system/{info,health}
