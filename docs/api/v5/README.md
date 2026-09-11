@@ -65,7 +65,7 @@
   | 422 | `invalid` | 对象不符合层的 schema(或 FastAPI 默认校验) |
   | 502 | `platform` | tmux 起不来 |
 
-- **身份自报、不做权限**:`X-Memory-Talk-User: <名字>` 是谁在操作——建 work 时写进 `created_by`,动 work 时记进它的 users,collections 的每个 commit 以它为 **author**(`<名字>@memory.talk`);`X-Memory-Talk-Work: <work_id>` 是在哪个 work 里操作(进 `Work:`;**自己造成的变动不投给自己的收件箱**)。不带照样能操作。
+- **身份自报、必须注册、不做权限**:`X-Memory-Talk-User: <名字>` 是谁在操作,名字必须是 `POST /api/users` 注册过的(否则 404)——建 work 时写进 `created_by`,动 work 时记进它的 users,collections 的每个 commit 以它为 **author**(档案里的邮箱,没填则 `<名字>@memory.talk`);不带头 = 匿名,照样能操作。整个实例给一个团队用。
 - **Collections 的每个写动作一个 `[层名]` 提交**,写请求可带 `reason`(进 `Reason:`)。跨层的决定是两个相邻提交 + 同一个 `Decision:` / `Discussion:` trailer。
 - **时间**:ISO 8601 UTC。**无分页**。**没有鉴权、没有网关**。
 
