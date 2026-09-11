@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from ._spec import LayerSpec
-from ._user import from_yaml
+from ._user import from_dict, from_yaml, schema_from_yaml
 from .card import LAYER as CARD
 from .issue import LAYER as ISSUE
 from .origin import LAYER as ORIGIN
 
 BUILTIN: list[LayerSpec] = [ORIGIN, ISSUE, CARD]
 
-__all__ = ["LayerSpec", "BUILTIN", "from_yaml"]
+__all__ = ["LayerSpec", "BUILTIN", "from_yaml", "from_dict", "schema_from_yaml"]

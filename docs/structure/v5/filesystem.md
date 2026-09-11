@@ -6,8 +6,7 @@
 ~/.memory.talk/                       ← MEMORY_TALK_HOME
 ├── collections/                      ← 分层 git 仓库(认知层),见 collections.md
 │   ├── .git/                         ←   refs/heads/layer/{origin,issue,card,…}、refs/heads/stack;HEAD → stack
-│   ├── layers                        ←   层清单,一行一层,最底在前(始祖提交里就有)
-│   ├── schemas/<层>.yaml             ←   用户层的 schema(最底层)
+│   ├── collections.json              ←   锚定:整个 collections 的配置 + layers[](最底在前,用户层内嵌 schema);始祖提交只有它;git 历史 = 层的变化史
 │   ├── manager.json                  ←   根:管一切(可选)
 │   └── <按主题组织的目录树>/          ←   原文、.issue/、.card/、.<用户层>/ 并排
 │       ├── manager.json              ←   这一片归谁管(可选,任何目录)

@@ -19,7 +19,7 @@ from .manager import FILE as MANAGER_FILE
 from .manager import ManagerIndex, manager_path
 from .repo import GuardError, Repo
 
-SCHEMAS_DIR = "schemas"
+CONFIG_FILE = "collections.json"
 
 
 class CollectionsError(RuntimeError):
@@ -60,16 +60,25 @@ class CollectionsService:
             if b.name not in names:
                 names.append(b.name)
         self.repo.ensure_layers(names)
+        cfg = self.repo.config()
         specs: dict[str, LayerSpec] = {}
-        for name in names:
+        for entry in cfg["layers"]:
+            name = entry["name"]
             if name in builtin:
                 specs[name] = builtin[name]
+            elif "schema" in entry:
+                specs[name] = layer_pkg.from_dict(name, entry["schema"])
             else:
-                text = self.repo.read(f"{SCHEMAS_DIR}/{name}.yaml")
-                if text is None:
-                    raise CollectionsError("bad_layer", f"层 {name} 在 layers 里,但没有 {SCHEMAS_DIR}/{name}.yaml", 500)
-                specs[name] = layer_pkg.from_yaml(text.decode())
-        self.layers, self.order = specs, names
+                raise CollectionsError("bad_layer", f"collections.json 里的层 {name} 既不是内置的,也没有 schema", 500)
+        self.layers, self.order = specs, [e["name"] for e in cfg["layers"]]
+
+    def anchor(self) -> dict:
+        """collections.json 本体。"""
+        return self.repo.config()
+
+    def anchor_history(self):
+        """collections.json 的提交历史 = 层的变化史(在最底层分支上)。"""
+        return self.repo.log(self.repo.layer_ref(self.order[0]), CONFIG_FILE)
 
     def layer(self, name: str) -> LayerSpec:
         try:
@@ -83,19 +92,22 @@ class CollectionsService:
     def add_layer(self, name: str, schema_yaml: str, reason: str, ctx: Ctx) -> LayerInfo:
         if name in self.layers:
             raise CollectionsError("exists", f"层已存在:{name}", 409)
-        spec = layer_pkg.from_yaml(schema_yaml)
-        if spec.name != name:
-            raise CollectionsError("bad_layer", f"schema 里的 layer 是 {spec.name!r},不是 {name!r}")
-        # schema 文件归最底层(机制,不是证据);然后重跑 init 把新层加在最上
-        self.repo.commit(self.order[0], f"[{self.order[0]}] layer: add {name}\n\n{('Reason: ' + reason) if reason else ''}".strip(),
-                         {f"{SCHEMAS_DIR}/{name}.yaml": schema_yaml.encode()}, [], layer_of=self.layer_of_path)
-        self.repo.ensure_layers([*self.order, name])
+        schema = layer_pkg.schema_from_yaml(schema_yaml)
+        if schema.get("layer", name) != name:
+            raise CollectionsError("bad_layer", f"schema 里的 layer 是 {schema.get('layer')!r},不是 {name!r}")
+        layer_pkg.from_dict(name, schema)                     # 先校验能不能解析
+        entry = {"name": name, "schema": {k: v for k, v in schema.items() if k != "layer"}, "added_at": _now()}
+        msg = f"[{self.order[0]}] collections: add layer {name}" + (f"\n\nReason: {reason}" if reason else "")
+        try:
+            self.repo.add_layer(entry, msg, author=self.author_of(ctx.user))
+        except GuardError as e:
+            raise CollectionsError("guard", str(e), e.status) from None
         self._load_layers()
         return self.layers[name].info(self.order.index(name))
 
     def layer_of_path(self, repo_path: str) -> str:
         """一个仓库路径归哪层:第一个带 `.<层>` 后缀的目录段说了算;都没有 → 最底层。"""
-        if repo_path == "layers" or repo_path.startswith(SCHEMAS_DIR + "/"):
+        if repo_path == CONFIG_FILE:
             return self.order[0]                      # 机制文件归最底层
         for seg in repo_path.split("/"):
             for name, spec in self.layers.items():
@@ -124,7 +136,7 @@ class CollectionsService:
         spec = self.layer(layer)
         out = []
         for repo_path in self.repo.tree(prefix):
-            if repo_path == "layers" or repo_path.startswith(SCHEMAS_DIR + "/") or repo_path.endswith(MANAGER_FILE):
+            if repo_path == CONFIG_FILE or repo_path.endswith(MANAGER_FILE):
                 continue
             if spec.format == "raw" and self.layer_of_path(repo_path) != spec.name:
                 continue
@@ -164,7 +176,7 @@ class CollectionsService:
         seen: dict[str, TreeItem] = {}
         for repo_path in self.repo.tree(prefix):
             rest = repo_path[len(prefix):].lstrip("/") if prefix else repo_path
-            if not rest or rest in ("layers",) or rest.startswith(SCHEMAS_DIR):
+            if not rest or rest == CONFIG_FILE:
                 continue
             head = rest.split("/", 1)[0]
             full = f"{prefix}/{head}" if prefix else head
@@ -306,7 +318,7 @@ class CollectionsService:
         """变动打到 manager work 的收件箱;没人管 → home/unmanaged.jsonl;自己造成的不投给自己。"""
         seen = set()
         for f in files:
-            if f == MANAGER_FILE or f.endswith("/" + MANAGER_FILE) or f == "layers" or f.startswith(SCHEMAS_DIR + "/"):
+            if f == MANAGER_FILE or f.endswith("/" + MANAGER_FILE) or f == CONFIG_FILE:
                 continue                                   # 机制文件的变动不投递
             m = self.managers.resolve(f)
             spec = self.layers[layer]

@@ -13,9 +13,20 @@ _TYPES: dict[str, Any] = {"string": str, "int": int, "bool": bool, "ref": str,
                           "list[string]": list[str], "list[ref]": list[str]}
 
 
-def from_yaml(text: str) -> LayerSpec:
+def schema_from_yaml(text: str) -> dict:
     doc = yaml.safe_load(text) or {}
-    name = doc["layer"]
+    if "layer" not in doc:
+        raise ValueError("schema 里要有 layer: <名字>")
+    return doc
+
+
+def from_yaml(text: str) -> LayerSpec:
+    doc = schema_from_yaml(text)
+    return from_dict(doc["layer"], doc)
+
+
+def from_dict(name: str, doc: dict) -> LayerSpec:
+    """collections.json 里内嵌的 schema → LayerSpec。"""
     fmt = "markdown" if str(doc.get("format", "markdown+frontmatter")).startswith("markdown") else "json"
     fields: dict[str, FieldSpec] = {}
     refs: dict[str, str] = {}

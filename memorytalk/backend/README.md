@@ -39,7 +39,7 @@ memorytalk/backend/           # 服务本体;memorytalk/cli.py 是它的命令�
 │   │   ├── repo.py           #     分层 git(自己实现):layer/<名> 权威分支 + stack merge 视图 + 路径归属守卫;纯 plumbing
 │   │   ├── manager.py        #     manager.json:最近祖先解析
 │   │   ├── catalog.py        #     一层的目录(按目录树列标题)+ 召回文本
-│   │   └── __init__.py       #     CollectionsService:层的装载(内置 + schemas/*.yaml)、对象 CRUD、历史、检索、树、行为、manager、投递到收件箱
+│   │   └── __init__.py       #     CollectionsService:层的装载(内置 + collections.json 里内嵌 schema 的用户层)、对象 CRUD、历史、检索、树、行为、manager、投递到收件箱
 │   └── store/                #   装配 —— docs/designs/v5/provider.md
 │       └── __init__.py       #     StoreService:按 MEMORY_TALK_STORE 选 provider,按族建 work 仓储
 │
@@ -47,7 +47,7 @@ memorytalk/backend/           # 服务本体;memorytalk/cli.py 是它的命令�
 │   ├── fs.py                 #   FileSystemProvider(read/write/append/list/…,能力 local_path)+ LocalFS
 │   └── db.py                 #   DatabaseProvider(表定义 + 链式 select/insert/update/delete,方言在内)+ SQLite
 │
-├── layers/                   # 每个内置 layer 一个文件;用户层来自仓库里的 schemas/<name>.yaml
+├── layers/                   # 每个内置 layer 一个文件;用户层来自仓库根 collections.json 里内嵌的 schema
 │   ├── _spec.py              #   LayerSpec:名字 + 形态(后缀 / 本体文件 / 格式)+ schema + 行为
 │   ├── _user.py              #   YAML 字段表 → LayerSpec(用户层,无行为)
 │   ├── origin.py             #   最底层:不带后缀的一切,原文

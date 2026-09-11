@@ -16,10 +16,10 @@
   HEAD → stack;工作树跟着 stack(只为了人能 ls / cat,服务从不读它)
 ```
 
-- **始祖** = 第一个提交,只有根上的 `layers` 文件(一行一层,最底在前)。所有分支从它出发。
+- **始祖** = 第一个提交,只有根上的 `collections.json`:`{"version": 1, "layers": [{"name": "origin", "builtin": true}, …]}`,最底在前;用户层的项内嵌 `schema` 和 `added_at`。所有分支从它出发;`git log collections.json` = 层的变化史。
 - **一个动作一个提交**,信息以 `[层名]` 开头;跨层的决定是两个相邻提交 + 同一个 trailer。`git log --first-parent stack` 是全部认知的时间线;`git log layer/<层>` 是那一层的。
 - **守卫**(写时,plumbing 内):① 后缀 / 机制规则说这个路径该归哪层,和声明的层不符 → 拒;② 路径已在别的层的树里 → 拒。所以 `[card]` 提交碰不到 `.issue/` 里的东西。
-- **机制文件**:`layers`、`schemas/<层>.yaml` 归最底层;`manager.json` 归它所在目录按后缀规则算出的层。它们的变动不投递。
+- **机制文件**:`collections.json` 归最底层;`manager.json` 归它所在目录按后缀规则算出的层。它们的变动不投递,也不出现在 tree / 目录里。
 - 全部 plumbing(hash-object / update-index / write-tree / commit-tree / update-ref),不需要工作树、不装 hook——服务进程是唯一写者。
 
 ## 对象:带后缀的目录
@@ -30,7 +30,7 @@
 | id | 文件路径 | `path`(不含后缀) | `path` | `path` |
 | 格式 | 原文 | JSON | markdown + frontmatter | schema 定 |
 | 标题 | 文件名 | `question` | `title` | schema 的 `title` |
-| 层序 | 0(最底) | 1 | 2 | 之上,按 `layers` 顺序 |
+| 层序 | 0(最底) | 1 | 2 | 之上,按 `collections.json` 的 `layers[]` 顺序 |
 
 对象目录里还可以放 `manager.json`(谁管它)和附件。目录树按主题组织,原文、`.issue/`、`.card/` 并排。
 
@@ -122,7 +122,7 @@ frontmatter 只有 `key: value` 行;`links` 逗号分隔;空值不写。读出�
 
 ### 用户层的 schema
 
-`schemas/<名>.yaml`,在仓库最底层:
+写成 YAML 交给 `POST /api/collections/layers`,系统把它嵌进 `collections.json` 的 `layers[]`:
 
 ```yaml
 layer: decision

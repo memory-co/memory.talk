@@ -68,7 +68,7 @@ issue 和 card **只是两个内置的 layer**。它们的对象模型([issue.md
 
 - **每个 layer 自己一条历史。** `git log layer/card` 只有卡的变化,`git log layer/issue` 只有辩论序列;`git log --first-parent stack` 是全部认知的时间线,每一行自带 `[issue]` / `[card]` 标注。裸 git 里这些要靠路径过滤去拼,而且分支上什么都混在一起。
 - **layer 与 layer 之间路径不相交,由 hook 守着。** 一个声明 `[card]` 的提交碰了某个 `.issue/` 目录里的文件,当场拒绝——包括 `--no-verify`、`reset`、`cherry-pick` 都绕不过。这就是 collectbase 说的「认知卫生」在 memory.talk 里的形态:**不会有一次提交把「争的过程」和「争完的结论」搅在一起**。
-- **layer 是可加的,不用改代码。** collectbase 的 `layers` 文件就是 layer 的清单;加一层 = 加一个名字。memory.talk 在这上面只多要一样东西:**schema**——这个 layer 的文件长什么样。于是「我想记一种新东西」(决策记录、实验日志、人物档案……)变成写一份 schema,而不是往 backend 里加一个包。
+- **layer 是可加的,不用改代码。** collectbase 用根上的 `layers` 文件当锚定;memory.talk 对应的是根上的 **`collections.json`**——整个 collections 的配置 + `layers[]` 清单(最底在前),用户层的 schema 内嵌在自己那一项里。它被 git 追踪、归最底层,`git log collections.json` 就是层的变化史;加一层 = 这份文件多一项。于是「我想记一种新东西」(决策记录、实验日志、人物档案……)变成写一份 schema,而不是往 backend 里加一个包。
 
 一句话:**collectbase 管「层怎么在 git 里成立」,memory.talk 管「每一层里的文件是什么」。**
 
@@ -146,7 +146,7 @@ git log --first-parent stack
 | 提交信息 | `card: write …` / `issue: argue …` | `[card] write …` / `[issue] argue …`(动词不变,层名前置) |
 | 跨对象的决定 | 一个 commit | 两个相邻提交 + 同一个 `Decision:` trailer(§6) |
 | 历史 | `git log -- <path>` | 同,外加 `git log layer/<名>` 看整层 |
-| 加一种新对象 | 改代码 | 写一份 schema + `layers` 里加一行 |
+| 加一种新对象 | 改代码 | 写一份 schema,嵌进 `collections.json` 的 `layers[]` |
 | 谁改不动谁 | 靠代码纪律 | hook 守着:上层改不动下层,跨层提交被拒 |
 
 collections-store.md 的两条原则不变:**认知层进 git,现场层用裸文件**。Collections 只是把「进 git」这一半做成了有层语义的。

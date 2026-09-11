@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import tempfile
@@ -21,7 +22,11 @@ from pathlib import Path
 
 from memorytalk.backend.models.collections import Revision
 
-ANCHOR = "layers"                     # 根上的层清单:一行一个,最底在前
+
+def _dump(cfg: dict) -> bytes:
+    return (json.dumps(cfg, ensure_ascii=False, indent=2) + "\n").encode()
+
+ANCHOR = "collections.json"           # 根上的配置:整个 collections 的配置 + 层清单(最底在前);git 历史 = 层的变化史
 
 
 class GuardError(RuntimeError):
@@ -129,18 +134,23 @@ class Repo:
         sha = self._git("rev-list", "--max-parents=0", self.stack, check=False).split()
         return sha[0] if sha else None
 
-    def layers(self) -> list[str] | None:
+    def config(self) -> dict | None:
+        """collections.json(从 stack 树里读,不读工作区)。"""
         if self.resolve(self.stack) is None:
             return None
         data = self.read(ANCHOR)
-        return [l.strip() for l in data.decode().splitlines() if l.strip()] if data else None
+        return json.loads(data) if data else None
+
+    def layers(self) -> list[str] | None:
+        cfg = self.config()
+        return [l["name"] for l in cfg["layers"]] if cfg else None
 
     def ensure_layers(self, names: list[str]) -> None:
-        """无则建拓扑;有则把缺的层补上(新层分支从始祖出发,layers 文件在最底层更新)。"""
+        """无则建拓扑;有则把缺的内置层补上(新层分支从始祖出发,collections.json 在最底层更新)。"""
         cur = self.layers()
         if cur is None:
-            text = "\n".join(names) + "\n"
-            tree = self.write_tree({ANCHOR: Entry("100644", self.hash_object(text.encode()), ANCHOR)})
+            cfg = {"version": 1, "layers": [{"name": n, "builtin": True} for n in names]}
+            tree = self.write_tree({ANCHOR: Entry("100644", self.hash_object(_dump(cfg)), ANCHOR)})
             start = self.commit_tree(tree, [], f"[{names[0]}] collections: init\n\nlayers: {', '.join(names)}")
             for n in names:
                 self.update_ref(self.layer_ref(n), start)
@@ -155,9 +165,20 @@ class Repo:
         for n in missing:
             if self.resolve(self.layer_ref(n)) is None:
                 self.update_ref(self.layer_ref(n), start)
-        new = [*cur, *missing]
+        cfg = self.config()
+        cfg["layers"] += [{"name": n, "builtin": True} for n in missing]
         self.commit(cur[0], f"[{cur[0]}] collections: add layers {', '.join(missing)}",
-                    {ANCHOR: ("\n".join(new) + "\n").encode()}, [], layer_of=lambda p: cur[0])
+                    {ANCHOR: _dump(cfg)}, [], layer_of=lambda p: cur[0])
+
+    def add_layer(self, entry: dict, message: str, author=None) -> None:
+        """在 collections.json 的 layers[] 末尾加一层(最上),并从始祖开一条分支。"""
+        cfg = self.config()
+        cfg["layers"].append(entry)
+        start = self.anchor()
+        if self.resolve(self.layer_ref(entry["name"])) is None:
+            self.update_ref(self.layer_ref(entry["name"]), start)
+        bottom = cfg["layers"][0]["name"]
+        self.commit(bottom, message, {ANCHOR: _dump(cfg)}, [], layer_of=lambda p: bottom, author=author)
 
     # ------------------------------------------------------------ 归属
 

@@ -107,7 +107,7 @@ manager 机制不规定动作。但把它接到 v5 已有的几条线上,会自�
 | issue.md §4 派出论证 work | `positions[].spawned_works` | 不变——派出是 issue 的领域动作,不是 manager 机制的事;派出的 work 默认挂在 manager work 下 |
 | work 树的父子 | 只表达「事怎么拆」 | 同时是**隐式的 manager 链**:子的变动默认打到父 |
 | issue / card 的存储形态 | `issues/<id>.json`、`cards/**/<slug>.md`,按层分目录 | 都变成**带后缀的目录**,放哪都行:`<名>.issue/issue.json`、`<名>.card/card.md`,自己目录里可放 `manager.json`([collections.md §1](collections.md)) |
-| collectbase 分层 | `[issue]` / `[card]` 各自路径 | `manager.json` 是**机制文件**(同 collectbase 的 `layers`),不是证据:在 `.issue/` 里随 `[issue]` 提交,在 `.card/` 里随 `[card]` 提交,在普通文件夹里归最底层但**不受 444 保护**——memory.talk 把它登记为机制例外 |
+| collectbase 分层 | `[issue]` / `[card]` 各自路径 | `manager.json` 是**机制文件**(同 `collections.json`),不是证据:在 `.issue/` 里随 `[issue]` 提交,在 `.card/` 里随 `[card]` 提交,在普通文件夹里归最底层但**不受 444 保护**——memory.talk 把它登记为机制例外 |
 
 ---
 

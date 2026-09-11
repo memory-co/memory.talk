@@ -2,7 +2,7 @@
 
 认知层。层由 schema 定义(内置 origin / issue / card,可加用户层);对象 = 带后缀的目录 `<path>.<层>/`,放在树的任何位置;origin = 不带后缀的文件。每个写动作一个 `[层名]` 提交,落在 `layer/<层>` 上再 merge 进 `stack`;碰了别的层的路径被守卫拒绝(409 `guard`)。机制见 [designs collections.md](../../designs/v5/collections.md) / [collections-layer.md](../../designs/v5/collections-layer.md) / [manager.md](../../designs/v5/manager.md)。
 
-`{path:path}` 直接放在 URL 里(可含 `/` 和中文)。固定子路径(`layers` `tree` `search` `manager` `managed` `history` `act`)先于 `{layer}`。
+`{path:path}` 直接放在 URL 里(可含 `/` 和中文)。固定子路径(`layers` `config` `tree` `search` `manager` `managed` `history` `act`)先于 `{layer}`。
 
 ---
 
@@ -28,15 +28,26 @@
 {"name": "decision", "schema_yaml": "layer: decision\nformat: markdown+frontmatter\ntitle: title\nfields:\n  title: {type: string, required: true}\n  issue: {type: ref, layer: issue}\n", "reason": ""}
 ```
 
-**201** 返回 LayerInfo。副作用:`schemas/decision.yaml` 进最底层(一个 `[origin]` 提交)、根上的 `layers` 文件加一行、新分支 `layer/decision` 从始祖出发。重启后仍在。已存在 → 409。类型只有 `string` `int` `bool` `"list[string]"` `ref` `"list[ref]"`(带 `[` 的要加引号)。
+**201** 返回 LayerInfo。副作用:`collections.json` 的 `layers[]` 多一项(schema 内嵌、`added_at`),一个 `[origin]` 提交;新分支 `layer/decision` 从始祖出发。重启后仍在。已存在 → 409。类型只有 `string` `int` `bool` `"list[string]"` `ref` `"list[ref]"`(带 `[` 的要加引号)。
 
 ---
 
 ## 树、检索、目录
 
+### GET /api/collections/config
+
+`collections.json` 本体 + 它的提交历史(层的变化史):
+
+```json
+{"config": {"version": 1, "layers": [{"name": "origin", "builtin": true}, {"name": "issue", "builtin": true}, {"name": "card", "builtin": true},
+                                        {"name": "decision", "schema": {"format": "…", "fields": {…}}, "added_at": "…"}]},
+ "history": [{"sha": "…", "author": "alice", "date": "…", "subject": "[origin] collections: add layer decision", "body": "Reason: …"},
+             {"sha": "…", "subject": "[origin] collections: init", …}]}
+```
+
 ### GET /api/collections/tree?path=
 
-浏览一个目录:对象折成一项(`kind: object`,`path` 不含后缀)、普通目录、origin 文件。`manager.json` / `layers` / `schemas/` 不列。
+浏览一个目录:对象折成一项(`kind: object`,`path` 不含后缀)、普通目录、origin 文件。`manager.json` / `collections.json` 不列。
 
 ```json
 [{"name": "配置", "path": "memory.talk/配置", "kind": "dir", "layer": null},

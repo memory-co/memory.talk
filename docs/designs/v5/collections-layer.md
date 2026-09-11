@@ -6,7 +6,7 @@
 - v5 collections(层即 collectbase 的 layer;Collections 是认知层的容器): [collections.md](collections.md)
 - v5 manager(任何层的任何目录都可以放 `manager.json`): [manager.md](manager.md)
 - v5 issue / card(两个内置层,照着看就是范例): [issue.md](issue.md) / [card.md](card.md)
-- collectbase `layers` 文件与 `cb init`(层的清单和顺序在这里): [cli.md](https://github.com/memory-co/collectbase/blob/main/docs/v2/works/cli.md)
+- collectbase 的 `layers` 锚定文件(memory.talk 对应的是仓库根的 `collections.json`): [cli.md](https://github.com/memory-co/collectbase/blob/main/docs/v2/works/cli.md)
 
 ---
 
@@ -16,12 +16,12 @@
 
 | 问题 | 答案落在哪 |
 |---|---|
-| **叫什么** | 层名:`layers` 文件里一行、分支 `layer/<名>`、提交前缀 `[名]` |
+| **叫什么** | 层名:`collections.json` 的 `layers[]` 里一项、分支 `layer/<名>`、提交前缀 `[名]` |
 | **住哪** | 路径:这个层的文件都在哪个目录下(和别的层不相交) |
 | **长什么样** | schema:一个对象是一个什么格式的文件、有哪些字段、哪个是标题、哪些是引用 |
-| **排在哪** | 层序:它在 `layers` 里的位置——比谁更接近记录、比谁更接近结论 |
+| **排在哪** | 层序:它在 `collections.json` 的 `layers[]` 里的位置——比谁更接近记录、比谁更接近结论 |
 
-落下来就是两个文件:**`layers` 里加一行**(collectbase 的事),**`schemas/<名>.yaml` 写一份**(memory.talk 的事)。不写代码。
+落下来就是**仓库根 `collections.json` 的 `layers[]` 里多一项**——名字、schema 内嵌、什么时候加的;一次最底层的提交,`git log collections.json` 就是层的变化史。不写代码。你手里写的还是一份 YAML 字段表(`memory.talk collection layers add <名> --schema <file>`),系统把它嵌进 `collections.json`。
 
 ---
 
@@ -42,7 +42,7 @@
 schema 说清一个对象是什么样的文件。最小的一份:
 
 ```yaml
-# schemas/decision.yaml
+# 写成 YAML 交给 `collection layers add`;落进 collections.json 时就是这份的 JSON
 layer: decision
 object: <名>.decision/decision.md       # 对象 = 带后缀的目录,本体文件叫 decision.md;<名> 由人起,放哪都行
 format: markdown+frontmatter             # 或 json
@@ -139,15 +139,15 @@ schema:      title / hypothesis / setup / result / verdict(supports | refutes | 
 
 ## 6. 改层、删层
 
-- **改 schema**:加字段随时加(老对象没有那个字段就是空);删字段、改类型要先把老对象迁过来——那是一次 `[名]` 提交,历史里看得见。schema 文件本身也在 Collections 里(最底层,和 `layers` 一起),改它也是提交。
-- **加层**:`layers` 加一行 + 一份 schema;collectbase 从当前 HEAD 开分支,从此这一层的历史开始。之前的历史不受影响。
-- **删层**:collectbase 说层是可以停的(分支留着不动);memory.talk 侧把它从 `layers` 拿掉,通用端点就不再暴露它,文件和历史都在。**不删对象**——删了也在 git 里,但没必要。
+- **改 schema**:加字段随时加(老对象没有那个字段就是空);删字段、改类型要先把老对象迁过来——那是一次 `[名]` 提交,历史里看得见。schema 就在 `collections.json` 里(最底层),改它也是提交。
+- **加层**:`collections.json` 的 `layers[]` 加一项(带 schema);新分支从始祖出发,从此这一层的历史开始。之前的历史不受影响。
+- **删层**:collectbase 说层是可以停的(分支留着不动);memory.talk 侧把它从 `collections.json` 拿掉,通用端点就不再暴露它,文件和历史都在。**不删对象**——删了也在 git 里,但没必要。
 
 ---
 
 ## 7. 这篇有意不定的事
 
-- **schema 文件放哪、归哪层**:本篇按「Collections 最底层,和 `layers` 并列」写(它是机制不是内容)。要不要单独一个 `schemas/` 目录,还是每层目录里一份 `schema.yaml`——后者「层和它的定义在一起」更好看,但底层改不动上层目录里的文件,得想清楚归属。
+- ~~schema 文件放哪、归哪层~~:已定——没有单独的 schema 文件,schema 内嵌在 `collections.json` 的 `layers[]` 里,整份文件归最底层。
 - **schema 语言**:上面用的是 YAML 字段表。要不要直接用 JSON Schema(表达力强、工具多,但对人不友好)——倾向 YAML 字段表 + 少数约定,真不够再说。
 - **引用要不要校验存在**:`decision.issue` 指向一个不存在的 issue,写的时候拒绝还是放行。倾向写时校验存在、删时不级联(同 [collections.md §7](collections.md))。
 - **通用端点的形状**:`/api/collections/<层>/<id>` 一套,内置层的 `/api/issues/…` `/api/cards/…` 是不是它上面的别名。

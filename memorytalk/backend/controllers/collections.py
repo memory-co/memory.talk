@@ -35,6 +35,11 @@ def add_layer(req: LayerCreate, svc: CollectionsService = Depends(collections), 
     return svc.add_layer(req.name, req.schema_yaml, req.reason, c)
 
 
+@router.get("/config", summary="collections.json 本体 + 它的 git 历史(层的变化史)")
+def config(svc: CollectionsService = Depends(collections)) -> dict:
+    return {"config": svc.anchor(), "history": [r.model_dump() for r in svc.anchor_history()]}
+
+
 @router.get("/tree", response_model=list[TreeItem], summary="浏览目录树:对象(带后缀的目录折成一项)、目录、origin 文件")
 def tree(path: str = "", svc: CollectionsService = Depends(collections)):
     return svc.tree(path)
