@@ -81,7 +81,15 @@ collections 的每个动作是一个 commit;做这个动作的 user 就是 commi
 
 ---
 
-## 7. 这篇有意不定的事
+## 7. user 是顶层对象:有自己的 API 和命令
+
+user 和 work、collections 平级,所以它有自己的面——不是挂在 work 下面的一个子资源:
+
+- **API**:`GET /api/users`(所有出现过的 user,从 work 的 `created_by` / `users` 和 collections 的 commit author 汇总,按最近活动倒序)、`GET /api/users/{name}`(建的 / 动过的 work、最近的提交)、`GET /api/users/me`(请求头里那个名字对应的 user)。
+- **CLI**:`memory.talk user list | show <name> | whoami`。
+- **汇总,不注册**:没有 users 表、没有建 user 的端点;一个名字出现在任何一处,它就在清单里。这和 §1 说的「在系统里出现过的一个名字」是一回事。服务配置的默认 author(匿名提交)不算 user。
+
+## 8. 这篇有意不定的事
 
 - **身份从哪来**:现在是请求头自报。前端要不要让人第一次打开时填个名字存本地;将来接了登录态,是替换还是叠加。
 - **要不要有 user 清单**:现在 user 只是散落在各处的名字,没有一份「团队里有谁」的表。倾向先不要——从 work 的 `users` 和 git author 里能汇总出来;真要头像、邮箱、显示名,再加 user 资料这一类记录(存哪由仓储 + [provider.md](provider.md) 定)。

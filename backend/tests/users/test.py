@@ -32,3 +32,23 @@ def test_users_visibility(client):
     assert len(m["history"]) == 3
 
     assert client.get("/api/works/work_nope/users").status_code == 404
+
+
+def test_users_top_level(client):
+    a = client.post("/api/works", json={"goal": "A 的事"}, headers={"X-Memory-Talk-User": "alice"}).json()
+    client.patch(f"/api/works/{a['id']}", json={"status": "doing"}, headers={"X-Memory-Talk-User": "bob"})
+    client.post("/api/collections/card/x/一张卡", json={"data": {"title": "一张卡"}}, headers={"X-Memory-Talk-User": "bob"})
+    client.post("/api/collections/card/x/匿名卡", json={"data": {"title": "匿名卡"}})          # 没带身份:不算 user
+
+    users = {u["name"]: u for u in client.get("/api/users").json()}
+    assert set(users) == {"alice", "bob"}
+    assert users["alice"]["works_created"] == 1 and users["alice"]["works_touched"] == 1
+    assert users["bob"]["works_created"] == 0 and users["bob"]["works_touched"] == 1 and users["bob"]["commits"] == 1
+    assert users["alice"]["active_works"] == [a["id"]]
+
+    p = client.get("/api/users/bob").json()
+    assert p["works_touched_ids"] == [a["id"]] and p["recent_commits"][0]["subject"].startswith("[card] write x/一张卡")
+    assert client.get("/api/users/nobody").status_code == 404
+    assert client.get("/api/users/me").json() is None
+    assert client.get("/api/users/me", headers={"X-Memory-Talk-User": "alice"}).json()["works_created_ids"] == [a["id"]]
+    assert client.get("/api/users/me", headers={"X-Memory-Talk-User": "carol"}).json()["name"] == "carol"   # 新名字:存在但空白

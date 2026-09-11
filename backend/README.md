@@ -11,6 +11,7 @@ backend/
 ├── gateway.py                # AuthGate + 静态托管 + 反代(/tty、/proxy/<port>)
 │
 ├── models/                   # 数据模型(纯结构,不含 IO)
+│   ├── users.py              #   User / UserProfile(汇总视图,不落盘)
 │   ├── work.py               #   Work 节点(目标、created_by、状态、父子)、Canvas、Session、WorkUser、Round、Event
 │   ├── collections.py            #   LayerInfo / Obj / Revision / SearchHit / Catalog / Tree / Manager / InboxItem
 │   └── server.py             #   Server 契约:name + protocols(声明响应哪些协议)/ open(id, uri) → Window + Handle / handle / alive / destroy
@@ -32,6 +33,7 @@ backend/
 │   │   ├── terminal.py       #     tmux 现场 + 终端类 server 基类(TerminalBase)
 │   │   ├── agent.py          #     agent 类 server 基类(AgentBase:终端把手 + 读 round)
 │   │   └── adapters/         #     读各平台会话记录:claude_code / codex / kimi
+│   ├── users/                #   UserService:从 work 与 collections 汇总 user(不注册)—— docs/designs/v5/user.md
 │   ├── collections/              #   认知层 —— docs/designs/v5/collections.md / manager.md
 │   │   ├── repo.py           #     分层 git(自己实现):layer/<名> 权威分支 + stack merge 视图 + 路径归属守卫;纯 plumbing
 │   │   ├── manager.py        #     manager.json:最近祖先解析
@@ -61,6 +63,7 @@ backend/
 │
 ├── controllers/              # HTTP 面(FastAPI 路由;只做参数/响应,不含逻辑)
 │   ├── works.py              #   /api/works/…
+│   ├── users.py              #   /api/users/…(顶层:list / me / {name})
 │   ├── collections.py            #   /api/collections/…(层、树、检索、manager、对象 CRUD、历史、行为)
 │   ├── auth.py               #   /api/auth/{login,verify,logout,me}
 │   └── system.py             #   /api/system/{info,health}
