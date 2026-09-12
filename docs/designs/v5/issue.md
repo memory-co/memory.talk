@@ -25,16 +25,16 @@ memory.talk/配置/该走文件还是环境变量.issue/
 ├── readme.md             ← 主题:问题的展开。纯 markdown,无 frontmatter;标题就是目录名
 ├── meta.yaml             ← 和别的 issue 的边;立场的排序和总结(manager 判定)
 ├── positions/
-│   ├── p1.md             ← 一个立场:# 主张 + 阐述 + ## 论证;普通 markdown
-│   └── p2.md
+│   ├── 只用环境变量,不要配置文件.md     ← 一个立场:文件名就是主张,内容是阐述 + ## 论证;普通 markdown
+│   └── 走配置文件,环境变量只做覆盖.md
 └── manager.json          ← 谁管它(机制文件,见 manager.md;可无)
 ```
 
-**目录名就是问题。** `该走文件还是环境变量` 既是路径末段,也是标题;不在文件里再写一遍。
+**目录名就是问题,文件名就是主张。** `该走文件还是环境变量` 既是路径末段也是标题;`positions/只用环境变量,不要配置文件.md` 的文件名就是这个立场的主张。都不在文件里再写一遍,也没有 `p1` 这种编号。
 
 **为什么拆成多个文件:**
 
-- **变动落在该落的地方。** 加立场 = 新建一个文件;给某个立场加论证 = 改那一个文件;连边、改排序 = 改 `meta.yaml`。`git log -- positions/p2.md` 是 p2 的全部历史,`git log -- meta.yaml` 是判断的变化史。
+- **变动落在该落的地方。** 加立场 = 新建一个文件;给某个立场加论证 = 改那一个文件;连边、改排序 = 改 `meta.yaml`。`git log -- positions/<主张>.md` 是一个立场的全部历史,`git log -- meta.yaml` 是判断的变化史。
 - **立场是文件的单位。** 两个人同时给不同立场加论证,碰的是不同文件。
 - **人能直接读写。** `cat readme.md` 是问题,`ls positions/` 是有几个立场,`cat meta.yaml` 是当前判断。
 - **冷热分开。** `readme.md` 建了基本不动;`positions/` 是活跃的那一半;`meta.yaml` 是定期回头看一眼的那一份。
@@ -49,11 +49,11 @@ memory.talk/配置/该走文件还是环境变量.issue/
 
 问题的展开——背景、为什么冒出来、边界。**没有 frontmatter,没有字段。** 可以为空(只有目录名的 issue 也合法)。可以改,历史在 git。
 
-### positions/<id>.md
+### positions/<主张>.md
+
+`positions/只用环境变量,不要配置文件.md`:
 
 ```markdown
-# 只用环境变量,不要配置文件
-
 为什么这么主张,前提是什么。
 
 ## 论证
@@ -63,14 +63,13 @@ memory.talk/配置/该走文件还是环境变量.issue/
 - 可以配一个 .env 文件给本地用,服务本身还是只读环境变量
 ```
 
-**普通 markdown,无 frontmatter。** 一级标题是主张,下面是阐述,`## 论证` 下一行一条讨论——支持也好、反对也好、补一个证据也好,就是一句话,**不打 +1 / -1**。证据顺手写在括号里(work 的 round、origin 路径、URL,系统不解析)。
+**普通 markdown,无 frontmatter,无标题。** 文件名是主张,内容是阐述,`## 论证` 下一行一条讨论——支持也好、反对也好、补一个证据也好,就是一句话,**不打 +1 / -1**。证据顺手写在括号里(work 的 round、origin 路径、URL,系统不解析)。
 
-谁、何时——在 git:每个立场一次提交、每条论证一次提交,`git log -- positions/p1.md` 就是这个立场的完整记录。
+谁、何时——在 git:每个立场一次提交、每条论证一次提交,`git log -- positions/<主张>.md` 就是这个立场的完整记录。
 
 | 部分 | 改不改 | 说明 |
 |---|---|---|
-| id(文件名) | 不改 | `p<n>`,issue 内顺序编号 |
-| `# 标题` | 不改 | 主张。改主意是加新立场,不是改旧的 |
+| 文件名 | 不改 | 主张本身。改主意是加新立场,不是改旧的(也不重命名) |
 | 阐述 | 建时写 | 之后要补充,走论证 |
 | `## 论证` 列表 | 只增 | 一条一行,append 到末尾 |
 
@@ -79,27 +78,27 @@ memory.talk/配置/该走文件还是环境变量.issue/
 ```yaml
 links:
   - {type: specializes, target: memory.talk/配置/配置怎么管}
-  - {type: suggested_by, target: memory.talk/架构/该不该拆服务#p2}
+  - {type: suggested_by, target: memory.talk/架构/该不该拆服务#先拆成两个服务}
 
 positions:                      # manager 的判定:排在前面的是当前占优的
-  - {id: p2, note: 试过了,够用;本地开发的痛点用 .env 解}
-  - {id: p1, note: 配置文件的灵活性目前没人需要}
+  - {claim: 只用环境变量,不要配置文件, note: 试过了,够用;本地开发的痛点用 .env 解}
+  - {claim: 走配置文件,环境变量只做覆盖, note: 配置文件的灵活性目前没人需要}
 summary: 目前倾向只走环境变量;等 work_try 把 .env 那条路验完再定。
 ```
 
 | 键 | 改不改 | 说明 |
 |---|---|---|
-| `links[]` | 只增 | 和别的 issue 的边,`{type, target}`;`target` 是对端 issue 的 path(`suggested_by` 可带 `#<position_id>`);同 `(type, target)` 不重复 |
-| `positions[]` | 可改 | **立场的排序**:按当前占优程度从前到后,每项 `id` + 一句 `note`(为什么排这)。没列进来的立场排在后面,顺序按编号 |
+| `links[]` | 只增 | 和别的 issue 的边,`{type, target}`;`target` 是对端 issue 的 path(`suggested_by` 可带 `#<主张>` 指到对端的某个立场);同 `(type, target)` 不重复 |
+| `positions[]` | 可改 | **立场的排序**:按当前占优程度从前到后,每项 `claim`(= 文件名)+ 一句 `note`(为什么排这)。没列进来的立场排在后面,按文件名 |
 | `summary` | 可改 | 对整个 issue 现状的一句总结 |
 
 `links.type` ∈ `specializes`(本 issue 是 target 的子问题)/ `suggested_by`(被 target 引出)/ `questions`(质疑 target 的前提)/ `replaces`(重述并取代 target)/ `related`。**只连 issue**;和 work、card 的关系不在这里(§4)。
 
-`positions` 和 `summary` 是**判断**,不是计算:由 manager work 里的人或 agent 读完论证之后写下来。改了就是一次 `[issue]` 提交,`git log -- meta.yaml` 是这个问题「风向」的变化史。没有 `meta.yaml` 或没有 `positions` 键 = 还没人判断,立场按编号列。
+`positions` 和 `summary` 是**判断**,不是计算:由 manager work 里的人或 agent 读完论证之后写下来。改了就是一次 `[issue]` 提交,`git log -- meta.yaml` 是这个问题「风向」的变化史。没有 `meta.yaml` 或没有 `positions` 键 = 还没人判断,立场按文件名列。
 
 ### 对 layer 机制的要求
 
-issue 从「一个本体文件」变成「一个目录里的一组文件」:`readme.md`、`positions/*.md` 是无 frontmatter 的普通 markdown,`meta.yaml` 是一份 YAML。标题来自目录名。`GET` 一个 issue 把三样合起来给:展开、按 `meta.positions` 排好序的立场(各带主张、阐述、论证列表)、边、总结。守卫不用改:`.issue/` 下的一切本来就归 issue 层。
+issue 从「一个本体文件」变成「一个目录里的一组文件」:`readme.md`、`positions/*.md` 是无 frontmatter 的普通 markdown,`meta.yaml` 是一份 YAML。标题来自目录名。`GET` 一个 issue 把三样合起来给:展开、按 `meta.positions` 排好序的立场(各带主张 = 文件名、阐述、论证列表)、边、总结。守卫不用改:`.issue/` 下的一切本来就归 issue 层。
 
 ---
 
@@ -109,10 +108,10 @@ issue 从「一个本体文件」变成「一个目录里的一组文件」:`rea
 |---|---|---|---|
 | 建 issue(通用 create) | 正文?(可空) | 新建 `readme.md` | `[issue] write <path>` |
 | 改展开(通用 update) | 正文 | 改 `readme.md` | `[issue] edit <path>` |
-| `position` | `claim`, 正文? | 新建 `positions/p<n>.md` | `[issue] position <path>#p<n>: <claim>` |
-| `argue` | `position`, `comment` | 改 `positions/p<n>.md`(`## 论证` 下追加一行) | `[issue] argue <path>#p<n>: <comment>` |
+| `position` | `claim`, 正文? | 新建 `positions/<claim>.md`(正文) | `[issue] position <path>: <claim>` |
+| `argue` | `claim`, `comment` | 改 `positions/<claim>.md`(`## 论证` 下追加一行) | `[issue] argue <path>#<claim>: <comment>` |
 | `link` | `type`, `target` | 改 / 新建 `meta.yaml`(`links` 追加) | `[issue] link <path> <type> <target>` |
-| `rank` | `positions[]{id, note}`, `summary?` | 改 / 新建 `meta.yaml`(整体替换 `positions` 和 `summary`) | `[issue] rank <path>: p2 > p1` |
+| `rank` | `positions[]{claim, note}`, `summary?` | 改 / 新建 `meta.yaml`(整体替换 `positions` 和 `summary`) | `[issue] rank <path>: <首位 claim>` |
 
 四个行为。`position` / `argue` / `link` 只增;`rank` 可以反复改,那是它的本意。层守卫兜底(`[card]` 提交碰不到 `.issue/`)。
 
@@ -150,4 +149,5 @@ v4 用 +1 / -1 累成 credence 现算排序,v5 不这么做。理由:论证的�
 
 - **新 issue 默认谁管**:倾向不自动写 `manager.json`,靠所在文件夹的继承链。
 - **立场文件的正文能不能事后改**:目前定「建时写、之后走论证」;若发现阐述常要修,再放开。
+- **主张当文件名的长度和字符**:文件名有长度上限、不能含 `/`;主张太长时怎么办(截断?要求短句?)先不定,靠约定「主张是一句短话」。
 - **`rank` 要不要限定只有 manager work 能调**:现在不做权限(user.md),谁都能调;先靠约定。

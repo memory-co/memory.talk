@@ -38,7 +38,7 @@
 
 `<path>.issue/issue.json`。问题 + 立场 + 论证 + IBIS 边;立场 / 论证只增不改(行为保证,层守卫兜底)。
 
-> **设计已改**:[designs issue.md](../../designs/v5/issue.md) 把它改成多文件目录——`readme.md`(问题的展开,标题 = 目录名)+ `meta.yaml`(issue 间的边 + manager 对立场的排序和总结)+ `positions/p<n>.md`(一个立场一个普通 markdown,论证一行一条、不打分);不再有 `origin` / `card` 字段、不再算 credence,不再有 `decide` / `spawn`。下面是**代码现状**,代码跟上后本节重写。
+> **设计已改**:[designs issue.md](../../designs/v5/issue.md) 把它改成多文件目录——`readme.md`(问题的展开,标题 = 目录名)+ `meta.yaml`(issue 间的边 + manager 对立场的排序和总结)+ `positions/<主张>.md`(一个立场一个普通 markdown,文件名就是主张,论证一行一条、不打分);不再有 `origin` / `card` 字段、不再算 credence,不再有 `decide` / `spawn`。下面是**代码现状**,代码跟上后本节重写。
 
 ```json
 {"question": "memory.talk v5 的配置该走文件还是环境变量?",
