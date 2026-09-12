@@ -3,6 +3,7 @@ import { AlertCircle, LoaderCircle } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -14,11 +15,13 @@ export function Logo({ small = false }: { small?: boolean }) {
 export function UserAvatar({ children }: { children: ReactNode }) {
   return <Avatar className="h-8 w-8 shrink-0"><AvatarFallback className="bg-accent text-xs text-accent-foreground">{children}</AvatarFallback></Avatar>;
 }
-export function Loading({ label = '正在加载…' }: { label?: string }) {
-  return <div className="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground" role="status"><LoaderCircle className="h-4 w-4 animate-spin" /><span>{label}</span></div>;
+export function Loading({ label }: { label?: string }) {
+  const t = useT();
+  return <div className="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground" role="status"><LoaderCircle className="h-4 w-4 animate-spin" /><span>{label ?? t('common.loading')}</span></div>;
 }
 export function ErrorState({ error, retry }: { error: unknown; retry?: () => void }) {
-  return <Alert variant="destructive" className="my-3"><AlertCircle className="h-4 w-4" /><AlertDescription>{error instanceof Error ? error.message : '加载失败，请稍后重试。'}{retry && <Button variant="link" size="sm" className="ml-2 text-destructive" onClick={retry}>重新加载</Button>}</AlertDescription></Alert>;
+  const t = useT();
+  return <Alert variant="destructive" className="my-3"><AlertCircle className="h-4 w-4" /><AlertDescription>{error instanceof Error ? error.message : t('common.loadFailed')}{retry && <Button variant="link" size="sm" className="ml-2 text-destructive" onClick={retry}>{t('common.reload')}</Button>}</AlertDescription></Alert>;
 }
 export function Empty({ icon, title, children }: { icon?: ReactNode; title: string; children?: ReactNode }) {
   return <div className="empty-state">{icon && <div className="empty-icon">{icon}</div>}<h3>{title}</h3>{children}</div>;
@@ -36,7 +39,8 @@ export function Modal({ open, onClose, title, description, children }: {
 }
 const MarkdownContent = lazy(() => import('./Markdown').then(module => ({ default: module.Markdown })));
 export function Markdown({ text }: { text: string }) {
-  return <Suspense fallback={<Loading label="正在加载正文…" />}><MarkdownContent text={text} /></Suspense>;
+  const t = useT();
+  return <Suspense fallback={<Loading label={t('common.loadingBody')} />}><MarkdownContent text={text} /></Suspense>;
 }
 export function safeWindowUrl(raw?: string | null): string | null {
   if (!raw) return null;

@@ -1,4 +1,5 @@
 import { usePreferences } from './store';
+import { t } from './i18n';
 
 export class ApiError extends Error {
   constructor(message: string, public status: number, public code?: string) { super(message); }
@@ -21,14 +22,14 @@ export async function api<T>(path: string, options: {
     });
   } catch (e) {
     if (e instanceof Error && e.name === 'AbortError') throw e;
-    throw new ApiError('无法连接服务，请确认 memory.talk 后端已启动。', 0);
+    throw new ApiError(t('api.unreachable'), 0);
   }
   const result = await response.json().catch(() => null);
   if (!response.ok || result?.error) {
     const detail = Array.isArray(result?.detail)
-      ? result.detail.map((d: { msg: string }) => d.msg).join('；') : result?.detail;
-    throw new ApiError(result?.message || detail || `请求失败（${response.status}）`, response.status, result?.error);
+      ? result.detail.map((d: { msg: string }) => d.msg).join(t('api.separator')) : result?.detail;
+    throw new ApiError(result?.message || detail || t('api.failed', { status: response.status }), response.status, result?.error);
   }
-  if (!result || !('data' in result)) throw new ApiError('服务返回了无法识别的响应。', response.status);
+  if (!result || !('data' in result)) throw new ApiError(t('api.badResponse'), response.status);
   return result.data as T;
 }

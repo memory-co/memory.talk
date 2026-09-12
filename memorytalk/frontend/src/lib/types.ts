@@ -1,3 +1,5 @@
+import { localeTag, type Key, type Locale, type T } from './i18n';
+
 export type WorkStatus = 'todo' | 'doing' | 'done' | 'abandoned';
 export interface Work {
   id: string; goal: string; parent: string | null; status: WorkStatus;
@@ -32,19 +34,17 @@ export interface CollectionObject {
 export interface Revision { sha: string; author: string; date: string; subject: string; body: string }
 export interface SearchHit { layer: string; path: string; file: string; line: number; text: string }
 export interface InboxItem { ts: string; layer: string; path: string; subject: string; by: string | null }
-export const statusLabels: Record<WorkStatus, string> = {
-  todo: '待开始', doing: '进行中', done: '已完成', abandoned: '已放下',
-};
-export const layerLabels: Record<string, string> = { origin: '原文', issue: '问题', card: '卡片' };
-export const sessionLabels: Record<string, string> = {
-  codex: 'Codex', claude: 'Claude Code', kimi: 'Kimi', bash: '终端', http: '网页', https: '网页',
-};
+export const workStatuses: WorkStatus[] = ['todo', 'doing', 'done', 'abandoned'];
+export const statusLabel = (t: T, status: WorkStatus) => t(`status.${status}`);
+export const layerLabel = (t: T, layer: string) => (['origin', 'issue', 'card'].includes(layer) ? t(`layer.${layer}` as Key) : layer);
+const schemeNames: Record<string, string> = { codex: 'Codex', claude: 'Claude Code', kimi: 'Kimi' };
+export const sessionLabel = (t: T, scheme: string) => schemeNames[scheme] || (['bash', 'http', 'https'].includes(scheme) ? t(`scheme.${scheme}` as Key) : scheme);
 export function flattenWorks(works: Work[]): Work[] {
   return works.flatMap(w => [w, ...flattenWorks(w.children || [])]);
 }
 export function flattenCatalog(c: Catalog): { path: string; title: string | null }[] {
   return [...c.objects, ...c.subdirs.flatMap(flattenCatalog)];
 }
-export function dateLabel(value: string) {
-  return new Date(value).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+export function dateLabel(value: string, locale: Locale = 'zh') {
+  return new Date(value).toLocaleDateString(localeTag(locale), { month: 'short', day: 'numeric' });
 }
