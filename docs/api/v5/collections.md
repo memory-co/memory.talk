@@ -1,6 +1,6 @@
 # Collections API
 
-认知层。层由 schema 定义(内置 origin / issue / card,可加用户层);对象 = 带后缀的目录 `<path>.<层>/`,放在树的任何位置;origin = 不带后缀的文件。每个写动作一个 `[层名]` 提交,落在 `layer/<层>` 上再 merge 进 `stack`;碰了别的层的路径被守卫拒绝(409 `guard`)。机制见 [designs collections.md](../../designs/v5/collections.md) / [collections-layer.md](../../designs/v5/collections-layer.md) / [manager.md](../../designs/v5/manager.md)。
+认知层。层 = 一份**目录的校验规则**(内置 origin / issue / card,可加用户层);对象 = 带后缀的目录 `<path>.<层>/`,里面一组文件,放在树的任何位置;origin = 不带后缀的文件。一次写 = 对一个对象目录的一批文件改动,整目录按层的 schema 校验(不合 → 422 `invalid`),过了一个 `[层名]` 提交,落在 `layer/<层>` 上再 merge 进 `stack`;碰了别的层的路径被守卫拒绝(409 `guard`)。机制见 [designs collections.md](../../designs/v5/collections.md) / [collections-layer.md](../../designs/v5/collections-layer.md) / [manager.md](../../designs/v5/manager.md)。
 
 `{path:path}` 直接放在 URL 里(可含 `/` 和中文)。固定子路径(`layers` `config` `tree` `search` `manager` `managed` `history` `act`)先于 `{layer}`。
 
@@ -11,18 +11,22 @@
 ### GET /api/collections/layers
 
 ```json
-[{"name": "origin", "order": 0, "builtin": true, "suffix": null, "body": null, "format": "raw", "title": null, "fields": {}, "behaviors": [], "description": "…"},
- {"name": "issue",  "order": 1, "builtin": true, "suffix": ".issue", "body": "issue.json", "format": "json", "title": "question",
-  "fields": {"question": {"type": "string", "required": true, …}, "card": {"type": "ref", "ref": "card", …}, …},
-  "behaviors": ["argue", "decide", "link", "position", "spawn"]},
- {"name": "card",   "order": 2, "builtin": true, "suffix": ".card", "body": "card.md", "format": "markdown", "title": "title", "behaviors": ["discuss"], …}]
+[{"name": "origin", "order": 0, "builtin": true, "suffix": null, "title": "dirname", "files": [], "behaviors": [], "description": "…"},
+ {"name": "issue",  "order": 1, "builtin": true, "suffix": ".issue", "title": "dirname",
+  "files": [{"pattern": "readme.md", "format": "markdown", "required": true},
+            {"pattern": "meta.yaml", "format": "yaml", "required": false, "fields": {"links": …, "positions": …, "summary": …}},
+            {"pattern": "positions/*.md", "format": "markdown", "required": false}],
+  "behaviors": ["argue", "link", "position", "rank"]},
+ {"name": "card",   "order": 2, "builtin": true, "suffix": ".card", "title": "card.md:title",
+  "files": [{"pattern": "card.md", "format": "markdown+frontmatter", "required": true, "fields": {"title": {"type": "string", "required": true}, "issue": {"type": "ref", "ref": "issue"}, …}}],
+  "behaviors": ["discuss"]}]
 ```
 
-最底在前。用户层排在内置层之上,`behaviors` 为空。
+最底在前。`files` 是对象目录里允许的文件清单(`pattern` 可通配);`title` 是标题来源(`dirname` 或 `<文件>:<字段>`)。用户层排在内置层之上,`behaviors` 为空。
 
 ### POST /api/collections/layers
 
-加一个用户层:一份 YAML 字段表(格式见 [collections-layer.md §2](../../designs/v5/collections-layer.md))。
+加一个用户层:一份 YAML schema——`files` 目录清单(每个文件的 `format` / `required` / `fields`),或单文件简写 `format` + `fields`(格式见 [collections-layer.md §2](../../designs/v5/collections-layer.md))。
 
 ```json
 {"name": "decision", "schema_yaml": "layer: decision\nformat: markdown+frontmatter\ntitle: title\nfields:\n  title: {type: string, required: true}\n  issue: {type: ref, layer: issue}\n", "reason": ""}
@@ -70,20 +74,21 @@
 ### POST /api/collections/{layer}/{path}
 
 ```json
-{"data": {"question": "配置该走文件还是环境变量?", "origin": {"work_id": "work_a", "rounds": [3]}}, "reason": "撞见的"}
+{"files": {"readme.md": "背景……", "positions/只用环境变量.md": "为什么……"}, "reason": "撞见的"}
 ```
 
-- 非 origin 层:`data` 按 schema 校验(不合 → 422 `invalid`),落成 `<path>.<层>/<本体文件>`。
+- `files`:目录里的文件 `{相对路径: 内容}`。整目录按层的 schema 校验:清单外的文件、格式不对、缺必填键、多余键、缺必需文件 → 422 `invalid`。没给的必需 markdown / text 文件补空(`POST /issue/<path>` 带 `{}` 就是一个只有空 `readme.md` 的 issue)。
+- `data`:简写,**只对目录里只有一个带字段文件的层**(card、单文件用户层)成立——按字段写那个文件,正文用 `body` 键;issue 这种多文件层给 `data` → 400。
 - origin 层:`{"content": "原文"}`,落成 `<path>` 这个文件。
-- **201** 返回 Obj:`{"layer", "path", "title", "body"}`;已存在 → 409 `exists`。提交 `[层] write <path>`。
+- **201** 返回 Obj:`{"layer", "path", "title", "files": [目录里的文件], "body"}`;已存在 → 409 `exists`。提交 `[层] write <path>`。
 
 ### GET /api/collections/{layer}/{path}?rev=
 
-`body` 是按 schema 解析后的对象(issue 附现算的 `up / down / neutral / credence`,立场按 credence 倒序);origin 是原文字符串。`rev=` 读历史版本(sha 来自 history)。
+`body` 是层的读视图:card 是 `card.md` 解析后的字段 + 正文;issue 是 `{"readme", "positions": [{"claim", "note", "body", "arguments"}], "links", "summary"}`(立场按 `meta.yaml` 的 `positions` 排,没排到的按文件名);多文件用户层是 `{相对路径: 解析结果}`;origin 是原文字符串。`rev=` 读历史版本(sha 来自 history)。
 
 ### PUT /api/collections/{layer}/{path}
 
-`{"data": {...}, "reason"}` 字段合并(`null` 不动;markdown 层正文用 `body` 键);origin `{"content"}` 整体替换。提交 `[层] edit <path>`。
+`{"files": {"positions/乙.md": null, "meta.yaml": "summary: 先这样"}, "reason"}`:只动提到的文件,`null` 删,改完的目录整个再校验(删必需文件 → 422)。`data` 是字段合并(`null` 不动);origin `{"content"}` 整体替换。提交 `[层] edit <path>`。
 
 ### DELETE /api/collections/{layer}/{path}?reason=
 
@@ -95,31 +100,32 @@
 
 ---
 
-## 行为(schema 之上的领域动作)
+## 行为(校验器之上的快捷方式)
 
 ### POST /api/collections/act/{layer}/{action}/{path}
 
-payload 是 JSON 对象,按行为不同。返回该行为的结果(issue 的行为返回 issue 读视图;card 的 `discuss` 返回新 issue)。层没有这个行为 → 404 `no_action`。
+行为 = 预制好的一批文件改动 + 一条像样的提交信息;和直接 `PUT files` 走同一个门、过同一个校验。payload 是 JSON 对象,按行为不同;返回该层的读视图。层没有这个行为 → 404 `no_action`;对象不存在 → 404。
 
 **issue**
 
-| action | payload | 提交 |
-|---|---|---|
-| `position` | `claim`, `origin?`, `reason?` | `[issue] position <path>#p<n>: …` |
-| `argue` | `position`, `stance` (1/0/-1), `comment?`, `evidence?` `{work_id, rounds, origin}`, `work_id?`, `reason?` | `[issue] argue <path>#p<n> +1` |
-| `link` | `type` (specializes / suggested_by / questions / replaces / related), `target`, `reason?` | `[issue] link …` |
-| `spawn` | `position`, `work_id`, `reason?` | `[issue] spawn <path>#p<n> -> <work_id>` |
-| `decide` | `position`, `card` (卡的 path), `title?`, `body?`, `context?`, `reason?` | **两个相邻提交**:`[issue] decide <path>#p<n> -> card <card>` + `[card] write <card>`,同一个 `Decision:` trailer;第二个失败则第一个用反向提交退回。卡已存在 → 409 |
+| action | payload | 碰的文件 | 提交 |
+|---|---|---|---|
+| `position` | `claim`, `body?`, `reason?` | 新建 `positions/<claim>.md`(已有 → 409) | `[issue] position <path>: <claim>` |
+| `argue` | `claim`, `comment`, `reason?` | `positions/<claim>.md` 的 `## 论证` 下追加一行(立场不存在 → 404) | `[issue] argue <path>#<claim>: <comment>` |
+| `link` | `type` (specializes / suggested_by / questions / replaces / related), `target`, `reason?` | `meta.yaml` 的 `links` 追加,不重复 | `[issue] link <path> <type> <target>` |
+| `rank` | `positions[]{claim, note?}`, `summary?`, `reason?` | 整体替换 `meta.yaml` 的 `positions` / `summary`(claim 必须是已有立场,否则 422) | `[issue] rank <path>: <首位 claim>` |
+
+谁、何时不在文件里:每个行为一次提交,author = 请求的 user。
 
 **card**
 
 | action | payload | 提交 |
 |---|---|---|
-| `discuss` | `issue` (新 issue 的 path), `question`, `origin?`, `reason?` | **两个相邻提交**:`[issue] raise <issue>: …`(`card` 指回这张卡)+ `[card] link <path> -> issue <issue>`,同一个 `Discussion:` trailer |
+| `discuss` | `issue` (新 issue 的 path), `readme?`, `reason?` | 两个提交:`[issue] write <issue>` + `[card] link <path> -> issue <issue>`(卡的 `issue` 指过去;issue 不记卡)。issue 已存在 → 409 |
 
 ---
 
-## manager
+## manager(暂缓:路由已注释掉,等 work 实现后一起启用;service 层逻辑保留)
 
 ### GET /api/collections/manager?path=
 

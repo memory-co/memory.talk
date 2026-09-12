@@ -8,7 +8,7 @@ IP = "memory.talk/配置/该走文件还是环境变量"
 
 def _managed(client):
     w = client.post("/api/works", json={"goal": "管配置这一片"}).json()
-    client.post(f"/api/collections/issue/{IP}", json={"data": {"question": "q"}})
+    client.post(f"/api/collections/issue/{IP}", json={})
     client.put("/api/collections/manager", params={"path": "memory.talk"}, json={"work": w["id"]})
     return w
 

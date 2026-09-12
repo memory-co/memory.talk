@@ -1,56 +1,67 @@
-"""collections/issue_behaviors -- IBIS actions on an issue. See README.md."""
+"""collections/issue_behaviors -- shortcuts over the issue directory. See README.md."""
 import pytest
 
+from tests._util import git_authors, git_log
+
 IP = "memory.talk/配置/该走文件还是环境变量"
+A, B = "只用环境变量", "加一个 settings.json"
 
 
 @pytest.fixture
 def issue(client):
-    client.post(f"/api/collections/issue/{IP}", json={"data": {"question": "配置该走文件还是环境变量?"}})
+    client.post(f"/api/collections/issue/{IP}", json={})
     return IP
 
 
-def _act(client, action, payload):
-    return client.post(f"/api/collections/act/issue/{action}/{IP}", json=payload)
+def _act(client, action, payload, **kw):
+    return client.post(f"/api/collections/act/issue/{action}/{IP}", json=payload, **kw)
 
 
-def test_positions_are_numbered_and_appended(client, issue):
-    _act(client, "position", {"claim": "加一个 settings.json"})
-    v = _act(client, "position", {"claim": "只用环境变量"}).json()
-    assert [p["id"] for p in v["positions"]] == ["p1", "p2"]
+def test_position_creates_a_file_named_by_the_claim(client, svc, issue):
+    v = _act(client, "position", {"claim": A, "body": "为什么"}).json()
+    assert [p["claim"] for p in v["positions"]] == [A] and v["positions"][0]["body"] == "为什么"
+    assert svc.collections.repo.read(f"{IP}.issue/positions/{A}.md") == "为什么".encode()
+    assert _act(client, "position", {"claim": A}).status_code == 409
 
 
-def test_argue_records_stance_and_evidence(client, issue):
-    _act(client, "position", {"claim": "只用环境变量"})
-    v = _act(client, "argue", {"position": "p1", "stance": 1, "comment": "够用", "evidence": {"work_id": "work_try", "rounds": [9]}}).json()
-    a = v["positions"][0]["arguments"][0]
-    assert (a["id"], a["stance"], a["evidence"]["rounds"]) == ("a1", 1, [9])
+def test_argue_appends_a_line_under_the_heading(client, svc, issue):
+    _act(client, "position", {"claim": A, "body": "为什么"})
+    _act(client, "argue", {"claim": A, "comment": "试了一遍,够用(work_try#9)"})
+    v = _act(client, "argue", {"claim": A, "comment": "本地开发要改十几个变量"}).json()
+    assert v["positions"][0]["arguments"] == ["试了一遍,够用(work_try#9)", "本地开发要改十几个变量"]
+    assert svc.collections.repo.read(f"{IP}.issue/positions/{A}.md").decode() == "为什么\n\n## 论证\n- 试了一遍,够用(work_try#9)\n- 本地开发要改十几个变量\n"
 
 
-def test_credence_is_computed_and_sorts_positions(client, issue):
-    _act(client, "position", {"claim": "加一个 settings.json"})
-    _act(client, "position", {"claim": "只用环境变量"})
-    _act(client, "argue", {"position": "p2", "stance": 1})
-    _act(client, "argue", {"position": "p1", "stance": -1})
-    _act(client, "argue", {"position": "p1", "stance": 0})
-    v = client.get(f"/api/collections/issue/{IP}").json()["body"]
-    assert [(p["id"], p["credence"]) for p in v["positions"]] == [("p2", 1), ("p1", -1)]
-    assert v["positions"][1]["neutral"] == 1                              # 中立不进 credence
+def test_who_and_when_live_in_git(client, H, issue):
+    _act(client, "position", {"claim": A}, headers=H("alice"))
+    _act(client, "argue", {"claim": A, "comment": "够用"}, headers=H("bob"))
+    log = git_log(client, "layer/issue")
+    assert f"[issue] argue {IP}#{A}: 够用" in log and f"[issue] position {IP}: {A}" in log
+    assert git_authors(client, 2)[0::2] == ["bob", "alice"]
 
 
-def test_link_adds_an_ibis_edge_once(client, issue):
+def test_link_adds_an_edge_to_meta_once(client, svc, issue):
     _act(client, "link", {"type": "specializes", "target": "memory.talk/更大的问题"})
     v = _act(client, "link", {"type": "specializes", "target": "memory.talk/更大的问题"}).json()
     assert v["links"] == [{"type": "specializes", "target": "memory.talk/更大的问题"}]
+    assert b"links:" in svc.collections.repo.read(f"{IP}.issue/meta.yaml")
 
 
-def test_spawn_records_the_work_id(client, issue):
-    _act(client, "position", {"claim": "只用环境变量"})
-    v = _act(client, "spawn", {"position": "p1", "work_id": "work_try"}).json()
-    assert v["positions"][0]["spawned_works"] == ["work_try"]
+def test_rank_orders_positions_and_unranked_follow_by_name(client, issue):
+    _act(client, "position", {"claim": A})
+    _act(client, "position", {"claim": B})
+    _act(client, "position", {"claim": "丙"})
+    v = _act(client, "rank", {"positions": [{"claim": B, "note": "灵活"}], "summary": "先看 B"}).json()
+    assert [(p["claim"], p["note"]) for p in v["positions"]] == [(B, "灵活"), ("丙", ""), (A, "")]
+    assert v["summary"] == "先看 B"
+    assert f"[issue] rank {IP}: {B}" in git_log(client, "layer/issue")
+
+
+def test_rank_must_name_existing_positions(client, issue):
+    assert _act(client, "rank", {"positions": [{"claim": "没这个"}]}).status_code == 422
 
 
 def test_unknown_position_and_action_are_404(client, issue):
-    assert _act(client, "argue", {"position": "p9", "stance": 1}).status_code == 404
+    assert _act(client, "argue", {"claim": "没这个", "comment": "x"}).status_code == 404
     r = _act(client, "nope", {})
     assert r.status_code == 404 and r.json()["error"] == "no_action"

@@ -26,76 +26,49 @@
 
 | | origin | issue | card | 用户层 `<名>` |
 |---|---|---|---|---|
-| 形态 | 任何**不带后缀**的文件 | `<path>.issue/issue.json` | `<path>.card/card.md` | `<path>.<名>/<名>.md` 或 `.json` |
+| 形态 | 任何**不带后缀**的文件 | `<path>.issue/` 目录:`readme.md` + `meta.yaml` + `positions/*.md` | `<path>.card/card.md` | schema 的 `files` 清单;单文件简写 = `<path>.<名>/<名>.md` 或 `.json` |
 | id | 文件路径 | `path`(不含后缀) | `path` | `path` |
-| 格式 | 原文 | JSON | markdown + frontmatter | schema 定 |
-| 标题 | 文件名 | `question` | `title` | schema 的 `title` |
+| 格式 | 原文 | markdown / yaml / markdown | markdown + frontmatter | 每个文件各自定 |
+| 标题 | 文件名 | 目录名 | `title` | `dirname` 或 `<文件>:<字段>` |
 | 层序 | 0(最底) | 1 | 2 | 之上,按 `collections.json` 的 `layers[]` 顺序 |
 
-对象目录里还可以放 `manager.json`(谁管它)和附件。目录树按主题组织,原文、`.issue/`、`.card/` 并排。
+**层就是这个目录的校验器**:目录里只能有清单上的文件,每个文件按格式和字段校验,一次写整目录过一遍,不过整批拒(422)。对象目录里还可以放 `manager.json`(谁管它,机制文件,不在清单里)。目录树按主题组织,原文、`.issue/`、`.card/` 并排。
 
 ### issue 层(内置)
 
-`<path>.issue/issue.json`。问题 + 立场 + 论证 + IBIS 边;立场 / 论证只增不改(行为保证,层守卫兜底)。
+`<path>.issue/` 目录,三种文件;标题就是目录名。机制见 [designs issue.md](../../designs/v5/issue.md)。
 
-> **设计已改**:[designs issue.md](../../designs/v5/issue.md) 把它改成多文件目录——`readme.md`(问题的展开,标题 = 目录名)+ `meta.yaml`(issue 间的边 + manager 对立场的排序和总结)+ `positions/<主张>.md`(一个立场一个普通 markdown,文件名就是主张,论证一行一条、不打分);不再有 `origin` / `card` 字段、不再算 credence,不再有 `decide` / `spawn`。下面是**代码现状**,代码跟上后本节重写。
-
-```json
-{"question": "memory.talk v5 的配置该走文件还是环境变量?",
- "origin": {"work_id": "work_a", "rounds": [3, 4], "origin": null},
- "card": "memory.talk/配置/配置只来自环境变量",
- "positions": [
-   {"id": "p2", "claim": "只用环境变量,不要配置文件", "origin": null,
-    "arguments": [{"id": "a1", "stance": 1, "comment": "试了一遍,环境变量够用",
-                   "evidence": {"work_id": "work_try", "rounds": [9]}, "work_id": "work_try", "created_at": "…"}],
-    "spawned_works": ["work_try"], "created_at": "…",
-    "up": 1, "down": 0, "neutral": 0, "credence": 1}],
- "links": [{"type": "specializes", "target": "memory.talk/配置/更大的那个问题"}],
- "created_at": "…"}
+```
+memory.talk/配置/该走文件还是环境变量.issue/
+├── readme.md                          问题的展开;纯 markdown,可空;必需
+├── meta.yaml                          可无
+├── positions/
+│   ├── 只用环境变量,不要配置文件.md     文件名 = 主张;阐述 + `## 论证` 下一行一条
+│   └── 走配置文件,环境变量只做覆盖.md
+└── manager.json                       机制文件,可无
 ```
 
-**Issue**
+**meta.yaml**
 
-| 字段 | 类型 | 改不改 | 说明 |
-|---|---|---|---|
-| `question` | string | 不改 | 问题本身;也是标题(目录 / 召回用) |
-| `origin` | Origin \| null | 不改 | 从哪冒出来:work 的哪些 round,或 origin 层的一个路径。**出处不是归属** |
-| `card` | string \| null | 改 | 争完写成的卡的 path(`decide` 写入),或这个 issue 挂在哪张卡上当讨论页(`discuss` 写入) |
-| `positions[]` | Position[] | 只增 | |
-| `links[]` | IssueLink[] | 只增 | 同 `(type, target)` 不重复 |
-| `created_at` | ISO 8601 | 不改 | |
+```yaml
+links:
+- {type: specializes, target: memory.talk/配置/配置怎么管}
+positions:                     # manager 的判定:排前面的当前占优;claim 必须是 positions/ 下已有的文件
+- {claim: 只用环境变量,不要配置文件, note: 试过了,够用}
+summary: 目前倾向只走环境变量
+```
 
-没有 `manager_work` 字段:谁管它看同目录的 `manager.json`。没有 id 字段:id 就是 path。
+| 键 | 改不改 | 说明 |
+|---|---|---|
+| `links[]` | 只增 | `{type, target}`;`type` ∈ `specializes` / `suggested_by` / `questions` / `replaces` / `related`;`target` 是对端 issue 的 path(`suggested_by` 可带 `#<主张>`);同 `(type, target)` 不重复 |
+| `positions[]` | 可改 | `{claim, note?}`,按占优程度从前到后 |
+| `summary` | 可改 | 一句总结 |
 
-**Origin**:`{"work_id": "…", "rounds": [int], "origin": "<origin 层路径>"}`,三项都可空;`rounds` 是 `rounds.jsonl` 里的下标。
+**positions/<主张>.md**:普通 markdown,无 frontmatter;文件名非空、不含 `/`;`## 论证` 之后的列表行是论证,一行一条,不打分。谁、何时在 git(`git log -- positions/<主张>.md`)。
 
-**Position**
+**读视图**:`{"readme", "positions": [{"claim", "note", "body", "arguments": [...]}], "links", "summary"}`;立场按 `meta.positions` 排,没排到的按文件名。不算 credence。
 
-| 字段 | 说明 |
-|---|---|
-| `id` | `p<n>`,issue 内顺序编号 |
-| `claim` | 立场文本 |
-| `origin` | 这个立场从哪来(Origin \| null) |
-| `arguments[]` | 只增 |
-| `spawned_works[]` | 为验证这个立场派出的 work id;去重 |
-| `created_at` | |
-
-读视图多四个**现算**字段:`up` / `down` / `neutral` = `stance` 为 `1` / `-1` / `0` 的论证数;`credence = up - down`;立场按 credence 倒序。不存、不回写。
-
-**Argument**
-
-| 字段 | 说明 |
-|---|---|
-| `id` | `a<n>`,立场内顺序编号 |
-| `stance` | `1` 支持 / `0` 中立 / `-1` 反对;`≠0` 的就是 IBIS Argument |
-| `comment` | 一句话 |
-| `evidence` | Origin \| null:证据在哪 |
-| `work_id` | 若来自派出的论证 work,记它 |
-| `created_at` | |
-
-**IssueLink**:`{"type", "target"}`。`type` ∈ `specializes`(本 issue 是 target 的子问题)/ `suggested_by`(被 target 引出,target 可写 `<path>#<position_id>`)/ `questions`(质疑 target 的前提)/ `replaces`(重述并取代 target)/ `related`;`target` 是对端 issue 的 path。
-
-**沉默不算数**:没有论证就没有计数;`0` 也不进 credence。
+没有 `origin` / `card` 字段:issue 不记它从哪来、不记写成了哪张卡(卡记 issue)。没有 id:id 就是 path;立场没有 id:主张就是文件名。
 
 ### card 层(内置)
 
@@ -120,15 +93,24 @@ issue: memory.talk/配置/该走文件还是环境变量
 | `issue` | string \| null | 讨论页:挂在这张卡上的 issue 的 path |
 | `body` | string | 正文,可以比一句话长;但**一张卡讲一件事** |
 
-frontmatter 只有 `key: value` 行;`links` 逗号分隔;空值不写。读出来是 `{"title", "context", "links": [...], "issue", "body"}`。没有 `status`:删就是删,历史在 git;没有 id:id 就是 path。
+frontmatter 是 YAML(`links` 是列表);空值不写;多余的键拒。读出来是 `{"title", "context", "links": [...], "issue", "body"}`。没有 `status`:删就是删,历史在 git;没有 id:id 就是 path。
 
 ### 用户层的 schema
 
-写成 YAML 交给 `POST /api/collections/layers`,系统把它嵌进 `collections.json` 的 `layers[]`:
+写成 YAML 交给 `POST /api/collections/layers`,系统把它嵌进 `collections.json` 的 `layers[]`。两种写法:
 
 ```yaml
-layer: decision
-format: markdown+frontmatter      # 或 json
+layer: experiment                  # 目录清单:每个文件一条,路径可用 * 通配
+title: dirname                     # 或 <文件>:<字段>
+files:
+  readme.md:   {format: markdown, required: true}
+  result.yaml: {format: yaml, fields: {verdict: {type: string, required: true}, issue: {type: ref, layer: issue}}}
+  "runs/*.md": {format: markdown}
+```
+
+```yaml
+layer: decision                    # 单文件简写:目录里只有 decision.md
+format: markdown+frontmatter       # 或 json
 title: title
 fields:
   title:    {type: string, required: true}
@@ -136,7 +118,7 @@ fields:
   issue:    {type: ref, layer: issue}
 ```
 
-类型:`string` `int` `bool` `"list[string]"` `ref` `"list[ref]"`。markdown 格式自动带 `body`。没有行为。
+格式:`markdown` `markdown+frontmatter` `yaml` `json` `text`;字段类型:`string` `int` `bool` `"list[string]"` `ref` `"list[ref]"`。markdown+frontmatter 自动带 `body`。没有行为。
 
 ## manager.json
 

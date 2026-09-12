@@ -18,7 +18,7 @@ memory.talk
 ├── collection                                          # 认知层(API 是 /api/collections)
 │            layers | tree | ls | search
 │            read | write | edit | rm | log             # 对象 CRUD + 历史
-│            act                                        # 行为:issue position / argue / link / spawn / decide;card discuss
+│            act                                        # 行为:issue position / argue / link / rank;card discuss
 │            manager | managed                          # manager.json
 
 ```
@@ -49,8 +49,9 @@ memory.talk user add alice --email alice@example.com         # 注册(一次)
 export MEMORY_TALK_USER=alice
 W=$(memory.talk work create --goal '把配置改成环境变量' --json | jq -r .id)
 memory.talk work attach $W codex:///home/alice/memory.talk   # 在这个 work 里开一个 Codex 会话,打印窗地址
-memory.talk collection write issue memory.talk/配置/该走文件还是环境变量 --field question='配置该走文件还是环境变量?'
+memory.talk collection write issue memory.talk/配置/该走文件还是环境变量 --put readme.md='起服务要读几样配置……'
 memory.talk collection act issue position memory.talk/配置/该走文件还是环境变量 --field claim='只用环境变量'
-memory.talk collection act issue decide   memory.talk/配置/该走文件还是环境变量 --field position=p1 --field card=memory.talk/配置/配置只来自环境变量
+memory.talk collection act issue rank     memory.talk/配置/该走文件还是环境变量 --data '{"positions": [{"claim": "只用环境变量", "note": "够用"}]}'
+memory.talk collection write card memory.talk/配置/配置只来自环境变量 --field title='配置只来自环境变量' --field issue=memory.talk/配置/该走文件还是环境变量
 memory.talk work set $W --status done
 ```

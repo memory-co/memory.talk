@@ -1,4 +1,4 @@
-"""CollectionsService:认知层。layer 由 spec 定义;对象按 path 读写;每个动作一个 `[layer]` 提交;变动投递给 manager。"""
+"""CollectionsService:认知层。layer = 目录的校验规则;对象 = 一个目录里的一组文件,按 path 读写;一次写 = 一批文件改动 + 整目录校验 + 一个 `[layer]` 提交;变动投递给 manager。"""
 from __future__ import annotations
 
 import json
@@ -117,34 +117,70 @@ class CollectionsService:
 
     # ================================================================ 对象
 
-    def _view(self, spec: LayerSpec, obj: Any) -> Any:
-        v = getattr(spec, "view", None)
-        return v(self, "", obj) if v else obj
+    def split(self, repo_path: str) -> tuple[str, str, str]:
+        """仓库路径 → (层, 对象 path, 目录内相对路径)。origin 的相对路径为 ''。"""
+        layer = self.layer_of_path(repo_path)
+        spec = self.layers[layer]
+        got = spec.split(repo_path)
+        if got is None:
+            return (self.order[0], repo_path, "")
+        return (layer, got[0], got[1])
+
+    def _files(self, spec: LayerSpec, path: str, rev: str | None = None) -> dict[str, bytes] | None:
+        """一个对象目录里的文件 {相对路径: 内容};机制文件不算。不存在 → None。"""
+        if spec.raw:
+            data = self.repo.read(path, rev)
+            return None if data is None else {"": data}
+        prefix = spec.obj_dir(path)
+        out: dict[str, bytes] = {}
+        for repo_path in self.repo.tree(prefix, rev):
+            if not repo_path.startswith(prefix + "/"):
+                continue
+            rel = repo_path[len(prefix) + 1:]
+            if rel == MANAGER_FILE:
+                continue
+            out[rel] = self.repo.read(repo_path, rev) or b""
+        return out or None
+
+    def _obj(self, spec: LayerSpec, path: str, files: dict[str, bytes]) -> Obj:
+        if spec.raw:
+            text = files[""].decode("utf-8", "replace")
+            return Obj(layer=spec.name, path=path, title=path.rsplit("/", 1)[-1], body=text)
+        parsed = spec.parse(files)
+        return Obj(layer=spec.name, path=path, title=spec.title_of(parsed, path), files=sorted(files),
+                   body=spec.body(parsed, path))
 
     def get(self, layer: str, path: str, rev: str | None = None) -> Obj:
         spec = self.layer(layer)
-        data = self.repo.read(spec.body_path(path), rev)
-        if data is None:
+        files = self._files(spec, path, rev)
+        if files is None:
             raise CollectionsError("not_found", f"{layer}:{path} 不存在", 404)
-        body = spec.parse(data)
-        return Obj(layer=layer, path=path, title=spec.title_of(body, path), body=self._view(spec, body))
+        return self._obj(spec, path, files)
+
+    def file(self, layer: str, path: str, rel: str) -> bytes | None:
+        """对象目录里的一个文件(行为用)。"""
+        spec = self.layer(layer)
+        return self.repo.read(path if spec.raw else f"{spec.obj_dir(path)}/{rel}")
 
     def exists(self, layer: str, path: str) -> bool:
-        return self.repo.exists(self.layer(layer).body_path(path))
+        return self._files(self.layer(layer), path) is not None
 
     def list(self, layer: str, prefix: str = "") -> list[Obj]:
         spec = self.layer(layer)
         out = []
+        if spec.raw:
+            for repo_path in self.repo.tree(prefix):
+                if repo_path == CONFIG_FILE or repo_path.endswith(MANAGER_FILE) or self.layer_of_path(repo_path) != spec.name:
+                    continue
+                out.append(self._obj(spec, repo_path, {"": self.repo.read(repo_path) or b""}))
+            return out
+        seen: set[str] = set()
         for repo_path in self.repo.tree(prefix):
-            if repo_path == CONFIG_FILE or repo_path.endswith(MANAGER_FILE):
+            got = spec.split(repo_path)
+            if got is None or got[0] in seen or self.layer_of_path(repo_path) != spec.name:
                 continue
-            if spec.format == "raw" and self.layer_of_path(repo_path) != spec.name:
-                continue
-            path = spec.path_of(repo_path)
-            if path is None:
-                continue
-            body = spec.parse(self.repo.read(repo_path) or b"")
-            out.append(Obj(layer=layer, path=path, title=spec.title_of(body, path), body=self._view(spec, body)))
+            seen.add(got[0])
+            out.append(self.get(layer, got[0]))
         return out
 
     def catalog(self, layer: str, root: str = "") -> CatalogDir:
@@ -159,11 +195,9 @@ class CollectionsService:
     def search(self, query: str, layer: str | None = None) -> list[SearchHit]:
         hits = []
         for h in self.repo.grep(query):
-            lyr = self.layer_of_path(h.file)
+            lyr, path, _ = self.split(h.file)
             if layer and lyr != layer:
                 continue
-            spec = self.layers[lyr]
-            path = spec.path_of(h.file) or h.file
             hits.append(SearchHit(layer=lyr, path=path, file=h.file, line=h.line, text=h.text))
         return hits
 
@@ -188,7 +222,7 @@ class CollectionsService:
                 seen[head] = TreeItem(name=head, path=full, kind="file", layer=self.order[0])
         return sorted(seen.values(), key=lambda i: (i.kind != "dir", i.name))
 
-    # ---- 写 ----
+    # ---- 写:一次写 = 对一个对象目录的一批文件改动,整目录按层的 schema 校验,过了一次 [layer] 提交 ----
 
     def _message(self, layer: str, subject: str, reason: str, ctx: Ctx, extra: str | None) -> str:
         trailers = []
@@ -210,49 +244,81 @@ class CollectionsService:
         self._deliver(layer, list(puts) + list(deletes), subject, sha, ctx)
         return sha
 
-    def create(self, layer: str, path: str, data: Any, reason: str, ctx: Ctx, subject: str | None = None,
-               extra_trailer: str | None = None) -> Obj:
+    @staticmethod
+    def _bytes(v: str | bytes) -> bytes:
+        return v if isinstance(v, bytes) else str(v).encode()
+
+    def put(self, layer: str, path: str, files: dict[str, str | bytes | None], reason: str, ctx: Ctx,
+            subject: str | None = None, extra_trailer: str | None = None) -> str:
+        """对象目录的一批文件改动:值为 None = 删。改完的目录整个按 schema 校验,不过 422;过了一次 [layer] 提交。
+        origin:files = {"": 内容}。"""
+        spec = self.layer(layer)
+        path = path.strip("/")
+        if not path:
+            raise CollectionsError("invalid", "path 不能为空", 400)
+        if spec.raw:
+            content = files.get("")
+            if content is None:
+                raise CollectionsError("invalid", "origin 要有 content", 400)
+            return self.commit(layer, subject or f"write {path}", {path: self._bytes(content)}, [], reason, ctx, extra_trailer)
+        cur = self._files(spec, path) or {}
+        new = dict(cur)
+        for rel, content in files.items():
+            rel = rel.strip("/")
+            if not rel or rel == MANAGER_FILE or ".." in rel.split("/"):
+                raise CollectionsError("invalid", f"文件名不合法:{rel!r}", 400)
+            if content is None:
+                new.pop(rel, None)
+            else:
+                new[rel] = self._bytes(content)
+        try:
+            spec.validate(new)
+        except ValueError as e:
+            raise CollectionsError("invalid", f"{layer} 的 schema 校验失败:{e}", 422) from None
+        base = spec.obj_dir(path)
+        puts = {f"{base}/{rel}": data for rel, data in new.items() if cur.get(rel) != data}
+        deletes = [f"{base}/{rel}" for rel in cur if rel not in new]
+        return self.commit(layer, subject or f"write {path}", puts, deletes, reason, ctx, extra_trailer)
+
+    def files_from_data(self, layer: str, path: str, data: dict, merge: bool) -> dict[str, bytes]:
+        """`data` 简写 → 文件:只对「唯一一个带字段的固定文件」的层成立(card、单文件用户层)。"""
+        spec = self.layer(layer)
+        rule = spec.fielded_file
+        if rule is None:
+            raise CollectionsError("invalid", f"层 {layer} 不接受 data 简写,请用 files 给出目录里的文件", 400)
+        obj = dict(data or {})
+        if merge:
+            cur = self.file(layer, path, rule.pattern)
+            if cur is not None:
+                base = rule.parse(cur)
+                base.update({k: v for k, v in obj.items() if v is not None})
+                obj = base
+        try:
+            return {rule.pattern: rule.serialize(obj)}
+        except Exception as e:
+            raise CollectionsError("invalid", f"{layer} 的 schema 校验失败:{rule.pattern}:{e}", 422) from None
+
+    def create(self, layer: str, path: str, files: dict[str, str | bytes], reason: str, ctx: Ctx,
+               subject: str | None = None, extra_trailer: str | None = None) -> Obj:
         spec = self.layer(layer)
         if self.exists(layer, path):
             raise CollectionsError("exists", f"{layer}:{path} 已存在", 409)
-        try:
-            content = spec.serialize(data)
-        except Exception as e:
-            raise CollectionsError("invalid", f"{layer} 的 schema 校验失败:{e}", 422) from None
-        self.commit(layer, subject or f"write {path}", {spec.body_path(path): content}, [], reason, ctx, extra_trailer)
+        full: dict[str, str | bytes | None] = {} if spec.raw else dict(spec.defaults())
+        full.update(files)
+        self.put(layer, path, full, reason, ctx, subject, extra_trailer)
         return self.get(layer, path)
 
-    def write(self, layer: str, path: str, data: Any, subject: str, reason: str, ctx: Ctx,
-              extra_trailer: str | None = None) -> Obj:
-        """整体重写(行为内部用)。"""
-        spec = self.layer(layer)
-        try:
-            content = spec.serialize(data)
-        except Exception as e:
-            raise CollectionsError("invalid", f"{layer} 的 schema 校验失败:{e}", 422) from None
-        self.commit(layer, subject, {spec.body_path(path): content}, [], reason, ctx, extra_trailer)
-        return self.get(layer, path)
-
-    def update(self, layer: str, path: str, patch: Any, reason: str, ctx: Ctx) -> Obj:
-        spec = self.layer(layer)
-        cur = self.repo.read(spec.body_path(path))
-        if cur is None:
+    def update(self, layer: str, path: str, files: dict[str, str | bytes | None], reason: str, ctx: Ctx) -> Obj:
+        if not self.exists(layer, path):
             raise CollectionsError("not_found", f"{layer}:{path} 不存在", 404)
-        if spec.format == "raw":
-            data = patch
-        else:
-            data = spec.parse(cur)
-            data.update({k: v for k, v in (patch or {}).items() if v is not None})
-        return self.write(layer, path, data, f"edit {path}", reason, ctx)
+        self.put(layer, path, files, reason, ctx, f"edit {path}")
+        return self.get(layer, path)
 
     def delete(self, layer: str, path: str, reason: str, ctx: Ctx) -> None:
         spec = self.layer(layer)
         if not self.exists(layer, path):
             raise CollectionsError("not_found", f"{layer}:{path} 不存在", 404)
-        if spec.format == "raw":
-            files = [path]
-        else:
-            files = [p for p in self.repo.tree(spec.obj_dir(path))]
+        files = [path] if spec.raw else [p for p in self.repo.tree(spec.obj_dir(path))]
         self.commit(layer, f"delete {path}", {}, files, reason, ctx)
 
     def act(self, layer: str, action: str, path: str, payload: dict, ctx: Ctx) -> Any:
@@ -260,7 +326,12 @@ class CollectionsService:
         fn = spec.behaviors.get(action)
         if fn is None:
             raise CollectionsError("no_action", f"层 {layer} 没有行为 {action}(有:{', '.join(sorted(spec.behaviors)) or '无'})", 404)
-        return fn(self, path, payload, ctx)
+        if not spec.raw and not self.exists(layer, path):
+            raise CollectionsError("not_found", f"{layer}:{path} 不存在", 404)
+        try:
+            return fn(self, path, payload, ctx)
+        except KeyError as e:
+            raise CollectionsError("invalid", f"行为 {action} 缺参数 {e.args[0]!r}", 422) from None
 
     # ================================================================ manager
 
@@ -293,7 +364,7 @@ class CollectionsService:
         """这个 work 管的所有对象(按 manager 继承链解析)。"""
         out = []
         for name, spec in self.layers.items():
-            if spec.format == "raw":
+            if spec.raw:
                 continue
             for o in self.list(name):
                 m = self.managers.resolve(spec.obj_dir(o.path))
@@ -304,7 +375,7 @@ class CollectionsService:
     def unmanaged(self) -> list[TreeItem]:
         out = []
         for name, spec in self.layers.items():
-            if spec.format == "raw":
+            if spec.raw:
                 continue
             for o in self.list(name):
                 if self.managers.resolve(spec.obj_dir(o.path)) is None:
@@ -318,8 +389,7 @@ class CollectionsService:
             if f == MANAGER_FILE or f.endswith("/" + MANAGER_FILE) or f == CONFIG_FILE:
                 continue                                   # 机制文件的变动不投递
             m = self.managers.resolve(f)
-            spec = self.layers[layer]
-            path = spec.path_of(f) or f
+            _, path, _ = self.split(f)
             key = (path, m.work if m else None)
             if key in seen:
                 continue

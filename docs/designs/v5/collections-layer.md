@@ -1,6 +1,6 @@
 # collections layer —— 怎么设计一个自己的层(v5 设计)
 
-> **状态:框架稿,未实施。** [collections.md](collections.md) 说 issue 和 card 只是 Collections 里两个内置的 layer,用户写清 schema 就能加自己的层。本篇讲**怎么加**:一个层要回答哪几个问题、要写哪几个文件、系统会替它做什么、不会替它做什么,以及两个例子。总定位见 [README.md](README.md)。
+> **状态:已实施。** 层 = 目录的校验器(`LayerSpec` + `FileRule` 清单),用户层的 `files` 清单写法和单文件简写都认;实现见 `memorytalk/backend/services/collections/layers/`(README 讲 spec / 提交格式 / 映射)。[collections.md](collections.md) 说 issue 和 card 只是 Collections 里两个内置的 layer,用户写清 schema 就能加自己的层。本篇讲**怎么加**。总定位见 [README.md](README.md)。
 
 相关:
 - v5 collections(层即 collectbase 的 layer;Collections 是认知层的容器): [collections.md](collections.md)

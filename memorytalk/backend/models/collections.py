@@ -1,6 +1,6 @@
 """Collections —— 认知层的容器(docs/designs/v5/collections.md)。
 
-对象 = 一个带后缀的目录 `<path>.<layer>/`,本体文件在里面;origin 是任何不带后缀的文件。
+对象 = 一个带后缀的目录 `<path>.<layer>/`,里面是一组文件,允许哪些文件由层的 schema 定;origin 是任何不带后缀的文件。
 一个对象的 id 就是它的 path(不含后缀)。
 """
 from __future__ import annotations
@@ -17,16 +17,22 @@ class FieldSpec(BaseModel):
     description: str = ""
 
 
+class FileInfo(BaseModel):
+    pattern: str = Field(description="对象目录内的相对路径;可用 * 通配")
+    format: Literal["markdown", "markdown+frontmatter", "yaml", "json", "text"]
+    required: bool = False
+    fields: dict[str, FieldSpec] = Field(default_factory=dict, description="yaml / json / frontmatter 的字段")
+    description: str = ""
+
+
 class LayerInfo(BaseModel):
     name: str
     order: int = Field(description="0 = 最底层(origin)")
     builtin: bool
     suffix: str | None = Field(description="对象目录后缀 `.<name>`;origin 为 None(不带后缀的一切)")
-    body: str | None = Field(description="本体文件名;origin 为 None(文件本身)")
-    format: Literal["json", "markdown", "raw"]
-    title: str | None = Field(None, description="哪个字段是标题(目录 / 召回用)")
-    fields: dict[str, FieldSpec] = Field(default_factory=dict)
-    behaviors: list[str] = Field(default_factory=list, description="schema 之上的领域动作;用户层为空")
+    title: str = Field("dirname", description="标题从哪来:dirname 或 <文件>:<字段>")
+    files: list[FileInfo] = Field(default_factory=list, description="目录里允许的文件;origin 为空(文件本身)")
+    behaviors: list[str] = Field(default_factory=list, description="schema 之上的快捷动作;用户层为空")
     description: str = ""
 
 
@@ -34,17 +40,20 @@ class Obj(BaseModel):
     layer: str
     path: str = Field(description="对象 id = 路径(不含后缀)")
     title: str | None = None
-    body: Any = Field(description="按 layer 的 schema 解析后的对象;origin 为原文字符串")
+    files: list[str] = Field(default_factory=list, description="目录里有哪些文件(相对路径);origin 为空")
+    body: Any = Field(description="按 layer 的 schema 解析后的视图;origin 为原文字符串")
 
 
 class ObjCreate(BaseModel):
-    data: dict[str, Any] | None = Field(None, description="按 layer schema 的字段(非 origin)")
+    files: dict[str, str] | None = Field(None, description="目录里的文件 {相对路径: 内容};整目录按层的 schema 校验")
+    data: dict[str, Any] | None = Field(None, description="简写:只有一个带字段文件的层(card 等),按字段写那个文件")
     content: str | None = Field(None, description="origin:原文")
     reason: str = ""
 
 
 class ObjUpdate(BaseModel):
-    data: dict[str, Any] | None = Field(None, description="要改的字段(合并);markdown 层的正文用 `body` 键")
+    files: dict[str, str | None] | None = Field(None, description="改 / 加 / 删(null)目录里的文件;没提到的不动")
+    data: dict[str, Any] | None = Field(None, description="简写:字段合并(markdown 正文用 `body` 键)")
     content: str | None = None
     reason: str = ""
 
@@ -105,7 +114,7 @@ class InboxItem(BaseModel):
 
 class LayerCreate(BaseModel):
     name: str
-    schema_yaml: str = Field(description="schemas/<name>.yaml 的内容,见 docs/designs/v5/collections-layer.md")
+    schema_yaml: str = Field(description="层的 schema YAML(files 清单或单文件简写),见 docs/designs/v5/collections-layer.md")
     reason: str = ""
 
 

@@ -1,4 +1,4 @@
-"""/api/collections —— 认知层:层、树、检索、manager、对象 CRUD、历史、行为。"""
+"""/api/collections —— 认知层:层、树、检索、对象(目录里的一组文件)CRUD、历史、行为。"""
 from __future__ import annotations
 
 from typing import Any
@@ -78,7 +78,7 @@ def history(layer: str, path: str, svc: CollectionsService = Depends(collections
     return ok(svc.history(layer, path))
 
 
-@router.post("/act/{layer}/{action}/{path:path}", summary="行为:schema 之上的领域动作(issue: position / argue / link / spawn / decide;card: discuss)")
+@router.post("/act/{layer}/{action}/{path:path}", summary="行为:校验器之上的快捷方式(issue: position / argue / link / rank;card: discuss)")
 def act(layer: str, action: str, path: str, payload: dict[str, Any], svc: CollectionsService = Depends(collections),
         c: Ctx = Depends(ctx)) -> Any:
     return ok(svc.act(layer, action, path, payload, c))
@@ -91,10 +91,23 @@ def catalog(layer: str, dir: str = "", svc: CollectionsService = Depends(collect
     return ok(svc.catalog(layer, dir))
 
 
-@router.post("/{layer}/{path:path}", response_model=Result[Obj], status_code=201, summary="建一个对象(一个 [layer] 提交)")
+def _files(svc: CollectionsService, layer: str, path: str, req: ObjCreate | ObjUpdate, merge: bool) -> dict:
+    """请求体 → 目录里的文件改动:origin 用 content;files 直接给;data 是单字段文件层的简写。"""
+    spec = svc.layer(layer)
+    if spec.raw:
+        if req.content is None:
+            raise CollectionsError("invalid", "origin 要给 content", 400)
+        return {"": req.content}
+    files: dict = dict(req.files or {})
+    if req.data is not None:
+        files.update(svc.files_from_data(layer, path, req.data, merge))
+    return files
+
+
+@router.post("/{layer}/{path:path}", response_model=Result[Obj], status_code=201,
+             summary="建一个对象:目录里的文件(files)或字段简写(data);origin 用 content。整目录按层的 schema 校验,一个 [layer] 提交")
 def create(layer: str, path: str, req: ObjCreate, svc: CollectionsService = Depends(collections), c: Ctx = Depends(ctx)):
-    data = req.content if svc.layer(layer).format == "raw" else (req.data or {})
-    return ok(svc.create(layer, path, data, req.reason, c))
+    return ok(svc.create(layer, path, _files(svc, layer, path, req, merge=False), req.reason, c))
 
 
 @router.get("/{layer}/{path:path}", response_model=Result[Obj], summary="读一个对象(rev= 读历史版本)")
@@ -102,10 +115,10 @@ def get(layer: str, path: str, rev: str | None = Query(None), svc: CollectionsSe
     return ok(svc.get(layer, path, rev))
 
 
-@router.put("/{layer}/{path:path}", response_model=Result[Obj], summary="改一个对象(字段合并;origin 整体替换)")
+@router.put("/{layer}/{path:path}", response_model=Result[Obj],
+            summary="改一个对象:files 加 / 改 / 删(null)目录里的文件,没提到的不动;data 是字段合并;origin 整体替换")
 def update(layer: str, path: str, req: ObjUpdate, svc: CollectionsService = Depends(collections), c: Ctx = Depends(ctx)):
-    patch = req.content if svc.layer(layer).format == "raw" else (req.data or {})
-    return ok(svc.update(layer, path, patch, req.reason, c))
+    return ok(svc.update(layer, path, _files(svc, layer, path, req, merge=True), req.reason, c))
 
 
 @router.delete("/{layer}/{path:path}", summary="删一个对象(历史在 git)")

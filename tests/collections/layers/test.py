@@ -6,16 +6,25 @@ def test_three_builtin_layers_bottom_first(client):
     assert [l["name"] for l in client.get("/api/collections/layers").json()] == ["origin", "issue", "card"]
 
 
-def test_origin_has_no_suffix_and_no_body_file(client):
+def test_origin_has_no_suffix_and_no_files(client):
     origin = client.get("/api/collections/layers").json()[0]
-    assert origin["suffix"] is None and origin["body"] is None and origin["format"] == "raw"
+    assert origin["suffix"] is None and origin["files"] == []
 
 
-def test_issue_and_card_shapes(client):
-    _, issue, card = client.get("/api/collections/layers").json()
-    assert (issue["suffix"], issue["body"], issue["format"], issue["title"]) == (".issue", "issue.json", "json", "question")
-    assert (card["suffix"], card["body"], card["format"], card["title"]) == (".card", "card.md", "markdown", "title")
-    assert sorted(issue["behaviors"]) == ["argue", "decide", "link", "position", "spawn"] and card["behaviors"] == ["discuss"]
+def test_issue_is_a_directory_of_three_kinds_of_files(client):
+    issue = client.get("/api/collections/layers").json()[1]
+    assert issue["suffix"] == ".issue" and issue["title"] == "dirname"
+    assert [(f["pattern"], f["format"], f["required"]) for f in issue["files"]] == [
+        ("readme.md", "markdown", True), ("meta.yaml", "yaml", False), ("positions/*.md", "markdown", False)]
+    assert issue["behaviors"] == ["argue", "link", "position", "rank"]
+
+
+def test_card_is_a_single_frontmatter_file(client):
+    card = client.get("/api/collections/layers").json()[2]
+    assert (card["suffix"], card["title"]) == (".card", "card.md:title")
+    assert [(f["pattern"], f["format"], f["required"]) for f in card["files"]] == [("card.md", "markdown+frontmatter", True)]
+    assert card["files"][0]["fields"]["title"]["required"] and card["files"][0]["fields"]["issue"]["ref"] == "issue"
+    assert card["behaviors"] == ["discuss"]
 
 
 def test_repo_has_a_branch_per_layer_and_stack(svc):

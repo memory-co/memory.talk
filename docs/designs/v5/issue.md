@@ -1,6 +1,6 @@
 # issue —— 一个问题一个目录:readme.md 是主题,positions/ 一个立场一个文件,meta.yaml 放边和排序(v5 设计)
 
-> **状态:设计稿,代码未跟上。** 现在代码里 issue 是一个 `issue.json` 加一组构造它的行为函数(`layers/issue.py`),立场、论证、计数、出处、卡全嵌在里面;按本篇,`issue.py` 应当变成**这个目录的校验器**(§2 末),行为只是校验器之上的快捷方式。本篇改成**多文件目录**,把 issue 和 work / card 的耦合解开(不记 `origin`、不记 `card`),并且**不再算分**:哪个立场占优由 manager work 判定,写在 `meta.yaml` 里。改完后 [structure collections.md](../../structure/v5/collections.md) 和 `layers/issue.py` 跟着改。总定位见 [README.md](README.md)。
+> **状态:已实施。** `layers/issue.py` 是这个目录的校验器(三种文件的规则),四个行为是它之上的快捷方式;API / CLI 见 [api collections.md](../../api/v5/collections.md) / [cli collection.md](../../cli/v5/collection.md),文件形态见 [structure collections.md](../../structure/v5/collections.md)。总定位见 [README.md](README.md)。
 
 相关:
 - collections(issue 是一个 layer;对象是任意位置的 `<名>.issue/` 目录): [collections.md](collections.md)

@@ -13,8 +13,11 @@ def c_layers(api, a):
         out(api.call("POST", "/api/collections/layers", json_body={"name": a.add, "schema_yaml": Path(a.schema).read_text(), "reason": a.reason or ""}), a.json)
         return
     ls = api.call("GET", "/api/collections/layers")
-    out(ls, a.json, "\n".join(f"{l['order']}  {l['name']:<10} {l['format']:<9} {('.' + l['name'] + '/') if l['suffix'] else '(不带后缀的一切)':<14} "
-                              f"行为 {', '.join(l['behaviors']) or '-'}  {l['description']}" for l in ls))
+    lines = []
+    for l in ls:
+        files = ", ".join(f"{f['pattern']}({f['format']}{'*' if f['required'] else ''})" for f in l["files"]) or "(不带后缀的一切)"
+        lines.append(f"{l['order']}  {l['name']:<10} {('.' + l['name'] + '/') if l['suffix'] else '-':<12} {files}  行为 {', '.join(l['behaviors']) or '-'}  {l['description']}")
+    out(ls, a.json, "\n".join(lines))
 def c_tree(api, a):
     items = api.call("GET", "/api/collections/tree", params={"path": a.path or ""})
     out(items, a.json, "\n".join(f"{i['name']:<40} {i['kind']:<7} {i.get('layer') or ''}" for i in items) or "(空)")
@@ -38,32 +41,54 @@ def c_read(api, a):
     if isinstance(b, str):
         print(b, end="" if b.endswith("\n") else "\n")
     elif a.layer == "issue":
-        print(f"# {b['question']}\n出处 {b.get('origin') or '-'}  卡 {b.get('card') or '-'}")
-        for p in b["positions"]:
-            print(f"\n## {p['id']}  {p['claim']}   (+{p['up']} / -{p['down']} / 0:{p['neutral']}  credence {p['credence']})")
+        print(f"# {o['title']}")
+        if b["readme"].strip():
+            print("\n" + b["readme"].rstrip("\n"))
+        if b["summary"]:
+            print(f"\n总结:{b['summary']}")
+        for i, p in enumerate(b["positions"], 1):
+            print(f"\n## {i}. {p['claim']}" + (f"   ← {p['note']}" if p["note"] else ""))
+            if p["body"].strip():
+                print(p["body"].rstrip("\n"))
             for g in p["arguments"]:
-                print(f"  {g['id']} {'+1' if g['stance'] == 1 else ('-1' if g['stance'] == -1 else ' 0')}  {g['comment']}  {g.get('evidence') or ''}")
+                print(f"  - {g}")
         for l in b["links"]:
             print(f"边 {l['type']} → {l['target']}")
-    else:
+    elif isinstance(b, dict) and set(o["files"]) == {o["files"][0]} and "body" in b:
         meta = {k: v for k, v in b.items() if k != "body" and v not in (None, "", [])}
         print("---\n" + "\n".join(f"{k}: {v}" for k, v in meta.items()) + "\n---\n\n" + (b.get("body") or ""))
+    else:
+        for rel in o["files"]:
+            print(f"== {rel}")
+            v = b.get(rel) if isinstance(b, dict) else None
+            print(v if isinstance(v, str) else json.dumps(v, ensure_ascii=False, indent=2))
 def _payload(a) -> dict:
     if a.data:
         return json.loads(value(a.data))
     return parse_fields(a.field)
-def c_write(api, a):
-    body = {"content": value(a.content), "reason": a.reason or ""} if a.content else {"data": _payload(a), "reason": a.reason or ""}
-    out(api.call("POST", f"/api/collections/{a.layer}/{a.path}", json_body=body), a.json, f"[{a.layer}] write {a.path}")
-def c_edit(api, a):
-    body = {"content": value(a.content), "reason": a.reason or ""} if a.content else {"data": _payload(a), "reason": a.reason or ""}
-    out(api.call("PUT", f"/api/collections/{a.layer}/{a.path}", json_body=body), a.json, f"[{a.layer}] edit {a.path}")
+def _body(a) -> dict:
+    body = {"reason": a.reason or ""}
+    if a.content:
+        body["content"] = value(a.content)
+    if a.put:
+        files = {}
+        for item in a.put:
+            if "=" not in item:
+                raise SystemExit(f"--put 要写成 <文件>=<内容|@file|@-|null>:{item}")
+            rel, v = item.split("=", 1)
+            files[rel] = None if v == "null" else value(v)
+        body["files"] = files
+    if a.field or a.data:
+        body["data"] = _payload(a)
+    return body
+def c_write(api, a): out(api.call("POST", f"/api/collections/{a.layer}/{a.path}", json_body=_body(a)), a.json, f"[{a.layer}] write {a.path}")
+def c_edit(api, a): out(api.call("PUT", f"/api/collections/{a.layer}/{a.path}", json_body=_body(a)), a.json, f"[{a.layer}] edit {a.path}")
 def c_rm(api, a): api.call("DELETE", f"/api/collections/{a.layer}/{a.path}", params={"reason": a.reason}); print(f"[{a.layer}] delete {a.path}")
 def c_log(api, a):
     revs = api.call("GET", f"/api/collections/history/{a.layer}/{a.path}")
     out(revs, a.json, "\n".join(f"{r['sha'][:7]}  {r['author']:<10} {r['date'][:19]}  {r['subject']}" + (f"\n         {r['body']}" if r['body'] else "") for r in revs))
 def c_act(api, a):
-    payload = parse_fields(a.field)
+    payload = json.loads(value(a.data)) if a.data else parse_fields(a.field)
     if a.reason:
         payload["reason"] = a.reason
     out(api.call("POST", f"/api/collections/act/{a.layer}/{a.action}/{a.path}", json_body=payload), a.json, f"[{a.layer}] {a.action} {a.path}: ok")
@@ -91,10 +116,11 @@ def register(top) -> None:
     p = c.add_parser("read"); p.add_argument("layer"); p.add_argument("path"); p.add_argument("--rev"); p.set_defaults(fn=c_read)
     for name, fn in (("write", c_write), ("edit", c_edit)):
         p = c.add_parser(name); p.add_argument("layer"); p.add_argument("path")
+        p.add_argument("--put", action="append", metavar="FILE=CONTENT", help="目录里的文件;内容可 @file / @-;null 删")
         p.add_argument("--field", action="append"); p.add_argument("--data"); p.add_argument("--content"); p.add_argument("--reason"); p.set_defaults(fn=fn)
     p = c.add_parser("rm"); p.add_argument("layer"); p.add_argument("path"); p.add_argument("--reason", default=""); p.set_defaults(fn=c_rm)
     p = c.add_parser("log"); p.add_argument("layer"); p.add_argument("path"); p.set_defaults(fn=c_log)
-    p = c.add_parser("act"); p.add_argument("layer"); p.add_argument("action"); p.add_argument("path"); p.add_argument("--field", action="append"); p.add_argument("--reason"); p.set_defaults(fn=c_act)
+    p = c.add_parser("act"); p.add_argument("layer"); p.add_argument("action"); p.add_argument("path"); p.add_argument("--field", action="append"); p.add_argument("--data", help="整个 payload 的 JSON(可 @file / @-)"); p.add_argument("--reason"); p.set_defaults(fn=c_act)
     # manager / managed 暂时注释掉,等 work 实现后一起启用(后端路由也注释了)
     # p = c.add_parser("manager"); p.add_argument("path", nargs="?"); p.add_argument("--set"); p.add_argument("--unset", action="store_true"); p.add_argument("--reason"); p.set_defaults(fn=c_manager)
     # p = c.add_parser("managed"); p.add_argument("--work", dest="work_filter"); p.set_defaults(fn=c_managed)

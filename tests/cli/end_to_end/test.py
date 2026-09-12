@@ -70,27 +70,29 @@ def test_cli_end_to_end(cli):
     assert "在动 alice" in cli("work", "show", w["id"]).stdout
     assert "bash" in cli("work", "servers").stdout and "default" in cli("work", "servers").stdout
 
-    # collection:写 issue → 立场 → decide → 卡;--field 解析、@-、log、search(manager / inbox 暂时注释,等 work 实现后一起启用)
+    # collection:建 issue → 立场 → 论证 → rank → 卡;--put / --field 解析、@-、log、search(manager / inbox 暂时注释,等 work 实现后一起启用)
     ip = "memory.talk/配置/该走文件还是环境变量"
-    cli("collection", "write", "issue", ip, "--field", "question=配置该走文件还是环境变量?", "--reason", "撞见的", user="alice")
+    cli("collection", "write", "issue", ip, "--put", "readme.md=背景:起服务要读几样配置", "--reason", "撞见的", user="alice")
     cli("col", "act", "issue", "position", ip, "--field", "claim=只用环境变量", user="alice")
-    cli("col", "act", "issue", "argue", ip, "--field", "position=p1", "--field", "stance=1",
-        "--field", "evidence.work_id=" + w["id"], "--field", "evidence.rounds=3,4", user="alice")
-    r = json.loads(cli("--json", "collection", "read", "issue", ip).stdout)["body"]
-    assert r["positions"][0]["arguments"][0]["evidence"] == {"work_id": w["id"], "rounds": [3, 4], "origin": None}
-    cli("col", "act", "issue", "decide", ip, "--field", "position=p1", "--field", "card=memory.talk/配置/配置只来自环境变量", user="alice")
+    cli("col", "act", "issue", "argue", ip, "--data", json.dumps({"claim": "只用环境变量", "comment": "试了一遍,够用(" + w["id"] + "#3)"}), user="alice")
+    cli("col", "act", "issue", "rank", ip, "--data", '{"positions": [{"claim": "只用环境变量", "note": "够用"}], "summary": "先这样"}', user="alice")
+    r = json.loads(cli("--json", "collection", "read", "issue", ip).stdout)
+    assert r["title"] == "该走文件还是环境变量" and r["body"]["positions"][0]["arguments"] == ["试了一遍,够用(" + w["id"] + "#3)"]
+    assert r["body"]["summary"] == "先这样" and r["files"] == ["meta.yaml", "positions/只用环境变量.md", "readme.md"]
+    assert "← 够用" in cli("collection", "read", "issue", ip).stdout
+    cli("col", "write", "card", "memory.talk/配置/配置只来自环境变量", "--field", "title=配置只来自环境变量", "--field", "issue=" + ip, user="alice")
     cli("col", "edit", "card", "memory.talk/配置/配置只来自环境变量", "--field", "body=@-", "--reason", "补正文", inp="只用环境变量。\n", user="alice")
     assert "只用环境变量。" in cli("collection", "read", "card", "memory.talk/配置/配置只来自环境变量").stdout
     log = cli("collection", "log", "card", "memory.talk/配置/配置只来自环境变量").stdout
     assert "alice" in log and "[card] edit" in log
-    assert "[issue]" in cli("col", "search", "环境变量").stdout
+    assert "[issue]" in cli("col", "search", "起服务").stdout
     assert "该走文件还是环境变量.issue" in cli("col", "tree", "memory.talk/配置").stdout
     # cli("col", "manager", "memory.talk", "--set", w["id"], user="alice")
     # assert w["id"] in cli("col", "manager", ip).stdout
     cli("col", "act", "issue", "position", ip, "--field", "claim=再来一个", user="alice")
     # assert ip in cli("work", "inbox", w["id"]).stdout
     # assert ip in cli("col", "managed", "--work", w["id"]).stdout
-    assert "issue" in cli("col", "layers").stdout
+    assert "positions/*.md" in cli("col", "layers").stdout
 
     cli("work", "set", child["id"], "--status", "done", user="alice")
     assert json.loads(cli("--json", "work", "set", w["id"], "--status", "done").stdout)["status"] == "done"

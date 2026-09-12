@@ -2,7 +2,7 @@
 内置层的顺序在这里定(最底在前);用户层排在它们之上,顺序按 collections.json 的 layers[]。怎么定义一层见 README.md。"""
 from __future__ import annotations
 
-from ._spec import LayerSpec
+from ._spec import FileRule, LayerSpec
 from ._user import from_dict, from_yaml, schema_from_yaml
 from .card import LAYER as CARD
 from .issue import LAYER as ISSUE
@@ -10,4 +10,4 @@ from .origin import LAYER as ORIGIN
 
 BUILTIN: list[LayerSpec] = [ORIGIN, ISSUE, CARD]
 
-__all__ = ["LayerSpec", "BUILTIN", "from_yaml", "from_dict", "schema_from_yaml"]
+__all__ = ["LayerSpec", "FileRule", "BUILTIN", "from_yaml", "from_dict", "schema_from_yaml"]

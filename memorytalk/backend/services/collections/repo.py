@@ -112,10 +112,10 @@ class Repo:
 
     # ------------------------------------------------------------ 读(stack)
 
-    def tree(self, prefix: str = "") -> dict[str, str]:
-        if self.git.resolve(self.stack) is None:
+    def tree(self, prefix: str = "", rev: str | None = None) -> dict[str, str]:
+        if rev is None and self.git.resolve(self.stack) is None:
             return {}
-        return {e.path: e.oid for e in self.git.ls_tree(self.stack, prefix)}
+        return {e.path: e.oid for e in self.git.ls_tree(rev or self.stack, prefix)}
 
     def read(self, path: str, rev: str | None = None) -> bytes | None:
         return self.git.show(rev or self.stack, path)

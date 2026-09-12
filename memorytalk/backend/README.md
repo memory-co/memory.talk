@@ -38,10 +38,10 @@ memorytalk/backend/           # 服务本体;memorytalk/cli.py 是它的命令�
 │   │   └── __init__.py       #     UserService:注册 / 档案 / 活动统计(从 work 与 collections 现算)/ commit author
 │   ├── collections/          #   认知层 —— docs/designs/v5/collections.md / manager.md
 │   │   ├── layers/           #     每个内置 layer 一个文件;用户层来自仓库根 collections.json 里内嵌的 schema(README.md:怎么定义一层、各层收什么)
-│   │   │   ├── _spec.py      #       LayerSpec:名字 + 形态(后缀 / 本体文件 / 格式)+ schema + 行为
-│   │   │   ├── _user.py      #       YAML 字段表 → LayerSpec(用户层,无行为)
-│   │   │   ├── origin.py     #       最底层:不带后缀的一切,原文
-│   │   │   ├── issue.py      #       <名>.issue/issue.json;行为 position / argue / link / spawn / decide
+│   │   │   ├── _spec.py      #       LayerSpec = 目录的校验规则(FileRule 清单:路径 / 格式 / 字段 / 必需)+ 标题来源 + 行为 + 读视图
+│   │   │   ├── _user.py      #       YAML schema(files 清单或单文件简写)→ LayerSpec(用户层,无行为)
+│   │   │   ├── origin.py     #       最底层:不带后缀的一切,原文,不校验
+│   │   │   ├── issue.py      #       <名>.issue/{readme.md, meta.yaml, positions/*.md};行为 position / argue / link / rank
 │   │   │   └── card.py       #       <名>.card/card.md;行为 discuss
 │   │   ├── git.py            #     git 原语:hash-object / write-tree / commit-tree / update-ref / ls-tree / show / log / grep,不认识层
 │   │   ├── repo.py           #     分层拓扑(在 git.py 上):layer/<名> 权威分支 + stack merge 视图 + 路径归属守卫 + collections.json 锚定
@@ -77,12 +77,55 @@ memorytalk/backend/           # 服务本体;memorytalk/cli.py 是它的命令�
 │   ├── fs.py                 #   FileSystemProvider(read/write/append/list/…,能力 local_path)+ LocalFS
 │   └── db.py                 #   DatabaseProvider(表定义 + 链式 select/insert/update/delete,方言在内)+ SQLite
 │
-├── layers/                   # 每个内置 layer 一个文件;用户层来自仓库根 collections.json 里内嵌的 schema
-│   ├── _spec.py              #   LayerSpec:名字 + 形态(后缀 / 本体文件 / 格式)+ schema + 行为
-│   ├── _user.py              #   YAML 字段表 → LayerSpec(用户层,无行为)
-│   ├── origin.py             #   最底层:不带后缀的一切,原文
-│   ├── issue.py              #   <名>.issue/issue.json;行为 position / argue / link / spawn / decide
-│   └── card.py               #   <名>.card/card.md;行为 discuss
+├── work_servers/         #   work server 的装载与寻址 —— docs/designs/v5/work-server.md
+│   │   ├── registry.py       #     协议 → server 寻址:先看谁声明了它,没人声明去 default
+│   │   ├── uri.py            #     块的 URI 解析
+│   │   ├── terminal.py       #     tmux 现场 + 终端类 server 基类(TerminalBase)
+│   │   ├── agent.py          #     agent 类 server 基类(AgentBase:终端把手 + 读 round)
+│   │   └── adapters/         #     读各平台会话记录:claude_code / codex / kimi
+│   ├── users/                #   user:注册的实体 —— docs/designs/v5/user.md
+│   │   ├── repo.py           #     UserRepo:fs 版(users/<name>.json)/ db 版(users 表)
+│   │   └── __init__.py       #     UserService:注册 / 档案 / 活动统计(从 work 与 collections 现算)/ commit author
+│   ├── collections/          #   认知层 —— docs/designs/v5/collections.md / manager.md
+│   │   ├── layers/           #     每个内置 layer 一个文件;用户层来自仓库根 collections.json 里内嵌的 schema(README.md:怎么定义一层、各层收什么)
+│   │   │   ├── _spec.py      #       LayerSpec = 目录的校验规则(FileRule 清单:路径 / 格式 / 字段 / 必需)+ 标题来源 + 行为 + 读视图
+│   │   │   ├── _user.py      #       YAML schema(files 清单或单文件简写)→ LayerSpec(用户层,无行为)
+│   │   │   ├── origin.py     #       最底层:不带后缀的一切,原文,不校验
+│   │   │   ├── issue.py      #       <名>.issue/{readme.md, meta.yaml, positions/*.md};行为 position / argue / link / rank
+│   │   │   └── card.py       #       <名>.card/card.md;行为 discuss
+│   │   ├── git.py            #     git 原语:hash-object / write-tree / commit-tree / update-ref / ls-tree / show / log / grep,不认识层
+│   │   ├── repo.py           #     分层拓扑(在 git.py 上):layer/<名> 权威分支 + stack merge 视图 + 路径归属守卫 + collections.json 锚定
+│   │   ├── manager.py        #     manager.json:最近祖先解析
+│   │   ├── catalog.py        #     一层的目录(按目录树列标题)+ 召回文本
+│   │   └── __init__.py       #     CollectionsService:层的装载(内置 + collections.json 里内嵌 schema 的用户层)、对象 CRUD、历史、检索、树、行为、manager、投递到收件箱
+│   └── store/                #   装配 —— docs/designs/v5/provider.md
+│       └── __init__.py       #     StoreService:按 MEMORY_TALK_STORE 选 provider,按族建 work 仓储
+│
+├── providers/                # 存储介质的两族基类(只有介质原语,没有业务)—— docs/designs/v5/provider.md
+│   ├── fs.py                 #   FileSystemProvider(read/write/append/list/…,能力 local_path)+ LocalFS
+│   └── db.py                 #   DatabaseProvider(表定义 + 链式 select/insert/update/delete,方言在内)+ SQLite
+│
+├── work_servers/         #   work server 的装载与寻址 —— docs/designs/v5/work-server.md
+│   │   ├── registry.py       #     协议 → server 寻址:先看谁声明了它,没人声明去 default
+│   │   ├── uri.py            #     块的 URI 解析
+│   │   ├── terminal.py       #     tmux 现场 + 终端类 server 基类(TerminalBase)
+│   │   ├── agent.py          #     agent 类 server 基类(AgentBase:终端把手 + 读 round)
+│   │   └── adapters/         #     读各平台会话记录:claude_code / codex / kimi
+│   ├── users/                #   user:注册的实体 —— docs/designs/v5/user.md
+│   │   ├── repo.py           #     UserRepo:fs 版(users/<name>.json)/ db 版(users 表)
+│   │   └── __init__.py       #     UserService:注册 / 档案 / 活动统计(从 work 与 collections 现算)/ commit author
+│   ├── collections/              #   认知层 —— docs/designs/v5/collections.md / manager.md
+│   │   ├── git.py            #     git 原语:hash-object / write-tree / commit-tree / update-ref / ls-tree / show / log / grep,不认识层
+│   │   ├── repo.py           #     分层拓扑(在 git.py 上):layer/<名> 权威分支 + stack merge 视图 + 路径归属守卫 + collections.json 锚定
+│   │   ├── manager.py        #     manager.json:最近祖先解析
+│   │   ├── catalog.py        #     一层的目录(按目录树列标题)+ 召回文本
+│   │   └── __init__.py       #     CollectionsService:层的装载(内置 + collections.json 里内嵌 schema 的用户层)、对象 CRUD、历史、检索、树、行为、manager、投递到收件箱
+│   └── store/                #   装配 —— docs/designs/v5/provider.md
+│       └── __init__.py       #     StoreService:按 MEMORY_TALK_STORE 选 provider,按族建 work 仓储
+│
+├── providers/                # 存储介质的两族基类(只有介质原语,没有业务)—— docs/designs/v5/provider.md
+│   ├── fs.py                 #   FileSystemProvider(read/write/append/list/…,能力 local_path)+ LocalFS
+│   └── db.py                 #   DatabaseProvider(表定义 + 链式 select/insert/update/delete,方言在内)+ SQLite
 │
 ├── work_servers/             # 每个 work server 一个文件,自己声明响应哪些协议(自动扫描);没人声明的协议去 default
 │   ├── bash.py               #   bash
