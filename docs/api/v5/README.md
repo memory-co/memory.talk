@@ -37,10 +37,10 @@
 | `GET` | `/api/collections/config` | collections.json 本体 + 它的 git 历史(层的变化史) |
 | `GET` | `/api/collections/layers` | 有哪些层(最底在前)、各自的 schema 与行为 |
 | `POST` | `/api/collections/layers` | 加一个用户层:一份 schema YAML |
-| `GET` | `/api/collections/managed` | 某个 work 管的所有对象;不传 work = 没人管的对象 |
-| `GET` | `/api/collections/manager` | 这个路径归谁管(最近的 manager.json) |
-| `PUT` | `/api/collections/manager` | 在这个目录(或对象)下放 manager.json,绑到一个 work |
-| `DELETE` | `/api/collections/manager` | 解绑:删这个目录的 manager.json |
+| `GET` | `/api/collections/managed` | (暂缓,等 work 实现后启用)某个 work 管的所有对象;不传 work = 没人管的对象 |
+| `GET` | `/api/collections/manager` | (暂缓,等 work 实现后启用)这个路径归谁管(最近的 manager.json) |
+| `PUT` | `/api/collections/manager` | (暂缓,等 work 实现后启用)在这个目录(或对象)下放 manager.json,绑到一个 work |
+| `DELETE` | `/api/collections/manager` | (暂缓,等 work 实现后启用)解绑:删这个目录的 manager.json |
 | `GET` | `/api/collections/search` | git grep 整个 Collections(可限定层) |
 | `GET` | `/api/collections/tree` | 浏览目录树:对象(带后缀的目录折成一项)、目录、origin 文件 |
 | `GET` | `/api/collections/{layer}` | 一层的目录(按目录树列标题) |

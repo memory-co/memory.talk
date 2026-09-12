@@ -51,25 +51,26 @@ def search(q: str, layer: str | None = None, svc: CollectionsService = Depends(c
     return ok(svc.search(q, layer))
 
 
-@router.get("/manager", response_model=Result[Manager | None], summary="这个路径归谁管(最近的 manager.json)")
-def get_manager(path: str = "", svc: CollectionsService = Depends(collections)):
-    return ok(svc.manager(path))
-
-
-@router.put("/manager", response_model=Result[Manager], summary="在这个目录(或对象)下放 manager.json,绑到一个 work")
-def put_manager(req: ManagerPut, path: str = "", svc: CollectionsService = Depends(collections), c: Ctx = Depends(ctx)):
-    return ok(svc.set_manager(path, req.work, req.reason, c))
-
-
-@router.delete("/manager", summary="解绑:删这个目录的 manager.json")
-def delete_manager(path: str = "", reason: str = "", svc: CollectionsService = Depends(collections), c: Ctx = Depends(ctx)):
-    svc.unset_manager(path, reason, c)
-    return ok()
-
-
-@router.get("/managed", response_model=Result[list[TreeItem]], summary="某个 work 管的所有对象;不传 work = 没人管的对象")
-def managed(work: str | None = None, svc: CollectionsService = Depends(collections)):
-    return ok(svc.managed_by(work) if work else svc.unmanaged())
+# ---- manager / managed:先注释掉,等 work 那边实现了再一起搞(service 里 svc.manager / set_manager / unset_manager / managed_by / unmanaged 都还在) ----
+# @router.get("/manager", response_model=Result[Manager | None], summary="这个路径归谁管(最近的 manager.json)")
+# def get_manager(path: str = "", svc: CollectionsService = Depends(collections)):
+#     return ok(svc.manager(path))
+#
+#
+# @router.put("/manager", response_model=Result[Manager], summary="在这个目录(或对象)下放 manager.json,绑到一个 work")
+# def put_manager(req: ManagerPut, path: str = "", svc: CollectionsService = Depends(collections), c: Ctx = Depends(ctx)):
+#     return ok(svc.set_manager(path, req.work, req.reason, c))
+#
+#
+# @router.delete("/manager", summary="解绑:删这个目录的 manager.json")
+# def delete_manager(path: str = "", reason: str = "", svc: CollectionsService = Depends(collections), c: Ctx = Depends(ctx)):
+#     svc.unset_manager(path, reason, c)
+#     return ok()
+#
+#
+# @router.get("/managed", response_model=Result[list[TreeItem]], summary="某个 work 管的所有对象;不传 work = 没人管的对象")
+# def managed(work: str | None = None, svc: CollectionsService = Depends(collections)):
+#     return ok(svc.managed_by(work) if work else svc.unmanaged())
 
 
 @router.get("/history/{layer}/{path:path}", response_model=Result[list[Revision]], summary="一个对象的 git log(这一层的分支上)")
