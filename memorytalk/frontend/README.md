@@ -1,6 +1,6 @@
 # memory.talk 前端
 
-前端采用与 shellbase 一致的技术栈：React 18、TypeScript、Vite、Tailwind CSS、Zustand、TanStack Query，以及 Base UI、Lucide、Sonner。Markdown 展示使用 react-markdown 与 remark-gfm，认知对象的元数据通过 YAML 解析。
+前端采用与 shellbase 一致的技术栈：React 18、TypeScript、Vite、Tailwind CSS、Zustand、TanStack Query，UI 统一采用 shadcn/ui（New York / Radix）、Lucide、Sonner。Markdown 展示使用 react-markdown 与 remark-gfm，认知对象的元数据通过 YAML 解析。
 
 ## 页面组织
 
@@ -13,7 +13,7 @@
 | 认知库 `#/library` | 按层浏览、全文搜索、对象阅读、版本历史、创建原文 / issue / card、编辑 card |
 | 设置 `#/settings` | 选择与注册用户、查看运行环境和浏览器终端接入方式 |
 
-侧栏支持折叠，移动端使用抽屉导航。`Ctrl/Cmd + K` 搜索工作，首页输入框按 Enter 创建工作、Shift + Enter 换行。身份、侧栏偏好和每个 work 选中的会话保存在本地。
+侧栏使用 shadcn Sidebar，支持折叠，移动端使用带焦点管理的 Sheet 抽屉。`Ctrl/Cmd + B` 折叠侧栏，`Ctrl/Cmd + K` 搜索工作（方向键选择、Enter 打开），首页输入框按 Enter 创建工作、Shift + Enter 换行。身份、侧栏偏好和每个 work 选中的会话保存在本地。
 
 ## 开发与构建
 
@@ -71,9 +71,11 @@ src/
 ├── shell/             # Shell、工作树、首页、工作区与会话展示
 ├── collections/       # 认知库、对象阅读、历史、创建与编辑
 ├── settings/          # 用户和环境设置
-├── components/        # Base UI 对话框、Markdown、状态展示
+├── components/        # 业务通用展示、按需加载的 Markdown
+│   └── ui/            # shadcn/ui 官方组件与本地适配
+├── hooks/             # 移动断点、受控弹窗焦点恢复
 ├── lib/               # API、类型、查询、路由、偏好、文件阅读视图
 └── index.css          # 全局样式与响应式布局
 ```
 
-工作区、认知库和设置按路由延迟加载。界面不会注入演示工作或模拟响应，加载、空数据和请求失败分别展示对应状态。
+组件来源、主题与扩展约定见 [UI 基础组件](src/components/ui/README.md)。工作区、认知库和设置按路由延迟加载；工作搜索和 Markdown 按需加载。界面不会注入演示工作或模拟响应，加载、空数据和请求失败分别展示对应状态。

@@ -7,3 +7,16 @@ pytest tests/frontend
 ```
 
 页面构建检查在 `memorytalk/frontend` 执行 `npm run build`。浏览器验证应使用独立的 `MEMORY_TALK_HOME`，覆盖工作创建、子工作、会话切换、认知库读写与历史、用户选择及移动端导航；浏览器终端交互需要已接入 ttyd。
+
+## 浏览器交互回归
+
+`browser_smoke.py` 启动临时后端，使用独立数据目录、随机端口和 tmux socket；结束时清理进程与数据。需要已安装项目依赖、tmux 和 Python Playwright。可以使用系统 Chromium，或通过 `MEMORY_TALK_TEST_CHROMIUM` 指定浏览器路径；没有系统 Chromium 时使用 Playwright 安装的 Chromium。
+
+```bash
+npm --prefix memorytalk/frontend run build
+python -m pip install playwright
+python -m playwright install chromium
+python tests/frontend/browser_smoke.py
+```
+
+覆盖工作与子工作创建、Select 状态切换、多个会话的键盘切换、认知库读写与版本历史、用户偏好、Command 搜索、移动端导航、弹窗焦点圈定与恢复，以及删除失败时保留确认框。使用真实后端，故障场景通过浏览器请求拦截模拟。截图目录会输出到终端。

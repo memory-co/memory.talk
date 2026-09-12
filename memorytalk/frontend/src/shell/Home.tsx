@@ -1,3 +1,6 @@
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { ArrowRight, ArrowUp, BookOpen, CornerDownLeft, GitBranch, LoaderCircle, Sparkles, Terminal } from 'lucide-react';
@@ -24,14 +27,14 @@ export function WorkComposer({ parent, onCreated, compact = false }: {
   });
   const submit = (event?: FormEvent) => { event?.preventDefault(); if (goal.trim() && !mutation.isPending) mutation.mutate(); };
   return <form onSubmit={submit} className={compact ? 'work-composer compact' : 'work-composer'}>
-    <label className="sr-only" htmlFor={compact ? 'subwork-goal' : 'work-goal'}>工作目标</label>
-    <textarea id={compact ? 'subwork-goal' : 'work-goal'} value={goal} maxLength={2000} autoFocus={compact}
+    <Label className="sr-only" htmlFor={compact ? 'subwork-goal' : 'work-goal'}>工作目标</Label>
+    <Textarea className="border-0 p-0 shadow-none focus-visible:ring-0" id={compact ? 'subwork-goal' : 'work-goal'} value={goal} maxLength={2000} autoFocus={compact}
       onChange={e => setGoal(e.target.value)} placeholder={parent ? '这一步要完成什么？' : '描述你想完成的事…'}
       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }} />
     <div className="composer-footer"><span><GitBranch size={15} />{parent ? '拆分为子工作' : '从一个目标开始'}</span>
-      <button type="submit" className="send-button" disabled={!goal.trim() || mutation.isPending} aria-label="创建工作">
+      <Button variant="default" type="submit" size="icon" className="rounded-full" disabled={!goal.trim() || mutation.isPending} aria-label="创建工作">
         {mutation.isPending ? <LoaderCircle size={20} className="spin" /> : <ArrowUp size={20} />}
-      </button>
+      </Button>
     </div>
     {mutation.isError && <ErrorState error={mutation.error} />}
   </form>;
@@ -57,17 +60,17 @@ export function Home() {
       <WorkComposer />
       <div className="composer-hint"><CornerDownLeft size={12} /> Enter 创建工作 <span>·</span> Shift + Enter 换行</div>
       <div className="start-actions">
-        <button onClick={() => { const field = document.getElementById('work-goal') as HTMLTextAreaElement; field?.focus(); }}><Terminal size={16} />开始一个工作<ArrowRight size={14} /></button>
-        <button onClick={() => navigate({ page: 'library', layer: 'card' })}><BookOpen size={16} />从已有认知出发<ArrowRight size={14} /></button>
+        <Button variant="outline" size="sm" onClick={() => { const field = document.getElementById('work-goal') as HTMLTextAreaElement; field?.focus(); }}><Terminal size={16} />开始一个工作<ArrowRight size={14} /></Button>
+        <Button variant="outline" size="sm" onClick={() => navigate({ page: 'library', layer: 'card' })}><BookOpen size={16} />从已有认知出发<ArrowRight size={14} /></Button>
       </div>
     </section>
     <section className="recent-section">
       <div className="section-caption"><span>继续最近的工作</span><span className="caption-note">接着上次的思路</span></div>
       {works.isError ? <ErrorState error={works.error} retry={() => { void works.refetch(); }} /> : recent.length ? <div className="recent-grid">
-        {recent.map(work => <button className="recent-card" key={work.id} onClick={() => navigate({ page: 'work', work: work.id })}>
+        {recent.map(work => <Button variant="ghost" className="recent-card h-auto min-w-0 whitespace-normal grid grid-cols-[1fr_auto] md:block" key={work.id} onClick={() => navigate({ page: 'work', work: work.id })}>
           <div className="recent-card-top"><GitBranch size={17} /><span>{dateLabel(work.created_at)}</span></div>
           <h3>{work.goal}</h3><div className="recent-card-bottom"><span className={`status-text ${work.status}`}><i />{statusLabels[work.status]}</span><ArrowUpRightIcon /></div>
-        </button>)}
+        </Button>)}
       </div> : <div className="home-empty"><Sparkles size={18} /><div><strong>{works.isPending ? '正在寻找你的工作…' : '留一个起点给未来的自己'}</strong><p>创建第一项工作后，你可以随时从这里继续。</p></div></div>}
     </section>
     <footer className="home-footer"><span className="mini-dot" /> 工作在这里发生，记忆随之生长</footer>
