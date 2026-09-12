@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "memorytalk"
-version = "5.0.5"
+version = "5.1.1"
 description = "memory.talk v5 — work / collections / user 三个顶层对象的工作台:跑 code agent 的 work 树,git 分层的认知层,注册的团队成员"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -50,10 +50,14 @@ testpaths = ["tests"]
 python_files = ["test_*.py", "test.py"]   # 场景住在 tests/<名字>/test.py
 addopts = "--import-mode=importlib"
 
+[tool.hatch.build]
+# 前端构建产物(memorytalk/frontend/dist,`cd memorytalk/frontend && npm run build`)虽被 .gitignore,也要进 sdist 和 wheel:
+# `python -m build` 先出 sdist、再从 sdist 出 wheel,所以 sdist 里没有 dist 的话 wheel 里也不会有
+artifacts = ["memorytalk/frontend/dist/**"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["memorytalk"]
-artifacts = ["memorytalk/frontend/dist/**"]
-# 前端源码不进 wheel;构建产物(memorytalk/frontend/dist,`cd memorytalk/frontend && npm run build`)随包分发
+# 前端源码不进 wheel
 exclude = [
     "memorytalk/frontend/src",
     "memorytalk/frontend/apps",
@@ -69,4 +73,4 @@ exclude = [
 ]
 
 [tool.hatch.build.targets.sdist]
-exclude = ["memorytalk/frontend/node_modules", "memorytalk/frontend/dist"]
+exclude = ["memorytalk/frontend/node_modules"]
