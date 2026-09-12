@@ -34,7 +34,7 @@
 | `GET` | `/api/users/{name}` | 一个 user 的档案 + 建的 / 动过的 work、最近的提交 |
 | `PUT` | `/api/users/{name}` | 改档案(display_name / email) |
 | `GET` | `/api/collections/config` | collections.json 本体 + 它的 git 历史(层的变化史) |
-| `GET` | `/api/collections/layers` | 有哪些层(最底在前)、各自允许的文件清单与行为 |
+| `GET` | `/api/collections/layers` | 有哪些层(最底在前)、各自允许的文件 |
 | `POST` | `/api/collections/layers` | 加一个用户层:一份 schema YAML |
 | `GET` | `/api/collections/managed` | (暂缓,等 work 实现后启用)某个 work 管的所有对象;不传 work = 没人管的对象 |
 | `GET` | `/api/collections/manager` | (暂缓,等 work 实现后启用)这个路径归谁管(最近的 manager.json) |
@@ -44,11 +44,10 @@
 | `GET` | `/api/collections/tree` | 浏览目录树:对象(带后缀的目录折成一项)、目录、origin 文件 |
 | `GET` | `/api/collections/{layer}` | 一层的目录(按目录树列标题) |
 | `GET` | `/api/collections/{layer}/{path}` | 读一个对象(rev= 读历史版本) |
-| `POST` | `/api/collections/{layer}/{path}` | 建一个对象:目录里的文件(files)或字段简写(data);origin 用 content。整目录按层的 schema 校验,一个 [layer] 提交 |
-| `PUT` | `/api/collections/{layer}/{path}` | 改一个对象:files 加 / 改 / 删(null)目录里的文件,没提到的不动;data 是字段合并;origin 整体替换 |
+| `POST` | `/api/collections/{layer}/{path}` | 建一个对象:目录里的文件(files);origin 用 content。整批交给层的 check,过了一个 [layer] 提交 |
+| `PUT` | `/api/collections/{layer}/{path}` | 改一个对象:files 加 / 改 / 删(null)目录里的文件,没提到的不动,整批交给层的 check;origin 整体替换 |
 | `DELETE` | `/api/collections/{layer}/{path}` | 删一个对象(历史在 git) |
 | `GET` | `/api/collections/history/{layer}/{path}` | 一个对象的 git log(这一层的分支上) |
-| `POST` | `/api/collections/act/{layer}/{action}/{path}` | 行为:校验器之上的快捷方式(issue: position / argue / link / rank;card: discuss) |
 
 分页面:[system.md](system.md) · [works.md](works.md) · [users.md](users.md) · [collections.md](collections.md)
 
@@ -60,7 +59,7 @@
   | 状态 | `error` | 何时 |
   |---|---|---|
   | 400 | `bad_uri` / `no_server` / `cmd_not_found` / `guard` | URI 没协议 / 连 default 都没有 / 命令不在 PATH / 空改动、路径不合法 |
-  | 404 | `not_found` / `no_layer` / `no_action` | work、会话、对象、层、行为不存在 |
+  | 404 | `not_found` / `no_layer` | work、会话、对象、层不存在 |
   | 409 | `exists` / `conflict` / `guard` | 对象已存在 / work 状态、画布、结束后 attach / **跨层提交被守卫拒绝** |
   | 422 | `invalid` | 对象不符合层的 schema(或 FastAPI 默认校验) |
   | 502 | `platform` | tmux 起不来 |

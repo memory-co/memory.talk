@@ -1,6 +1,6 @@
 # collection
 
-认知层:层、树、对象 CRUD、历史、检索、行为、manager。对应 [`/api/collections`](../../api/v5/collections.md)。机制见 [`../../designs/v5/collections.md`](../../designs/v5/collections.md)。别名 `col`。
+认知层:层、树、对象(目录里的文件)CRUD、历史、检索。对应 [`/api/collections`](../../api/v5/collections.md)。机制见 [`../../designs/v5/collections.md`](../../designs/v5/collections.md)。别名 `col`。
 
 ```
 memory.talk collection
@@ -10,27 +10,25 @@ memory.talk collection
 ├── search  <query> [--layer <层>]
 │
 ├── read    <layer> <path> [--rev <sha>]
-├── write   <layer> <path> (--put <文件>=<内容|@file|@-> ... | --field k=v ... | --data '<json>' | --content @file) [--reason '<…>']
-├── edit    <layer> <path> (--put <文件>=<内容|@file|@-|null> ... | --field k=v ... | --data '<json>' | --content @file) [--reason '<…>']
+├── write   <layer> <path> (--put <文件>=<内容|@file|@-> ... | --content @file) [--subject '<…>'] [--reason '<…>']
+├── edit    <layer> <path> (--put <文件>=<内容|@file|@-|null> ... | --content @file) [--subject '<…>'] [--reason '<…>']
 ├── rm      <layer> <path> [--reason '<…>']
 ├── log     <layer> <path>
-│
-├── act     <layer> <action> <path> (--field k=v ... | --data '<json>') [--reason '<…>']
 │
 ├── manager [<path>] [--set <work_id> | --unset]
 └── managed [--work <work_id>]
 ```
 
-每个写命令是 collections 仓库里的一个 `[层]` 提交,author = `--user`;`--reason` 进 commit body。碰了别的层的路径 → exit 1 `guard`。
+每个写命令是 collections 仓库里的一个 `[层]` 提交,author = `--user`;`--subject` 是提交主题(不给就是 write / edit <path>),`--reason` 进 commit body。这批文件交给层的 check,不过 → exit 1 `invalid` 并打印理由;碰了别的层的路径 → exit 1 `guard`。
 
 ## layers
 
 ```bash
-memory.talk collection layers                          # 最底在前:origin / issue / card / 用户层;各自允许的文件(格式,* 必需)与行为
+memory.talk collection layers                          # 最底在前:origin / issue / card / 用户层;各自允许的文件
 memory.talk collection layers add decision --schema decision.yaml
 ```
 
-schema 写法见 [`../../designs/v5/collections-layer.md`](../../designs/v5/collections-layer.md)(`list[…]` 要加引号)。
+schema 写法(files 清单:format / required / append_only / fields)见 [`../../designs/v5/collections-layer.md`](../../designs/v5/collections-layer.md)(`list[…]` 要加引号)。
 
 ## tree / ls / search
 
@@ -43,48 +41,34 @@ schema 写法见 [`../../designs/v5/collections-layer.md`](../../designs/v5/coll
 ## read
 
 ```bash
-memory.talk collection read card memory.talk/配置/配置只来自环境变量
-memory.talk collection read issue memory.talk/配置/该走文件还是环境变量        # 标题 = 目录名;立场按 meta.yaml 的排序,带 note 和论证
+memory.talk collection read issue memory.talk/配置/该走文件还是环境变量        # 标题(目录名)+ 目录里每个文件
+memory.talk collection read card  memory.talk/配置/配置只来自环境变量
 memory.talk collection read origin memory.talk/配置/旧方案.md
 memory.talk collection read card memory.talk/配置/配置只来自环境变量 --rev 527e8ae   # 历史版本
 ```
 
-Markdown 输出:card 就是那份 markdown;issue 渲染成标题 + 展开 + 总结 + 立场(序号、主张、note、阐述、论证);多文件用户层按文件分段;origin 原文。`--json` 是 API 的 Obj(含 `files`)。
+输出就是文件:`# <标题>` 之后每个文件一段 `== <相对路径>`;origin 是原文。`--json` 是 API 的 Obj(`files` 是 `{相对路径: 内容}`)。
 
 ## write / edit / rm
 
 ```bash
 # 目录里的文件:--put <相对路径>=<内容>(多次);内容可 @file / @-;edit 时 null 删
 memory.talk collection write issue memory.talk/配置/该走文件还是环境变量 --put readme.md=@背景.md --reason '撞见的'
-memory.talk collection write issue memory.talk/配置/另一个问题                      # 什么都不给:一个空 readme.md
-memory.talk collection edit  issue memory.talk/配置/该走文件还是环境变量 --put positions/乙.md=null --put meta.yaml=@meta.yaml
-# 字段简写(只对单文件层:card、单文件用户层):--field k=v(多次),或 --data '<json>';正文用 --field body=@正文.md
-memory.talk collection write card memory.talk/配置/配置只来自环境变量 \
-    --field title='配置只来自环境变量' --field context='memory.talk v5' --field issue=memory.talk/配置/该走文件还是环境变量 --field body=@正文.md
+memory.talk collection edit  issue memory.talk/配置/该走文件还是环境变量 \
+    --put positions/只用环境变量.md=@为什么.md --subject 'position memory.talk/配置/该走文件还是环境变量: 只用环境变量'
+memory.talk collection edit  issue memory.talk/配置/该走文件还是环境变量 \
+    --put positions/只用环境变量.md=@- --subject 'argue …#只用环境变量: 够用' < 加了一行的文件.md       # 只能在末尾追加
+memory.talk collection edit  issue memory.talk/配置/该走文件还是环境变量 --put meta.yaml=@meta.yaml --subject 'rank …'
+memory.talk collection write card  memory.talk/配置/配置只来自环境变量 --put readme.md=@正文.md --put meta.yaml='issue: memory.talk/配置/该走文件还是环境变量'
 memory.talk collection write origin memory.talk/配置/旧方案.md --content @旧方案.md          # origin:原文
-memory.talk collection edit  card memory.talk/配置/配置只来自环境变量 --field body=@新正文.md --reason '补理由'
 memory.talk collection rm    card memory.talk/配置/配置只来自环境变量 --reason '过时'          # 删,历史在 git
 ```
 
-`--field` 的值:字符串照写;列表用逗号(`--field links=a,b`,所以含逗号的句子用 `--data`);引用就是对端的 path。整目录不合层的 schema → exit 1 `invalid`(清单外的文件、缺必填、多余字段)。已存在 → exit 1 `exists`。
+每个层允许哪些文件、哪些只增不改,看 `collection layers` 和 [`../../designs/v5/issue.md`](../../designs/v5/issue.md) / [`card.md`](../../designs/v5/card.md)。不过 check → exit 1 `invalid`,理由打印出来;已存在 → exit 1 `exists`。
 
 ## log
 
 一个对象在它那层分支上的提交历史:sha / 谁 / 时间 / subject / Reason。
-
-## act
-
-行为(校验器之上的快捷方式),payload 用 `--field` 或 `--data '<json>'`:
-
-```bash
-memory.talk collection act issue position <path> --field claim='只用环境变量' --field body=@为什么.md
-memory.talk collection act issue argue    <path> --data '{"claim": "只用环境变量", "comment": "试过,够用(work_try#9)"}'
-memory.talk collection act issue link     <path> --field type=specializes --field target=<另一个 issue 的 path>
-memory.talk collection act issue rank     <path> --data '{"positions": [{"claim": "只用环境变量", "note": "够用"}], "summary": "先这样"}'
-memory.talk collection act card  discuss  <path> --field issue=<新 issue 的 path> --field readme='有人不同意'
-```
-
-`position` 新建 `positions/<claim>.md`,`argue` 往它的 `## 论证` 下加一行,`link` / `rank` 改 `meta.yaml`;谁、何时在 git。层没有这个行为 → exit 1 `no_action`。
 
 ## manager / managed
 

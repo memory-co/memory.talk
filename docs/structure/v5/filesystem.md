@@ -12,7 +12,7 @@
 │       ├── manager.json              ←   这一片归谁管(可选,任何目录)
 │       ├── 某份原文.md                ←   origin:不带后缀的文件
 │       ├── 某个问题.issue/            ←   issue:readme.md + meta.yaml + positions/<主张>.md + 可选 manager.json
-│       └── 某张卡.card/              ←   card:card.md + 可选 manager.json
+│       └── 某张卡.card/              ←   card:readme.md + meta.yaml + 可选 manager.json
 ├── users/                            ← user 档案(注册的实体;MEMORY_TALK_STORE=fs 时)
 │   └── <name>.json                   ←   name / display_name / email / created_at
 ├── works/                            ← 裸文件(现场层)
@@ -31,7 +31,7 @@
 ## collections/(分层 git)
 
 - **拓扑**:每层一条权威分支 `layer/<名>`(线性,只放这一层的文件);`stack` 是合并视图,每次层提交后一个 merge 节点。全部分支从始祖提交出发。工作树跟着 stack,只为了人能 `ls` / `cat`,服务从不读它。
-- **一个动作一个 commit**,subject 以 `[层名]` 开头,动词在后(`write` / `edit` / `delete` / `position` / `argue` / `link` / `rank` / `manage` …),body 带 `Reason:` / `Work:`(哪个 work);谁 = commit author。
+- **一个动作一个 commit**,subject 以 `[层名]` 开头,动词在后(默认 `write` / `edit` / `delete` / `manage`;调用方可自己给主题,如 `position …` / `argue …` / `rank …`),body 带 `Reason:` / `Work:`(哪个 work);谁 = commit author。
 - **守卫**在写时:路径按后缀 / 机制规则该归哪层、路径是否已在别的层的树里;不符即拒。跨层的决定是两个相邻提交。
 - **author** 来自 `MEMORY_TALK_AUTHOR` / `MEMORY_TALK_EMAIL`,写进仓库 config。
 - **历史** = `git log layer/<层>` / `git log --first-parent stack` / `git log -- <路径>`;**检索** = `git grep` stack;**旧版本** = `git show <sha>:<路径>`。只用 git 命令行。

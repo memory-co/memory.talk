@@ -9,7 +9,7 @@ IP = "memory.talk/配置/该走文件还是环境变量"
 
 def _setup(client):
     w = client.post("/api/works", json={"goal": "管配置这一片"}).json()
-    client.post(f"/api/collections/issue/{IP}", json={})
+    client.post(f"/api/collections/issue/{IP}", json={"files": {"readme.md": ""}})
     return w
 
 

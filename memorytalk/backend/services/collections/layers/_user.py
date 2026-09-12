@@ -1,27 +1,27 @@
-"""用户自定义层:一份 YAML schema → LayerSpec(docs/designs/v5/collections-layer.md)。没有行为。
+"""用户自定义层:一份 YAML 清单编译成一个 check(docs/designs/v5/collections-layer.md)。
 
-两种写法都认:
-  files:                      # 目录清单:每个文件一条(路径可用 * 通配),各自 format / required / fields
-    readme.md: {format: markdown, required: true}
-    meta.yaml: {format: yaml, fields: {...}}
-  title: dirname | <文件>:<字段>
+    layer: experiment
+    files:
+      readme.md:   {format: markdown, required: true}
+      result.yaml: {format: yaml, fields: {verdict: {type: string, required: true}, issue: {type: ref, layer: issue}}}
+      "runs/*.md": {format: markdown, append_only: true}
 
-  format: markdown+frontmatter | json      # 单文件简写:对象目录里只有 <层>.md / <层>.json,字段就是 fields
-  title: <字段>
-  fields: {...}
+format:markdown / text 不看内容;yaml / json 解开按 fields 校验(多余键拒)。required 的文件不能缺、不能删;append_only 的只能追加。
 """
 from __future__ import annotations
 
+import fnmatch
+import json
 from typing import Any
 
 import yaml
-from pydantic import ConfigDict, Field, create_model
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model
 
-from memorytalk.backend.models.collections import FieldSpec
-from ._spec import FileRule, LayerSpec
+from ._layer import Change, Layer, appended_only, load_yaml
 
 _TYPES: dict[str, Any] = {"string": str, "int": int, "bool": bool, "ref": str,
                           "list[string]": list[str], "list[ref]": list[str]}
+_FORMATS = ("markdown", "text", "yaml", "json")
 
 
 def schema_from_yaml(text: str) -> dict:
@@ -31,59 +31,67 @@ def schema_from_yaml(text: str) -> dict:
     return doc
 
 
-def from_yaml(text: str) -> LayerSpec:
+def from_yaml(text: str) -> Layer:
     doc = schema_from_yaml(text)
     return from_dict(doc["layer"], doc)
 
 
-def _fields(name: str, fname: str, spec_fields: dict | None, with_body: bool) -> tuple[dict[str, FieldSpec], dict[str, str], type]:
-    fields: dict[str, FieldSpec] = {}
-    refs: dict[str, str] = {}
+def _model(name: str, fname: str, fields: dict) -> type[BaseModel]:
     model_fields: dict[str, Any] = {}
-    for fld, spec in (spec_fields or {}).items():
+    for fld, spec in (fields or {}).items():
         spec = spec or {}
         t = str(spec.get("type", "string"))
         if t not in _TYPES:
             raise ValueError(f"层 {name} 的 {fname} 字段 {fld}:不支持的类型 {t!r}(只有 {', '.join(_TYPES)})")
-        fields[fld] = FieldSpec(type=t, required=bool(spec.get("required")), ref=spec.get("layer"),
-                                description=str(spec.get("description", "")))
-        if t in ("ref", "list[ref]"):
-            refs[fld] = spec.get("layer", "")
         py = _TYPES[t]
         model_fields[fld] = (py, ...) if spec.get("required") else (py | None, Field(default=None))
-    if with_body:
-        model_fields["body"] = (str, Field(default=""))
-    model = create_model(f"Layer_{name}_{fname.replace('/', '_').replace('*', 'x').replace('.', '_')}", __config__=ConfigDict(extra="forbid"), **model_fields)  # type: ignore[call-overload]
-    return fields, refs, model
+    return create_model(f"Layer_{name}_{fname}".replace("/", "_").replace("*", "x").replace(".", "_"),
+                        __config__=ConfigDict(extra="forbid"), **model_fields)  # type: ignore[call-overload]
 
 
-def from_dict(name: str, doc: dict) -> LayerSpec:
-    """collections.json 里内嵌的 schema → LayerSpec。"""
-    rules: list[FileRule] = []
-    refs: dict[str, str] = {}
-    if "files" in doc:
-        for pattern, fs in (doc["files"] or {}).items():
-            fs = fs or {}
-            fmt = str(fs.get("format", "markdown"))
-            fields: dict[str, FieldSpec] = {}
-            model = None
-            if fs.get("fields"):
-                if fmt not in ("markdown+frontmatter", "yaml", "json"):
-                    raise ValueError(f"层 {name} 的 {pattern}:格式 {fmt} 没有字段")
-                fields, r, model = _fields(name, pattern, fs["fields"], fmt == "markdown+frontmatter")
-                refs.update(r)
-            rules.append(FileRule(str(pattern), fmt, required=bool(fs.get("required")), fields=fields, model=model,
-                                  description=str(fs.get("description", ""))))
-        title = str(doc.get("title") or "dirname")
-    else:                                                             # 单文件简写
-        fmt = "markdown+frontmatter" if str(doc.get("format", "markdown+frontmatter")).startswith("markdown") else "json"
-        fname = f"{name}.md" if fmt == "markdown+frontmatter" else f"{name}.json"
-        fields, refs, model = _fields(name, fname, doc.get("fields"), fmt == "markdown+frontmatter")
-        rules.append(FileRule(fname, fmt, required=True, fields=fields, model=model))
-        title = f"{fname}:{doc['title']}" if doc.get("title") else "dirname"
+def from_dict(name: str, doc: dict) -> Layer:
+    """collections.json 里内嵌的 schema → Layer。"""
+    rules: list[tuple[str, str, bool, bool, type[BaseModel] | None]] = []     # (pattern, format, required, append_only, model)
+    for pattern, fs in (doc.get("files") or {}).items():
+        fs = fs or {}
+        fmt = str(fs.get("format", "markdown"))
+        if fmt not in _FORMATS:
+            raise ValueError(f"层 {name} 的 {pattern}:不支持的格式 {fmt!r}(只有 {', '.join(_FORMATS)})")
+        model = None
+        if fs.get("fields"):
+            if fmt not in ("yaml", "json"):
+                raise ValueError(f"层 {name} 的 {pattern}:格式 {fmt} 没有字段")
+            model = _model(name, str(pattern), fs["fields"])
+        rules.append((str(pattern), fmt, bool(fs.get("required")), bool(fs.get("append_only")), model))
     if not rules:
         raise ValueError(f"层 {name}:files 不能为空")
-    if title != "dirname" and ":" not in title:
-        raise ValueError(f"层 {name}:title 要写成 dirname 或 <文件>:<字段>")
-    return LayerSpec(name=name, files=rules, title=title, refs=refs, builtin=False,
-                     description=str(doc.get("description", "")))
+
+    def rule_for(rel: str):
+        return next((r for r in rules if fnmatch.fnmatchcase(rel, r[0])), None)
+
+    def check(changes: list[Change], after: dict[str, bytes]) -> str | None:
+        for c in changes:
+            r = rule_for(c.path)
+            if r is None:
+                return f"{c.path}:{name} 目录里只能有 {', '.join(p for p, *_ in rules)}"
+            pattern, fmt, required, append_only, model = r
+            if c.new is None:
+                if required:
+                    return f"{c.path}:必需的文件不能删"
+                continue
+            if append_only and c.old is not None and not appended_only(c.old, c.new):
+                return f"{c.path}:只能在末尾追加"
+            if fmt in ("yaml", "json"):
+                try:
+                    obj = load_yaml(c.new) if fmt == "yaml" else json.loads(c.new.decode("utf-8", "replace") or "{}")
+                    if model:
+                        model.model_validate(obj)
+                except (ValueError, ValidationError) as e:
+                    return f"{c.path}:{e}"
+        for pattern, fmt, required, *_ in rules:
+            if required and not any(fnmatch.fnmatchcase(f, pattern) for f in after):
+                return f"缺 {pattern}"
+        return None
+
+    return Layer(name=name, check=check, files=[p for p, *_ in rules], builtin=False,
+                 description=str(doc.get("description", "")), schema={k: v for k, v in doc.items() if k != "layer"})

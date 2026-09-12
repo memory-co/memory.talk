@@ -1,6 +1,6 @@
 # issue —— 一个问题一个目录:readme.md 是主题,positions/ 一个立场一个文件,meta.yaml 放边和排序(v5 设计)
 
-> **状态:已实施。** `layers/issue.py` 是这个目录的校验器(三种文件的规则),四个行为是它之上的快捷方式;API / CLI 见 [api collections.md](../../api/v5/collections.md) / [cli collection.md](../../cli/v5/collection.md),文件形态见 [structure collections.md](../../structure/v5/collections.md)。总定位见 [README.md](README.md)。
+> **状态:已实施。** `layers/issue.py` 就是一个 `check(diff, after)`:这次提交对目录的改动进去,过 / 不过(带理由)出来;没有行为,写就是写文件。API / CLI 见 [api collections.md](../../api/v5/collections.md) / [cli collection.md](../../cli/v5/collection.md),文件形态见 [structure collections.md](../../structure/v5/collections.md)。总定位见 [README.md](README.md)。
 
 相关:
 - collections(issue 是一个 layer;对象是任意位置的 `<名>.issue/` 目录): [collections.md](collections.md)
@@ -96,36 +96,36 @@ summary: 目前倾向只走环境变量;等 work_try 把 .env 那条路验完再
 
 `positions` 和 `summary` 是**判断**,不是计算:由 manager work 里的人或 agent 读完论证之后写下来。改了就是一次 `[issue]` 提交,`git log -- meta.yaml` 是这个问题「风向」的变化史。没有 `meta.yaml` 或没有 `positions` 键 = 还没人判断,立场按文件名列。
 
-### issue 层 = 这个目录的校验器
+### issue 层 = 一个校验函数
 
-层不是「一个 JSON 模型 + 几个行为函数」,是**这个目录允许长什么样**的一份规则;任何提交进 `.issue/` 的文件改动,先按它校验,不过整批拒绝([collections-layer.md §2](collections-layer.md))。issue 层的规则:
+层不是「一个 JSON 模型 + 几个行为函数」,是一个函数:`check(changes, after) -> None | str`。`changes` 是这次提交对这个目录的 diff(相对路径、改前、改后),`after` 是改完之后的整个目录;返回 None 就过,返回一句话就拒、那句话原样报给调用方。看 diff 才能说「只增不改」,看 after 才能说「排序里的立场得存在」。issue 的规则:
 
 | 文件 | 规则 |
 |---|---|
-| `readme.md` | markdown;可无、可空、可改 |
-| `meta.yaml` | YAML,可无;`links[]` 每项 `{type ∈ 五种, target: 非空}`,`(type, target)` 不重复;`positions[]` 每项 `{claim, note?}`,`claim` 必须是 `positions/` 下**存在**的文件名;`summary` 字符串 |
-| `positions/*.md` | markdown;文件名非空、不含 `/`;已有的文件不能重命名(删了再建是两个立场) |
-| `manager.json` | 机制文件,系统的,任何层都允许 |
-| 其他任何文件 | **拒绝** |
+| `readme.md` | 必需;可改;不能删 |
+| `meta.yaml` | 可无、可删;`links[]` 每项 `{type ∈ 五种, target: 非空}`,`(type, target)` 不重复;`positions[]` 每项 `{claim, note?}`,`claim` 必须是 `positions/` 下**存在**的文件名;`summary` 字符串;多余的键拒 |
+| `positions/*.md` | 新建随意(文件名非空);改只能在末尾追加;不能删(改名 = 删 + 建,所以也不行) |
+| `manager.json` | 机制文件,系统的,任何层都允许,不进 check |
+| 其他任何文件 | **拒** |
 
-标题来自目录名。读:`GET` 一个 issue 把三样合起来给——展开、按 `meta.positions` 排好序的立场(各带主张 = 文件名、阐述、论证列表)、边、总结。
-
-行为(§3)是这套规则之上的**快捷方式**:`position` = 新建一个文件,`argue` = 追加一行,`link` / `rank` = 改 `meta.yaml`;它们和「直接往目录里提交文件」走同一个门、过同一个校验。守卫不用改:`.issue/` 下的一切本来就归 issue 层。
+一次提交里几个文件一起进 check,一个不过整批不落。标题来自目录名。读就是目录里的文件,不解析、不排序;怎么渲染是客户端的事。
 
 ---
 
-## 3. 行为:每个行为碰哪个文件
+## 3. 写:每个动作碰哪个文件
 
-| 行为 | payload | 碰的文件 | 提交信息 |
-|---|---|---|---|
-| 建 issue(通用 create) | 正文?(可空) | 新建 `readme.md` | `[issue] write <path>` |
-| 改展开(通用 update) | 正文 | 改 `readme.md` | `[issue] edit <path>` |
-| `position` | `claim`, 正文? | 新建 `positions/<claim>.md`(正文) | `[issue] position <path>: <claim>` |
-| `argue` | `claim`, `comment` | 改 `positions/<claim>.md`(`## 论证` 下追加一行) | `[issue] argue <path>#<claim>: <comment>` |
-| `link` | `type`, `target` | 改 / 新建 `meta.yaml`(`links` 追加) | `[issue] link <path> <type> <target>` |
-| `rank` | `positions[]{claim, note}`, `summary?` | 改 / 新建 `meta.yaml`(整体替换 `positions` 和 `summary`) | `[issue] rank <path>: <首位 claim>` |
+没有行为,没有专门的端点。做任何事都是「往目录里提交文件」,层的 check 决定过不过;提交主题由调用方给(`subject`),不给就是 `write / edit <path>`。
 
-四个行为。`position` / `argue` / `link` 只增;`rank` 可以反复改,那是它的本意。层守卫兜底(`[card]` 提交碰不到 `.issue/`)。
+| 动作 | 碰的文件 | 建议的提交主题 |
+|---|---|---|
+| 建 issue | 新建 `readme.md`(可空) | `write <path>` |
+| 改展开 | 改 `readme.md` | `edit <path>` |
+| 加立场 | 新建 `positions/<主张>.md`(阐述) | `position <path>: <主张>` |
+| 加论证 | 改 `positions/<主张>.md`,`## 论证` 下多一行——check 只放行末尾追加 | `argue <path>#<主张>: <一句话>` |
+| 连边 | 改 `meta.yaml` 的 `links` | `link <path> <type> <target>` |
+| 排序 / 总结 | 改 `meta.yaml` 的 `positions` / `summary` | `rank <path>: <首位主张>` |
+
+「只增不改」不靠约定:改立场正文、删立场、改名都被 check 拒;层守卫兜底(`[card]` 提交碰不到 `.issue/`)。
 
 ---
 
@@ -138,11 +138,11 @@ summary: 目前倾向只走环境变量;等 work_try 把 .env 那条路验完再
 | issue 从哪个 work 冒出来 | 不记 | 要追,看提交 author 和 manager work 的 rounds |
 | 谁管这个 issue、谁来判定排序 | `manager.json` | 目录下放一个,或继承上级目录的([manager.md](manager.md))。这是 issue 和 work 之间**唯一**的机制耦合,而且是「目录归谁管」,不是 issue 的字段 |
 | 论证的证据在哪 | 论证那一行的文字 | 自由格式,系统不解析 |
-| issue 争出的卡 | **card 记**:`card.md` 的 `issue` 字段指向这个 issue | 写卡是 card 层的一次 create;issue 这边不动 |
-| 对卡不同意开的讨论页 | **card 记**:同上 | 建 issue + 改卡的 `issue` 字段,card 层的行为 |
+| issue 争出的卡 | **card 记**:卡的 `meta.yaml` 里 `issue` 指向这个 issue | 写卡是 card 层的一次 create;issue 这边不动 |
+| 对卡不同意开的讨论页 | **card 记**:同上 | 建一个 issue,再改卡的 `meta.yaml`;两个普通提交,各在自己的层 |
 | issue 之间 | `meta.yaml` 的 `links` | §2 |
 
-原来 issue 上的 `decide` / `spawn` 行为、`Decision:` / `Discussion:` trailer 在这个版本**都不要**。
+原来的 `decide` / `spawn` / `discuss` 行为、`Decision:` / `Discussion:` trailer、`/act/` 端点在这个版本**都不要**。
 
 ---
 
@@ -162,4 +162,4 @@ v4 用 +1 / -1 累成 credence 现算排序,v5 不这么做。理由:论证的�
 - **新 issue 默认谁管**:倾向不自动写 `manager.json`,靠所在文件夹的继承链。
 - **立场文件的正文能不能事后改**:目前定「建时写、之后走论证」;若发现阐述常要修,再放开。
 - **主张当文件名的长度和字符**:文件名有长度上限、不能含 `/`;主张太长时怎么办(截断?要求短句?)先不定,靠约定「主张是一句短话」。
-- **`rank` 要不要限定只有 manager work 能调**:现在不做权限(user.md),谁都能调;先靠约定。
+- **改 `meta.yaml` 的排序要不要限定只有 manager work 能做**:现在不做权限(user.md),谁都能改;先靠约定。

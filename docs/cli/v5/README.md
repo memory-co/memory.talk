@@ -18,7 +18,6 @@ memory.talk
 ├── collection                                          # 认知层(API 是 /api/collections)
 │            layers | tree | ls | search
 │            read | write | edit | rm | log             # 对象 CRUD + 历史
-│            act                                        # 行为:issue position / argue / link / rank;card discuss
 │            manager | managed                          # manager.json
 
 ```
@@ -37,7 +36,7 @@ memory.talk
 | `--json` | — | 关 | 结构化输出(机器 / LLM 用);默认 Markdown,TTY 下用 rich 渲染 |
 
 - **参数风格**:主对象用位置参数(`work show <id>`、`collection read <layer> <path>`),其余一律命名 flag(`--xx`)。
-- **文本传文件 / stdin**:所有文本类 flag(`--goal` `--reason` `--content` `--data` `--field k=v` 的值)支持 `@<file>`(逐字节原样读)和 `@-`(stdin,一条命令只能出现一次),给带引号、换行、`$` 的内容用。
+- **文本传文件 / stdin**:所有文本类 flag(`--goal` `--reason` `--content` `--put 文件=内容` 的值)支持 `@<file>`(逐字节原样读)和 `@-`(stdin,一条命令只能出现一次),给带引号、换行、`$` 的内容用。
 - **退出码**:`0` 成功;`1` 业务错误(API 4xx,stderr 打 `**error:** <message>`,`--json` 时 stdout 打错误体);`2` 用法错误;`3` 连不上 server(提示 `memory.talk server start`)。
 - **id 与路径**:work 是 `work_…`;会话是 `<work_id>-s<n>`;collection 对象是**路径**(`memory.talk/配置/该走文件还是环境变量`),直接当位置参数,不用引号也行,有空格才引。
 
@@ -50,8 +49,8 @@ export MEMORY_TALK_USER=alice
 W=$(memory.talk work create --goal '把配置改成环境变量' --json | jq -r .id)
 memory.talk work attach $W codex:///home/alice/memory.talk   # 在这个 work 里开一个 Codex 会话,打印窗地址
 memory.talk collection write issue memory.talk/配置/该走文件还是环境变量 --put readme.md='起服务要读几样配置……'
-memory.talk collection act issue position memory.talk/配置/该走文件还是环境变量 --field claim='只用环境变量'
-memory.talk collection act issue rank     memory.talk/配置/该走文件还是环境变量 --data '{"positions": [{"claim": "只用环境变量", "note": "够用"}]}'
-memory.talk collection write card memory.talk/配置/配置只来自环境变量 --field title='配置只来自环境变量' --field issue=memory.talk/配置/该走文件还是环境变量
+memory.talk collection edit  issue memory.talk/配置/该走文件还是环境变量 --put positions/只用环境变量.md='为什么……' --subject 'position …: 只用环境变量'
+memory.talk collection edit  issue memory.talk/配置/该走文件还是环境变量 --put meta.yaml='positions: [{claim: 只用环境变量, note: 够用}]' --subject 'rank …'
+memory.talk collection write card memory.talk/配置/配置只来自环境变量 --put readme.md='只用环境变量。' --put meta.yaml='issue: memory.talk/配置/该走文件还是环境变量'
 memory.talk work set $W --status done
 ```

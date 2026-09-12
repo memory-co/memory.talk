@@ -3,7 +3,7 @@ import json
 import pytest
 import subprocess
 
-SCHEMA = "layer: decision\nformat: json\ntitle: title\nfields:\n  title: {type: string, required: true}\n"
+SCHEMA = "layer: decision\nfiles:\n  readme.md: {format: markdown, required: true}\n  meta.yaml: {format: yaml, fields: {chosen: {type: string, required: true}}}\n"
 
 
 def test_anchor_is_the_only_file_in_the_root_commit(svc):
@@ -23,7 +23,7 @@ def test_adding_a_layer_embeds_its_schema_and_is_a_commit(client, H):
     client.post("/api/collections/layers", json={"name": "decision", "schema_yaml": SCHEMA, "reason": "要记决定"}, headers=H("alice"))
     r = client.get("/api/collections/config").json()
     last = r["config"]["layers"][-1]
-    assert last["name"] == "decision" and last["schema"]["fields"]["title"]["required"] and last["added_at"]
+    assert last["name"] == "decision" and last["schema"]["files"]["readme.md"]["required"] and last["added_at"]
     assert r["history"][0]["subject"] == "[origin] collections: add layer decision" and r["history"][0]["author"] == "alice"
     assert r["history"][-1]["subject"].startswith("[origin] collections: init")
 

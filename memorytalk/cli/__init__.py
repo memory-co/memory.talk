@@ -4,7 +4,7 @@
     memory.talk server      start | stop | restart | status | daemon        → cli/server.py
     memory.talk work        create | list | show | set | attach | …          → cli/work.py
     memory.talk user        add | list | show | set | whoami                 → cli/user.py
-    memory.talk collection  layers | tree | ls | search | read | … → cli/collection.py(别名 col)
+    memory.talk collection  layers | tree | ls | search | read | write | edit | rm | log → cli/collection.py(别名 col)
 
 每个子命令组一个文件,各自 register(top) 挂到总 parser 上;公共件在 _common.py。
 """

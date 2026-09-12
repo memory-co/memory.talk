@@ -11,20 +11,11 @@ def test_origin_has_no_suffix_and_no_files(client):
     assert origin["suffix"] is None and origin["files"] == []
 
 
-def test_issue_is_a_directory_of_three_kinds_of_files(client):
-    issue = client.get("/api/collections/layers").json()[1]
-    assert issue["suffix"] == ".issue" and issue["title"] == "dirname"
-    assert [(f["pattern"], f["format"], f["required"]) for f in issue["files"]] == [
-        ("readme.md", "markdown", True), ("meta.yaml", "yaml", False), ("positions/*.md", "markdown", False)]
-    assert issue["behaviors"] == ["argue", "link", "position", "rank"]
-
-
-def test_card_is_a_single_frontmatter_file(client):
-    card = client.get("/api/collections/layers").json()[2]
-    assert (card["suffix"], card["title"]) == (".card", "card.md:title")
-    assert [(f["pattern"], f["format"], f["required"]) for f in card["files"]] == [("card.md", "markdown+frontmatter", True)]
-    assert card["files"][0]["fields"]["title"]["required"] and card["files"][0]["fields"]["issue"]["ref"] == "issue"
-    assert card["behaviors"] == ["discuss"]
+def test_issue_and_card_list_their_allowed_files(client):
+    _, issue, card = client.get("/api/collections/layers").json()
+    assert (issue["suffix"], issue["files"]) == (".issue", ["readme.md", "meta.yaml", "positions/*.md"])
+    assert (card["suffix"], card["files"]) == (".card", ["readme.md", "meta.yaml"])
+    assert issue["schema"] is None and card["builtin"]
 
 
 def test_repo_has_a_branch_per_layer_and_stack(svc):

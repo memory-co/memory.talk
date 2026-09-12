@@ -35,7 +35,7 @@
 Collections(一个 collectbase 仓库,~/.memory.talk/memory/)
 ├── layer/origin   ← origin:任何**不带层后缀**的文件或目录          schema 极薄:原文 + 可选 meta;最底层,只读
 ├── layer/issue    ← issue :任何 `<名>.issue/` 目录(里面 readme.md + meta.yaml + positions/*.md)  标题 = 目录名;每个立场一个文件;meta.yaml 放边和 manager 的排序
-├── layer/card     ← card  :任何 `<名>.card/` 目录(里面 card.md)     schema:frontmatter(title / context / links / issue)+ 正文
+├── layer/card     ← card  :任何 `<名>.card/` 目录(里面 readme.md + meta.yaml)  标题 = 目录名;meta.yaml 放 context / links / issue
 └── layer/<你的>   ← 用户自定义的 layer:`<名>.<层>/`,写清 schema 就行
     stack          ← 合并视图:所有 layer 的文件并在一起,日常读写站在这里
 ```
@@ -53,7 +53,8 @@ memory.talk/
 │   │   ├── positions/p1.md
 │   │   └── manager.json
 │   └── 配置只来自环境变量.card/               ← card:争完的结论
-│       └── card.md
+│       ├── readme.md
+│       └── meta.yaml
 └── design/
     └── v5-总设计.pdf → blob/…                ← origin:二进制外置
 ```
@@ -84,7 +85,7 @@ issue 和 card **只是两个内置的 layer**。它们的对象模型([issue.md
 |---|---|---|---|
 | **名字** | = layer 名 = 提交信息里的 `[层名]` = 分支 `layer/<名字>` | `issue` | `card` |
 | **路径** | 对象怎么认:**目录名后缀 `.<层>/`**,放在树的任何位置;没有后缀的就是 origin | `<任意路径>/<名>.issue/`(readme.md + meta.yaml + positions/*.md) | `<任意路径>/<名>.card/card.md` |
-| **schema** | 目录长什么样:允许哪些文件、各自的格式 + 字段 + 哪些字段是引用;层就是它的校验器 | `readme.md`(markdown)+ `meta.yaml`(`links[]` `positions[]` `summary`)+ `positions/*.md`(markdown);别的文件拒绝 | `card.md`(markdown + frontmatter;`title` `context` `links[]→card` `issue→issue`) |
+| **check** | 一个函数:这次提交对目录的 diff 进去,过 / 不过出去;目录里允许哪些文件、哪些只增不改、字段怎么校验都在里面 | `readme.md`(markdown)+ `meta.yaml`(`links[]` `positions[]` `summary`)+ `positions/*.md`(markdown);别的文件拒绝 | `card.md`(markdown + frontmatter;`title` `context` `links[]→card` `issue→issue`) |
 
 schema 决定的事:
 
@@ -93,7 +94,7 @@ schema 决定的事:
 - **引用**:schema 里标出「这个字段指向哪个 layer 的对象」,于是 card.issue、issue.card、card.links 这些跨 layer 的边有了统一的表达;顺链接走(collections-store.md §5 的检索方式)靠它。
 - **目录**:哪个字段是标题、按什么分目录——召回时给 agent 的那份目录由此生成。
 
-内置 layer 除了 schema 还带**行为**:issue 的「加立场 / 表态 / 绑 manager / 派活」、card 的「从 issue 写卡 / 对卡开讨论页」,这些是 schema 之上的领域动作,有自己的端点。**用户自定义的 layer 只有 schema,没有行为**——通用 CRUD 就是它的全部;真需要行为,那就是一个新的内置 layer。
+层**没有行为**,内置的也没有:做任何事都是往目录里提交文件,层的 check 决定过不过。issue 的「加立场 / 加论证 / 排序」、card 的「从 issue 写出来 / 开讨论页」都是几次普通提交(见 [issue.md §3](issue.md))。
 
 ---
 
@@ -144,7 +145,7 @@ git log --first-parent stack
 |---|---|---|
 | memory/ 仓库 | 裸 git,一条 main | collectbase 仓库:`layer/origin`、`layer/issue`、`layer/card`、`stack`,`cb init --layers origin,issue,card` |
 | issue / card 的对象模型 | issue.md / card.md | **不变** |
-| 文件形态与路径 | `issues/<id>.json`、`cards/**/<slug>.md`(按层分目录) | **对象变目录、带后缀、放哪都行**:`<名>.issue/`(readme.md + meta.yaml + positions/)、`<名>.card/card.md`;不再有按层分的顶层目录 |
+| 文件形态与路径 | `issues/<id>.json`、`cards/**/<slug>.md`(按层分目录) | **对象变目录、带后缀、放哪都行**:`<名>.issue/`(readme.md + meta.yaml + positions/)、`<名>.card/`(readme.md + meta.yaml);不再有按层分的顶层目录 |
 | 提交信息 | `card: write …` / `issue: argue …` | `[card] write …` / `[issue] argue …`(动词不变,层名前置) |
 | 跨对象的决定 | 一个 commit | 两个相邻提交 + 同一个 `Decision:` trailer(§6) |
 | 历史 | `git log -- <path>` | 同,外加 `git log layer/<名>` 看整层 |

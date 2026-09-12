@@ -1,9 +1,9 @@
 # memorytalk/backend(v5 服务)
 
-memory.talk v5 的 Python 包(pip:`memorytalk`,命令 `memory.talk`)。**work 树(带 created_by 与 users)、协议 server、Collections(origin / issue / card 三层 + 用户层,提交 author = user)、manager 收件箱、存储 provider(LocalFS / SQLite,测试两种都跑)都有最简实现。** 未做:鉴权网关、ttyd / 反代托管、`daemon` / `start` / `stop`、逐 round 标注、二进制 blob 外置、给人手工 `git commit` 用的 hook(服务进程是唯一写者)。 端点清单见 [docs/api/v5](../docs/api/v5/README.md);起服务 `memory.talk server start`,测试在仓库根 `pytest`。 按 **models / services / controllers** 三层分目录,外加 **work_servers/**(每个协议一个 server);内置 layer 定义在 services/collections/layers/ 下;services 下每个子包对应 [docs/designs/v5](../docs/designs/v5/README.md) 的一篇设计;底层逻辑照 shellbase `server/shellbase/` 原生实现。
+memory.talk v5 的 Python 包(pip:`memorytalk`,命令 `memory.talk`)。**work 树(带 created_by 与 users)、协议 server、Collections(origin / issue / card 三层 + 用户层;每层是一个 check(diff) 校验器;提交 author = user)、manager 收件箱、存储 provider(LocalFS / SQLite,测试两种都跑)都有最简实现。** 未做:鉴权网关、ttyd / 反代托管、`daemon` / `start` / `stop`、逐 round 标注、二进制 blob 外置、给人手工 `git commit` 用的 hook(服务进程是唯一写者)。 端点清单见 [docs/api/v5](../docs/api/v5/README.md);起服务 `memory.talk server start`,测试在仓库根 `pytest`。 按 **models / services / controllers** 三层分目录,外加 **work_servers/**(每个协议一个 server);内置 layer 定义在 services/collections/layers/ 下;services 下每个子包对应 [docs/designs/v5](../docs/designs/v5/README.md) 的一篇设计;底层逻辑照 shellbase `server/shellbase/` 原生实现。
 
 ```
-memorytalk/backend/           # 服务本体;memorytalk/cli.py 是它的命令行客户端
+memorytalk/backend/           # 服务本体;memorytalk/cli/ 是它的命令行客户端
 ├── main.py                   # FastAPI 实例、路由挂载、启动钩子
 ├── config.py                 # 环境变量与路径(~/.memory.talk/{memory,works})
 ├── gateway.py                # AuthGate + 静态托管 + 反代(/tty、/proxy/<port>)
@@ -12,8 +12,8 @@ memorytalk/backend/           # 服务本体;memorytalk/cli.py 是它的命令�
 │   ├── result.py             #   Result[T]:统一响应信封 {data, message[, error]},每个端点的 response_model
 │   ├── users.py              #   User(档案,存)/ UserView / UserProfile(带派生统计)
 │   ├── work.py               #   Work 节点(目标、created_by、状态、父子)、Canvas、Session、WorkUser、Round、Event
-│   ├── collections.py            #   LayerInfo / Obj / Revision / SearchHit / Catalog / Tree / Manager / InboxItem
-│   └── server.py             #   Server 契约:name + protocols(声明响应哪些协议)/ open(id, uri) → Window + Handle / handle / alive / destroy
+│   ├── collections.py        #   LayerInfo / Obj(目录里的文件)/ ObjWrite / Revision / SearchHit / Catalog / Tree / Manager / InboxItem
+│   └── work_server.py        #   work server 契约:name + protocols / open(id, uri) → Window + Handle / handle / alive / destroy
 │
 ├── services/                 # 业务逻辑(每个子包对应一篇设计;**入口就是子包的 `__init__.py`**,导出该 service 类,main.py 按 `services/*` 扫描装配,不另加约定)
 │   ├── README.md             #   整体思路:三条主线(认知层是 git / 现场层介质可换 / 协议自己说)+ 三层怎么接
@@ -37,91 +37,19 @@ memorytalk/backend/           # 服务本体;memorytalk/cli.py 是它的命令�
 │   │   ├── repo.py           #     UserRepo:fs 版(users/<name>.json)/ db 版(users 表)
 │   │   └── __init__.py       #     UserService:注册 / 档案 / 活动统计(从 work 与 collections 现算)/ commit author
 │   ├── collections/          #   认知层 —— docs/designs/v5/collections.md / manager.md
-│   │   ├── layers/           #     每个内置 layer 一个文件;用户层来自仓库根 collections.json 里内嵌的 schema(README.md:怎么定义一层、各层收什么)
-│   │   │   ├── _spec.py      #       LayerSpec = 目录的校验规则(FileRule 清单:路径 / 格式 / 字段 / 必需)+ 标题来源 + 行为 + 读视图
-│   │   │   ├── _user.py      #       YAML schema(files 清单或单文件简写)→ LayerSpec(用户层,无行为)
+│   │   ├── layers/           #     每层一个文件 = 一个 check(diff, after) -> None | str;用户层从 collections.json 里的 YAML 编译(README.md:怎么写一层)
+│   │   │   ├── _layer.py     #       Layer / Change 契约 + 小工具(appended_only / load_yaml)
+│   │   │   ├── _user.py      #       YAML files 清单 → check(清单外拒、required、append_only、fields)
 │   │   │   ├── origin.py     #       最底层:不带后缀的一切,原文,不校验
-│   │   │   ├── issue.py      #       <名>.issue/{readme.md, meta.yaml, positions/*.md};行为 position / argue / link / rank
-│   │   │   └── card.py       #       <名>.card/card.md;行为 discuss
+│   │   │   ├── issue.py      #       <名>.issue/{readme.md, meta.yaml, positions/*.md};立场只增不改、不删;meta 的边和排序有约束
+│   │   │   └── card.py       #       <名>.card/{readme.md, meta.yaml};readme 不能删;meta 只有 context / links / issue
 │   │   ├── git.py            #     git 原语:hash-object / write-tree / commit-tree / update-ref / ls-tree / show / log / grep,不认识层
 │   │   ├── repo.py           #     分层拓扑(在 git.py 上):layer/<名> 权威分支 + stack merge 视图 + 路径归属守卫 + collections.json 锚定
 │   │   ├── manager.py        #     manager.json:最近祖先解析
-│   │   ├── catalog.py        #     一层的目录(按目录树列标题)+ 召回文本
-│   │   └── __init__.py       #     CollectionsService:层的装载(内置 + collections.json 里内嵌 schema 的用户层)、对象 CRUD、历史、检索、树、行为、manager、投递到收件箱
+│   │   ├── catalog.py        #     一层的目录(按目录树列标题 = 末段)
+│   │   └── __init__.py       #     CollectionsService:层的装载、对象读(目录里的文件)、写(一批文件改动 → 算 diff → 层的 check → 一个 [层] 提交)、历史、检索、树、manager、投递
 │   └── store/                #   装配 —— docs/designs/v5/provider.md
-│       └── __init__.py       #     StoreService:按 MEMORY_TALK_STORE 选 provider,按族建 work 仓储
-│
-├── providers/                # 存储介质的两族基类(只有介质原语,没有业务)—— docs/designs/v5/provider.md
-│   ├── fs.py                 #   FileSystemProvider(read/write/append/list/…,能力 local_path)+ LocalFS
-│   └── db.py                 #   DatabaseProvider(表定义 + 链式 select/insert/update/delete,方言在内)+ SQLite
-│
-├── work_servers/         #   work server 的装载与寻址 —— docs/designs/v5/work-server.md
-│   │   ├── registry.py       #     协议 → server 寻址:先看谁声明了它,没人声明去 default
-│   │   ├── uri.py            #     块的 URI 解析
-│   │   ├── terminal.py       #     tmux 现场 + 终端类 server 基类(TerminalBase)
-│   │   ├── agent.py          #     agent 类 server 基类(AgentBase:终端把手 + 读 round)
-│   │   └── adapters/         #     读各平台会话记录:claude_code / codex / kimi
-│   ├── users/                #   user:注册的实体 —— docs/designs/v5/user.md
-│   │   ├── repo.py           #     UserRepo:fs 版(users/<name>.json)/ db 版(users 表)
-│   │   └── __init__.py       #     UserService:注册 / 档案 / 活动统计(从 work 与 collections 现算)/ commit author
-│   ├── collections/              #   认知层 —— docs/designs/v5/collections.md / manager.md
-│   │   ├── git.py            #     git 原语:hash-object / write-tree / commit-tree / update-ref / ls-tree / show / log / grep,不认识层
-│   │   ├── repo.py           #     分层拓扑(在 git.py 上):layer/<名> 权威分支 + stack merge 视图 + 路径归属守卫 + collections.json 锚定
-│   │   ├── manager.py        #     manager.json:最近祖先解析
-│   │   ├── catalog.py        #     一层的目录(按目录树列标题)+ 召回文本
-│   │   └── __init__.py       #     CollectionsService:层的装载(内置 + collections.json 里内嵌 schema 的用户层)、对象 CRUD、历史、检索、树、行为、manager、投递到收件箱
-│   └── store/                #   装配 —— docs/designs/v5/provider.md
-│       └── __init__.py       #     StoreService:按 MEMORY_TALK_STORE 选 provider,按族建 work 仓储
-│
-├── providers/                # 存储介质的两族基类(只有介质原语,没有业务)—— docs/designs/v5/provider.md
-│   ├── fs.py                 #   FileSystemProvider(read/write/append/list/…,能力 local_path)+ LocalFS
-│   └── db.py                 #   DatabaseProvider(表定义 + 链式 select/insert/update/delete,方言在内)+ SQLite
-│
-├── work_servers/         #   work server 的装载与寻址 —— docs/designs/v5/work-server.md
-│   │   ├── registry.py       #     协议 → server 寻址:先看谁声明了它,没人声明去 default
-│   │   ├── uri.py            #     块的 URI 解析
-│   │   ├── terminal.py       #     tmux 现场 + 终端类 server 基类(TerminalBase)
-│   │   ├── agent.py          #     agent 类 server 基类(AgentBase:终端把手 + 读 round)
-│   │   └── adapters/         #     读各平台会话记录:claude_code / codex / kimi
-│   ├── users/                #   user:注册的实体 —— docs/designs/v5/user.md
-│   │   ├── repo.py           #     UserRepo:fs 版(users/<name>.json)/ db 版(users 表)
-│   │   └── __init__.py       #     UserService:注册 / 档案 / 活动统计(从 work 与 collections 现算)/ commit author
-│   ├── collections/          #   认知层 —— docs/designs/v5/collections.md / manager.md
-│   │   ├── layers/           #     每个内置 layer 一个文件;用户层来自仓库根 collections.json 里内嵌的 schema(README.md:怎么定义一层、各层收什么)
-│   │   │   ├── _spec.py      #       LayerSpec = 目录的校验规则(FileRule 清单:路径 / 格式 / 字段 / 必需)+ 标题来源 + 行为 + 读视图
-│   │   │   ├── _user.py      #       YAML schema(files 清单或单文件简写)→ LayerSpec(用户层,无行为)
-│   │   │   ├── origin.py     #       最底层:不带后缀的一切,原文,不校验
-│   │   │   ├── issue.py      #       <名>.issue/{readme.md, meta.yaml, positions/*.md};行为 position / argue / link / rank
-│   │   │   └── card.py       #       <名>.card/card.md;行为 discuss
-│   │   ├── git.py            #     git 原语:hash-object / write-tree / commit-tree / update-ref / ls-tree / show / log / grep,不认识层
-│   │   ├── repo.py           #     分层拓扑(在 git.py 上):layer/<名> 权威分支 + stack merge 视图 + 路径归属守卫 + collections.json 锚定
-│   │   ├── manager.py        #     manager.json:最近祖先解析
-│   │   ├── catalog.py        #     一层的目录(按目录树列标题)+ 召回文本
-│   │   └── __init__.py       #     CollectionsService:层的装载(内置 + collections.json 里内嵌 schema 的用户层)、对象 CRUD、历史、检索、树、行为、manager、投递到收件箱
-│   └── store/                #   装配 —— docs/designs/v5/provider.md
-│       └── __init__.py       #     StoreService:按 MEMORY_TALK_STORE 选 provider,按族建 work 仓储
-│
-├── providers/                # 存储介质的两族基类(只有介质原语,没有业务)—— docs/designs/v5/provider.md
-│   ├── fs.py                 #   FileSystemProvider(read/write/append/list/…,能力 local_path)+ LocalFS
-│   └── db.py                 #   DatabaseProvider(表定义 + 链式 select/insert/update/delete,方言在内)+ SQLite
-│
-├── work_servers/         #   work server 的装载与寻址 —— docs/designs/v5/work-server.md
-│   │   ├── registry.py       #     协议 → server 寻址:先看谁声明了它,没人声明去 default
-│   │   ├── uri.py            #     块的 URI 解析
-│   │   ├── terminal.py       #     tmux 现场 + 终端类 server 基类(TerminalBase)
-│   │   ├── agent.py          #     agent 类 server 基类(AgentBase:终端把手 + 读 round)
-│   │   └── adapters/         #     读各平台会话记录:claude_code / codex / kimi
-│   ├── users/                #   user:注册的实体 —— docs/designs/v5/user.md
-│   │   ├── repo.py           #     UserRepo:fs 版(users/<name>.json)/ db 版(users 表)
-│   │   └── __init__.py       #     UserService:注册 / 档案 / 活动统计(从 work 与 collections 现算)/ commit author
-│   ├── collections/              #   认知层 —— docs/designs/v5/collections.md / manager.md
-│   │   ├── git.py            #     git 原语:hash-object / write-tree / commit-tree / update-ref / ls-tree / show / log / grep,不认识层
-│   │   ├── repo.py           #     分层拓扑(在 git.py 上):layer/<名> 权威分支 + stack merge 视图 + 路径归属守卫 + collections.json 锚定
-│   │   ├── manager.py        #     manager.json:最近祖先解析
-│   │   ├── catalog.py        #     一层的目录(按目录树列标题)+ 召回文本
-│   │   └── __init__.py       #     CollectionsService:层的装载(内置 + collections.json 里内嵌 schema 的用户层)、对象 CRUD、历史、检索、树、行为、manager、投递到收件箱
-│   └── store/                #   装配 —— docs/designs/v5/provider.md
-│       └── __init__.py       #     StoreService:按 MEMORY_TALK_STORE 选 provider,按族建 work 仓储
+│       └── __init__.py       #     StoreService:按 MEMORY_TALK_STORE 选 provider,按族建 work / user 仓储
 │
 ├── providers/                # 存储介质的两族基类(只有介质原语,没有业务)—— docs/designs/v5/provider.md
 │   ├── fs.py                 #   FileSystemProvider(read/write/append/list/…,能力 local_path)+ LocalFS
@@ -138,7 +66,7 @@ memorytalk/backend/           # 服务本体;memorytalk/cli.py 是它的命令�
 ├── controllers/              # HTTP 面(FastAPI 路由;只做参数/响应,不含逻辑)
 │   ├── works.py              #   /api/works/…
 │   ├── users.py              #   /api/users/…(顶层:list / me / {name})
-│   ├── collections.py            #   /api/collections/…(层、树、检索、manager、对象 CRUD、历史、行为)
+│   ├── collections.py        #   /api/collections/…(层、树、检索、对象 CRUD、历史)
 │   ├── auth.py               #   /api/auth/{login,verify,logout,me}
 │   └── system.py             #   /api/system/{info,health}
 │

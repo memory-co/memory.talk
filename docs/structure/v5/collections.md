@@ -26,13 +26,13 @@
 
 | | origin | issue | card | 用户层 `<名>` |
 |---|---|---|---|---|
-| 形态 | 任何**不带后缀**的文件 | `<path>.issue/` 目录:`readme.md` + `meta.yaml` + `positions/*.md` | `<path>.card/card.md` | schema 的 `files` 清单;单文件简写 = `<path>.<名>/<名>.md` 或 `.json` |
+| 形态 | 任何**不带后缀**的文件 | `<path>.issue/` 目录:`readme.md` + `meta.yaml` + `positions/*.md` | `<path>.card/` 目录:`readme.md` + `meta.yaml` | schema 的 `files` 清单 |
 | id | 文件路径 | `path`(不含后缀) | `path` | `path` |
-| 格式 | 原文 | markdown / yaml / markdown | markdown + frontmatter | 每个文件各自定 |
-| 标题 | 文件名 | 目录名 | `title` | `dirname` 或 `<文件>:<字段>` |
+| 格式 | 原文 | markdown / yaml / markdown | markdown / yaml | 每个文件各自定 |
+| 标题 | 文件名 | 目录名 | 目录名 | 目录名 |
 | 层序 | 0(最底) | 1 | 2 | 之上,按 `collections.json` 的 `layers[]` 顺序 |
 
-**层就是这个目录的校验器**:目录里只能有清单上的文件,每个文件按格式和字段校验,一次写整目录过一遍,不过整批拒(422)。对象目录里还可以放 `manager.json`(谁管它,机制文件,不在清单里)。目录树按主题组织,原文、`.issue/`、`.card/` 并排。
+**层就是一个校验函数 `check(diff, after)`**:一次写 = 对这个目录的一批文件改动,层看 diff(能表达只增不改、不能删)和改完的目录(跨文件约束),不过整批拒(422,理由带回)。读就是目录里的文件,不解析。对象目录里还可以放 `manager.json`(谁管它,机制文件,不在清单里)。目录树按主题组织,原文、`.issue/`、`.card/` 并排。
 
 ### issue 层(内置)
 
@@ -66,59 +66,50 @@ summary: 目前倾向只走环境变量
 
 **positions/<主张>.md**:普通 markdown,无 frontmatter;文件名非空、不含 `/`;`## 论证` 之后的列表行是论证,一行一条,不打分。谁、何时在 git(`git log -- positions/<主张>.md`)。
 
-**读视图**:`{"readme", "positions": [{"claim", "note", "body", "arguments": [...]}], "links", "summary"}`;立场按 `meta.positions` 排,没排到的按文件名。不算 credence。
+**check**:清单外的文件拒;`readme.md` 不能删;立场文件新建随意、改只能在末尾追加、不能删(改名 = 删 + 建,也不行);`meta.yaml` 按上表,`positions[].claim` 必须是已有立场,多余键拒。**读**:`files = {相对路径: 内容}`,不解析、不排序、不算分,怎么渲染是客户端的事。
 
 没有 `origin` / `card` 字段:issue 不记它从哪来、不记写成了哪张卡(卡记 issue)。没有 id:id 就是 path;立场没有 id:主张就是文件名。
 
 ### card 层(内置)
 
-`<path>.card/card.md`。维基式事实条目:可改、可删,历史在 git;**没有分数、没有状态位**。机制见 [designs card.md](../../designs/v5/card.md)。
+`<path>.card/` 目录,两个文件;标题就是目录名。维基式事实条目:可改、可删,历史在 git;**没有分数、没有状态位**。机制见 [designs card.md](../../designs/v5/card.md)。
 
-```markdown
----
-title: 配置只来自环境变量
-context: memory.talk v5
-links: memory.talk/配置/另一张卡
-issue: memory.talk/配置/该走文件还是环境变量
----
-
-只用环境变量。配置文件是多出来的一份状态,要同步。
+```
+memory.talk/配置/配置只来自环境变量.card/
+├── readme.md          正文;必需,不能删
+├── meta.yaml          可无
+└── manager.json       机制文件,可无
 ```
 
-| 字段 | 类型 | 说明 |
+**meta.yaml**
+
+```yaml
+context: memory.talk v5
+links: [memory.talk/配置/另一张卡]
+issue: memory.talk/配置/该走文件还是环境变量
+```
+
+| 键 | 类型 | 说明 |
 |---|---|---|
-| `title` | string | 维基式规范标题——它出现在目录里,召回靠它 |
 | `context` | string | 在哪成立:关于哪个项目 / 用户 / 场景。「本地论」在卡上的落法——不是治理字段,是事实陈述的一部分 |
 | `links[]` | string[] | 相关卡的 path(内链,只有一种类型) |
-| `issue` | string \| null | 讨论页:挂在这张卡上的 issue 的 path |
-| `body` | string | 正文,可以比一句话长;但**一张卡讲一件事** |
+| `issue` | string \| null | 讨论页:这张卡对应的 issue 的 path(卡记 issue,issue 不记卡) |
 
-frontmatter 是 YAML(`links` 是列表);空值不写;多余的键拒。读出来是 `{"title", "context", "links": [...], "issue", "body"}`。没有 `status`:删就是删,历史在 git;没有 id:id 就是 path。
+**check**:只能有这两个文件;`readme.md` 不能删;`meta.yaml` 多余的键拒。没有 `title`(目录名就是)、没有 `status`(删就是删)、没有 id(id 就是 path)。
 
 ### 用户层的 schema
 
-写成 YAML 交给 `POST /api/collections/layers`,系统把它嵌进 `collections.json` 的 `layers[]`。两种写法:
+写成 YAML 交给 `POST /api/collections/layers`,系统把它嵌进 `collections.json` 的 `layers[]`,启动时编译成这个层的 check:
 
 ```yaml
-layer: experiment                  # 目录清单:每个文件一条,路径可用 * 通配
-title: dirname                     # 或 <文件>:<字段>
-files:
+layer: experiment
+files:                                # 目录清单:每个文件一条,路径可用 * 通配
   readme.md:   {format: markdown, required: true}
   result.yaml: {format: yaml, fields: {verdict: {type: string, required: true}, issue: {type: ref, layer: issue}}}
-  "runs/*.md": {format: markdown}
+  "runs/*.md": {format: markdown, append_only: true}
 ```
 
-```yaml
-layer: decision                    # 单文件简写:目录里只有 decision.md
-format: markdown+frontmatter       # 或 json
-title: title
-fields:
-  title:    {type: string, required: true}
-  rejected: {type: "list[string]"}
-  issue:    {type: ref, layer: issue}
-```
-
-格式:`markdown` `markdown+frontmatter` `yaml` `json` `text`;字段类型:`string` `int` `bool` `"list[string]"` `ref` `"list[ref]"`。markdown+frontmatter 自动带 `body`。没有行为。
+规则:清单外的路径拒;`required` 不能缺、不能删;`append_only` 只能在末尾追加;`format: yaml / json` 按 `fields` 校验(必填、类型、多余键拒),`markdown / text` 不看内容。字段类型:`string` `int` `bool` `"list[string]"` `ref` `"list[ref]"`。没有行为,标题是目录名。
 
 ## manager.json
 

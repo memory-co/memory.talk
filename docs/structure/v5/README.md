@@ -17,7 +17,7 @@ v5 的三层:**work**(做事,裸文件)、**issue**(议事,git)、**card**(记�
 | Event | work 自己的时间线,append-only | `works/<id>/events.jsonl` | [work.md](work.md#event) |
 | **Collections**:层 / 对象 / 分层仓库 / manager.json | 认知层。origin / issue / card 三个内置 layer + 用户层;对象 = 带后缀的目录,放哪都行 | `memory/`(分层 git) | [collections.md](collections.md) |
 | ↳ issue 层:readme.md / meta.yaml / positions/*.md | 问题(目录名)+ 立场(一个一文件)+ 论证(立场文件里一行一条)+ 边和 manager 的排序(meta.yaml);立场 / 论证只增不改 | `<path>.issue/` 目录 | [collections.md](collections.md#issue-层内置) |
-| ↳ card 层:Card | 维基式事实条目:标题 + 正文 + 语境 + 链接;可改可删,历史在 git | `<path>.card/card.md` | [collections.md](collections.md#card-层内置) |
+| ↳ card 层:readme.md / meta.yaml | 维基式事实条目:正文 + 语境 / 链接 / 讨论页;标题是目录名;可改可删,历史在 git | `<path>.card/` 目录 | [collections.md](collections.md#card-层内置) |
 | ↳ origin 层 | 不带后缀的一切文件,原文 | 任意路径 | [collections.md](collections.md#对象带后缀的目录) |
 | Server / Window / Handle / Live | 声明响应哪些协议(没人声明的去 default);建现场、交回窗 + 把手 | 不落盘(运行时对象) | [work-server.md](work-server.md) |
 

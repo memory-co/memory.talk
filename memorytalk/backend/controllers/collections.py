@@ -1,13 +1,11 @@
-"""/api/collections —— 认知层:层、树、检索、对象(目录里的一组文件)CRUD、历史、行为。"""
+"""/api/collections —— 认知层:层、树、检索、对象(目录里的一组文件)CRUD、历史。"""
 from __future__ import annotations
-
-from typing import Any
 
 from memorytalk.backend.models.result import Result, ok
 from fastapi import APIRouter, Depends, Header, Query, Request
 
-from memorytalk.backend.models.collections import (CatalogDir, InboxItem, LayerCreate, LayerInfo, Manager, ManagerPut, Obj,
-                            ObjCreate, ObjUpdate, Revision, SearchHit, TreeItem)
+from memorytalk.backend.models.collections import (CatalogDir, LayerCreate, LayerInfo, Manager, ManagerPut, Obj, ObjWrite,
+                                                     Revision, SearchHit, TreeItem)
 from memorytalk.backend.services.collections import CollectionsError, CollectionsService, Ctx
 
 router = APIRouter(prefix="/api/collections", tags=["collections"])
@@ -26,7 +24,7 @@ def ctx(request: Request, x_memory_talk_user: str | None = Header(None, alias="X
 
 # ---- 固定路径先于 /{layer} ----
 
-@router.get("/layers", response_model=Result[list[LayerInfo]], summary="有哪些层(最底在前)、各自的 schema 与行为")
+@router.get("/layers", response_model=Result[list[LayerInfo]], summary="有哪些层(最底在前)、各自允许的文件")
 def layers(svc: CollectionsService = Depends(collections)):
     return ok(svc.layer_infos())
 
@@ -78,12 +76,6 @@ def history(layer: str, path: str, svc: CollectionsService = Depends(collections
     return ok(svc.history(layer, path))
 
 
-@router.post("/act/{layer}/{action}/{path:path}", summary="行为:校验器之上的快捷方式(issue: position / argue / link / rank;card: discuss)")
-def act(layer: str, action: str, path: str, payload: dict[str, Any], svc: CollectionsService = Depends(collections),
-        c: Ctx = Depends(ctx)) -> Any:
-    return ok(svc.act(layer, action, path, payload, c))
-
-
 # ---- 层级 / 对象 ----
 
 @router.get("/{layer}", response_model=Result[CatalogDir], summary="一层的目录(按目录树列标题)")
@@ -91,23 +83,21 @@ def catalog(layer: str, dir: str = "", svc: CollectionsService = Depends(collect
     return ok(svc.catalog(layer, dir))
 
 
-def _files(svc: CollectionsService, layer: str, path: str, req: ObjCreate | ObjUpdate, merge: bool) -> dict:
-    """请求体 → 目录里的文件改动:origin 用 content;files 直接给;data 是单字段文件层的简写。"""
-    spec = svc.layer(layer)
-    if spec.raw:
+def _files(svc: CollectionsService, layer: str, req: ObjWrite) -> dict:
+    """请求体 → 目录里的文件改动:origin 用 content,其余用 files。"""
+    if svc.layer(layer).raw:
         if req.content is None:
             raise CollectionsError("invalid", "origin 要给 content", 400)
         return {"": req.content}
-    files: dict = dict(req.files or {})
-    if req.data is not None:
-        files.update(svc.files_from_data(layer, path, req.data, merge))
-    return files
+    if not req.files:
+        raise CollectionsError("invalid", "要给 files:目录里的文件 {相对路径: 内容}", 400)
+    return dict(req.files)
 
 
 @router.post("/{layer}/{path:path}", response_model=Result[Obj], status_code=201,
-             summary="建一个对象:目录里的文件(files)或字段简写(data);origin 用 content。整目录按层的 schema 校验,一个 [layer] 提交")
-def create(layer: str, path: str, req: ObjCreate, svc: CollectionsService = Depends(collections), c: Ctx = Depends(ctx)):
-    return ok(svc.create(layer, path, _files(svc, layer, path, req, merge=False), req.reason, c))
+             summary="建一个对象:目录里的文件(files);origin 用 content。整批交给层的 check,过了一个 [layer] 提交")
+def create(layer: str, path: str, req: ObjWrite, svc: CollectionsService = Depends(collections), c: Ctx = Depends(ctx)):
+    return ok(svc.create(layer, path, _files(svc, layer, req), req.reason, c, req.subject))
 
 
 @router.get("/{layer}/{path:path}", response_model=Result[Obj], summary="读一个对象(rev= 读历史版本)")
@@ -116,9 +106,9 @@ def get(layer: str, path: str, rev: str | None = Query(None), svc: CollectionsSe
 
 
 @router.put("/{layer}/{path:path}", response_model=Result[Obj],
-            summary="改一个对象:files 加 / 改 / 删(null)目录里的文件,没提到的不动;data 是字段合并;origin 整体替换")
-def update(layer: str, path: str, req: ObjUpdate, svc: CollectionsService = Depends(collections), c: Ctx = Depends(ctx)):
-    return ok(svc.update(layer, path, _files(svc, layer, path, req, merge=True), req.reason, c))
+            summary="改一个对象:files 加 / 改 / 删(null)目录里的文件,没提到的不动,整批交给层的 check;origin 整体替换")
+def update(layer: str, path: str, req: ObjWrite, svc: CollectionsService = Depends(collections), c: Ctx = Depends(ctx)):
+    return ok(svc.update(layer, path, _files(svc, layer, req), req.reason, c, req.subject))
 
 
 @router.delete("/{layer}/{path:path}", summary="删一个对象(历史在 git)")
