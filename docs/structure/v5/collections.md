@@ -36,7 +36,9 @@
 
 ### issue 层(内置)
 
-`<path>.issue/issue.json`。问题 + 立场 + 论证 + IBIS 边;立场 / 论证只增不改(行为保证,层守卫兜底)。机制见 [designs issue.md](../../designs/v5/issue.md)。
+`<path>.issue/issue.json`。问题 + 立场 + 论证 + IBIS 边;立场 / 论证只增不改(行为保证,层守卫兜底)。
+
+> **设计已改**:[designs issue.md](../../designs/v5/issue.md) 把它改成多文件目录——`issue.md`(问题 + links)+ `positions/p<n>.md`(一个立场一个文件,论证在里面)。下面是**代码现状**,代码跟上后本节重写。
 
 ```json
 {"question": "memory.talk v5 的配置该走文件还是环境变量?",
