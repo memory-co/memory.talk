@@ -1,6 +1,6 @@
 # issue —— 一个问题一个目录:readme.md 是主题,positions/ 一个立场一个文件,meta.yaml 放边和排序(v5 设计)
 
-> **状态:设计稿,代码未跟上。** 现在代码里 issue 是一个 `issue.json`,立场、论证、计数、出处、卡全嵌在里面;本篇改成**多文件目录**,把 issue 和 work / card 的耦合解开(不记 `origin`、不记 `card`),并且**不再算分**:哪个立场占优由 manager work 判定,写在 `meta.yaml` 里。改完后 [structure collections.md](../../structure/v5/collections.md) 和 `layers/issue.py` 跟着改。总定位见 [README.md](README.md)。
+> **状态:设计稿,代码未跟上。** 现在代码里 issue 是一个 `issue.json` 加一组构造它的行为函数(`layers/issue.py`),立场、论证、计数、出处、卡全嵌在里面;按本篇,`issue.py` 应当变成**这个目录的校验器**(§2 末),行为只是校验器之上的快捷方式。本篇改成**多文件目录**,把 issue 和 work / card 的耦合解开(不记 `origin`、不记 `card`),并且**不再算分**:哪个立场占优由 manager work 判定,写在 `meta.yaml` 里。改完后 [structure collections.md](../../structure/v5/collections.md) 和 `layers/issue.py` 跟着改。总定位见 [README.md](README.md)。
 
 相关:
 - collections(issue 是一个 layer;对象是任意位置的 `<名>.issue/` 目录): [collections.md](collections.md)
@@ -96,9 +96,21 @@ summary: 目前倾向只走环境变量;等 work_try 把 .env 那条路验完再
 
 `positions` 和 `summary` 是**判断**,不是计算:由 manager work 里的人或 agent 读完论证之后写下来。改了就是一次 `[issue]` 提交,`git log -- meta.yaml` 是这个问题「风向」的变化史。没有 `meta.yaml` 或没有 `positions` 键 = 还没人判断,立场按文件名列。
 
-### 对 layer 机制的要求
+### issue 层 = 这个目录的校验器
 
-issue 从「一个本体文件」变成「一个目录里的一组文件」:`readme.md`、`positions/*.md` 是无 frontmatter 的普通 markdown,`meta.yaml` 是一份 YAML。标题来自目录名。`GET` 一个 issue 把三样合起来给:展开、按 `meta.positions` 排好序的立场(各带主张 = 文件名、阐述、论证列表)、边、总结。守卫不用改:`.issue/` 下的一切本来就归 issue 层。
+层不是「一个 JSON 模型 + 几个行为函数」,是**这个目录允许长什么样**的一份规则;任何提交进 `.issue/` 的文件改动,先按它校验,不过整批拒绝([collections-layer.md §2](collections-layer.md))。issue 层的规则:
+
+| 文件 | 规则 |
+|---|---|
+| `readme.md` | markdown;可无、可空、可改 |
+| `meta.yaml` | YAML,可无;`links[]` 每项 `{type ∈ 五种, target: 非空}`,`(type, target)` 不重复;`positions[]` 每项 `{claim, note?}`,`claim` 必须是 `positions/` 下**存在**的文件名;`summary` 字符串 |
+| `positions/*.md` | markdown;文件名非空、不含 `/`;已有的文件不能重命名(删了再建是两个立场) |
+| `manager.json` | 机制文件,系统的,任何层都允许 |
+| 其他任何文件 | **拒绝** |
+
+标题来自目录名。读:`GET` 一个 issue 把三样合起来给——展开、按 `meta.positions` 排好序的立场(各带主张 = 文件名、阐述、论证列表)、边、总结。
+
+行为(§3)是这套规则之上的**快捷方式**:`position` = 新建一个文件,`argue` = 追加一行,`link` / `rank` = 改 `meta.yaml`;它们和「直接往目录里提交文件」走同一个门、过同一个校验。守卫不用改:`.issue/` 下的一切本来就归 issue 层。
 
 ---
 

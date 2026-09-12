@@ -18,7 +18,7 @@
 |---|---|
 | **叫什么** | 层名:`collections.json` 的 `layers[]` 里一项、分支 `layer/<名>`、提交前缀 `[名]` |
 | **住哪** | 路径:这个层的文件都在哪个目录下(和别的层不相交) |
-| **长什么样** | schema:一个对象是一个什么格式的文件、有哪些字段、哪个是标题、哪些是引用 |
+| **长什么样** | schema:一个对象是一个**目录**,里面允许哪些文件、每个文件什么格式、有哪些字段、哪些是引用。层就是这份 schema 的**校验器**:提交进这个目录的东西不合 schema,整批拒绝 |
 | **排在哪** | 层序:它在 `collections.json` 的 `layers[]` 里的位置——比谁更接近记录、比谁更接近结论 |
 
 落下来就是**仓库根 `collections.json` 的 `layers[]` 里多一项**——名字、schema 内嵌、什么时候加的;一次最底层的提交,`git log collections.json` 就是层的变化史。不写代码。你手里写的还是一份 YAML 字段表(`memory.talk collection layers add <名> --schema <file>`),系统把它嵌进 `collections.json`。
@@ -35,31 +35,36 @@
 
 **哪都行。** 层不占目录([collections.md §1](collections.md)):一个对象是**一个带后缀的目录** `<名>.<层>/`,放在树的任何位置——`memory.talk/配置/重审配置方案.decision/` 和它讨论的 `.issue/`、写出来的 `.card/`、引用的原文文件并排在同一个文件夹里。「这个路径归哪层」看后缀就知道;`manager.json` 的继承链按目录树走,一个主题文件夹一个 manager,管它下面所有层的东西。
 
-对象是目录,不是文件——这样它自己身上能放 `manager.json`,也能带附件。目录里放什么由 schema 定(下一条):一个本体文件(`<层>.md` 或 `<层>.json`)+ 可选的附件。
+对象是目录,不是文件——这样它可以由几个文件组成(issue 是 `readme.md` + `meta.yaml` + `positions/*.md`),自己身上能放 `manager.json`。目录里**允许放什么**由 schema 定(下一条),schema 没列的文件进不来。
 
-### 长什么样:schema
+### 长什么样:schema = 目录的校验规则
 
-schema 说清一个对象是什么样的文件。最小的一份:
+schema 说清一个对象目录里**允许有哪些文件、每个文件长什么样**。最小的一份:
 
 ```yaml
 # 写成 YAML 交给 `collection layers add`;落进 collections.json 时就是这份的 JSON
 layer: decision
-object: <名>.decision/decision.md       # 对象 = 带后缀的目录,本体文件叫 decision.md;<名> 由人起,放哪都行
-format: markdown+frontmatter             # 或 json
-title: title                             # 哪个字段是标题(目录、召回用它)
-fields:
-  title:    {type: string, required: true}
-  context:  {type: string}               # 在哪成立(本地论:事实自带语境)
-  chosen:   {type: string, required: true}
-  rejected: {type: "list[string]"}
-  issue:    {type: ref, layer: issue}    # 引用:这个决定来自哪个 issue
-  cards:    {type: "list[ref]", layer: card} # 引用:它写成了哪些卡
-body: true                               # markdown 正文(format=json 时没有)
+files:
+  readme.md:                                   # 一个文件一条;键是目录内的相对路径,可用 * 通配
+    format: markdown                           # markdown | markdown+frontmatter | yaml | json | text
+    required: true
+  meta.yaml:
+    format: yaml
+    fields:                                    # yaml / json / frontmatter 才有字段
+      chosen:   {type: string, required: true}
+      rejected: {type: "list[string]"}
+      issue:    {type: ref, layer: issue}      # 引用:指向哪个层的对象
+      cards:    {type: "list[ref]", layer: card}
+  "notes/*.md":
+    format: markdown
+title: dirname                                 # 标题从哪来:dirname(目录名)或 <文件>:<字段>
 ```
 
-schema 只有五样东西:**格式**(json / markdown+frontmatter)、**对象形态**(目录后缀 + 本体文件名)、**字段**(名字、类型、必不必填)、**哪个字段是标题**、**哪些字段是引用**(指向哪个层)。类型就几种:`string` `int` `bool` `list[…]` `ref`。不做嵌套对象——要嵌套,那是另一个层加一个 `ref`。
+schema 就四样东西:**文件清单**(目录里允许哪些路径,`*` 通配)、每个文件的**格式**、有字段的文件的**字段**(名字、类型、必不必填、是不是引用)、**标题从哪来**。类型就几种:`string` `int` `bool` `list[…]` `ref`。不做嵌套对象——要嵌套,那是另一个层加一个 `ref`,或者另一个文件。
 
-> 内置的 issue 有 `positions[]{…arguments[]{…}}` 这种嵌套,那是它作为内置层带**行为**的代价;用户层没有行为,也就不需要嵌套。真需要,先问自己:嵌在里面的那个东西是不是该独立成一层。
+单文件的层就是清单里只有一项:card 是 `files: {card.md: {format: markdown+frontmatter, required: true, fields: …}}`。
+
+**层就是这份 schema 的校验器。** 往一个 `.decision/` 目录里提交任何文件——新建、改、删——系统把改完之后的目录整个拿去按 schema 校验:清单外的文件、格式不对的文件、缺必填字段、`required` 的文件被删了,任一条不过,**整批拒绝**(422,说清哪个文件哪一条)。过了,才是一次 `[decision]` 提交。所以「一个 issue 目录里只能有 readme.md / meta.yaml / positions/*.md」不是约定,是层在守。`manager.json` 是机制文件,任何层的任何目录都允许,不用写进清单。
 
 ### 排在哪
 
@@ -82,7 +87,8 @@ collectbase 的层是有序的:下面的更接近记录、上面的更接近结�
 
 | 能力 | 怎么来的 |
 |---|---|
-| **建 / 读 / 改 / 删 / 列** | 按 schema 校验、落盘、`[名]` 提交;`/api/collections/<名>/…` 一套通用端点 |
+| **写(建 / 改 / 删)** | 一次写 = 对一个对象目录的一批文件改动(`files` + `deletes`),整目录按 schema 校验,过了一次 `[名]` 提交;`/api/collections/<名>/<path>` 一套通用端点,内置层和用户层同一个门 |
+| **读 / 列** | 目录按 schema 解出来:每个文件按格式解析(frontmatter / yaml / json 成字段,markdown 成文本),合成一个视图 |
 | **历史** | `git log layer/<名>`、`git log -- <路径>`;读任意历史版本 |
 | **目录 / 召回** | 按 `title` 字段和目录结构生成目录;work 开工时可以要求注入这一层的目录 |
 | **检索** | `git grep` 这一层的路径 |
@@ -95,6 +101,8 @@ collectbase 的层是有序的:下面的更接近记录、上面的更接近结�
 ---
 
 ## 4. 系统不替你做什么:行为
+
+先说清行为是什么:**行为 = 预制好的一批文件改动 + 一条像样的提交信息**。issue 的 `position` 就是「在 `positions/` 下新建一个文件」,`argue` 就是「往某个文件末尾追加一行」,`rank` 就是「整体替换 `meta.yaml` 的两个键」。它们走的和通用写入是**同一个门**,过同一个校验器;行为只是省得调用方自己拼文件、自己起提交信息。没有行为,用通用写入照样什么都能做。
 
 用户层**没有行为**。什么叫行为:issue 的「加立场」「表态」「派活」、card 的「从 issue 写卡」——这些是通用 CRUD 表达不了的领域动作,每个都有自己的端点、自己的校验、自己的两层联动。
 
