@@ -8,6 +8,7 @@
 
 ```
 memory.talk
+├── version                                             # 版本号(也可 -V / --version)
 ├── server   start | stop | restart | status          # 本地 API 服务(后台守护)
 ├── work     create | list | show | set               # work 树
 │            attach | sessions | detach | capture | rounds   # 会话(现场)

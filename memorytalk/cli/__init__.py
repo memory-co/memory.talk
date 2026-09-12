@@ -1,5 +1,6 @@
 """memory.talk 命令行:本地 API 的客户端,不含业务逻辑(docs/cli/v5)。
 
+    memory.talk version                                                    → 版本号
     memory.talk server      start | stop | restart | status | daemon        → cli/server.py
     memory.talk work        create | list | show | set | attach | …          → cli/work.py
     memory.talk user        add | list | show | set | whoami                 → cli/user.py
@@ -12,6 +13,8 @@ from __future__ import annotations
 import argparse
 import os
 
+from memorytalk import __version__
+
 from . import collection, server, user, work
 from ._common import DEFAULT_SERVER, Api
 
@@ -22,7 +25,9 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--user", default=os.environ.get("MEMORY_TALK_USER"), help="我是谁(须注册过)")
     ap.add_argument("--work", default=os.environ.get("MEMORY_TALK_WORK"), help="在哪个 work 里操作")
     ap.add_argument("--json", action="store_true", help="结构化输出")
+    ap.add_argument("-V", "--version", action="version", version=f"memory.talk {__version__}")
     top = ap.add_subparsers(dest="cmd", required=True)
+    top.add_parser("version", help="版本号").set_defaults(local=lambda a: print(f"memory.talk {__version__}"))
     for group in (server, work, user, collection):
         group.register(top)
     return ap
