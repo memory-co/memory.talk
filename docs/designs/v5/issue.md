@@ -12,7 +12,7 @@
 
 ## 1. issue 是什么
 
-一个**问题**,底下挂几个**立场**(候选答案),每个立场挂**论证**(支持 / 反对 / 中立,可带证据)。这是 IBIS。work 是做,card 是记,issue 是**议**:还没定的事待在这里。
+一个**问题**,底下挂几个**立场**(候选答案),每个立场挂**论证**(支持 / 反对 / 中立,一句话,可提证据)。这是 IBIS。work 是做,card 是记,issue 是**议**:还没定的事待在这里。
 
 issue 不关闭、立场只增不改、立场之间靠论证竞争、沉默不算数——沿用 v4,§5 说。
 
@@ -25,7 +25,7 @@ memory.talk/配置/该走文件还是环境变量.issue/
 ├── readme.md             ← 主题:问题的展开。纯 markdown,没有 frontmatter;标题就是目录名
 ├── links.yaml            ← 和别的 issue 的边
 ├── positions/
-│   ├── p1.md             ← 一个立场:主张 + 论证
+│   ├── p1.md             ← 一个立场:# 主张 + 阐述 + ## 论证;普通 markdown
 │   └── p2.md
 └── manager.json          ← 谁管它(机制文件,见 manager.md;可无)
 ```
@@ -65,33 +65,32 @@ memory.talk/配置/该走文件还是环境变量.issue/
 ### positions/<id>.md
 
 ```markdown
----
-claim: 只用环境变量,不要配置文件
-by: alice
-at: 2026-09-12T02:10:00Z
-arguments:
-  - {id: a1, stance: 1, comment: 试了一遍,环境变量够用, evidence: work_try#9, by: alice, at: 2026-09-12T03:00:00Z}
-  - {id: a2, stance: -1, comment: 本地开发要改十几个变量,太烦, by: bob, at: 2026-09-12T04:00:00Z}
----
+# 只用环境变量,不要配置文件
 
 为什么这么主张,前提是什么。
+
+## 论证
+
+- +1 试了一遍,环境变量够用(work_try#9)
+- -1 本地开发要改十几个变量,太烦
 ```
 
-立场要带结构(主张 + 一串论证),所以有 frontmatter(完整 YAML)。
+**普通 markdown,没有 frontmatter。** 一级标题就是主张(claim),下面是阐述;论证是 `## 论证` 下的一个列表,一条一行,行首 `+1` / `0` / `-1` 是立场,后面是一句话,证据顺手写在括号里(一个 work 的 round、一个 origin 路径、一个 URL,系统不解析)。
 
-| 字段 | 改不改 | 说明 |
+谁、何时——不在文件里,在 git:每个立场一次提交、每条论证一次提交,`git log -- positions/p1.md` 就是这个立场的完整记录,author 和 date 都在,提交信息还带着方向(`argue <path>#p1 +1`)。
+
+| 部分 | 改不改 | 说明 |
 |---|---|---|
 | id(文件名) | 不改 | `p<n>`,issue 内顺序编号 |
-| `claim` | 不改 | 主张。改主意是加新立场,不是改旧的 |
-| `by` / `at` | 不改 | 谁、何时提的 |
-| `arguments[]` | 只增 | `stance` 1 / 0 / -1;`comment` 一句话;`evidence` **一个字符串**——一个 work 的 round(`work_try#9`)、一个 origin 路径、一个 URL,随便什么,系统不解析;`by` / `at` |
-| 正文 | 建时写 | 立场的阐述。之后要补充,走论证 |
+| `# 标题` | 不改 | 主张。改主意是加新立场,不是改旧的 |
+| 阐述 | 建时写 | 之后要补充,走论证 |
+| `## 论证` 列表 | 只增 | 一条一行,append 到末尾 |
 
-**读视图现算**:每个立场 `up / down / neutral` = `stance` 为 1 / -1 / 0 的论证数,`credence = up - down`;`GET` 一个 issue 把 `readme.md`、`links.yaml`、`positions/*.md` 合起来给,立场按 credence 倒序。不存、不回写。
+**读视图现算**:每个立场数 `## 论证` 下 `+1` / `-1` / `0` 开头的行 → `up / down / neutral`,`credence = up - down`;`GET` 一个 issue 把 `readme.md`、`links.yaml`、`positions/*.md` 合起来给,立场按 credence 倒序。不存、不回写。
 
 ### 对 layer 机制的要求
 
-issue 从「一个本体文件」变成「一个目录里的一组文件」:`readme.md`(无 frontmatter 的 markdown)、`links.yaml`、`positions/*.md`(markdown + 完整 YAML frontmatter)。layer 的形态描述([collections-layer.md](collections-layer.md))要能表达「目录型对象,由几种文件组成」。标题来自目录名,不来自字段。守卫不用改:`.issue/` 下的一切本来就归 issue 层。
+issue 从「一个本体文件」变成「一个目录里的一组文件」:`readme.md` 和 `positions/*.md` 都是无 frontmatter 的普通 markdown,`links.yaml` 是一个 YAML 列表。layer 的形态描述([collections-layer.md](collections-layer.md))要能表达「目录型对象,由几种文件组成」。标题来自目录名,不来自字段。守卫不用改:`.issue/` 下的一切本来就归 issue 层。
 
 ---
 
@@ -101,8 +100,8 @@ issue 从「一个本体文件」变成「一个目录里的一组文件」:`rea
 |---|---|---|---|
 | 建 issue(通用 create) | 正文?(可空) | 新建 `readme.md` | `[issue] write <path>` |
 | 改展开(通用 update) | 正文 | 改 `readme.md` | `[issue] edit <path>` |
-| `position` | `claim`, 正文? | 新建 `positions/p<n>.md` | `[issue] position <path>#p<n>: <claim>` |
-| `argue` | `position`, `stance`, `comment?`, `evidence?` | 改 `positions/p<n>.md`(追加一条) | `[issue] argue <path>#p<n> +1` |
+| `position` | `claim`, 正文? | 新建 `positions/p<n>.md`(`# claim` + 正文) | `[issue] position <path>#p<n>: <claim>` |
+| `argue` | `position`, `stance`, `comment`(证据写在 comment 里) | 改 `positions/p<n>.md`(`## 论证` 下追加一行) | `[issue] argue <path>#p<n> +1` |
 | `link` | `type`, `target` | 改 / 新建 `links.yaml`(追加一条) | `[issue] link <path> <type> <target>` |
 
 就这三个行为。「只增不改」由行为保证(`argue` / `link` 只 append),层守卫兜底(`[card]` 提交碰不到 `.issue/`)。
@@ -117,12 +116,12 @@ issue 从「一个本体文件」变成「一个目录里的一组文件」:`rea
 |---|---|---|
 | issue 从哪个 work 冒出来 | 不记 | 要追,看提交 author 和 manager work 的 rounds |
 | 谁管这个 issue | `manager.json` | 目录下放一个,或继承上级目录的([manager.md](manager.md))。这是 issue 和 work 之间**唯一**的机制耦合,而且是「目录归谁管」,不是 issue 的字段 |
-| 论证的证据在哪 | 论证的 `evidence` 字符串 | 自由格式,系统不解析、不校验 |
+| 论证的证据在哪 | 论证那一行的文字 | 自由格式,系统不解析、不校验 |
 | issue 争出的卡 | **card 记**:`card.md` 的 `issue` 字段指向这个 issue | 写卡是 card 层的一次 create;issue 这边不动 |
 | 对卡不同意开的讨论页 | **card 记**:同上 | 建 issue + 改卡的 `issue` 字段,两个提交,card 层的行为 |
 | issue 之间 | `links.yaml` | §2 |
 
-所以原来 issue 上的 `decide` / `spawn` 行为、`Decision:` / `Discussion:` trailer 在这个版本**都不要**:写卡就是写卡,派 work 就是派 work,各自在各自的层做,想关联就在 card 的 `issue` 字段或论证的 `evidence` 里写一句。
+所以原来 issue 上的 `decide` / `spawn` 行为、`Decision:` / `Discussion:` trailer 在这个版本**都不要**:写卡就是写卡,派 work 就是派 work,各自在各自的层做,想关联就在 card 的 `issue` 字段或论证那一行里写一句。
 
 ---
 
@@ -140,5 +139,4 @@ issue 从「一个本体文件」变成「一个目录里的一组文件」:`rea
 
 - **新 issue 默认谁管**:倾向不自动写 `manager.json`,靠所在文件夹的继承链。
 - **立场文件的正文能不能事后改**:目前定「建时写、之后走论证」;若发现阐述常要修,再放开。
-- **`arguments` 放 frontmatter 还是正文小节**:frontmatter 好解析、追加是加几行;正文小节更像人写的讨论。先 frontmatter。
-- **要不要把 `evidence` 结构化回来**:等看到真实用法再说;现在一个字符串。
+- **论证要不要结构化**:现在是 `## 论证` 下一行一条,靠行首 `+1 / 0 / -1` 认方向;谁、何时靠 git。若以后要按证据检索,再考虑结构化。
