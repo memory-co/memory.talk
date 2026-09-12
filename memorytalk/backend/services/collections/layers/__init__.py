@@ -1,5 +1,5 @@
-"""每个内置 layer 一个文件(origin / issue / card);用户层来自 Collect 里的 schemas/<name>.yaml。
-内置层的顺序在这里定(最底在前);用户层排在它们之上,顺序按仓库的 `layers` 文件。"""
+"""每个内置 layer 一个文件(origin / issue / card);用户层来自仓库根 collections.json 里内嵌的 schema(_user.py 翻成 LayerSpec)。
+内置层的顺序在这里定(最底在前);用户层排在它们之上,顺序按 collections.json 的 layers[]。怎么定义一层见 README.md。"""
 from __future__ import annotations
 
 from ._spec import LayerSpec

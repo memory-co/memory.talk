@@ -37,7 +37,7 @@ memorytalk/backend/           # 服务本体;memorytalk/cli.py 是它的命令�
 │   │   ├── repo.py           #     UserRepo:fs 版(users/<name>.json)/ db 版(users 表)
 │   │   └── __init__.py       #     UserService:注册 / 档案 / 活动统计(从 work 与 collections 现算)/ commit author
 │   ├── collections/          #   认知层 —— docs/designs/v5/collections.md / manager.md
-│   │   ├── layers/           #     每个内置 layer 一个文件;用户层来自仓库根 collections.json 里内嵌的 schema
+│   │   ├── layers/           #     每个内置 layer 一个文件;用户层来自仓库根 collections.json 里内嵌的 schema(README.md:怎么定义一层、各层收什么)
 │   │   │   ├── _spec.py      #       LayerSpec:名字 + 形态(后缀 / 本体文件 / 格式)+ schema + 行为
 │   │   │   ├── _user.py      #       YAML 字段表 → LayerSpec(用户层,无行为)
 │   │   │   ├── origin.py     #       最底层:不带后缀的一切,原文
