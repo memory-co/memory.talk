@@ -84,7 +84,7 @@ issue 和 card **只是两个内置的 layer**。它们的对象模型([issue.md
 | 要素 | 是什么 | issue | card |
 |---|---|---|---|
 | **名字** | = layer 名 = 提交信息里的 `[层名]` = 分支 `layer/<名字>` | `issue` | `card` |
-| **路径** | 对象怎么认:**目录名后缀 `.<层>/`**,放在树的任何位置;没有后缀的就是 origin | `<任意路径>/<名>.issue/`(readme.md + meta.yaml + positions/*.md) | `<任意路径>/<名>.card/card.md` |
+| **路径** | 对象怎么认:**目录名后缀 `.<层>/`**,放在树的任何位置;没有后缀的就是 origin | `<任意路径>/<名>.issue/`(readme.md + meta.yaml + positions/*.md) | `<任意路径>/<名>.card/`(readme.md + meta.yaml) |
 | **check** | 一个函数:这次提交对目录的 diff 进去,过 / 不过出去;目录里允许哪些文件、哪些只增不改、字段怎么校验都在里面 | `readme.md`(markdown)+ `meta.yaml`(`links[]` `positions[]` `summary`)+ `positions/*.md`(markdown);别的文件拒绝 | `card.md`(markdown + frontmatter;`title` `context` `links[]→card` `issue→issue`) |
 
 schema 决定的事:
