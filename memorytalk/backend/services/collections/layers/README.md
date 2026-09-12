@@ -1,109 +1,171 @@
-# Layers：认知层定义与扩展架构
+# layers —— LayerSpec 描述什么、用户提交什么、两者怎么对上
 
-`layers` 定义 Collections 中各类认知对象的数据结构、存储形态与领域行为。内置层和用户自定义层统一表示为 `LayerSpec`，由 `CollectionsService` 装载并执行通用操作。
+三件事分开说:① `LayerSpec` 的每个字段是什么;② 用户通过 API 提交的格式是什么;③ 二者之间的映射(提交的东西怎么校验、落成什么文件、读回来长什么样)。最后按 origin / issue / card 各给一份对照。
 
-本模块负责对象的领域语义与表示规则；服务层负责操作编排，仓储层负责持久化与分层约束。Git 分支拓扑及 `stack` 合并视图见 [Collections 架构说明](../README.md)。
+## ① LayerSpec:一个层的声明(`_spec.py`)
 
-## 统一契约：LayerSpec
+| 字段 | 描述的是 | 决定了什么 |
+|---|---|---|
+| `name` | 层名 | 分支名 `layer/<name>`;对象目录后缀 `.<name>`;本体文件名 `<name>.json` / `<name>.md`;提交前缀 `[<name>]` |
+| `format` | 本体文件的形态:`raw` / `json` / `markdown` | **用户提交什么键**(见 ②)、落盘怎么编码、读回来怎么解;`raw` 表示没有后缀目录,路径本身就是文件 |
+| `model` | 一个 pydantic 模型(`raw` 没有) | **用户 `data` 里允许哪些字段、哪些必填、什么类型**;校验不过 → 422 `invalid` |
+| `title` | `model` 里哪个字段当标题 | 目录列表 / tree 里显示的名字;没有就用路径末段 |
+| `refs` | `model` 里哪些字段存的是别的层对象的 path,`{字段: 目标层}` | 只影响 `GET /layers` 字段表里的类型标注(`ref` / `list[ref]`),不做引用校验 |
+| `fields` | 给 API 看的字段表,`{字段: {type, required, ref, description}}` | `GET /api/collections/layers` 的输出;内置层用 `fields_of(model, refs)` 从 model 抽出来 |
+| `behaviors` | `{动作名: 函数}` | `POST /act/<layer>/<动作>/<path>` 能调哪些动作 |
+| `view` (可选) | `fn(collections, path, obj) -> obj` | GET 返回前对 body 做的现算(issue 用它加 up / down / credence) |
+| `builtin` / `description` | 元信息 | 只出现在 `GET /layers` |
 
-`LayerSpec` 将层定义集中为以下几个维度：
+`format` 派生出三个东西(都在 `LayerSpec` 上算,不用手写):
 
-| 维度 | 职责 |
-| --- | --- |
-| 标识与元数据 | 声明层名称、描述及是否为内置层 |
-| 存储形态 | 定义编码格式、对象目录后缀、本体文件名及路径映射 |
-| 数据模型 | 通过 Pydantic 模型定义字段类型、必填约束和默认值，并在编解码时校验 |
-| 展示与引用 | 提供标题字段、字段描述和引用目标层，供目录与 API 使用 |
-| 领域行为 | 注册该层支持的业务操作，由服务统一分派 |
-| 读取视图 | 按需在读取结果上计算派生信息，如 issue 的论证统计 |
+| format | 后缀目录 `obj_dir(path)` | 本体文件 `body_path(path)` | 例(path = `a/b`) |
+|---|---|---|---|
+| `raw` | 无 | `<path>` | `a/b` |
+| `json` | `<path>.<name>/` | `<path>.<name>/<name>.json` | `a/b.issue/issue.json` |
+| `markdown` | `<path>.<name>/` | `<path>.<name>/<name>.md` | `a/b.card/card.md` |
 
-数据模型约束对象结构，领域行为表达操作语义，读取视图补充派生信息。引用元数据描述对象间的关联，当前以路径字符串保存，不提供外键约束。
+## ② 用户提交的格式(API)
 
-## 对象标识与存储形态
+对象的 URL 里 `path` 是**不带后缀**的逻辑路径(`memory.talk/配置/该走文件还是环境变量`),后缀由层加。
 
-对象通过层名称和逻辑路径定位。`LayerSpec` 负责逻辑路径与仓库文件路径之间的转换，使服务层可以用一致的接口处理不同存储格式。
+| 请求 | 请求体 | 说明 |
+|---|---|---|
+| `POST /api/collections/{layer}/{path}` 创建 | 非 raw 层:`{"data": {…}, "reason"?}`;raw 层(origin):`{"content": "原文", "reason"?}` | `data` 必须满足该层的 `model` |
+| `PUT /api/collections/{layer}/{path}` 修改 | 同上 | `data` 是**字段合并**(没给的不动);`content` 是整体替换 |
+| `DELETE …/{layer}/{path}` | 无 | 删整个对象目录 / origin 文件 |
+| `POST /api/collections/act/{layer}/{action}/{path}` | 该行为自己定义的 JSON | 由 `behaviors[action]` 处理,不经 `model` 校验(行为内部自己改对象后再经 `model`) |
 
-| 格式 | 仓库中的表示 | 适用对象 |
-| --- | --- | --- |
-| `raw` | `<path>` | 无结构化模型的原文文本 |
-| `json` | `<path>.<layer>/<layer>.json` | 包含嵌套结构的认知对象 |
-| `markdown` | `<path>.<layer>/<layer>.md` | 以正文为主、附带元数据的词条 |
+**只有两种键:`data`(有 schema 的层)和 `content`(origin)。** markdown 层的正文也在 `data` 里,用 `body` 键——用户永远不需要自己拼 frontmatter。
 
-Markdown 对象使用 `body` 表示正文，其余字段编码为 frontmatter。调用方提交结构化字段，编解码由层定义统一处理；当前 frontmatter 实现支持简单字段与列表。
+## ③ 映射:提交 → 校验 → 落盘 → 读回
 
-主题目录可以同时包含不同层的对象。结构化对象以目录后缀标识所属层，服务按路径中首个匹配的层目录确定归属；没有匹配层目录的普通路径归最底层。仓储层进一步检查已有文件的所有权，确保写入遵守层边界。
+```
+用户提交 data / content
+   │  spec.serialize(data)
+   │     raw:       content 原样 → bytes
+   │     json:      model.validate(data) → json.dumps
+   │     markdown:  model.validate(data) → 除 body 外的字段写成 frontmatter,body 是正文
+   ▼
+bytes 落到 spec.body_path(path)                      ← 文件位置由 name + format 决定
+   │  Repo.commit(layer, …)                          ← 守卫:这个文件按后缀该归哪层?已被别的层占了没?
+   ▼
+layer/<name> 一个提交 + stack 一个 merge 节点
 
-## 内置层的职责
-
-| 层 | 领域职责 | 表示方式 | 领域行为 |
-| --- | --- | --- | --- |
-| `origin` | 保存外部原文，作为认知对象的来源材料 | 原始文本文件 | 无 |
-| `issue` | 组织问题、候选立场、论证及问题间关系 | JSON 对象 | `position`、`argue`、`link`、`spawn`、`decide` |
-| `card` | 保存带适用语境、可复用的事实结论 | Markdown 与 frontmatter | `discuss` |
-
-### Origin：来源材料
-
-`origin` 是内置最底层，不声明结构化数据模型，也不附加领域行为。原文通过该层入口写入；其他层可以引用原文，但无法通过自身的提交修改其内容。这里的只读边界针对跨层操作。
-
-### Issue：问题与论证
-
-`issue` 采用 IBIS 结构，以问题为中心组织立场、支持或反对的论证，以及问题之间的关联。出处可以指向 work 的会话轮次或 origin 文件；立场还可以关联用于取证的 work。
-
-领域行为分别负责补充立场、添加论证、建立关联、记录取证 work 和形成结论。其中 `spawn` 记录已存在的 work 标识，work 的创建仍由工作层负责。读取视图根据论证计算支持数、反对数和 `credence`，并据此排列立场；这些统计信息不作为独立事实持久化。
-
-### Card：事实结论
-
-`card` 保存标题、适用语境、正文及相关对象引用。词条可以编辑或删除，变更历史由 Git 保存。卡片间通过路径建立关联，`issue` 引用用于连接讨论页。
-
-`issue.decide` 将选定立场转为卡片，并建立双向关联；`card.discuss` 为既有卡片创建讨论问题。两类操作连接讨论与结论，使认知既可被直接使用，也可继续接受论证和修订。
-
-## 操作与持久化边界
-
-通用写入遵循以下流程：
-
-```text
-调用方提交层名称、逻辑路径与对象数据
-    → CollectionsService 取得 LayerSpec
-    → LayerSpec 校验数据、编码内容并映射仓库路径
-    → Repo 校验路径归属并提交到对应层分支
-    → 更新 stack 统一视图，由服务投递变更通知
+读:spec.path_of(repo_path) 认出对象 → spec.parse(bytes) 解回 dict(经 model)→ spec.view 现算 → GET 的 body
 ```
 
-读取默认从 `stack` 获取内容，经层定义解码和校验后形成对象；需要派生信息的层再应用读取视图。层定义无需承担 Git 引用管理或通知路由。
+守卫的规则来自 `CollectionsService.layer_of_path`:仓库路径里含 `.<name>/` 的归那一层,一个都不含的归 origin。所以「后缀」既是形态也是归属。
 
-领域行为通过 `CollectionsService` 读写对象，沿用相同的校验、提交与通知流程。跨层行为分别生成各层的提交，并通过 `Decision` 或 `Discussion` 提交标记关联；这种关联用于追溯业务操作，不构成跨层原子事务。当前 `decide` 在创建卡片失败时通过补偿提交恢复 issue 的关联。
+## 三个内置层对照
 
-## 扩展方式
+### origin(`origin.py`)
 
-### 声明式用户层
+```python
+LAYER = LayerSpec(name="origin", format="raw", builtin=True)
+```
 
-用户层通过 YAML schema 声明格式、标题字段和字段约束。`_user.py` 将其转换为动态 Pydantic 模型与 `LayerSpec`，从而复用现有的对象操作与持久化流程。
+| | |
+|---|---|
+| 提交 | `{"content": "任意文本"}` |
+| 校验 | 无 |
+| 落盘 | `<path>`,原样 |
+| 读回 `body` | 原文字符串 |
+| 归属 | 所有不带 `.<层>/` 的路径 |
+| 行为 | 无 |
+
+```
+POST /api/collections/origin/memory.talk/资料.md   {"content": "# 资料\n…"}
+→ 仓库文件 memory.talk/资料.md
+```
+
+### issue(`issue.py`)
+
+```python
+class Issue(BaseModel):
+    question: str                      # 必填
+    origin: Origin | None = None       # {work_id, rounds} 或 {origin: "<origin 路径>"}
+    card: str | None = None            # 争完写成的卡 / 挂在哪张卡上(card 的 path)
+    positions: list[Position] = []     # 立场(由行为追加)
+    links: list[IssueLink] = []        # IBIS 边(由行为追加)
+    created_at: str                    # 自动
+
+LAYER = LayerSpec(name="issue", format="json", model=Issue, title="question", refs={"card": "card"},
+                  behaviors={"position": …, "argue": …, "link": …, "spawn": …, "decide": …})
+LAYER.fields = fields_of(Issue, LAYER.refs)
+LAYER.view = read_view
+```
+
+| | |
+|---|---|
+| 提交 | `{"data": {"question": "…", "origin"?: {…}, "card"?: "…"}}` |
+| 校验 | `Issue`;缺 `question` → 422 |
+| 落盘 | `<path>.issue/issue.json`(`Issue` 的 JSON) |
+| 读回 `body` | `Issue` 的 dict + 每个立场的 `up / down / neutral / credence`,立场按 credence 倒序 |
+| 行为 | `position(claim)` `argue(position, stance, comment?)` `link(type, target)` `spawn(position, work_id)` `decide(position, card, title?, body?)` |
+
+```
+POST /api/collections/issue/memory.talk/配置/该走文件还是环境变量   {"data": {"question": "配置该走文件还是环境变量?"}}
+→ 仓库文件 memory.talk/配置/该走文件还是环境变量.issue/issue.json
+POST /api/collections/act/issue/position/memory.talk/配置/该走文件还是环境变量   {"claim": "只走环境变量"}
+→ 同一个文件里 positions 多一项 p1
+```
+
+### card(`card.py`)
+
+```python
+class Card(BaseModel):
+    title: str                         # 必填
+    context: str = ""                  # 在哪成立
+    links: list[str] = []              # 相关卡的 path
+    issue: str | None = None           # 讨论页(issue 的 path)
+    body: str = ""                     # 正文
+
+LAYER = LayerSpec(name="card", format="markdown", model=Card, title="title", refs={"issue": "issue", "links": "card"},
+                  behaviors={"discuss": …})
+LAYER.fields = fields_of(Card, LAYER.refs)
+```
+
+| | |
+|---|---|
+| 提交 | `{"data": {"title": "…", "body": "…", "context"?: "…", "links"?: […]}}` |
+| 校验 | `Card`;缺 `title` → 422 |
+| 落盘 | `<path>.card/card.md`:`title / context / links / issue` 写成 frontmatter,`body` 是正文 |
+| 读回 `body` | `Card` 的 dict(frontmatter 解回字段,正文回到 `body` 键;`links` 逗号分隔 → list) |
+| 行为 | `discuss(issue, question)`:对这张卡开讨论页 |
+
+```
+POST /api/collections/card/memory.talk/配置/配置只来自环境变量   {"data": {"title": "配置只来自环境变量", "body": "……", "links": ["a/b"]}}
+→ 仓库文件 memory.talk/配置/配置只来自环境变量.card/card.md:
+   ---
+   title: 配置只来自环境变量
+   links: a/b
+   ---
+
+   ……
+```
+
+## 跨层的行为
+
+行为签名统一 `(collections, path, payload, ctx) -> obj`。它拿到的是 service 本身,所以可以读改多层:`issue.decide` = `[issue] decide` + `[card] write`,`card.discuss` = `[issue] raise` + `[card] link`,都是两个相邻提交带同一个 trailer(`Decision:` / `Discussion:`),第二个失败第一个反向提交退回。
+
+## 用户层(`_user.py`)
+
+同一个 `LayerSpec`,只是 `model` 从 YAML 字段表用 `pydantic.create_model` 现造:
 
 ```yaml
 layer: decision
-format: markdown+frontmatter
+format: markdown+frontmatter     # 或 json
 title: title
 fields:
   title: {type: string, required: true}
   issue: {type: ref, layer: issue}
-  tags: {type: "list[string]"}
+  tags:  {type: "list[string]"}          # list[...] 要加引号
 ```
 
-当前支持 `string`、`int`、`bool`、`ref`、`list[string]` 和 `list[ref]`，存储格式为 JSON 或 Markdown。用户层仅声明数据结构，不加载自定义领域行为。
+类型只有 `string / int / bool / ref / list[string] / list[ref]`;markdown 格式自动带 `body`;没有行为。提交方式、落盘位置、读回格式和内置层完全一样(`<path>.decision/decision.md`)。schema 通过 `POST /api/collections/layers` 交上去,内嵌进仓库根 `collections.json`,启动时 `_load_layers` 从那里读回。
 
-新增层时，schema 内嵌至仓库根的 `collections.json`，对应分支由仓储层建立。服务启动时从该配置恢复层定义，使层配置与认知内容共同受 Git 历史管理。
+## 要加一个内置层
 
-### 代码定义的内置层
-
-需要专用领域行为或读取视图的层可以通过 Python 模块定义。每个模块导出 `LAYER`，集中声明模型、元数据和行为，并在 `BUILTIN` 中注册。服务负责装载定义及补充缺失的内置层，通用读写流程保持一致。
-
-## 模块索引
-
-| 文件 | 职责 |
-| --- | --- |
-| [`_spec.py`](_spec.py) | 统一层契约、路径映射、编解码及字段描述 |
-| [`_user.py`](_user.py) | 用户 schema 解析与动态模型构建 |
-| [`origin.py`](origin.py) | 来源材料层定义 |
-| [`issue.py`](issue.py) | 问题模型、论证行为与读取视图 |
-| [`card.py`](card.py) | 事实词条模型与讨论关联行为 |
-| [`__init__.py`](__init__.py) | 内置层注册、默认顺序及公共导出 |
+1. `<name>.py`:pydantic model(必填字段不给默认值)+ `LAYER = LayerSpec(...)` + `LAYER.fields = fields_of(Model, LAYER.refs)`。
+2. 行为 / 读视图按需挂上。
+3. 放进 `__init__.py` 的 `BUILTIN`(最底在前)。已有仓库启动时 `Repo.ensure_layers` 会把缺的层补进 `collections.json`。
