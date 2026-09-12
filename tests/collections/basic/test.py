@@ -1,4 +1,4 @@
-"""basic -- one file in origin, one in issue, both visible in stack. See README.md."""
+"""collections/basic -- one file in origin, one in issue, both visible in stack. See README.md."""
 import pytest
 
 
