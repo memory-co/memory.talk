@@ -82,7 +82,7 @@ issue 和 card **只是两个内置的 layer**。它们的对象模型([issue.md
 | 要素 | 是什么 | issue | card |
 |---|---|---|---|
 | **名字** | = layer 名 = 提交信息里的 `[层名]` = 分支 `layer/<名字>` | `issue` | `card` |
-| **路径** | 对象怎么认:**目录名后缀 `.<层>/`**,放在树的任何位置;没有后缀的就是 origin | `<任意路径>/<名>.issue/issue.json` | `<任意路径>/<名>.card/card.md` |
+| **路径** | 对象怎么认:**目录名后缀 `.<层>/`**,放在树的任何位置;没有后缀的就是 origin | `<任意路径>/<名>.issue/`(issue.md + positions/*.md) | `<任意路径>/<名>.card/card.md` |
 | **schema** | 文件长什么样:格式 + 字段 + 哪些字段是引用(指向别的 layer 的对象) | JSON;`question` `origin` `manager_work` `card→card` `positions[]` … | markdown + frontmatter;`title` `context` `links[]→card` `issue→issue` `status` |
 
 schema 决定的事:
@@ -143,7 +143,7 @@ git log --first-parent stack
 |---|---|---|
 | memory/ 仓库 | 裸 git,一条 main | collectbase 仓库:`layer/origin`、`layer/issue`、`layer/card`、`stack`,`cb init --layers origin,issue,card` |
 | issue / card 的对象模型 | issue.md / card.md | **不变** |
-| 文件形态与路径 | `issues/<id>.json`、`cards/**/<slug>.md`(按层分目录) | **对象变目录、带后缀、放哪都行**:`<名>.issue/issue.json`、`<名>.card/card.md`;不再有按层分的顶层目录 |
+| 文件形态与路径 | `issues/<id>.json`、`cards/**/<slug>.md`(按层分目录) | **对象变目录、带后缀、放哪都行**:`<名>.issue/`(issue.md + positions/)、`<名>.card/card.md`;不再有按层分的顶层目录 |
 | 提交信息 | `card: write …` / `issue: argue …` | `[card] write …` / `[issue] argue …`(动词不变,层名前置) |
 | 跨对象的决定 | 一个 commit | 两个相邻提交 + 同一个 `Decision:` trailer(§6) |
 | 历史 | `git log -- <path>` | 同,外加 `git log layer/<名>` 看整层 |
