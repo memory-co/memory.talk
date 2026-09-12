@@ -21,13 +21,13 @@ export interface SystemInfo {
 }
 export interface Layer {
   name: string; description: string; builtin: boolean; suffix: string | null;
-  files: { pattern: string; format: string; required: boolean }[]; behaviors: string[];
+  files: string[]; schema: Record<string, unknown> | null;
 }
 export interface Catalog {
   dir: string; objects: { path: string; title: string | null }[]; subdirs: Catalog[];
 }
 export interface CollectionObject {
-  layer: string; path: string; title: string | null; files: string[]; body: unknown;
+  layer: string; path: string; title: string; files: Record<string, string>; content: string | null;
 }
 export interface Revision { sha: string; author: string; date: string; subject: string; body: string }
 export interface SearchHit { layer: string; path: string; file: string; line: number; text: string }

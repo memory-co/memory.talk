@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from memorytalk.backend.models.result import fail
+from memorytalk.backend.gateway import mount_frontend
 
 from memorytalk.backend.config import Config, RuntimeConfig, load_config, load_runtime_config
 from memorytalk.backend.controllers import collections, system, users, works
@@ -55,4 +56,5 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
         status = {"bad_uri": 400, "cmd_not_found": 400, "no_server": 400, "platform": 502}.get(exc.code, 500)
         return JSONResponse(fail(exc.code, str(exc)), status_code=status)
 
+    mount_frontend(app)
     return app

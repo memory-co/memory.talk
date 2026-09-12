@@ -5,5 +5,5 @@ import { defineConfig } from "vite";
 export default defineConfig({
   plugins: [react()],
   resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
-  server: { proxy: { "/api": { target: "http://127.0.0.1:8000" } } },
+  server: { proxy: { "/api": { target: process.env.MEMORY_TALK_API || "http://127.0.0.1:8000" } } },
 });

@@ -85,7 +85,7 @@ def catalog(layer: str, dir: str = "", svc: CollectionsService = Depends(collect
 
 def _files(svc: CollectionsService, layer: str, req: ObjWrite) -> dict:
     """请求体 → 目录里的文件改动:origin 用 content,其余用 files。"""
-    if svc.layer(layer).raw:
+    if svc.layer(layer).suffix is None:
         if req.content is None:
             raise CollectionsError("invalid", "origin 要给 content", 400)
         return {"": req.content}

@@ -139,7 +139,7 @@ class CollectionsService:
 
     def _files(self, spec: Layer, path: str, rev: str | None = None) -> dict[str, bytes] | None:
         """一个对象目录里的文件 {相对路径: 内容};机制文件不算。不存在 → None。"""
-        if spec.raw:
+        if spec.suffix is None:
             data = self.repo.read(path, rev)
             return None if data is None else {"": data}
         prefix = spec.obj_dir(path)
@@ -155,7 +155,7 @@ class CollectionsService:
 
     def _obj(self, spec: Layer, path: str, files: dict[str, bytes]) -> Obj:
         title = path.rsplit("/", 1)[-1]
-        if spec.raw:
+        if spec.suffix is None:
             return Obj(layer=spec.name, path=path, title=title, content=files[""].decode("utf-8", "replace"))
         return Obj(layer=spec.name, path=path, title=title,
                    files={rel: data.decode("utf-8", "replace") for rel, data in sorted(files.items())})
@@ -173,7 +173,7 @@ class CollectionsService:
     def list(self, layer: str, prefix: str = "") -> list[Obj]:
         spec = self.layer(layer)
         out = []
-        if spec.raw:
+        if spec.suffix is None:
             for repo_path in self.repo.tree(prefix):
                 if repo_path == CONFIG_FILE or repo_path.endswith(MANAGER_FILE) or self.layer_of_path(repo_path) != spec.name:
                     continue
@@ -254,7 +254,7 @@ class CollectionsService:
         path = path.strip("/")
         if not path:
             raise CollectionsError("invalid", "path 不能为空", 400)
-        if spec.raw:
+        if spec.suffix is None:
             content = files.get("")
             if content is None:
                 raise CollectionsError("invalid", "origin 要有 content", 400)
@@ -302,7 +302,7 @@ class CollectionsService:
         spec = self.layer(layer)
         if not self.exists(layer, path):
             raise CollectionsError("not_found", f"{layer}:{path} 不存在", 404)
-        files = [path] if spec.raw else [p for p in self.repo.tree(spec.obj_dir(path))]
+        files = [path] if spec.suffix is None else [p for p in self.repo.tree(spec.obj_dir(path))]
         self.commit(layer, f"delete {path}", {}, files, reason, ctx)
 
     # ================================================================ manager
@@ -336,7 +336,7 @@ class CollectionsService:
         """这个 work 管的所有对象(按 manager 继承链解析)。"""
         out = []
         for name, spec in self.layers.items():
-            if spec.raw:
+            if spec.suffix is None:
                 continue
             for o in self.list(name):
                 m = self.managers.resolve(spec.obj_dir(o.path))
@@ -347,7 +347,7 @@ class CollectionsService:
     def unmanaged(self) -> list[TreeItem]:
         out = []
         for name, spec in self.layers.items():
-            if spec.raw:
+            if spec.suffix is None:
                 continue
             for o in self.list(name):
                 if self.managers.resolve(spec.obj_dir(o.path)) is None:

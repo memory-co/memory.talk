@@ -1,6 +1,6 @@
 # collections layer —— 怎么设计一个自己的层(v5 设计)
 
-> **状态:已实施。** 一个层 = 一个 `check(diff, after) -> None | str`;用户层的 YAML `files` 清单编译成这个函数;实现见 `memorytalk/backend/services/collections/layers/`(README 讲契约和三个内置层的规则)。[collections.md](collections.md) 说 issue 和 card 只是 Collections 里两个内置的 layer,用户写清 schema 就能加自己的层。本篇讲**怎么加**。总定位见 [README.md](README.md)。
+> **状态:已实施。** 一个层 = `Layer` 接口的一个实现,一个 `check(diff, after) -> None | str`;用户层的 YAML `files` 清单编译成这个函数;实现见 `memorytalk/backend/services/collections/layers/`(README 讲契约和三个内置层的规则)。[collections.md](collections.md) 说 issue 和 card 只是 Collections 里两个内置的 layer,用户写清 schema 就能加自己的层。本篇讲**怎么加**。总定位见 [README.md](README.md)。
 
 相关:
 - v5 collections(层即 collectbase 的 layer;Collections 是认知层的容器): [collections.md](collections.md)

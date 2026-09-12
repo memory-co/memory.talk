@@ -3,6 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ArrowUpRight, BookOpen, ChevronRight, Clock3, FileText, Folder, Layers, LoaderCircle, MessageSquare, Pencil, Plus, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, pathPart } from '@/lib/api';
+import { cardFiles, objectView } from '@/lib/collections';
 import { useLayers } from '@/lib/queries';
 import { queryClient } from '@/lib/query';
 import { dateLabel, flattenCatalog, layerLabels, type Catalog, type CollectionObject, type Revision, type SearchHit } from '@/lib/types';
@@ -60,7 +61,7 @@ export function ObjectDetail({ layer, path, onClose, onSelect, work }: {
   const [editing, setEditing] = useState(false);
   const object = useQuery({ queryKey: ['object', layer, path, revision], queryFn: ({ signal }) => api<CollectionObject>(`/collections/${encodeURIComponent(layer)}/${pathPart(path)}${revision ? `?rev=${encodeURIComponent(revision)}` : ''}`, { signal }) });
   const history = useQuery({ queryKey: ['history', layer, path], queryFn: ({ signal }) => api<Revision[]>(`/collections/history/${encodeURIComponent(layer)}/${pathPart(path)}`, { signal }), enabled: tab === 'history' });
-  const body = asObject(object.data?.body);
+  const body = objectView(object.data);
   return <>
     <div className="object-toolbar"><button className="icon-button small" onClick={onClose} aria-label="返回目录"><ArrowLeft size={16} /></button><span className="layer-label">{layerLabels[layer] || layer}</span>
       <div className="object-tabs"><button className={tab === 'content' ? 'active' : ''} onClick={() => setTab('content')}>内容</button><button className={tab === 'history' ? 'active' : ''} onClick={() => setTab('history')}><Clock3 size={13} />历史</button></div>
@@ -68,6 +69,7 @@ export function ObjectDetail({ layer, path, onClose, onSelect, work }: {
     </div>
     {object.isPending ? <Loading /> : object.isError ? <ErrorState error={object.error} retry={() => { void object.refetch(); }} /> : <div className="object-scroll">
       <div className="object-heading"><p className="object-path">{path}</p><h2>{object.data.title || path.split('/').pop()}</h2></div>
+      {!!body.invalidMeta && <ErrorState error={new Error('元数据无法解析，当前显示原始正文。')} />}
       {revision && <div className="revision-banner"><Clock3 size={14} /><span>历史版本 {revision.slice(0, 7)}</span><button className="text-button" onClick={() => setRevision('')}>回到当前版本</button></div>}
       {tab === 'history' ? history.isPending ? <Loading /> : history.isError ? <ErrorState error={history.error} /> : <div className="history-list">{history.data?.map(item => <button key={item.sha} onClick={() => { setRevision(item.sha); setTab('content'); }}><span className="history-point" /><strong>{item.subject}</strong><span>{item.author} · {dateLabel(item.date)} · {item.sha.slice(0, 7)}</span></button>)}</div>
         : layer === 'card' ? <>
@@ -81,30 +83,29 @@ export function ObjectDetail({ layer, path, onClose, onSelect, work }: {
           <h3 className="content-section-title">立场与论证 <span>{Array.isArray(body.positions) ? body.positions.length : 0}</span></h3>
           {Array.isArray(body.positions) && body.positions.map((value, i) => { const position = asObject(value); return <article className="position-card" key={i}><div className="position-heading"><span>{String(i + 1).padStart(2, '0')}</span><h4>{text(position.claim)}</h4></div>{text(position.note) && <p className="position-note">{text(position.note)}</p>}<Markdown text={text(position.body)} /></article>; })}
           {Array.isArray(body.links) && body.links.map((value, i) => { const link = asObject(value); return <button className="related-link" key={i} onClick={() => onSelect({ layer: 'issue', path: text(link.target).split('#')[0] })}><MessageSquare size={15} /><span>{text(link.target)}</span><small>{text(link.type)}</small></button>; })}
-        </> : typeof object.data.body === 'string' ? <Markdown text={object.data.body} /> : <div className="generic-files">{Object.entries(body).map(([name, value]) => <section key={name}><h3><FileText size={14} />{name}</h3>{typeof value === 'string' ? <Markdown text={value} /> : <pre>{JSON.stringify(value, null, 2)}</pre>}</section>)}</div>}
+        </> : layer === 'origin' ? <Markdown text={object.data.content || ''} /> : <div className="generic-files">{Object.entries(object.data.files).map(([name, value]) => <section key={name}><h3><FileText size={14} />{name}</h3>{name.endsWith('.md') ? <Markdown text={value} /> : <pre>{value}</pre>}</section>)}</div>}
     </div>}
-    <ObjectEditor layer={layer} path={path} initial={body} open={editing} onClose={() => setEditing(false)} onSaved={() => setEditing(false)} work={work} />
+    <ObjectEditor layer={layer} path={path} initial={object.data} open={editing} onClose={() => setEditing(false)} onSaved={() => setEditing(false)} work={work} />
   </>;
 }
 
 function ObjectEditor({ layer, path, initial, open, onClose, onSaved, work }: {
-  layer: string; path?: string; initial?: Record<string, unknown>; open: boolean; onClose: () => void; onSaved: (path: string) => void; work?: string;
+  layer: string; path?: string; initial?: CollectionObject; open: boolean; onClose: () => void; onSaved: (path: string) => void; work?: string;
 }) {
   const [objectPath, setObjectPath] = useState(path || '');
-  const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [context, setContext] = useState('');
   const [reason, setReason] = useState('');
-  useEffect(() => { if (open) { setObjectPath(path || ''); setTitle(text(initial?.title)); setContent(text(initial?.body)); setContext(text(initial?.context)); setReason(''); } }, [open, path]);
+  useEffect(() => { if (open) { const view = objectView(initial); setObjectPath(path || ''); setContent(initial?.files['readme.md'] || ''); setContext(text(view.context)); setReason(''); } }, [open, path]);
   const mutation = useMutation({ mutationFn: () => {
-    const payload = layer === 'origin' ? { content } : layer === 'issue' ? { files: { 'readme.md': content } } : { data: { title: title.trim(), body: content, context } };
+    const payload = layer === 'origin' ? { content } : layer === 'issue' ? { files: { 'readme.md': content } } : { files: cardFiles(content, context, initial?.files) };
     return api<CollectionObject>(`/collections/${encodeURIComponent(layer)}/${pathPart(objectPath.trim())}`, { method: path ? 'PUT' : 'POST', body: { ...payload, reason }, work });
   }, onSuccess: () => { for (const key of ['catalog', 'object', 'history', 'search']) void queryClient.invalidateQueries({ queryKey: [key] }); toast.success(path ? '内容已保存' : '内容已创建'); onSaved(objectPath.trim()); } });
-  const valid = !!objectPath.trim() && !objectPath.split('/').some(p => p === '..') && (layer !== 'card' || !!title.trim());
+  const valid = !!objectPath.trim() && !objectPath.split('/').some(p => !p.trim() || p === '..');
   return <Modal open={open} onClose={() => { if (!mutation.isPending) { mutation.reset(); onClose(); } }} title={`${path ? '编辑' : '新建'}${layerLabels[layer] || layer}`} description="每次保存都会留下可追溯的版本历史。">
     <form className="form-stack" onSubmit={e => { e.preventDefault(); if (valid) mutation.mutate(); }}>
-      {!path && <label>{layer === 'issue' ? '问题路径（最后一段为问题标题）' : '保存路径'}<input autoFocus value={objectPath} onChange={e => setObjectPath(e.target.value)} placeholder="项目 / 主题 / 名称" required /></label>}
-      {layer === 'card' && <><label>标题<input required value={title} onChange={e => setTitle(e.target.value)} /></label><label>适用语境<input value={context} onChange={e => setContext(e.target.value)} placeholder="关于哪个项目、场景或约定" /></label></>}
+      {!path && <label>{layer === 'origin' ? '保存路径' : '保存路径（最后一段为标题）'}<input autoFocus value={objectPath} onChange={e => setObjectPath(e.target.value)} placeholder="项目/主题/名称" required /></label>}
+      {layer === 'card' && <label>适用语境<input value={context} onChange={e => setContext(e.target.value)} placeholder="关于哪个项目、场景或约定" /></label>}
       <label>{layer === 'issue' ? '问题描述' : '正文'}<textarea className="editor-textarea" value={content} onChange={e => setContent(e.target.value)} placeholder="支持 Markdown" /></label>
       <label>修改说明（可选）<input value={reason} onChange={e => setReason(e.target.value)} placeholder="为什么记录或修改这条内容" /></label>
       {mutation.isError && <ErrorState error={mutation.error} />}

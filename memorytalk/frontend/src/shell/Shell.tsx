@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { ArrowUpRight, BookOpen, ChevronRight, GitBranch, Menu, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Search, Settings2, SquarePen, UserRound, X } from 'lucide-react';
 import { useWorks, useUsers, useSystem } from '@/lib/queries';
 import { usePreferences } from '@/lib/store';
 import { navigate, useRoute } from '@/lib/router';
 import { flattenWorks, statusLabels } from '@/lib/types';
-import { ErrorState, Logo, Modal } from '@/components/Shared';
-import { Library } from '@/collections/Library';
-import { Settings } from '@/settings/Settings';
+import { ErrorState, Loading, Logo, Modal } from '@/components/Shared';
 import { TaskTree } from './TaskTree';
 import { Home } from './Home';
-import { Workspace } from './Workspace';
+const Library = lazy(() => import('@/collections/Library').then(m => ({ default: m.Library })));
+const Settings = lazy(() => import('@/settings/Settings').then(m => ({ default: m.Settings })));
+const Workspace = lazy(() => import('./Workspace').then(m => ({ default: m.Workspace })));
 
 export function Shell() {
   const route = useRoute();
@@ -47,9 +47,9 @@ export function Shell() {
       <div className="topbar-right">{route.page === 'work' ? <button className={`icon-button ${inspector ? 'active' : ''}`} aria-label={inspector ? '收起认知库面板' : '打开认知库面板'} title="认知库" onClick={() => setInspector(!inspector)}>{inspector ? <PanelRightClose size={19} /> : <PanelRightOpen size={19} />}</button> : <span className="topbar-edition"><span className="mini-dot" />memory.talk</span>}</div>
     </header>
       <div className="main-layout"><main id="main-content" tabIndex={-1} className={`main-content page-${route.page}`}>
-        {route.page === 'home' ? <Home /> : route.page === 'work' && route.work ? <Workspace key={route.work} id={route.work} onLibrary={() => setInspector(true)} /> : route.page === 'library' ? <Library key={route.layer || 'card'} layer={route.layer} path={route.path} onSelect={selection => navigate({ page: 'library', ...selection })} /> : <Settings />}
+        <Suspense fallback={<Loading />}>{route.page === 'home' ? <Home /> : route.page === 'work' && route.work ? <Workspace key={route.work} id={route.work} onLibrary={() => setInspector(true)} /> : route.page === 'library' ? <Library key={route.layer || 'card'} layer={route.layer || 'card'} path={route.path} onSelect={selection => navigate({ page: 'library', ...selection })} /> : <Settings />}</Suspense>
       </main>
-      {route.page === 'work' && inspector && <aside className="inspector" aria-label="认知库面板"><div className="inspector-heading"><span><BookOpen size={17} />认知库</span><div><button className="icon-button small" aria-label="在主页面打开认知库" onClick={() => navigate({ page: 'library', ...selection })}><ArrowUpRight size={16} /></button><button className="icon-button small" aria-label="关闭认知库面板" onClick={() => setInspector(false)}><X size={17} /></button></div></div><Library compact {...selection} onSelect={setSelection} work={route.work} /></aside>}
+      {route.page === 'work' && inspector && <aside className="inspector" aria-label="认知库面板"><div className="inspector-heading"><span><BookOpen size={17} />认知库</span><div><button className="icon-button small" aria-label="在主页面打开认知库" onClick={() => navigate({ page: 'library', ...selection })}><ArrowUpRight size={16} /></button><button className="icon-button small" aria-label="关闭认知库面板" onClick={() => setInspector(false)}><X size={17} /></button></div></div><Suspense fallback={<Loading />}><Library compact {...selection} onSelect={setSelection} work={route.work} /></Suspense></aside>}
       </div>
     </div>
     <SearchWorks open={search} onClose={() => setSearch(false)} />

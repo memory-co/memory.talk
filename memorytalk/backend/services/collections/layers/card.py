@@ -9,36 +9,34 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from ._layer import Change, Layer, load_yaml
+from .base import Change, Layer, load_yaml
 
 
-class Meta(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    context: str = Field("", description="在哪成立:关于哪个项目 / 用户 / 场景")
-    links: list[str] = Field(default_factory=list, description="相关卡的 path")
-    issue: str | None = Field(None, description="讨论页:对应的 issue 的 path(卡记 issue,issue 不记卡)")
+class Card(Layer):
+    name = "card"
+    files = ["readme.md", "meta.yaml"]
+    description = "记事:一条事实,像维基词条;标题是目录名,正文在 readme.md,语境 / 链接 / 讨论页在 meta.yaml。可改、可删,历史在 git。"
 
+    class Meta(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        context: str = Field("", description="在哪成立:关于哪个项目 / 用户 / 场景")
+        links: list[str] = Field(default_factory=list, description="相关卡的 path")
+        issue: str | None = Field(None, description="讨论页:对应的 issue 的 path(卡记 issue,issue 不记卡)")
 
-def check(changes: list[Change], after: dict[str, bytes]) -> str | None:
-    for c in changes:
-        if c.path == "readme.md":
-            if c.new is None:
-                return "readme.md 不能删"
-        elif c.path == "meta.yaml":
-            if c.new is None:
-                continue
-            try:
-                Meta.model_validate(load_yaml(c.new))
-            except (ValueError, ValidationError) as e:
-                return f"meta.yaml:{e}"
-        else:
-            return f"{c.path}:card 目录里只能有 readme.md / meta.yaml"
-    if "readme.md" not in after:
-        return "缺 readme.md"
-    return None
-
-
-LAYER = Layer(
-    name="card", builtin=True, check=check, files=["readme.md", "meta.yaml"],
-    description="记事:一条事实,像维基词条;标题是目录名,正文在 readme.md,语境 / 链接 / 讨论页在 meta.yaml。可改、可删,历史在 git。",
-)
+    def check(self, changes: list[Change], after: dict[str, bytes]) -> str | None:
+        for c in changes:
+            if c.path == "readme.md":
+                if c.new is None:
+                    return "readme.md 不能删"
+            elif c.path == "meta.yaml":
+                if c.new is None:
+                    continue
+                try:
+                    self.Meta.model_validate(load_yaml(c.new))
+                except (ValueError, ValidationError) as e:
+                    return f"meta.yaml:{e}"
+            else:
+                return f"{c.path}:card 目录里只能有 readme.md / meta.yaml"
+        if "readme.md" not in after:
+            return "缺 readme.md"
+        return None

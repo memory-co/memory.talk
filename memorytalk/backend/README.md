@@ -37,9 +37,9 @@ memorytalk/backend/           # 服务本体;memorytalk/cli/ 是它的命令行�
 │   │   ├── repo.py           #     UserRepo:fs 版(users/<name>.json)/ db 版(users 表)
 │   │   └── __init__.py       #     UserService:注册 / 档案 / 活动统计(从 work 与 collections 现算)/ commit author
 │   ├── collections/          #   认知层 —— docs/designs/v5/collections.md / manager.md
-│   │   ├── layers/           #     每层一个文件 = 一个 check(diff, after) -> None | str;用户层从 collections.json 里的 YAML 编译(README.md:怎么写一层)
-│   │   │   ├── _layer.py     #       Layer / Change 契约 + 小工具(appended_only / load_yaml)
-│   │   │   ├── _user.py      #       YAML files 清单 → check(清单外拒、required、append_only、fields)
+│   │   ├── layers/           #     每层一个类,实现 Layer 接口的 check(diff, after) -> None | str;用户层从 collections.json 里的 YAML 编译(README.md:怎么写一层)
+│   │   │   ├── base.py       #       Layer(ABC:name / files / check;形态从 name 派生)+ Change + 小工具(appended_only / load_yaml)
+│   │   │   ├── _user.py      #       UserLayer:YAML files 清单编译进实例(清单外拒、required、append_only、fields)
 │   │   │   ├── origin.py     #       最底层:不带后缀的一切,原文,不校验
 │   │   │   ├── issue.py      #       <名>.issue/{readme.md, meta.yaml, positions/*.md};立场只增不改、不删;meta 的边和排序有约束
 │   │   │   └── card.py       #       <名>.card/{readme.md, meta.yaml};readme 不能删;meta 只有 context / links / issue

@@ -1,11 +1,17 @@
-# layers —— 一个层就是一个校验函数
+# layers —— 一个层是 `Layer` 接口的一个实现:一个 check
 
 ```python
-check(changes: list[Change], after: dict[str, bytes]) -> str | None     # None = 过;str = 拒绝的理由(原样报给调用方,422)
+class Layer(ABC):                                   # base.py
+    name: str                                       # = 分支 layer/<name>、后缀 .<name>、提交前缀 [<name>]
+    files: list[str]                                # 目录里允许的文件(给人看的清单;真正的规则在 check 里)
+    @abstractmethod
+    def check(self, changes: list[Change], after: dict[str, bytes]) -> str | None: ...   # None = 过;str = 理由(原样报给调用方,422)
+
 Change(path, old, new)     # 这次提交对一个对象目录的 diff:目录内相对路径;old=None 新增,new=None 删除
 after                      # 改完之后这个目录的全部文件
 ```
 
+形态(后缀、目录、路径拆分)从 `name` 派生,写在基类;子类只管 `name` / `files` / `check`。层无状态,一个实例服务所有对象。
 这是一个 pre-receive hook 的形状。层不认识 API、不认识读法、没有行为:**写就是写文件,层只负责说这批文件改动过不过。**
 看 diff 才能表达「只增不改」「不能删」;看 `after` 才能做跨文件约束(`meta.positions[].claim` 得是已有的立场)。
 
@@ -26,15 +32,15 @@ POST / PUT /api/collections/{layer}/{path}   {"files": {"<相对路径>": "<内�
 
 | 层 | 目录里允许 | check 的规则 |
 |---|---|---|
-| **origin**(`origin.py`) | 没有目录:任何不带后缀的路径就是一个文件 | 不校验,永远过 |
-| **issue**(`issue.py`) | `readme.md`(必需)/ `meta.yaml` / `positions/<主张>.md` | 别的文件拒;`readme.md` 不能删;立场文件新建随意、改只能在末尾追加、不能删(改名 = 删 + 建,也不行);`meta.yaml` 按 `Meta`:`links[].type` 五种、`(type, target)` 不重复、`positions[].claim` 必须是已有立场、多余键拒 |
-| **card**(`card.py`) | `readme.md`(必需)/ `meta.yaml` | 别的文件拒;`readme.md` 不能删;`meta.yaml` 只有 `context` / `links[]` / `issue`,多余键拒 |
+| **origin**(`Origin`) | 没有目录:任何不带后缀的路径就是一个文件(覆盖 `suffix` / `split`) | 不校验,永远过 |
+| **issue**(`Issue`;schema `Issue.Meta` 挂在类里) | `readme.md`(必需)/ `meta.yaml` / `positions/<主张>.md` | 别的文件拒;`readme.md` 不能删;立场文件新建随意、改只能在末尾追加、不能删(改名 = 删 + 建,也不行);`meta.yaml` 按 `Meta`:`links[].type` 五种、`(type, target)` 不重复、`positions[].claim` 必须是已有立场、多余键拒 |
+| **card**(`Card`;schema `Card.Meta`) | `readme.md`(必需)/ `meta.yaml` | 别的文件拒;`readme.md` 不能删;`meta.yaml` 只有 `context` / `links[]` / `issue`,多余键拒 |
 
 标题都是目录名,文件里不再写标题。「加一个立场」= PUT 一个新的 `positions/<主张>.md`;「加一条论证」= PUT 那个文件、末尾多一行;「排序」= PUT `meta.yaml`。提交主题由调用方给(`subject`),不给就是 `write / edit <path>`。
 
-## 用户层(`_user.py`)
+## 用户层(`UserLayer`,`_user.py`)
 
-一份 YAML 清单编译成一个 `check`:
+同一个接口的另一个实现,规则从一份 YAML 清单来(构造时编译进实例):
 
 ```yaml
 layer: experiment
@@ -49,5 +55,5 @@ schema 通过 `POST /api/collections/layers` 交上去,内嵌进仓库根 `colle
 
 ## 要加一个内置层
 
-1. `<name>.py`:写一个 `check(changes, after)`,`LAYER = Layer(name, check, files=[给人看的清单], description)`。
-2. 放进 `__init__.py` 的 `BUILTIN`(最底在前)。已有仓库启动时 `Repo.ensure_layers` 会把缺的层补进 `collections.json`。
+1. `<name>.py`:`class Xxx(Layer)`,填 `name` / `files` / `description`,实现 `check(self, changes, after)`;它的 schema(pydantic)挂在类里。
+2. 在 `__init__.py` 的 `BUILTIN` 里放一个实例(最底在前)。已有仓库启动时 `Repo.ensure_layers` 会把缺的层补进 `collections.json`。
