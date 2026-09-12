@@ -1,6 +1,6 @@
 # memorytalk/backend(v5 服务)
 
-memory.talk v5 的 Python 包(pip:`memorytalk`,命令 `memory.talk`)。**work 树(带 created_by 与 users)、协议 server、Collections(origin / issue / card 三层 + 用户层,提交 author = user)、manager 收件箱、存储 provider(LocalFS / SQLite,测试两种都跑)都有最简实现。** 未做:鉴权网关、ttyd / 反代托管、`daemon` / `start` / `stop`、逐 round 标注、二进制 blob 外置、给人手工 `git commit` 用的 hook(服务进程是唯一写者)。 端点清单见 [docs/api/v5](../docs/api/v5/README.md);起服务 `memory.talk server start`,测试在仓库根 `pytest`。 按 **models / services / controllers** 三层分目录,外加 **servers/**(每个协议一个 server)和 **layers/**(每个内置 layer 一个文件);services 下每个子包对应 [docs/designs/v5](../docs/designs/v5/README.md) 的一篇设计;底层逻辑照 shellbase `server/shellbase/` 原生实现。
+memory.talk v5 的 Python 包(pip:`memorytalk`,命令 `memory.talk`)。**work 树(带 created_by 与 users)、协议 server、Collections(origin / issue / card 三层 + 用户层,提交 author = user)、manager 收件箱、存储 provider(LocalFS / SQLite,测试两种都跑)都有最简实现。** 未做:鉴权网关、ttyd / 反代托管、`daemon` / `start` / `stop`、逐 round 标注、二进制 blob 外置、给人手工 `git commit` 用的 hook(服务进程是唯一写者)。 端点清单见 [docs/api/v5](../docs/api/v5/README.md);起服务 `memory.talk server start`,测试在仓库根 `pytest`。 按 **models / services / controllers** 三层分目录,外加 **work_servers/**(每个协议一个 server);内置 layer 定义在 services/collections/layers/ 下;services 下每个子包对应 [docs/designs/v5](../docs/designs/v5/README.md) 的一篇设计;底层逻辑照 shellbase `server/shellbase/` 原生实现。
 
 ```
 memorytalk/backend/           # 服务本体;memorytalk/cli.py 是它的命令行客户端
@@ -28,6 +28,34 @@ memorytalk/backend/           # 服务本体;memorytalk/cli.py 是它的命令�
 │   │   ├── inbox.py          #     收件箱:manager.json 路由过来的变动(append-only)
 │   │   └── events.py         #     work 自己的 append-only 事件(开工/状态/做完)
 │   ├── work_servers/         #   work server 的装载与寻址 —— docs/designs/v5/work-server.md
+│   │   ├── registry.py       #     协议 → server 寻址:先看谁声明了它,没人声明去 default
+│   │   ├── uri.py            #     块的 URI 解析
+│   │   ├── terminal.py       #     tmux 现场 + 终端类 server 基类(TerminalBase)
+│   │   ├── agent.py          #     agent 类 server 基类(AgentBase:终端把手 + 读 round)
+│   │   └── adapters/         #     读各平台会话记录:claude_code / codex / kimi
+│   ├── users/                #   user:注册的实体 —— docs/designs/v5/user.md
+│   │   ├── repo.py           #     UserRepo:fs 版(users/<name>.json)/ db 版(users 表)
+│   │   └── __init__.py       #     UserService:注册 / 档案 / 活动统计(从 work 与 collections 现算)/ commit author
+│   ├── collections/          #   认知层 —— docs/designs/v5/collections.md / manager.md
+│   │   ├── layers/           #     每个内置 layer 一个文件;用户层来自仓库根 collections.json 里内嵌的 schema
+│   │   │   ├── _spec.py      #       LayerSpec:名字 + 形态(后缀 / 本体文件 / 格式)+ schema + 行为
+│   │   │   ├── _user.py      #       YAML 字段表 → LayerSpec(用户层,无行为)
+│   │   │   ├── origin.py     #       最底层:不带后缀的一切,原文
+│   │   │   ├── issue.py      #       <名>.issue/issue.json;行为 position / argue / link / spawn / decide
+│   │   │   └── card.py       #       <名>.card/card.md;行为 discuss
+│   │   ├── git.py            #     git 原语:hash-object / write-tree / commit-tree / update-ref / ls-tree / show / log / grep,不认识层
+│   │   ├── repo.py           #     分层拓扑(在 git.py 上):layer/<名> 权威分支 + stack merge 视图 + 路径归属守卫 + collections.json 锚定
+│   │   ├── manager.py        #     manager.json:最近祖先解析
+│   │   ├── catalog.py        #     一层的目录(按目录树列标题)+ 召回文本
+│   │   └── __init__.py       #     CollectionsService:层的装载(内置 + collections.json 里内嵌 schema 的用户层)、对象 CRUD、历史、检索、树、行为、manager、投递到收件箱
+│   └── store/                #   装配 —— docs/designs/v5/provider.md
+│       └── __init__.py       #     StoreService:按 MEMORY_TALK_STORE 选 provider,按族建 work 仓储
+│
+├── providers/                # 存储介质的两族基类(只有介质原语,没有业务)—— docs/designs/v5/provider.md
+│   ├── fs.py                 #   FileSystemProvider(read/write/append/list/…,能力 local_path)+ LocalFS
+│   └── db.py                 #   DatabaseProvider(表定义 + 链式 select/insert/update/delete,方言在内)+ SQLite
+│
+├── work_servers/         #   work server 的装载与寻址 —— docs/designs/v5/work-server.md
 │   │   ├── registry.py       #     协议 → server 寻址:先看谁声明了它,没人声明去 default
 │   │   ├── uri.py            #     块的 URI 解析
 │   │   ├── terminal.py       #     tmux 现场 + 终端类 server 基类(TerminalBase)

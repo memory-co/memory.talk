@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from memorytalk.backend import layers as layer_pkg
+from . import layers as layer_pkg
 from memorytalk.backend.config import Config
-from memorytalk.backend.layers._spec import LayerSpec
+from .layers._spec import LayerSpec
 from memorytalk.backend.models.collections import (CatalogDir, InboxItem, LayerInfo, Manager, Obj, Revision, SearchHit,
                             TreeItem)
 from memorytalk.backend.services.work.inbox import Inbox

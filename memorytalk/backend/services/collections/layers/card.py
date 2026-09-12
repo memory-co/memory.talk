@@ -17,7 +17,7 @@ class Card(BaseModel):
 def discuss(collections, path: str, payload: dict, ctx) -> dict:
     """对这张卡不同意:开一个 issue 挂上去当讨论页。两个相邻提交:[issue] raise + [card] link。
     payload: issue (issue 的 path), question, origin?, reason?"""
-    from memorytalk.backend.layers.issue import Issue
+    from .issue import Issue
     from memorytalk.backend.services.collections import CollectionsError
     card = collections.get("card", path).body
     issue_path = payload["issue"]
