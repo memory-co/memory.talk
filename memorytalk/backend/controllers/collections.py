@@ -91,11 +91,6 @@ def catalog(layer: str, dir: str = "", svc: CollectionsService = Depends(collect
     return ok(svc.catalog(layer, dir))
 
 
-@router.get("/{layer}/recall", summary="目录渲染成可注入 agent 的文本")
-def recall(layer: str, dir: str = "", svc: CollectionsService = Depends(collections)):
-    return ok(svc.recall_text(layer, dir))
-
-
 @router.post("/{layer}/{path:path}", response_model=Result[Obj], status_code=201, summary="建一个对象(一个 [layer] 提交)")
 def create(layer: str, path: str, req: ObjCreate, svc: CollectionsService = Depends(collections), c: Ctx = Depends(ctx)):
     data = req.content if svc.layer(layer).format == "raw" else (req.data or {})

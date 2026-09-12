@@ -20,7 +20,6 @@
 | `GET` | `/api/works/{work_id}/inbox` | 收件箱:被 manager.json 路由过来的变动(Collections 的对象、子 work 的状态) |
 | `GET` | `/api/works/{work_id}/manager` | 这个 work 的变动打给谁:manager.json,没有则父 work |
 | `PUT` | `/api/works/{work_id}/manager` | 改写默认:这棵子树的变动打给指定 work(null = 删掉,回到父) |
-| `GET` | `/api/works/{work_id}/recall` | 开工注入:card 目录文本(card → work 的接口) |
 | `GET` | `/api/works/{work_id}/sessions` | 会话清单(含活没活着) |
 | `POST` | `/api/works/{work_id}/sessions` | 在 work 里打开一个块:协议 → server 建现场,登记会话,交回窗 + 把手 |
 | `GET` | `/api/works/{work_id}/users` | user:谁当前正在操作(current)、谁历史操作过(history)。只做可见性,不做权限 |
@@ -44,7 +43,6 @@
 | `GET` | `/api/collections/search` | git grep 整个 Collections(可限定层) |
 | `GET` | `/api/collections/tree` | 浏览目录树:对象(带后缀的目录折成一项)、目录、origin 文件 |
 | `GET` | `/api/collections/{layer}` | 一层的目录(按目录树列标题) |
-| `GET` | `/api/collections/{layer}/recall` | 目录渲染成可注入 agent 的文本 |
 | `GET` | `/api/collections/{layer}/{path}` | 读一个对象(rev= 读历史版本) |
 | `POST` | `/api/collections/{layer}/{path}` | 建一个对象(一个 [layer] 提交) |
 | `PUT` | `/api/collections/{layer}/{path}` | 改一个对象(字段合并;origin 整体替换) |
@@ -56,7 +54,7 @@
 
 ## 通用约定
 
-- **响应信封**:所有 `/api/*` 端点的 `response_model` 都是 **`Result[T]`** = **`{"data": T, "message": "ok"}`**(OpenAPI 里能看到 `Result_User_` 这类 schema)——分页面里写的响应体是 `data` 那一半。纯文本端点(recall / capture)的 `data` 是那段字符串;删除类端点返回 `200`,`data` 为 `null`(不再有 204)。
+- **响应信封**:所有 `/api/*` 端点的 `response_model` 都是 **`Result[T]`** = **`{"data": T, "message": "ok"}`**(OpenAPI 里能看到 `Result_User_` 这类 schema)——分页面里写的响应体是 `data` 那一半。纯文本端点(capture)的 `data` 是那段字符串;删除类端点返回 `200`,`data` 为 `null`(不再有 204)。
 - **错误体**:`{"data": null, "error": "<机器码>", "message": "<人读>"}`。
 
   | 状态 | `error` | 何时 |

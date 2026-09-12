@@ -63,10 +63,6 @@
 
 一层的目录:按目录树列 `{"path", "title"}`。`title` 是 schema 的 title 字段,没有就用路径末段。origin 层列的是所有不带后缀的文件。
 
-### GET /api/collections/{layer}/recall?dir=
-
-同上,渲染成缩进文本(`data` 是那段文本),给 agent 直接读。work 开工注入的是 `GET /api/works/{id}/recall`(默认 card 层)。
-
 ---
 
 ## 对象

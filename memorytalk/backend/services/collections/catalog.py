@@ -25,17 +25,3 @@ def build(objects: list[tuple[str, str]], root: str = "") -> CatalogDir:
             continue
         node(d if d else root).objects.append(CatalogEntry(path=path, title=title))
     return tree
-
-
-def render(tree: CatalogDir, indent: int = 0) -> str:
-    lines = []
-    pad = "  " * indent
-    if tree.dir:
-        lines.append(f"{pad}{tree.dir.rsplit('/', 1)[-1]}/")
-        indent += 1
-        pad = "  " * indent
-    for e in tree.objects:
-        lines.append(f"{pad}- {e.title}  ({e.path})")
-    for sub in tree.subdirs:
-        lines.append(render(sub, indent))
-    return "\n".join(l for l in lines if l)

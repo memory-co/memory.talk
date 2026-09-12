@@ -85,12 +85,7 @@ work 树(森林)。
 ]
 ```
 
-## GET /api/works/{work_id}/recall
-
-card → work 的接口:开工时注入的目录文本(`GET /api/collections/{layer}/recall` 的别名)。`data` 是那段文本。
-
-| 参数 | 说明 |
-|---|---|
+---|---|
 | `dir` | 只给这个目录之下的对象;空 = 全部 |
 | `layer` | 哪一层的目录,默认 `card` |
 

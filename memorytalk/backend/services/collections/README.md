@@ -56,6 +56,6 @@ graph LR
 - [`repo.py`](repo.py)：分层仓库，维护层分支、`stack` 合并视图与路径归属守卫。
 - [`git.py`](git.py)：Git 原语，封装内容树、提交、引用和历史等操作。
 - [`manager.py`](manager.py)：沿目录祖先解析 `manager.json`，确定变更应交给哪个 work。
-- [`catalog.py`](catalog.py)：将对象组织为目录，并生成供 recall 使用的文本。
+- [`catalog.py`](catalog.py)：将对象组织为目录（按目录树列标题）。
 
 对象的结构和行为由 [`layers/`](layers/) 定义；本模块负责将它们放进同一个可追溯、可分层扩展的认知仓库，并通过 manager 收件箱与 work 连接。

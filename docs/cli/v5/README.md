@@ -12,11 +12,11 @@ memory.talk
 ├── server   start | stop | restart | status          # 本地 API 服务(后台守护)
 ├── work     create | list | show | set               # work 树
 │            attach | sessions | detach | capture | rounds   # 会话(现场)
-│            inbox | manager | users | touch | recall  # 收件箱 / manager / user / 召回
+│            inbox | manager | users | touch           # 收件箱 / manager / user
 │            servers                                    # 有哪些 work server(bash / claude / codex / kimi / http / default)及各自响应的协议
 ├── user     add | list | show | set | whoami           # 人:注册的实体,和 work 平级;不做权限
 ├── collection                                          # 认知层(API 是 /api/collections)
-│            layers | tree | ls | recall | search
+│            layers | tree | ls | search
 │            read | write | edit | rm | log             # 对象 CRUD + 历史
 │            act                                        # 行为:issue position / argue / link / spawn / decide;card discuss
 │            manager | managed                          # manager.json
@@ -49,7 +49,6 @@ memory.talk user add alice --email alice@example.com         # 注册(一次)
 export MEMORY_TALK_USER=alice
 W=$(memory.talk work create --goal '把配置改成环境变量' --json | jq -r .id)
 memory.talk work attach $W codex:///home/alice/memory.talk   # 在这个 work 里开一个 Codex 会话,打印窗地址
-memory.talk work recall $W                                   # 开工注入:card 目录
 memory.talk collection write issue memory.talk/配置/该走文件还是环境变量 --field question='配置该走文件还是环境变量?'
 memory.talk collection act issue position memory.talk/配置/该走文件还是环境变量 --field claim='只用环境变量'
 memory.talk collection act issue decide   memory.talk/配置/该走文件还是环境变量 --field position=p1 --field card=memory.talk/配置/配置只来自环境变量

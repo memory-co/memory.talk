@@ -19,7 +19,6 @@ memory.talk work
 ├── manager  <work_id> [--set <work_id> | --unset]
 ├── users    <work_id>
 ├── touch    <work_id>
-├── recall   <work_id> [--layer card] [--dir <路径>]
 └── servers                                       # 有哪些 work server、各自响应哪些协议
 ```
 
@@ -97,7 +96,3 @@ memory.talk work manager work_… --unset    # 回到父
 ## work servers
 
 `GET /api/works/servers`:这个实例有哪些 work server(bash / claude / codex / kimi / http / default)及各自响应的协议。`work attach <uri>` 时协议去找谁,看这张表;平时几乎不用。
-
-## work recall
-
-开工注入:card 目录文本(`GET /api/works/{id}/recall`),`--layer` 换别的层,`--dir` 只给某目录之下。agent 开工时把这段读进上下文。

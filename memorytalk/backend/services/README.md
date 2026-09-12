@@ -29,7 +29,7 @@ controllers ──▶ services ──▶ providers(介质原语)
 ## 三层之间怎么接
 
 - **work → collections**:work 的 round 是 issue 的原料(逐 round 标注,未实现);issue 的出处、论证的证据指回 `(work_id, rounds)`。
-- **collections → work**:目录下的 `manager.json` 把这一片的变动投递到某个 work 的收件箱;work 树的父子是隐式的 manager 链。开工时把 card 目录注入(recall)。
+- **collections → work**:目录下的 `manager.json` 把这一片的变动投递到某个 work 的收件箱;work 树的父子是隐式的 manager 链。
 - **user 贯穿两边**:work 记谁建的、谁动过;collections 的 commit author 就是 user;仓储和 provider 对它一视同仁。
 
 ## 约定

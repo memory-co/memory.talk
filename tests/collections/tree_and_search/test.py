@@ -1,4 +1,4 @@
-"""collections/tree_and_search -- catalog, recall text, grep. See README.md."""
+"""collections/tree_and_search -- catalog, grep. See README.md."""
 
 
 def _seed(client):
@@ -13,12 +13,6 @@ def test_catalog_groups_by_directory(client):
     assert {d["dir"] for d in cat["subdirs"]} == {"memory.talk", "其他"}
     only = client.get("/api/collections/card", params={"dir": "memory.talk"}).json()
     assert [o["title"] for d in only["subdirs"] for o in d["objects"]] == ["配置只来自环境变量"]
-
-
-def test_recall_text_is_indented_titles(client):
-    _seed(client)
-    text = client.get("/api/collections/card/recall").json()
-    assert "- 配置只来自环境变量  (memory.talk/配置/配置只来自环境变量)" in text and "一张卡" in text
 
 
 def test_tree_folds_objects_into_one_item(client):

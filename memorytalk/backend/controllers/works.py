@@ -63,14 +63,6 @@ def events(work_id: str, svc: WorkService = Depends(works)):
     return ok(svc.history(work_id))
 
 
-@router.get("/{work_id}/recall",
-            summary="开工注入:card 目录文本(card → work 的接口)")
-def recall(work_id: str, dir: str = "", layer: str = "card", svc: WorkService = Depends(works),
-           c: CollectionsService = Depends(collections)):
-    svc.get(work_id)
-    return ok(c.recall_text(layer, dir))
-
-
 @router.get("/{work_id}/inbox", response_model=Result[list[InboxItem]],
             summary="收件箱:被 manager.json 路由过来的变动(Collections 的对象、子 work 的状态)")
 def inbox(work_id: str, svc: WorkService = Depends(works)):

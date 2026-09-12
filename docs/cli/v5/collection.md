@@ -7,7 +7,6 @@ memory.talk collection
 ├── layers  [add <name> --schema <file>]
 ├── tree    [<path>]
 ├── ls      <layer> [--dir <路径>]
-├── recall  [<layer>] [--dir <路径>]
 ├── search  <query> [--layer <层>]
 │
 ├── read    <layer> <path> [--rev <sha>]
@@ -33,13 +32,12 @@ memory.talk collection layers add decision --schema decision.yaml
 
 schema 写法见 [`../../designs/v5/collections-layer.md`](../../designs/v5/collections-layer.md)(`list[…]` 要加引号)。
 
-## tree / ls / recall / search
+## tree / ls / search
 
 | 命令 | 说明 |
 |---|---|
 | `tree [<path>]` | 浏览目录:对象折成一项(带层名)、目录、origin 文件 |
 | `ls <layer> [--dir]` | 一层的目录:按目录树列标题 |
-| `recall [<layer>] [--dir]` | 目录渲染成文本(默认 card),给 agent 读 |
 | `search <q> [--layer]` | `git grep`,每行一条:层 / 路径 / 行号 / 文本 |
 
 ## read

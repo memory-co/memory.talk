@@ -61,7 +61,6 @@ def w_users(api, a):
     u = api.call("GET", f"/api/works/{a.work_id}/users")
     out(u, a.json, "\n".join(f"{x['user']:<10} {'在动' if x['active'] else '    '}  {x['ops']} 次  最近 {x['last_seen']}" for x in u["history"]) or "(还没人动过)")
 def w_touch(api, a): out(api.call("POST", f"/api/works/{a.work_id}/users/touch"), a.json, "ok")
-def w_recall(api, a): print(api.call("GET", f"/api/works/{a.work_id}/recall", params={"layer": a.layer, "dir": a.dir}, text=True))
 def w_servers(api, a):
     ss = api.call("GET", "/api/works/servers")
     out(ss, a.json, "\n".join(f"{s['name']:<8} {', '.join(s['protocols']) or '(兜底)':<14} {s['description']}" for s in ss))
@@ -94,5 +93,4 @@ def register(top) -> None:
     wp("manager", w_manager, (["--set"], {}), (["--unset"], {"action": "store_true"}))
     wp("users", w_users)
     wp("touch", w_touch)
-    wp("recall", w_recall, (["--layer"], {"default": "card"}), (["--dir"], {"default": ""}))
     wp("servers", w_servers, wid=False)

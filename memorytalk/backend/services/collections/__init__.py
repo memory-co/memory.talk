@@ -14,7 +14,7 @@ from memorytalk.backend.models.collections import (CatalogDir, InboxItem, LayerI
 from memorytalk.backend.services.work.inbox import Inbox
 from memorytalk.backend.services.work.repo import WorkRepo
 
-from .catalog import build, render
+from .catalog import build
 from .manager import FILE as MANAGER_FILE
 from .manager import ManagerIndex, manager_path
 from .repo import GuardError, Repo
@@ -149,9 +149,6 @@ class CollectionsService:
 
     def catalog(self, layer: str, root: str = "") -> CatalogDir:
         return build([(o.path, o.title or o.path) for o in self.list(layer)], root)
-
-    def recall_text(self, layer: str = "card", root: str = "") -> str:
-        return render(self.catalog(layer, root))
 
     def history(self, layer: str, path: str) -> list[Revision]:
         spec = self.layer(layer)

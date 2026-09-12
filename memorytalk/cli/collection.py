@@ -18,8 +18,15 @@ def c_layers(api, a):
 def c_tree(api, a):
     items = api.call("GET", "/api/collections/tree", params={"path": a.path or ""})
     out(items, a.json, "\n".join(f"{i['name']:<40} {i['kind']:<7} {i.get('layer') or ''}" for i in items) or "(空)")
-def c_ls(api, a): out(api.call("GET", f"/api/collections/{a.layer}", params={"dir": a.dir}), a.json, api.call("GET", f"/api/collections/{a.layer}/recall", params={"dir": a.dir}, text=True))
-def c_recall(api, a): print(api.call("GET", f"/api/collections/{a.layer}/recall", params={"dir": a.dir}, text=True))
+def _catalog(d, indent=0):
+    lines = [f"{'  ' * indent}- {o['title']}  ({o['path']})" for o in d["objects"]]
+    for sub in d["subdirs"]:
+        lines.append(f"{'  ' * indent}{sub['dir'].rsplit('/', 1)[-1]}/")
+        lines.extend(_catalog(sub, indent + 1))
+    return lines
+def c_ls(api, a):
+    cat = api.call("GET", f"/api/collections/{a.layer}", params={"dir": a.dir})
+    out(cat, a.json, "\n".join(_catalog(cat)) or "(空)")
 def c_search(api, a):
     hits = api.call("GET", "/api/collections/search", params={"q": a.query, "layer": a.layer})
     out(hits, a.json, "\n".join(f"[{h['layer']}] {h['path']}:{h['line']}  {h['text'].strip()}" for h in hits) or "(没找到)")
@@ -80,7 +87,6 @@ def register(top) -> None:
     p = c.add_parser("layers"); p.add_argument("add", nargs="?"); p.add_argument("--schema"); p.add_argument("--reason"); p.set_defaults(fn=c_layers)
     p = c.add_parser("tree"); p.add_argument("path", nargs="?"); p.set_defaults(fn=c_tree)
     p = c.add_parser("ls"); p.add_argument("layer"); p.add_argument("--dir", default=""); p.set_defaults(fn=c_ls)
-    p = c.add_parser("recall"); p.add_argument("layer", nargs="?", default="card"); p.add_argument("--dir", default=""); p.set_defaults(fn=c_recall)
     p = c.add_parser("search"); p.add_argument("query"); p.add_argument("--layer"); p.set_defaults(fn=c_search)
     p = c.add_parser("read"); p.add_argument("layer"); p.add_argument("path"); p.add_argument("--rev"); p.set_defaults(fn=c_read)
     for name, fn in (("write", c_write), ("edit", c_edit)):
