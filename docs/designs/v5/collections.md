@@ -84,7 +84,7 @@ issue 和 card **只是两个内置的 layer**。它们的对象模型([issue.md
 |---|---|---|---|
 | **名字** | = layer 名 = 提交信息里的 `[层名]` = 分支 `layer/<名字>` | `issue` | `card` |
 | **路径** | 对象怎么认:**目录名后缀 `.<层>/`**,放在树的任何位置;没有后缀的就是 origin | `<任意路径>/<名>.issue/`(readme.md + meta.yaml + positions/*.md) | `<任意路径>/<名>.card/card.md` |
-| **schema** | 目录长什么样:允许哪些文件、各自的格式 + 字段 + 哪些字段是引用;层就是它的校验器 | JSON;`question` `origin` `manager_work` `card→card` `positions[]` … | markdown + frontmatter;`title` `context` `links[]→card` `issue→issue` `status` |
+| **schema** | 目录长什么样:允许哪些文件、各自的格式 + 字段 + 哪些字段是引用;层就是它的校验器 | `readme.md`(markdown)+ `meta.yaml`(`links[]` `positions[]` `summary`)+ `positions/*.md`(markdown);别的文件拒绝 | `card.md`(markdown + frontmatter;`title` `context` `links[]→card` `issue→issue`) |
 
 schema 决定的事:
 
