@@ -16,6 +16,7 @@ memorytalk/backend/           # 服务本体;memorytalk/cli.py 是它的命令�
 │   └── server.py             #   Server 契约:name + protocols(声明响应哪些协议)/ open(id, uri) → Window + Handle / handle / alive / destroy
 │
 ├── services/                 # 业务逻辑(每个子包对应一篇设计;**入口就是子包的 `__init__.py`**,导出该 service 类,main.py 按 `services/*` 扫描装配,不另加约定)
+│   ├── README.md             #   整体思路:三条主线(认知层是 git / 现场层介质可换 / 协议自己说)+ 三层怎么接
 │   ├── work/                 #   做事层 —— docs/designs/v5/work.md
 │   │   ├── __init__.py       #     入口:导出 WorkService(对外唯一门面)
 │   │   ├── tree.py           #     work 树:建节点、父子、状态、完成收拢
@@ -36,7 +37,8 @@ memorytalk/backend/           # 服务本体;memorytalk/cli.py 是它的命令�
 │   │   ├── repo.py           #     UserRepo:fs 版(users/<name>.json)/ db 版(users 表)
 │   │   └── __init__.py       #     UserService:注册 / 档案 / 活动统计(从 work 与 collections 现算)/ commit author
 │   ├── collections/              #   认知层 —— docs/designs/v5/collections.md / manager.md
-│   │   ├── repo.py           #     分层 git(自己实现):layer/<名> 权威分支 + stack merge 视图 + 路径归属守卫;纯 plumbing
+│   │   ├── git.py            #     git 原语:hash-object / write-tree / commit-tree / update-ref / ls-tree / show / log / grep,不认识层
+│   │   ├── repo.py           #     分层拓扑(在 git.py 上):layer/<名> 权威分支 + stack merge 视图 + 路径归属守卫 + collections.json 锚定
 │   │   ├── manager.py        #     manager.json:最近祖先解析
 │   │   ├── catalog.py        #     一层的目录(按目录树列标题)+ 召回文本
 │   │   └── __init__.py       #     CollectionsService:层的装载(内置 + collections.json 里内嵌 schema 的用户层)、对象 CRUD、历史、检索、树、行为、manager、投递到收件箱
