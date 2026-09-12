@@ -54,7 +54,7 @@ memory.talk work set $W --status done
 ```bash
 pip install -e ".[dev]"
 pytest                       # 每个场景在 fs 和 sqlite 两种 store 下各跑一遍
-cd memorytalk/frontend && npm install && npm run dev     # 前端(Vite + React;骨架,未实现)
+cd memorytalk/frontend && npm ci && npm run dev          # 前端(Vite + React;工作台 / 会话 / 认知库)
 ```
 
 发布前先 `cd memorytalk/frontend && npm run build`(产物 `dist/` 随 wheel 分发),再 `python -m build && twine upload dist/*`。
@@ -69,7 +69,7 @@ memorytalk/              ← Python 包(pip: memorytalk;命令 memory.talk)
 │   ├── providers/       ← 存储介质:FileSystemProvider(LocalFS)/ DatabaseProvider(SQLite)
 │   ├── layers/          ← 内置 layer:origin / issue / card
 │   └── work_servers/    ← 每个协议一个 work server:bash / claude / codex / kimi / http / default
-└── frontend/            ← Vite + React(骨架)
+└── frontend/            ← Vite + React 工作台(工作导航、会话、认知库、设置)
 tests/                   ← 按场景组织
 docs/                    ← designs / structure / api / cli
 ```

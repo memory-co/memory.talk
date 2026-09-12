@@ -1,4 +1,4 @@
-# collections —— 认知层的容器:层由 schema 定义(v5 设计)
+# collections —— 认知层的容器:层是一个 check(v5 设计)
 
 > **状态:框架稿,未实施。** 本篇引入 **Collections** 这个抽象:memory.talk 的认知层不再是「issue 和 card 两套存储」,而是一个 **Collections**——一个 [collectbase](https://github.com/memory-co/collectbase) 仓库;issue 和 card 各是其中的一个 **layer**;layer 由 **schema** 定义,用户写清 schema 就能加自己的 layer。字段 / 命令后续分篇。总定位见 [README.md](README.md)。
 
@@ -23,11 +23,11 @@
 
 ---
 
-## 1. 一句话:collections 是认知层,layer 由 schema 定义
+## 1. 一句话:collections 是认知层,layer 是一个 check
 
 [collections-store.md](collections-store.md) 定了「card 和 issue 放进一个 git 仓库」。collectbase 正好是「把 git 做成分层记录文件系统」的工具:**每一层一条权威分支、层与层路径不相交、`[层名]` 声明归属、hook 守卫**。v5 不自己再造一套,直接把那个 git 仓库**变成一个 collectbase 仓库**,并给它一个名字:
 
-> **Collections** = memory.talk 的认知层。它是一个 collectbase 仓库;它的每一个 **layer** = 一个名字 + 一段路径 + 一份 **schema**。
+> **Collections** = memory.talk 的认知层。它是一个 collectbase 仓库;它的每一个 **layer** = 一个名字 + 一段路径 + 一个 **check**(这次提交过不过)。
 
 于是三层结构里「记事 / 议事」那两层,在存储上统一成一个东西:
 
@@ -36,7 +36,7 @@ Collections(一个 collectbase 仓库,~/.memory.talk/memory/)
 ├── layer/origin   ← origin:任何**不带层后缀**的文件或目录          schema 极薄:原文 + 可选 meta;最底层,只读
 ├── layer/issue    ← issue :任何 `<名>.issue/` 目录(里面 readme.md + meta.yaml + positions/*.md)  标题 = 目录名;每个立场一个文件;meta.yaml 放边和 manager 的排序
 ├── layer/card     ← card  :任何 `<名>.card/` 目录(里面 readme.md + meta.yaml)  标题 = 目录名;meta.yaml 放 context / links / issue
-└── layer/<你的>   ← 用户自定义的 layer:`<名>.<层>/`,写清 schema 就行
+└── layer/<你的>   ← 用户自定义的 layer:`<名>.<层>/`,~/.memory.talk/layers/<名>.py 里一个 Layer 子类就行
     stack          ← 合并视图:所有 layer 的文件并在一起,日常读写站在这里
 ```
 
@@ -71,13 +71,13 @@ issue 和 card **只是两个内置的 layer**。它们的对象模型([issue.md
 
 - **每个 layer 自己一条历史。** `git log layer/card` 只有卡的变化,`git log layer/issue` 只有辩论序列;`git log --first-parent stack` 是全部认知的时间线,每一行自带 `[issue]` / `[card]` 标注。裸 git 里这些要靠路径过滤去拼,而且分支上什么都混在一起。
 - **layer 与 layer 之间路径不相交,由 hook 守着。** 一个声明 `[card]` 的提交碰了某个 `.issue/` 目录里的文件,当场拒绝——包括 `--no-verify`、`reset`、`cherry-pick` 都绕不过。这就是 collectbase 说的「认知卫生」在 memory.talk 里的形态:**不会有一次提交把「争的过程」和「争完的结论」搅在一起**。
-- **layer 是可加的,不用改代码。** collectbase 用根上的 `layers` 文件当锚定;memory.talk 对应的是根上的 **`collections.json`**——整个 collections 的配置 + `layers[]` 清单(最底在前),用户层的 schema 内嵌在自己那一项里。它被 git 追踪、归最底层,`git log collections.json` 就是层的变化史;加一层 = 这份文件多一项。于是「我想记一种新东西」(决策记录、实验日志、人物档案……)变成写一份 schema,而不是往 backend 里加一个包。
+- **layer 是可加的,不改包里的代码。** collectbase 用根上的 `layers` 文件当锚定;memory.talk 对应的是根上的 **`collections.json`**——整个 collections 的配置 + `layers[]` 清单(最底在前,只有名字和 `builtin`);用户层是 `~/.memory.talk/layers/<名>.py` 里一个 `Layer` 子类,启动时载入并登记进去。加层就是加一项、开一条从始祖出发的分支;`git log collections.json` 是层的变化史。
 
 一句话:**collectbase 管「层怎么在 git 里成立」,memory.talk 管「每一层里的文件是什么」。**
 
 ---
 
-## 3. layer = 名字 + 路径 + schema
+## 3. layer = 名字 + 路径 + check
 
 一个 layer 要说清三件事:
 
@@ -149,7 +149,7 @@ git log --first-parent stack
 | 提交信息 | `card: write …` / `issue: argue …` | `[card] write …` / `[issue] argue …`(动词不变,层名前置) |
 | 跨对象的决定 | 一个 commit | 两个相邻提交 + 同一个 `Decision:` trailer(§6) |
 | 历史 | `git log -- <path>` | 同,外加 `git log layer/<名>` 看整层 |
-| 加一种新对象 | 改代码 | 写一份 schema,嵌进 `collections.json` 的 `layers[]` |
+| 加一种新对象 | 改代码 | `~/.memory.talk/layers/` 放一个 `.py`(一个 `Layer` 子类),重启 |
 | 谁改不动谁 | 靠代码纪律 | hook 守着:上层改不动下层,跨层提交被拒 |
 
 collections-store.md 的两条原则不变:**认知层进 git,现场层用裸文件**。Collections 只是把「进 git」这一半做成了有层语义的。
@@ -158,7 +158,7 @@ collections-store.md 的两条原则不变:**认知层进 git,现场层用裸文
 
 ## 8. 这篇有意不定的事
 
-- **schema 用什么写**:JSON Schema、一份 YAML 字段表、还是直接一个 pydantic 类文件。内置 layer 现在就是 pydantic 类;用户的 layer 要能不写 Python——倾向 YAML 字段表 + 少量约定(哪个字段是标题、哪个是引用)。
+- ~~schema 用什么写~~:已定——不用 schema,用户层就是一个 `Layer` 子类的 `.py`,和内置层一样写 `check`([collections-layer.md](collections-layer.md))。
 - **通用 API 的形状**:`/api/collections/<class>/...` 一套 CRUD + 历史 + 检索,内置 layer 的专用端点(`/api/issues/...` `/api/cards/...`)是不是它上面的别名。
 - ~~要不要把 rounds 纳入 Collections 当事实层~~:已定——地板是 [origin](origin.md)(外部材料),rounds 整体仍不进 git;要留的几轮摘录进 origin。
 - **跨 layer 引用要不要校验**:card.issue 指向的 issue 必须存在吗;删时要不要检查反向引用。collectbase 明确「不管文件之间的关系」,这是 memory.talk 自己的事;倾向只在写时校验存在、不做级联。

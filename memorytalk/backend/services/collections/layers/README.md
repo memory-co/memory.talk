@@ -38,22 +38,28 @@ POST / PUT /api/collections/{layer}/{path}   {"files": {"<相对路径>": "<内�
 
 标题都是目录名,文件里不再写标题。「加一个立场」= PUT 一个新的 `positions/<主张>.md`;「加一条论证」= PUT 那个文件、末尾多一行;「排序」= PUT `meta.yaml`。提交主题由调用方给(`subject`),不给就是 `write / edit <path>`。
 
-## 用户层(`UserLayer`,`_user.py`)
+## 用户层:`<home>/layers/<name>.py`
 
-同一个接口的另一个实现,规则从一份 YAML 清单来(构造时编译进实例):
+和内置层一模一样:一个 `.py`,里面一个 `Layer` 子类。启动时载入(`load_user`),排在内置层之上,按文件名;`collections.json` 里自动补一项 `{"name", "builtin": false}`,新分支从始祖出发。
 
-```yaml
-layer: experiment
-files:
-  readme.md:   {format: markdown, required: true}
-  result.yaml: {format: yaml, fields: {verdict: {type: string, required: true}, issue: {type: ref, layer: issue}}}
-  "runs/*.md": {format: markdown, append_only: true}
+```python
+# ~/.memory.talk/layers/experiment.py
+from memorytalk.backend.services.collections.layers import Layer, appended_only, load_yaml
+
+class Experiment(Layer):
+    name = "experiment"
+    files = ["readme.md", "result.yaml", "runs/*.md"]
+
+    def check(self, changes, after):
+        for c in changes:
+            if c.path == "readme.md" and c.new is None:
+                return "readme.md 不能删"
+            ...
+        return None if "readme.md" in after else "缺 readme.md"
 ```
 
-规则:清单外的路径拒;`required` 的不能缺、不能删;`append_only` 的只能在末尾追加;`format: yaml / json` 的解开按 `fields` 校验(必填、类型、多余键拒),`markdown / text` 不看内容。字段类型:`string` `int` `bool` `ref` `list[string]` `list[ref]`。
-schema 通过 `POST /api/collections/layers` 交上去,内嵌进仓库根 `collections.json`,启动时 `_load_layers` 从那里读回;`GET /layers` 原样给出。
+没有 YAML、没有 schema 编译、没有加层的端点:加一层 = 放一个文件,重启。文件里没有 `Layer` 子类,或 `collections.json` 里记着的层找不到文件,启动即报错。
 
 ## 要加一个内置层
 
-1. `<name>.py`:`class Xxx(Layer)`,填 `name` / `files` / `description`,实现 `check(self, changes, after)`;它的 schema(pydantic)挂在类里。
-2. 在 `__init__.py` 的 `BUILTIN` 里放一个实例(最底在前)。已有仓库启动时 `Repo.ensure_layers` 会把缺的层补进 `collections.json`。
+和用户层一样写,只是文件放在这个目录、实例放进 `__init__.py` 的 `BUILTIN`(最底在前)。已有仓库启动时 `Repo.ensure_layers` 会把缺的层补进 `collections.json`。

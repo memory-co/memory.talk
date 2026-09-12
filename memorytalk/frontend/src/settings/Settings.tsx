@@ -40,7 +40,7 @@ function RegisterUser({ open, onClose }: { open: boolean; onClose: () => void })
     onSuccess: data => { setUser(data.name); void queryClient.invalidateQueries({ queryKey: ['users'] }); onClose(); setName(''); setDisplay(''); setEmail(''); toast.success('已添加并切换身份'); },
   });
   return <Modal open={open} onClose={() => { if (!mutation.isPending) { mutation.reset(); onClose(); } }} title="添加团队成员" description="每个人都可以参与工作，身份用于记录贡献。">
-    <form className="form-stack" onSubmit={e => { e.preventDefault(); mutation.mutate(); }}><label>用户名<input value={name} onChange={e => setName(e.target.value)} autoFocus required pattern="[A-Za-z0-9_.\-]{1,64}" placeholder="alice" /><span className="field-hint">支持英文字母、数字、下划线、点和连字符。</span></label><label>显示名称<input value={display} onChange={e => setDisplay(e.target.value)} placeholder="如何称呼你" /></label><label>邮箱（可选）<input type="email" value={email} onChange={e => setEmail(e.target.value)} /></label>
+    <form className="form-stack" onSubmit={e => { e.preventDefault(); mutation.mutate(); }}><label>用户名<input aria-label="用户名" value={name} onChange={e => setName(e.target.value)} autoFocus required pattern="[A-Za-z0-9_.\-]{1,64}" placeholder="alice" /><span className="field-hint">支持英文字母、数字、下划线、点和连字符。</span></label><label>显示名称<input value={display} onChange={e => setDisplay(e.target.value)} placeholder="如何称呼你" /></label><label>邮箱（可选）<input type="email" value={email} onChange={e => setEmail(e.target.value)} /></label>
       {mutation.isError && <ErrorState error={mutation.error} />}<div className="form-actions"><button className="button primary" disabled={!name.trim() || mutation.isPending}>{mutation.isPending && <LoaderCircle size={15} className="spin" />}添加并使用</button></div>
     </form>
   </Modal>;

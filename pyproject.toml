@@ -52,6 +52,7 @@ addopts = "--import-mode=importlib"
 
 [tool.hatch.build.targets.wheel]
 packages = ["memorytalk"]
+artifacts = ["memorytalk/frontend/dist/**"]
 # 前端源码不进 wheel;构建产物(memorytalk/frontend/dist,`cd memorytalk/frontend && npm run build`)随包分发
 exclude = [
     "memorytalk/frontend/src",

@@ -6,13 +6,14 @@
 ~/.memory.talk/                       ← MEMORY_TALK_HOME
 ├── collections/                      ← 分层 git 仓库(认知层),见 collections.md
 │   ├── .git/                         ←   refs/heads/layer/{origin,issue,card,…}、refs/heads/stack;HEAD → stack
-│   ├── collections.json              ←   锚定:整个 collections 的配置 + layers[](最底在前,用户层内嵌 schema);始祖提交只有它;git 历史 = 层的变化史
+│   ├── collections.json              ←   锚定:整个 collections 的配置 + layers[](最底在前,只有名字和 builtin);始祖提交只有它;git 历史 = 层的变化史
 │   ├── manager.json                  ←   根:管一切(可选)
 │   └── <按主题组织的目录树>/          ←   原文、.issue/、.card/、.<用户层>/ 并排
 │       ├── manager.json              ←   这一片归谁管(可选,任何目录)
 │       ├── 某份原文.md                ←   origin:不带后缀的文件
 │       ├── 某个问题.issue/            ←   issue:readme.md + meta.yaml + positions/<主张>.md + 可选 manager.json
 │       └── 某张卡.card/              ←   card:readme.md + meta.yaml + 可选 manager.json
+├── layers/                           ← 用户自定义层:<名>.py 各一个 Layer 子类,启动时载入(和内置层一模一样)
 ├── users/                            ← user 档案(注册的实体;MEMORY_TALK_STORE=fs 时)
 │   └── <name>.json                   ←   name / display_name / email / created_at
 ├── works/                            ← 裸文件(现场层)

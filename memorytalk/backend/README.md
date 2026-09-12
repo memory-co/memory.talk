@@ -5,7 +5,7 @@ memory.talk v5 的 Python 包(pip:`memorytalk`,命令 `memory.talk`)。**work �
 ```
 memorytalk/backend/           # 服务本体;memorytalk/cli/ 是它的命令行客户端
 ├── main.py                   # FastAPI 实例、路由挂载、启动钩子
-├── config.py                 # 环境变量与路径(~/.memory.talk/{memory,works})
+├── config.py                 # 环境变量与路径(~/.memory.talk/{collections,layers,works,users})
 ├── gateway.py                # AuthGate + 静态托管 + 反代(/tty、/proxy/<port>)
 │
 ├── models/                   # 数据模型(纯结构,不含 IO)
@@ -37,9 +37,8 @@ memorytalk/backend/           # 服务本体;memorytalk/cli/ 是它的命令行�
 │   │   ├── repo.py           #     UserRepo:fs 版(users/<name>.json)/ db 版(users 表)
 │   │   └── __init__.py       #     UserService:注册 / 档案 / 活动统计(从 work 与 collections 现算)/ commit author
 │   ├── collections/          #   认知层 —— docs/designs/v5/collections.md / manager.md
-│   │   ├── layers/           #     每层一个类,实现 Layer 接口的 check(diff, after) -> None | str;用户层从 collections.json 里的 YAML 编译(README.md:怎么写一层)
+│   │   ├── layers/           #     每层一个类,实现 Layer 接口的 check(diff, after) -> None | str;用户层 = <home>/layers/*.py 里一模一样的子类,启动时载入(README.md:怎么写一层)
 │   │   │   ├── base.py       #       Layer(ABC:name / files / check;形态从 name 派生)+ Change + 小工具(appended_only / load_yaml)
-│   │   │   ├── _user.py      #       UserLayer:YAML files 清单编译进实例(清单外拒、required、append_only、fields)
 │   │   │   ├── origin.py     #       最底层:不带后缀的一切,原文,不校验
 │   │   │   ├── issue.py      #       <名>.issue/{readme.md, meta.yaml, positions/*.md};立场只增不改、不删;meta 的边和排序有约束
 │   │   │   └── card.py       #       <名>.card/{readme.md, meta.yaml};readme 不能删;meta 只有 context / links / issue

@@ -57,24 +57,20 @@ class CollectionsService:
     # ================================================================ 层
 
     def _load_layers(self) -> None:
-        builtin = {l.name: l for l in layer_pkg.BUILTIN}
-        cur = self.repo.layers()
-        names = list(cur) if cur else [l.name for l in layer_pkg.BUILTIN]
-        for b in layer_pkg.BUILTIN:            # 内置层缺了就补上(顺序:内置在前)
-            if b.name not in names:
-                names.append(b.name)
-        self.repo.ensure_layers(names)
-        cfg = self.repo.config()
-        specs: dict[str, Layer] = {}
-        for entry in cfg["layers"]:
-            name = entry["name"]
-            if name in builtin:
-                specs[name] = builtin[name]
-            elif "schema" in entry:
-                specs[name] = layer_pkg.from_dict(name, entry["schema"])
-            else:
-                raise CollectionsError("bad_layer", f"collections.json 里的层 {name} 既不是内置的,也没有 schema", 500)
-        self.layers, self.order = specs, [e["name"] for e in cfg["layers"]]
+        """内置层 + <home>/layers/*.py 里的用户层;collections.json 里缺的补上(一次最底层提交),多出来的(文件没了)报错。"""
+        known = {l.name: l for l in layer_pkg.BUILTIN}
+        for l in layer_pkg.load_user(self.config.layers_dir):
+            if l.name in known:
+                raise CollectionsError("bad_layer", f"层名重复:{l.name}", 500)
+            known[l.name] = l
+        cur = self.repo.layers() or []
+        names = list(cur) + [n for n in known if n not in cur]
+        self.repo.ensure_layers(names, {l.name for l in layer_pkg.BUILTIN})
+        missing = [n for n in self.repo.layers() if n not in known]
+        if missing:
+            raise CollectionsError("bad_layer", f"collections.json 里有层 {', '.join(missing)},但既不是内置的,{self.config.layers_dir} 下也没有它的 .py", 500)
+        self.order = list(self.repo.layers())
+        self.layers = {n: known[n] for n in self.order}
 
     def anchor(self) -> dict:
         """collections.json 本体。"""
@@ -92,29 +88,10 @@ class CollectionsService:
 
     def _info(self, layer: Layer, order: int) -> LayerInfo:
         return LayerInfo(name=layer.name, order=order, builtin=layer.builtin, suffix=layer.suffix, files=layer.files,
-                         schema=layer.schema, description=layer.description)
+                         description=layer.description)
 
     def layer_infos(self) -> list[LayerInfo]:
         return [self._info(self.layers[n], i) for i, n in enumerate(self.order)]
-
-    def add_layer(self, name: str, schema_yaml: str, reason: str, ctx: Ctx) -> LayerInfo:
-        if name in self.layers:
-            raise CollectionsError("exists", f"层已存在:{name}", 409)
-        schema = layer_pkg.schema_from_yaml(schema_yaml)
-        if schema.get("layer", name) != name:
-            raise CollectionsError("bad_layer", f"schema 里的 layer 是 {schema.get('layer')!r},不是 {name!r}")
-        try:
-            layer_pkg.from_dict(name, schema)                 # 先校验能不能解析
-        except ValueError as e:
-            raise CollectionsError("bad_layer", str(e)) from None
-        entry = {"name": name, "schema": {k: v for k, v in schema.items() if k != "layer"}, "added_at": _now()}
-        msg = f"[{self.order[0]}] collections: add layer {name}" + (f"\n\nReason: {reason}" if reason else "")
-        try:
-            self.repo.add_layer(entry, msg, author=self.author_of(ctx.user))
-        except GuardError as e:
-            raise CollectionsError("guard", str(e), e.status) from None
-        self._load_layers()
-        return self._info(self.layers[name], self.order.index(name))
 
     def layer_of_path(self, repo_path: str) -> str:
         """一个仓库路径归哪层:第一个带 `.<层>` 后缀的目录段说了算;都没有 → 最底层。"""

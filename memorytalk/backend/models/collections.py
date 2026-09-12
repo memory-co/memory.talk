@@ -13,13 +13,10 @@ from pydantic import BaseModel, Field
 class LayerInfo(BaseModel):
     name: str
     order: int = Field(description="0 = 最底层(origin)")
-    builtin: bool
+    builtin: bool = Field(description="False = 用户层:<home>/layers/*.py 里的 Layer 子类")
     suffix: str | None = Field(description="对象目录后缀 `.<name>`;origin 为 None(不带后缀的一切)")
     files: list[str] = Field(default_factory=list, description="目录里允许的文件(可通配);origin 为空(文件本身)")
-    schema_: dict | None = Field(None, alias="schema", description="用户层的 YAML(原样);内置层为 null,规则在代码里")
     description: str = ""
-
-    model_config = {"populate_by_name": True}
 
 
 class Obj(BaseModel):
@@ -89,12 +86,6 @@ class InboxItem(BaseModel):
     sha: str | None = None
     by: str | None = None
     routed_by: str = Field(description="哪个 manager.json 把它路由过来的(目录,'' = 根)")
-
-
-class LayerCreate(BaseModel):
-    name: str
-    schema_yaml: str = Field(description="层的 YAML:files 清单(每个文件的 format / required / append_only / fields),见 docs/designs/v5/collections-layer.md")
-    reason: str = ""
 
 
 CatalogDir.model_rebuild()

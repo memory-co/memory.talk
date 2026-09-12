@@ -16,6 +16,10 @@ class Config:
     def collections_dir(self) -> Path:   # 分层 git 仓库(collections)
         return self.home / "collections"
 
+    @property
+    def layers_dir(self) -> Path:        # 用户自定义层:每个 .py 一个 Layer 子类,启动时载入
+        return self.home / "layers"
+
 
 
 def load_config() -> Config:

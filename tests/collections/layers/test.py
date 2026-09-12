@@ -15,7 +15,7 @@ def test_issue_and_card_list_their_allowed_files(client):
     _, issue, card = client.get("/api/collections/layers").json()
     assert (issue["suffix"], issue["files"]) == (".issue", ["readme.md", "meta.yaml", "positions/*.md"])
     assert (card["suffix"], card["files"]) == (".card", ["readme.md", "meta.yaml"])
-    assert issue["schema"] is None and card["builtin"]
+    assert issue["builtin"] and card["builtin"]
 
 
 def test_repo_has_a_branch_per_layer_and_stack(svc):

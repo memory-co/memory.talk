@@ -1,55 +1,86 @@
-"""collections/user_layer -- schema-defined layers. See README.md."""
+"""collections/user_layer -- a .py under <home>/layers is a layer. See README.md."""
+import os
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
 from tests._util import git_log
 
-SCHEMA = """
-layer: experiment
-description: 一次实验
-files:
-  readme.md:   {format: markdown, required: true}
-  result.yaml:
-    format: yaml
-    fields:
-      verdict: {type: string, required: true}
-      tags:    {type: "list[string]"}
-      issue:   {type: ref, layer: issue}
-  "runs/*.md": {format: markdown, append_only: true}
-"""
-OK = {"readme.md": "测什么", "result.yaml": "verdict: 支持\ntags: [a, b]", "runs/1.md": "第一次"}
+EXPERIMENT = '''
+import fnmatch
+from memorytalk.backend.services.collections.layers import Layer, appended_only, load_yaml
+
+class Experiment(Layer):
+    name = "experiment"
+    files = ["readme.md", "result.yaml", "runs/*.md"]
+    description = "一次实验"
+
+    def check(self, changes, after):
+        for c in changes:
+            if c.path == "readme.md":
+                if c.new is None:
+                    return "readme.md 不能删"
+            elif c.path == "result.yaml":
+                if c.new is not None and "verdict" not in load_yaml(c.new):
+                    return "result.yaml 要有 verdict"
+            elif fnmatch.fnmatchcase(c.path, "runs/*.md"):
+                if c.old is not None and c.new is not None and not appended_only(c.old, c.new):
+                    return f"{c.path}:只能在末尾追加"
+            else:
+                return f"{c.path}:experiment 目录里只能有 readme.md / result.yaml / runs/*.md"
+        return None if "readme.md" in after else "缺 readme.md"
+'''
+OK = {"readme.md": "测什么", "result.yaml": "verdict: 支持", "runs/1.md": "第一次"}
 
 
-def test_add_layer_from_yaml(client):
-    r = client.post("/api/collections/layers", json={"name": "experiment", "schema_yaml": SCHEMA})
-    assert r.status_code == 201
-    assert [l["name"] for l in client.get("/api/collections/layers").json()] == ["origin", "issue", "card", "experiment"]
-    assert r.json()["files"] == ["readme.md", "result.yaml", "runs/*.md"] and r.json()["schema"]["files"]["runs/*.md"]["append_only"]
-    assert client.post("/api/collections/layers", json={"name": "experiment", "schema_yaml": SCHEMA}).status_code == 409
-    assert client.post("/api/collections/layers", json={"name": "bad", "schema_yaml": "layer: bad\nfiles: {}\n"}).status_code == 400
-
-
-def test_objects_follow_the_compiled_check(client):
-    client.post("/api/collections/layers", json={"name": "experiment", "schema_yaml": SCHEMA})
-    r = client.post("/api/collections/experiment/基准/跑一次", json={"files": OK})
-    assert r.status_code == 201 and r.json()["title"] == "跑一次" and set(r.json()["files"]) == set(OK)
-    assert "[experiment] write" in git_log(client, "layer/experiment")
-    bad = lambda files: client.post("/api/collections/experiment/基准/坏", json={"files": files})
-    assert "缺 readme.md" in bad({"result.yaml": "verdict: x"}).json()["message"]
-    assert "verdict" in bad({"readme.md": "", "result.yaml": "tags: [a]"}).json()["message"]
-    assert "extra.txt" in bad({"readme.md": "", "extra.txt": "x"}).json()["message"]
-    assert "score" in bad({"readme.md": "", "result.yaml": "verdict: x\nscore: 1"}).json()["message"]
-
-
-def test_append_only_and_required_rules(client):
-    client.post("/api/collections/layers", json={"name": "experiment", "schema_yaml": SCHEMA})
-    client.post("/api/collections/experiment/基准/跑一次", json={"files": OK})
-    put = lambda files: client.put("/api/collections/experiment/基准/跑一次", json={"files": files})
-    assert put({"runs/1.md": "第一次\n第二行"}).status_code == 200
-    assert "追加" in put({"runs/1.md": "重写"}).json()["message"]
-    assert "不能删" in put({"readme.md": None}).json()["message"]
-    assert put({"result.yaml": None}).status_code == 200                      # 非必需的可以删
-
-
-def test_user_layer_survives_restart(client):
-    client.post("/api/collections/layers", json={"name": "experiment", "schema_yaml": SCHEMA})
+def _app():
     from memorytalk.backend.config import load_config, load_runtime_config
     from memorytalk.backend.main import create_app
-    assert create_app(load_config(), load_runtime_config()).state.collections.order[-1] == "experiment"
+    return create_app(load_config(), load_runtime_config())
+
+
+@pytest.fixture
+def client(home):
+    d = Path(os.environ["MEMORY_TALK_HOME"]) / "layers"
+    d.mkdir(parents=True)
+    (d / "experiment.py").write_text(EXPERIMENT)
+    with TestClient(_app()) as c:
+        yield c
+
+
+def test_layer_is_loaded_above_the_builtins(client):
+    ls = client.get("/api/collections/layers").json()
+    assert [(l["name"], l["builtin"]) for l in ls] == [("origin", True), ("issue", True), ("card", True), ("experiment", False)]
+    assert ls[-1]["files"] == ["readme.md", "result.yaml", "runs/*.md"]
+    cfg = client.get("/api/collections/config").json()["config"]
+    assert cfg["layers"][-1] == {"name": "experiment", "builtin": False}
+
+
+def test_objects_go_through_its_check(client):
+    r = client.post("/api/collections/experiment/基准/跑一次", json={"files": OK})
+    assert r.status_code == 201 and r.json()["title"] == "跑一次"
+    assert "[experiment] write" in git_log(client, "layer/experiment")
+    bad = lambda files: client.post("/api/collections/experiment/基准/坏", json={"files": files}).json()["message"]
+    assert "缺 readme.md" in bad({"result.yaml": "verdict: x"})
+    assert "verdict" in bad({"readme.md": "", "result.yaml": "note: x"})
+    assert "extra.txt" in bad({"readme.md": "", "extra.txt": "x"})
+    put = lambda files: client.put("/api/collections/experiment/基准/跑一次", json={"files": files})
+    assert put({"runs/1.md": "第一次\n第二次"}).status_code == 200
+    assert "追加" in put({"runs/1.md": "重写"}).json()["message"]
+
+
+def test_file_without_a_layer_class_fails_startup(home):
+    d = Path(os.environ["MEMORY_TALK_HOME"]) / "layers"
+    d.mkdir(parents=True)
+    (d / "empty.py").write_text("x = 1\n")
+    with pytest.raises(ValueError, match="Layer 的子类"):
+        _app()
+
+
+def test_removing_the_file_after_use_fails_startup(client):
+    client.post("/api/collections/experiment/基准/跑一次", json={"files": OK})
+    (Path(os.environ["MEMORY_TALK_HOME"]) / "layers" / "experiment.py").unlink()
+    from memorytalk.backend.services.collections import CollectionsError
+    with pytest.raises(CollectionsError, match="experiment"):
+        _app()

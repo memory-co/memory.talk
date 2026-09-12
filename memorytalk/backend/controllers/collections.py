@@ -4,8 +4,8 @@ from __future__ import annotations
 from memorytalk.backend.models.result import Result, ok
 from fastapi import APIRouter, Depends, Header, Query, Request
 
-from memorytalk.backend.models.collections import (CatalogDir, LayerCreate, LayerInfo, Manager, ManagerPut, Obj, ObjWrite,
-                                                     Revision, SearchHit, TreeItem)
+from memorytalk.backend.models.collections import (CatalogDir, LayerInfo, Manager, ManagerPut, Obj, ObjWrite, Revision,
+                                                     SearchHit, TreeItem)
 from memorytalk.backend.services.collections import CollectionsError, CollectionsService, Ctx
 
 router = APIRouter(prefix="/api/collections", tags=["collections"])
@@ -24,14 +24,9 @@ def ctx(request: Request, x_memory_talk_user: str | None = Header(None, alias="X
 
 # ---- 固定路径先于 /{layer} ----
 
-@router.get("/layers", response_model=Result[list[LayerInfo]], summary="有哪些层(最底在前)、各自允许的文件")
+@router.get("/layers", response_model=Result[list[LayerInfo]], summary="有哪些层(最底在前)、各自允许的文件;用户层来自 <home>/layers/*.py")
 def layers(svc: CollectionsService = Depends(collections)):
     return ok(svc.layer_infos())
-
-
-@router.post("/layers", response_model=Result[LayerInfo], status_code=201, summary="加一个用户层:一份 schema YAML")
-def add_layer(req: LayerCreate, svc: CollectionsService = Depends(collections), c: Ctx = Depends(ctx)):
-    return ok(svc.add_layer(req.name, req.schema_yaml, req.reason, c))
 
 
 @router.get("/config", summary="collections.json 本体 + 它的 git 历史(层的变化史)", response_model=Result[dict])

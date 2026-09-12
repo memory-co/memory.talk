@@ -1,6 +1,6 @@
 # Collections API
 
-认知层。层 = 一个校验函数 `check(diff, after)`(内置 origin / issue / card,可加用户层);对象 = 带后缀的目录 `<path>.<层>/`,里面一组文件,放在树的任何位置,标题就是目录名;origin = 不带后缀的文件。一次写 = 对一个对象目录的一批文件改动,交给层的 check(不过 → 422 `invalid`,`message` 是理由),过了一个 `[层名]` 提交,落在 `layer/<层>` 上再 merge 进 `stack`;碰了别的层的路径被守卫拒绝(409 `guard`)。机制见 [designs collections.md](../../designs/v5/collections.md) / [collections-layer.md](../../designs/v5/collections-layer.md) / [manager.md](../../designs/v5/manager.md)。
+认知层。层 = 一个 `Layer` 子类的 `check(diff, after)`(内置 origin / issue / card;用户层是 `~/.memory.talk/layers/*.py`);对象 = 带后缀的目录 `<path>.<层>/`,里面一组文件,放在树的任何位置,标题就是目录名;origin = 不带后缀的文件。一次写 = 对一个对象目录的一批文件改动,交给层的 check(不过 → 422 `invalid`,`message` 是理由),过了一个 `[层名]` 提交,落在 `layer/<层>` 上再 merge 进 `stack`;碰了别的层的路径被守卫拒绝(409 `guard`)。机制见 [designs collections.md](../../designs/v5/collections.md) / [collections-layer.md](../../designs/v5/collections-layer.md) / [manager.md](../../designs/v5/manager.md)。
 
 `{path:path}` 直接放在 URL 里(可含 `/` 和中文)。固定子路径(`layers` `config` `tree` `search` `manager` `managed` `history`)先于 `{layer}`。
 
@@ -11,23 +11,13 @@
 ### GET /api/collections/layers
 
 ```json
-[{"name": "origin", "order": 0, "builtin": true, "suffix": null,     "files": [],                                          "schema": null, "description": "…"},
- {"name": "issue",  "order": 1, "builtin": true, "suffix": ".issue", "files": ["readme.md", "meta.yaml", "positions/*.md"], "schema": null, "description": "…"},
- {"name": "card",   "order": 2, "builtin": true, "suffix": ".card",  "files": ["readme.md", "meta.yaml"],                  "schema": null, "description": "…"},
- {"name": "experiment", "order": 3, "builtin": false, "suffix": ".experiment", "files": ["readme.md", "result.yaml", "runs/*.md"], "schema": {"files": {…}}, …}]
+[{"name": "origin", "order": 0, "builtin": true,  "suffix": null,     "files": [],                                          "description": "…"},
+ {"name": "issue",  "order": 1, "builtin": true,  "suffix": ".issue", "files": ["readme.md", "meta.yaml", "positions/*.md"], "description": "…"},
+ {"name": "card",   "order": 2, "builtin": true,  "suffix": ".card",  "files": ["readme.md", "meta.yaml"],                  "description": "…"},
+ {"name": "experiment", "order": 3, "builtin": false, "suffix": ".experiment", "files": ["readme.md", "result.yaml", "runs/*.md"], "description": "…"}]
 ```
 
-最底在前。`files` 是对象目录里允许的文件(给人看的清单,可通配);内置层的规则在代码里(`schema: null`),用户层的 YAML 原样在 `schema`。
-
-### POST /api/collections/layers
-
-加一个用户层:一份 YAML 清单,编译成这个层的 check(格式见 [collections-layer.md §2](../../designs/v5/collections-layer.md))。
-
-```json
-{"name": "experiment", "schema_yaml": "layer: experiment\nfiles:\n  readme.md: {format: markdown, required: true}\n  result.yaml: {format: yaml, fields: {verdict: {type: string, required: true}}}\n  \"runs/*.md\": {format: markdown, append_only: true}\n", "reason": ""}
-```
-
-**201** 返回 LayerInfo。副作用:`collections.json` 的 `layers[]` 多一项(schema 内嵌、`added_at`),一个 `[origin]` 提交;新分支 `layer/experiment` 从始祖出发。重启后仍在。已存在 → 409;清单空 / 类型不认识 → 400 `bad_layer`。文件格式 `markdown` `text` `yaml` `json`;字段类型 `string` `int` `bool` `"list[string]"` `ref` `"list[ref]"`(带 `[` 的要加引号)。
+最底在前。`files` 是对象目录里允许的文件(给人看的清单,可通配);规则在各层的 `check` 里。**没有加层的端点**:用户层是 `~/.memory.talk/layers/<名>.py` 里一个和内置层一模一样的 `Layer` 子类,重启时载入、登记进 `collections.json`(一次 `[origin]` 提交)、新分支从始祖出发;`builtin: false`。怎么写见 [collections-layer.md](../../designs/v5/collections-layer.md)。
 
 ---
 

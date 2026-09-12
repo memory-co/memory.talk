@@ -34,8 +34,7 @@
 | `GET` | `/api/users/{name}` | 一个 user 的档案 + 建的 / 动过的 work、最近的提交 |
 | `PUT` | `/api/users/{name}` | 改档案(display_name / email) |
 | `GET` | `/api/collections/config` | collections.json 本体 + 它的 git 历史(层的变化史) |
-| `GET` | `/api/collections/layers` | 有哪些层(最底在前)、各自允许的文件 |
-| `POST` | `/api/collections/layers` | 加一个用户层:一份 schema YAML |
+| `GET` | `/api/collections/layers` | 有哪些层(最底在前)、各自允许的文件;用户层来自 <home>/layers/*.py |
 | `GET` | `/api/collections/managed` | (暂缓,等 work 实现后启用)某个 work 管的所有对象;不传 work = 没人管的对象 |
 | `GET` | `/api/collections/manager` | (暂缓,等 work 实现后启用)这个路径归谁管(最近的 manager.json) |
 | `PUT` | `/api/collections/manager` | (暂缓,等 work 实现后启用)在这个目录(或对象)下放 manager.json,绑到一个 work |

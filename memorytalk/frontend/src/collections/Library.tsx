@@ -106,7 +106,7 @@ function ObjectEditor({ layer, path, initial, open, onClose, onSaved, work }: {
     <form className="form-stack" onSubmit={e => { e.preventDefault(); if (valid) mutation.mutate(); }}>
       {!path && <label>{layer === 'origin' ? '保存路径' : '保存路径（最后一段为标题）'}<input autoFocus value={objectPath} onChange={e => setObjectPath(e.target.value)} placeholder="项目/主题/名称" required /></label>}
       {layer === 'card' && <label>适用语境<input value={context} onChange={e => setContext(e.target.value)} placeholder="关于哪个项目、场景或约定" /></label>}
-      <label>{layer === 'issue' ? '问题描述' : '正文'}<textarea className="editor-textarea" value={content} onChange={e => setContent(e.target.value)} placeholder="支持 Markdown" /></label>
+      <label>{layer === 'issue' ? '问题描述' : '正文'}<textarea aria-label={layer === 'issue' ? '问题描述' : '正文'} className="editor-textarea" value={content} onChange={e => setContent(e.target.value)} placeholder="支持 Markdown" /></label>
       <label>修改说明（可选）<input value={reason} onChange={e => setReason(e.target.value)} placeholder="为什么记录或修改这条内容" /></label>
       {mutation.isError && <ErrorState error={mutation.error} />}
       <div className="form-actions"><button type="button" className="button secondary" onClick={onClose} disabled={mutation.isPending}>取消</button><button className="button primary" disabled={!valid || mutation.isPending}>{mutation.isPending && <LoaderCircle size={15} className="spin" />}保存</button></div>

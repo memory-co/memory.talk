@@ -1,6 +1,6 @@
 # collections layer —— 怎么设计一个自己的层(v5 设计)
 
-> **状态:已实施。** 一个层 = `Layer` 接口的一个实现,一个 `check(diff, after) -> None | str`;用户层的 YAML `files` 清单编译成这个函数;实现见 `memorytalk/backend/services/collections/layers/`(README 讲契约和三个内置层的规则)。[collections.md](collections.md) 说 issue 和 card 只是 Collections 里两个内置的 layer,用户写清 schema 就能加自己的层。本篇讲**怎么加**。总定位见 [README.md](README.md)。
+> **状态:已实施。** 一个层 = `Layer` 接口的一个实现,一个 `check(diff, after) -> None | str`;用户层就是 `~/.memory.talk/layers/<名>.py` 里一模一样的子类,启动时载入,没有 YAML、没有加层的端点。实现见 `memorytalk/backend/services/collections/layers/`(README 讲契约和三个内置层的规则)。[collections.md](collections.md) 说 issue 和 card 只是 Collections 里两个内置的 layer。本篇讲**怎么加一层**。总定位见 [README.md](README.md)。
 
 相关:
 - v5 collections(层即 collectbase 的 layer;Collections 是认知层的容器): [collections.md](collections.md)
@@ -10,7 +10,7 @@
 
 ---
 
-## 1. 一句话:一个层 = 回答四个问题 + 写两个文件
+## 1. 一句话:一个层 = 回答四个问题 + 写一个 .py
 
 你想在认知层里记一种新东西——决策记录、实验日志、人物档案、外部文档摘要——就是加一个层。加一个层要回答四个问题:
 
@@ -21,7 +21,7 @@
 | **长什么样** | 一个对象是一个**目录**;层是一个**校验函数**:这次提交对目录的 diff 进去,过 / 不过出去。允许哪些文件、哪些只增不改、字段怎么校验,都是这个函数的事 |
 | **排在哪** | 层序:它在 `collections.json` 的 `layers[]` 里的位置——比谁更接近记录、比谁更接近结论 |
 
-落下来就是**仓库根 `collections.json` 的 `layers[]` 里多一项**——名字、schema 内嵌、什么时候加的;一次最底层的提交,`git log collections.json` 就是层的变化史。不写代码。你手里写的还是一份 YAML 字段表(`memory.talk collection layers add <名> --schema <file>`),系统把它嵌进 `collections.json`。
+落下来就是 **`~/.memory.talk/layers/<名>.py` 里一个 `Layer` 子类**——和内置的 issue / card 一模一样的写法;重启时载入,`collections.json` 的 `layers[]` 自动多一项(名字 + `builtin: false`),一次最底层的提交,`git log collections.json` 就是层的变化史。要写代码,但只写一个方法:`check`。
 
 ---
 
@@ -41,26 +41,35 @@
 
 层就是 `check(changes, after) -> None | str`:`changes` 是这次提交对一个对象目录的 diff(相对路径、改前、改后;改前为空是新增,改后为空是删除),`after` 是改完的整个目录;返回 None 过,返回一句话拒、那句话原样报给调用方。看 diff 才能说「只增不改」「不能删」,看 after 才能做跨文件约束。这是一个 pre-receive hook 的形状。
 
-内置层的 check 是代码(`issue.py` 几十行)。用户层不写代码,写一份 YAML 清单,系统编译成 check:
+内置层和用户层是同一个接口、同一种写法,区别只是文件放在哪:
 
-```yaml
-# 写成 YAML 交给 `collection layers add`;落进 collections.json 时就是这份的 JSON
-layer: decision
-files:
-  readme.md:   {format: markdown, required: true}         # 一个文件一条;键是目录内相对路径,可用 * 通配
-  meta.yaml:                                              # format:markdown | text(不看内容)| yaml | json(按 fields 校验)
-    format: yaml
-    fields:
-      chosen:   {type: string, required: true}
-      rejected: {type: "list[string]"}
-      issue:    {type: ref, layer: issue}                 # 引用:指向哪个层的对象
-      cards:    {type: "list[ref]", layer: card}
-  "notes/*.md": {format: markdown, append_only: true}     # 只能在末尾追加
+```python
+# ~/.memory.talk/layers/decision.py
+import fnmatch
+from memorytalk.backend.services.collections.layers import Layer, appended_only, load_yaml
+
+class Decision(Layer):
+    name = "decision"                                   # = 后缀 .decision、分支 layer/decision、提交前缀 [decision]
+    files = ["readme.md", "meta.yaml", "notes/*.md"]    # 给人看的清单;规则在 check 里
+    description = "一个决定:定了什么、否了什么、什么时候重审"
+
+    def check(self, changes, after):
+        for c in changes:
+            if c.path == "readme.md":
+                if c.new is None:
+                    return "readme.md 不能删"
+            elif c.path == "meta.yaml":
+                if c.new is not None and "chosen" not in load_yaml(c.new):
+                    return "meta.yaml 要有 chosen"
+            elif fnmatch.fnmatchcase(c.path, "notes/*.md"):
+                if c.old is not None and c.new is not None and not appended_only(c.old, c.new):
+                    return f"{c.path}:只能在末尾追加"
+            else:
+                return f"{c.path}:decision 目录里只能有 readme.md / meta.yaml / notes/*.md"
+        return None if "readme.md" in after else "缺 readme.md"
 ```
 
-编译出来的规则:清单外的路径拒;`required` 的不能缺、不能删;`append_only` 的改只能追加;yaml / json 文件解开按 `fields` 校验(必填、类型、多余的键拒)。类型就几种:`string` `int` `bool` `list[…]` `ref`。不做嵌套对象——要嵌套,那是另一个文件或另一个层加一个 `ref`。
-
-标题**一律是目录名**,文件里不写标题。`manager.json` 是机制文件,任何层的任何目录都允许,不用写进清单。
+想校验多严都行——pydantic、正则、跨文件——都是你这个方法里的事;系统不认识字段、类型、引用,它只问一句「过不过」。标题**一律是目录名**,文件里不写标题。`manager.json` 是机制文件,任何层的任何目录都允许,不用管。
 
 ### 排在哪
 
@@ -79,7 +88,7 @@ collectbase 的层是有序的:下面的更接近记录、上面的更接近结�
 
 ## 3. 系统替你做什么:通用的那一套
 
-写完清单,不写一行代码,你的层立刻有了:
+写完 `check`,你的层立刻有了:
 
 | 能力 | 怎么来的 |
 |---|---|
@@ -90,7 +99,7 @@ collectbase 的层是有序的:下面的更接近记录、上面的更接近结�
 | **manager** | 任何目录放 `manager.json`,这一层的变动就打到那个 work([manager.md](manager.md)) |
 | **层的守卫** | 提交必须声明 `[名]`,碰了别的层的路径当场拒绝 |
 
-这些对内置层和用户层**一视同仁**——issue 和 card 也只是 check 写在代码里而已。
+这些对内置层和用户层**一视同仁**——issue 和 card 只是文件放在包里而不是 `~/.memory.talk/layers/`。
 
 ---
 
@@ -111,7 +120,7 @@ issue 争完写卡,那个「决定」本身现在只是两个提交上的一个 
 ```
 layers:      origin, issue, decision, card  ← 夹在中间
 形态:        <名>.decision/decision.md       ← 放在它相关的 issue / card 旁边
-files:       readme.md(正文)+ meta.yaml(context / chosen / rejected[] / issue→issue / cards[]→card / review_after)
+check:       readme.md 必需;meta.yaml 要有 chosen,可带 rejected[] / issue / cards[] / review_after
 行为:        无。「做一个决定」= 建 decision + 写 card,两个提交;标题是目录名
 manager:     某个主题文件夹的 manager.json → 一个「定期重审决定」的 work;review_after 到了,agent 在收件箱里看到它
 ```
@@ -123,7 +132,7 @@ manager:     某个主题文件夹的 manager.json → 一个「定期重审决�
 ```
 layers:      origin, issue, card, experiment ← 放最上:它引用 issue(为哪个立场做的),没人引用它
 形态:        <名>.experiment/experiment.md   ← 放在它验证的那个 .issue/ 旁边
-files:       readme.md(hypothesis / setup / result)+ result.yaml(verdict / issue→issue#主张 / work 裸 id)+ runs/*.md(append_only)
+check:       readme.md 必需;result.yaml 要有 verdict;runs/*.md 只能追加
 行为:        无。实验做完 = 建一个 experiment;给立场加论证是另一个 `[issue]` 提交,那一行里写上这个 experiment 的 path
 ```
 
@@ -133,15 +142,15 @@ files:       readme.md(hypothesis / setup / result)+ result.yaml(verdict / issue
 
 ## 6. 改层、删层
 
-- **改 schema**:加字段随时加(老对象没有那个字段就是空);删字段、改类型要先把老对象迁过来——那是一次 `[名]` 提交,历史里看得见。schema 就在 `collections.json` 里(最底层),改它也是提交。
-- **加层**:`collections.json` 的 `layers[]` 加一项(带 schema);新分支从始祖出发,从此这一层的历史开始。之前的历史不受影响。
-- **删层**:collectbase 说层是可以停的(分支留着不动);memory.talk 侧把它从 `collections.json` 拿掉,通用端点就不再暴露它,文件和历史都在。**不删对象**——删了也在 git 里,但没必要。
+- **改规则**:改那个 `.py`,重启。放宽随时放;收紧要先把老对象迁过来——那是一次 `[名]` 提交,历史里看得见。规则本身不在仓库里,在文件里(想留历史就把 `~/.memory.talk/layers/` 自己放进 git)。
+- **加层**:放一个 `.py`,重启;`collections.json` 自动多一项,新分支从始祖出发。
+- **删层**:分支留着不动;把 `.py` 拿走的同时要把 `collections.json` 里那一项删掉(否则启动报错——这是故意的,防止层无声消失),通用端点就不再暴露它,文件和历史都在。**不删对象**。
 
 ---
 
 ## 7. 这篇有意不定的事
 
-- ~~schema 文件放哪、归哪层~~:已定——没有单独的 schema 文件,schema 内嵌在 `collections.json` 的 `layers[]` 里,整份文件归最底层。
+- ~~schema 文件放哪、归哪层~~:已定——没有 schema 文件;规则在 `~/.memory.talk/layers/<名>.py` 里,`collections.json` 只记名字和 `builtin`。
 - **schema 语言**:上面用的是 YAML 字段表。要不要直接用 JSON Schema(表达力强、工具多,但对人不友好)——倾向 YAML 字段表 + 少数约定,真不够再说。
 - **引用要不要校验存在**:`decision.issue` 指向一个不存在的 issue,写的时候拒绝还是放行。倾向写时校验存在、删时不级联(同 [collections.md §7](collections.md))。
 - **通用端点的形状**:`/api/collections/<层>/<id>` 一套,内置层的 `/api/issues/…` `/api/cards/…` 是不是它上面的别名。

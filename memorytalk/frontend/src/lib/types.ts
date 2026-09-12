@@ -21,7 +21,7 @@ export interface SystemInfo {
 }
 export interface Layer {
   name: string; description: string; builtin: boolean; suffix: string | null;
-  files: string[]; schema: Record<string, unknown> | null;
+  files: string[];
 }
 export interface Catalog {
   dir: string; objects: { path: string; title: string | null }[]; subdirs: Catalog[];

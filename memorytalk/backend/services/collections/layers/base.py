@@ -28,8 +28,7 @@ class Layer(ABC):
     name: str                    # 子类声明;= 分支 layer/<name>、后缀 .<name>、提交前缀 [<name>]
     files: list[str] = []        # 目录里允许的文件(给人看的清单;真正的规则在 check 里)
     description: str = ""
-    builtin: bool = True
-    schema: dict | None = None   # 用户层:它的 YAML(原样);内置层 None
+    builtin: bool = True         # 用户层(<home>/layers/*.py)载入时置 False
 
     @abstractmethod
     def check(self, changes: list[Change], after: dict[str, bytes]) -> str | None:

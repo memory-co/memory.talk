@@ -63,11 +63,11 @@ class Repo:
         cfg = self.config()
         return [l["name"] for l in cfg["layers"]] if cfg else None
 
-    def ensure_layers(self, names: list[str]) -> None:
-        """无则建拓扑;有则把缺的内置层补上(新层分支从始祖出发,collections.json 在最底层更新)。"""
+    def ensure_layers(self, names: list[str], builtin: set[str]) -> None:
+        """无则建拓扑;有则把缺的层补上(新层分支从始祖出发,collections.json 在最底层更新)。"""
         cur = self.layers()
         if cur is None:
-            cfg = {"version": 1, "layers": [{"name": n, "builtin": True} for n in names]}
+            cfg = {"version": 1, "layers": [{"name": n, "builtin": n in builtin} for n in names]}
             tree = self.git.write_tree({ANCHOR: Entry("100644", self.git.hash_object(_dump(cfg)), ANCHOR)})
             start = self.git.commit_tree(tree, [], f"[{names[0]}] collections: init\n\nlayers: {', '.join(names)}")
             for n in names:
@@ -84,18 +84,9 @@ class Repo:
             if self.git.resolve(self.layer_ref(n)) is None:
                 self.git.update_ref(self.layer_ref(n), start)
         cfg = self.config()
-        cfg["layers"] += [{"name": n, "builtin": True} for n in missing]
+        cfg["layers"] += [{"name": n, "builtin": n in builtin} for n in missing]
         self.commit(cur[0], f"[{cur[0]}] collections: add layers {', '.join(missing)}", {ANCHOR: _dump(cfg)}, [],
                     layer_of=lambda p: cur[0])
-
-    def add_layer(self, entry: dict, message: str, author=None) -> None:
-        """在 collections.json 的 layers[] 末尾加一层(最上),并从始祖开一条分支。"""
-        cfg = self.config()
-        cfg["layers"].append(entry)
-        if self.git.resolve(self.layer_ref(entry["name"])) is None:
-            self.git.update_ref(self.layer_ref(entry["name"]), self.anchor())
-        bottom = cfg["layers"][0]["name"]
-        self.commit(bottom, message, {ANCHOR: _dump(cfg)}, [], layer_of=lambda p: bottom, author=author)
 
     # ------------------------------------------------------------ 归属
 

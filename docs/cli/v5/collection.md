@@ -4,7 +4,7 @@
 
 ```
 memory.talk collection
-├── layers  [add <name> --schema <file>]
+├── layers
 ├── tree    [<path>]
 ├── ls      <layer> [--dir <路径>]
 ├── search  <query> [--layer <层>]
@@ -25,10 +25,9 @@ memory.talk collection
 
 ```bash
 memory.talk collection layers                          # 最底在前:origin / issue / card / 用户层;各自允许的文件
-memory.talk collection layers add decision --schema decision.yaml
 ```
 
-schema 写法(files 清单:format / required / append_only / fields)见 [`../../designs/v5/collections-layer.md`](../../designs/v5/collections-layer.md)(`list[…]` 要加引号)。
+没有 `layers add`:加一层 = 往 `~/.memory.talk/layers/` 放一个 `.py`(一个 `Layer` 子类,和内置层一模一样),`server restart`。写法见 [`../../designs/v5/collections-layer.md`](../../designs/v5/collections-layer.md)。
 
 ## tree / ls / search
 

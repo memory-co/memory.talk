@@ -2,19 +2,14 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-
 from ._common import out, value
 
 
 
 def c_layers(api, a):
-    if a.add:
-        out(api.call("POST", "/api/collections/layers", json_body={"name": a.add, "schema_yaml": Path(a.schema).read_text(), "reason": a.reason or ""}), a.json)
-        return
     ls = api.call("GET", "/api/collections/layers")
     out(ls, a.json, "\n".join(f"{l['order']}  {l['name']:<10} {('.' + l['name'] + '/') if l['suffix'] else '-':<12} "
-                              f"{', '.join(l['files']) or '(不带后缀的一切)':<40} {l['description']}" for l in ls))
+                              f"{', '.join(l['files']) or '(不带后缀的一切)':<40} {'' if l['builtin'] else '(用户层)'} {l['description']}" for l in ls))
 def c_tree(api, a):
     items = api.call("GET", "/api/collections/tree", params={"path": a.path or ""})
     out(items, a.json, "\n".join(f"{i['name']:<40} {i['kind']:<7} {i.get('layer') or ''}" for i in items) or "(空)")
@@ -76,7 +71,7 @@ def c_managed(api, a):
 
 def register(top) -> None:
     c = top.add_parser("collection", aliases=["col"], help="认知层").add_subparsers(dest="sub", required=True)
-    p = c.add_parser("layers"); p.add_argument("add", nargs="?"); p.add_argument("--schema"); p.add_argument("--reason"); p.set_defaults(fn=c_layers)
+    p = c.add_parser("layers", help="有哪些层;加用户层 = 往 ~/.memory.talk/layers/ 放一个 .py,重启"); p.set_defaults(fn=c_layers)
     p = c.add_parser("tree"); p.add_argument("path", nargs="?"); p.set_defaults(fn=c_tree)
     p = c.add_parser("ls"); p.add_argument("layer"); p.add_argument("--dir", default=""); p.set_defaults(fn=c_ls)
     p = c.add_parser("search"); p.add_argument("query"); p.add_argument("--layer"); p.set_defaults(fn=c_search)

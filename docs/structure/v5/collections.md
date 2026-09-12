@@ -16,7 +16,7 @@
   HEAD → stack;工作树跟着 stack(只为了人能 ls / cat,服务从不读它)
 ```
 
-- **始祖** = 第一个提交,只有根上的 `collections.json`:`{"version": 1, "layers": [{"name": "origin", "builtin": true}, …]}`,最底在前;用户层的项内嵌 `schema` 和 `added_at`。所有分支从它出发;`git log collections.json` = 层的变化史。
+- **始祖** = 第一个提交,只有根上的 `collections.json`:`{"version": 1, "layers": [{"name": "origin", "builtin": true}, …, {"name": "experiment", "builtin": false}]}`,最底在前;只有名字和 `builtin`。所有分支从它出发;`git log collections.json` = 层的变化史。
 - **一个动作一个提交**,信息以 `[层名]` 开头;跨层的决定是两个相邻提交 + 同一个 trailer。`git log --first-parent stack` 是全部认知的时间线;`git log layer/<层>` 是那一层的。
 - **守卫**(写时,plumbing 内):① 后缀 / 机制规则说这个路径该归哪层,和声明的层不符 → 拒;② 路径已在别的层的树里 → 拒。所以 `[card]` 提交碰不到 `.issue/` 里的东西。
 - **机制文件**:`collections.json` 归最底层;`manager.json` 归它所在目录按后缀规则算出的层。它们的变动不投递,也不出现在 tree / 目录里。
@@ -26,9 +26,9 @@
 
 | | origin | issue | card | 用户层 `<名>` |
 |---|---|---|---|---|
-| 形态 | 任何**不带后缀**的文件 | `<path>.issue/` 目录:`readme.md` + `meta.yaml` + `positions/*.md` | `<path>.card/` 目录:`readme.md` + `meta.yaml` | schema 的 `files` 清单 |
+| 形态 | 任何**不带后缀**的文件 | `<path>.issue/` 目录:`readme.md` + `meta.yaml` + `positions/*.md` | `<path>.card/` 目录:`readme.md` + `meta.yaml` | 它的 `check` 说了算 |
 | id | 文件路径 | `path`(不含后缀) | `path` | `path` |
-| 格式 | 原文 | markdown / yaml / markdown | markdown / yaml | 每个文件各自定 |
+| 格式 | 原文 | markdown / yaml / markdown | markdown / yaml | 它的 `check` 说了算 |
 | 标题 | 文件名 | 目录名 | 目录名 | 目录名 |
 | 层序 | 0(最底) | 1 | 2 | 之上,按 `collections.json` 的 `layers[]` 顺序 |
 
@@ -97,19 +97,9 @@ issue: memory.talk/配置/该走文件还是环境变量
 
 **check**:只能有这两个文件;`readme.md` 不能删;`meta.yaml` 多余的键拒。没有 `title`(目录名就是)、没有 `status`(删就是删)、没有 id(id 就是 path)。
 
-### 用户层的 schema
+### 用户层
 
-写成 YAML 交给 `POST /api/collections/layers`,系统把它嵌进 `collections.json` 的 `layers[]`,启动时编译成这个层的 check:
-
-```yaml
-layer: experiment
-files:                                # 目录清单:每个文件一条,路径可用 * 通配
-  readme.md:   {format: markdown, required: true}
-  result.yaml: {format: yaml, fields: {verdict: {type: string, required: true}, issue: {type: ref, layer: issue}}}
-  "runs/*.md": {format: markdown, append_only: true}
-```
-
-规则:清单外的路径拒;`required` 不能缺、不能删;`append_only` 只能在末尾追加;`format: yaml / json` 按 `fields` 校验(必填、类型、多余键拒),`markdown / text` 不看内容。字段类型:`string` `int` `bool` `"list[string]"` `ref` `"list[ref]"`。没有行为,标题是目录名。
+`~/.memory.talk/layers/<名>.py`,里面一个 `Layer` 子类,和内置层一模一样(`name` / `files` / `check`);启动时载入,`collections.json` 的 `layers[]` 自动补一项 `{"name": "<名>", "builtin": false}`(一次最底层提交),新分支从始祖出发。文件没了但 `collections.json` 里还有 → 启动报错。写法见 [designs collections-layer.md](../../designs/v5/collections-layer.md)。
 
 ## manager.json
 
