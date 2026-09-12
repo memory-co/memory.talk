@@ -56,7 +56,7 @@
 
 ## 通用约定
 
-- **响应信封**:所有 `/api/*` 的响应都是 **`{"data": …, "message": "ok"}`**——分页面里写的响应体是 `data` 那一半。纯文本端点(recall / capture)的 `data` 是那段字符串;删除类端点返回 `200`,`data` 为 `null`(不再有 204)。
+- **响应信封**:所有 `/api/*` 端点的 `response_model` 都是 **`Result[T]`** = **`{"data": T, "message": "ok"}`**(OpenAPI 里能看到 `Result_User_` 这类 schema)——分页面里写的响应体是 `data` 那一半。纯文本端点(recall / capture)的 `data` 是那段字符串;删除类端点返回 `200`,`data` 为 `null`(不再有 204)。
 - **错误体**:`{"data": null, "error": "<机器码>", "message": "<人读>"}`。
 
   | 状态 | `error` | 何时 |

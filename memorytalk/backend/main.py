@@ -4,7 +4,7 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from memorytalk.backend.envelope import EnvelopeMiddleware, envelope
+from memorytalk.backend.models.result import fail
 
 from memorytalk.backend.config import Config, RuntimeConfig, load_config, load_runtime_config
 from memorytalk.backend.controllers import collections, system, users, works
@@ -35,11 +35,10 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
 
     for r in (system.router, works.router, users.router, collections.router):
         app.include_router(r)
-    app.add_middleware(EnvelopeMiddleware)         # 所有 /api/* 响应包成 {"data", "message"[, "error"]}
 
     def _err(status: int, code: str):
         async def handler(_: Request, exc: Exception):
-            return JSONResponse(envelope(None, str(exc), code), status_code=status)
+            return JSONResponse(fail(code, str(exc)), status_code=status)
         return handler
 
     for exc_type in (WorkNotFound, SessionNotFound, UserNotFound):
@@ -49,11 +48,11 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
 
     @app.exception_handler(CollectionsError)
     async def _collect(_: Request, exc: CollectionsError):
-        return JSONResponse(envelope(None, str(exc), exc.code), status_code=exc.status)
+        return JSONResponse(fail(exc.code, str(exc)), status_code=exc.status)
 
     @app.exception_handler(WorkServerError)
     async def _server(_: Request, exc: WorkServerError):
         status = {"bad_uri": 400, "cmd_not_found": 400, "no_server": 400, "platform": 502}.get(exc.code, 500)
-        return JSONResponse(envelope(None, str(exc), exc.code), status_code=status)
+        return JSONResponse(fail(exc.code, str(exc)), status_code=status)
 
     return app
