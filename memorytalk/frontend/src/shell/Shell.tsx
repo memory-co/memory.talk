@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { BookOpen, ChevronsUpDown, Menu, PanelRight, Search, SquarePen, UserRound } from 'lucide-react';
+import { BookOpen, ChevronsUpDown, Menu, PanelRight, Search, SquarePen, UserRound, X } from 'lucide-react';
 import { useWorks, useUsers, useSystem } from '@/lib/queries';
 import { usePreferences } from '@/lib/store';
 import { localeTag, useT } from '@/lib/i18n';
@@ -47,7 +47,7 @@ export function Shell() {
 }
 
 /** 侧栏的内容:桌面放进 <Sidebar>,手机放进吸附列,同一份。 */
-function SidebarBody({ onSearch, onNavigate }: { onSearch: () => void; onNavigate: () => void }) {
+function SidebarBody({ onSearch, onNavigate, onClose }: { onSearch: () => void; onNavigate: () => void; onClose?: () => void }) {
   const t = useT();
   const route = useRoute();
   const works = useWorks(); const users = useUsers(); const system = useSystem();
@@ -57,10 +57,11 @@ function SidebarBody({ onSearch, onNavigate }: { onSearch: () => void; onNavigat
   const go = (page: 'home' | 'library' | 'settings') => { navigate({ page }); onNavigate(); };
   return <>
     <SidebarHeader className="border-b border-sidebar-border">
-      <SidebarMenu><SidebarMenuItem>
+      <SidebarMenu><SidebarMenuItem className="flex items-center gap-1">
         <SidebarMenuButton size="lg" onClick={() => go('home')} aria-label={t('nav.homeLink')}>
           <Logo /><div className="grid flex-1 text-left text-sm leading-tight"><span className="truncate font-semibold">memory.talk</span><span className="truncate text-xs text-muted-foreground">{system.isSuccess ? t('nav.connected') : system.isError ? t('nav.disconnected') : t('nav.connecting')}</span></div>
         </SidebarMenuButton>
+        {onClose && <Button variant="ghost" size="icon" className="size-8 shrink-0" onClick={onClose} aria-label={t('nav.closeNav')}><X /></Button>}
       </SidebarMenuItem></SidebarMenu>
     </SidebarHeader>
     <SidebarContent>
@@ -168,16 +169,11 @@ function MobileShell({ onSearch, library, page }: { onSearch: () => void; librar
   }, []);
   useEffect(() => { goTo(1, false); }, [goTo]);                                       // 初始停在主内容
   useEffect(() => { goTo(1); }, [route.page, route.work, route.layer, route.path, goTo]);   // 导航后回到主内容
-  const onScroll = () => {
-    const el = track.current; if (!el) return;
-    const cols = [...el.children] as HTMLElement[];
-    const x = el.scrollLeft + el.clientWidth / 2;
-    setCol(Math.max(0, cols.findIndex(c => x >= c.offsetLeft && x < c.offsetLeft + c.offsetWidth)));
-  };
+  const onScroll = () => { const el = track.current; if (el) setCol(Math.round(el.scrollLeft / el.clientWidth)); };   // 三列等宽:一列一页
   const safe = 'pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]';
   return <div ref={track} onScroll={onScroll} className="flex h-dvh w-full snap-x snap-mandatory overflow-x-auto overflow-y-hidden overscroll-x-contain bg-background [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-    <div className={cn('group flex h-full w-[min(85vw,20rem)] shrink-0 snap-start flex-col bg-sidebar text-sidebar-foreground', safe)} data-state="expanded" aria-label={t('nav.main')} aria-hidden={col !== 0}>
-      <SidebarBody onSearch={onSearch} onNavigate={() => goTo(1)} />
+    <div className={cn('group flex h-full w-full shrink-0 snap-start flex-col bg-sidebar text-sidebar-foreground', safe)} data-state="expanded" aria-label={t('nav.main')} aria-hidden={col !== 0}>
+      <SidebarBody onSearch={onSearch} onNavigate={() => goTo(1)} onClose={() => goTo(1)} />
     </div>
     <div className={cn('flex h-full w-full shrink-0 snap-start flex-col', safe)} aria-hidden={col !== 1}>
       <header className="flex h-14 shrink-0 items-center gap-2 border-b px-3">
@@ -187,8 +183,8 @@ function MobileShell({ onSearch, library, page }: { onSearch: () => void; librar
       </header>
       <main id="main-content" tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto outline-none">{page(() => goTo(2))}</main>
     </div>
-    {library && <div className={cn('flex h-full w-[min(90vw,24rem)] shrink-0 snap-start flex-col border-l', safe)} aria-label={t('nav.inspector')} aria-hidden={col !== 2}>
-      <div className="flex h-14 shrink-0 items-center gap-2 border-b px-4 text-sm font-medium"><BookOpen className="size-4" />{t('nav.library')}</div>
+    {library && <div className={cn('flex h-full w-full shrink-0 snap-start flex-col', safe)} aria-label={t('nav.inspector')} aria-hidden={col !== 2}>
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b px-4 text-sm font-medium"><BookOpen className="size-4" />{t('nav.library')}<Button variant="ghost" size="icon" className="ml-auto size-8" aria-label={t('nav.closeInspectorPanel')} onClick={() => goTo(1)}><X /></Button></div>
       <div className="flex min-h-0 flex-1 flex-col">{library}</div>
     </div>}
   </div>;
