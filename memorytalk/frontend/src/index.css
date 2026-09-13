@@ -57,7 +57,8 @@
   .markdown th, .markdown td { @apply border px-3 py-1.5 text-left; }
   .markdown hr { @apply my-6; }
   .markdown img { @apply max-w-full rounded-md; }
-  .terminal-output { @apply m-0 flex-1 overflow-auto whitespace-pre bg-zinc-950 p-4 font-mono text-xs leading-relaxed text-zinc-100; }
+  .terminal-output { @apply m-0 flex-1 overflow-auto overscroll-x-contain whitespace-pre bg-zinc-950 p-4 font-mono text-xs leading-relaxed text-zinc-100; }
+  .markdown pre, .markdown table { overscroll-behavior-x: contain; }
 }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

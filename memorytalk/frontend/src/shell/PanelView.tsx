@@ -68,7 +68,7 @@ export function PanelView({ work, session }: { work: Work; session: Session }) {
           {rounds.isPending ? <Loading /> : rounds.isError ? <ErrorState error={rounds.error} retry={() => { void rounds.refetch(); }} /> : rounds.data?.length ? rounds.data.map(round =>
             <article key={round.id} className={`rounded-lg text-sm ${round.role === 'human' ? 'ml-8 border bg-muted/50 p-4 sm:ml-16' : round.role === 'tool' ? 'border border-dashed p-3' : 'mr-8 p-4 sm:mr-16'}`}>
               <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">{round.role === 'human' ? t('session.you') : round.role === 'tool' ? t('session.tool') : session.scheme}</span>{round.timestamp && <time>{new Date(round.timestamp).toLocaleTimeString(localeTag(locale), { hour: '2-digit', minute: '2-digit' })}</time>}</div>
-              {round.role === 'tool' ? <details><summary className="cursor-pointer text-xs text-muted-foreground">{t('session.toolOutput')}</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 font-mono text-xs">{round.text}</pre></details> : <Markdown text={round.text} />}
+              {round.role === 'tool' ? <details><summary className="cursor-pointer text-xs text-muted-foreground">{t('session.toolOutput')}</summary><pre className="mt-2 max-h-80 overflow-auto overscroll-x-contain whitespace-pre-wrap break-all rounded bg-muted p-2 font-mono text-xs">{round.text}</pre></details> : <Markdown text={round.text} />}
             </article>)
             : <Empty icon={<FileText className="size-5" />} title={t('session.noTranscript')}><p>{t('session.noTranscriptText')}</p></Empty>}
         </div>

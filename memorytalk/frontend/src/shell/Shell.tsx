@@ -1,15 +1,15 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
-import { BookOpen, ChevronsUpDown, PanelRight, Search, SquarePen, UserRound, X } from 'lucide-react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { BookOpen, ChevronsUpDown, Menu, PanelRight, Search, SquarePen, UserRound } from 'lucide-react';
 import { useWorks, useUsers, useSystem } from '@/lib/queries';
 import { usePreferences } from '@/lib/store';
 import { localeTag, useT } from '@/lib/i18n';
 import { navigate, useRoute } from '@/lib/router';
 import { flattenWorks } from '@/lib/types';
+import { cn } from '@/lib/utils';
 import { ErrorState, Loading, Logo, UserAvatar } from '@/components/Shared';
 import { Button } from '@/components/ui/button';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { Separator } from '@/components/ui/separator';
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarMenuSkeleton, SidebarProvider, SidebarRail, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
 import { TaskTree } from './TaskTree';
 import { Home } from './Home';
@@ -18,24 +18,45 @@ const Library = lazy(() => import('@/collections/Library').then(m => ({ default:
 const Settings = lazy(() => import('@/settings/Settings').then(m => ({ default: m.Settings })));
 const Workspace = lazy(() => import('./Workspace').then(m => ({ default: m.Workspace })));
 
+/* 三种宽度,同一份侧栏:
+   ≥1024  桌面:sidebar-07,展开 / 图标栏由用户切换(记在偏好里)
+   768–1023 平板 / 横屏手机:默认图标栏,点开是挤开内容(不记偏好)
+   <768   竖屏手机:侧栏是横向吸附滚动的第一列,主内容第二列,认知库面板第三列;左右滑动切换,顶栏按钮兜底 */
+
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches);
+  useEffect(() => {
+    const mql = window.matchMedia(query);
+    const onChange = () => setMatches(mql.matches);
+    mql.addEventListener('change', onChange); setMatches(mql.matches);
+    return () => mql.removeEventListener('change', onChange);
+  }, [query]);
+  return matches;
+}
+
 export function Shell() {
   const collapsed = usePreferences(s => s.collapsed);
   const toggleSidebar = usePreferences(s => s.toggleSidebar);
   const locale = usePreferences(s => s.locale);
+  const large = useMediaQuery('(min-width: 1024px)');
+  const [tabletOpen, setTabletOpen] = useState(false);
   useEffect(() => { document.documentElement.lang = localeTag(locale); }, [locale]);
-  return <SidebarProvider open={!collapsed} onOpenChange={open => { if (open === collapsed) toggleSidebar(); }}><ShellContent /></SidebarProvider>;
+  const open = large ? !collapsed : tabletOpen;
+  const onOpenChange = (next: boolean) => { if (large) { if (next === collapsed) toggleSidebar(); } else setTabletOpen(next); };
+  return <SidebarProvider open={open} onOpenChange={onOpenChange}><ShellContent /></SidebarProvider>;
 }
 
-function AppSidebar({ onSearch }: { onSearch: () => void }) {
+/** 侧栏的内容:桌面放进 <Sidebar>,手机放进吸附列,同一份。 */
+function SidebarBody({ onSearch, onNavigate }: { onSearch: () => void; onNavigate: () => void }) {
   const t = useT();
   const route = useRoute();
   const works = useWorks(); const users = useUsers(); const system = useSystem();
   const user = usePreferences(s => s.user);
-  const { setOpenMobile } = useSidebar();
+  const { isMobile } = useSidebar();
   const currentUser = users.data?.find(u => u.name === user);
-  const go = (page: 'home' | 'library' | 'settings') => { navigate({ page }); setOpenMobile(false); };
-  return <Sidebar collapsible="icon">
-    <SidebarHeader>
+  const go = (page: 'home' | 'library' | 'settings') => { navigate({ page }); onNavigate(); };
+  return <>
+    <SidebarHeader className="border-b border-sidebar-border">
       <SidebarMenu><SidebarMenuItem>
         <SidebarMenuButton size="lg" onClick={() => go('home')} aria-label={t('nav.homeLink')}>
           <Logo /><div className="grid flex-1 text-left text-sm leading-tight"><span className="truncate font-semibold">memory.talk</span><span className="truncate text-xs text-muted-foreground">{system.isSuccess ? t('nav.connected') : system.isError ? t('nav.disconnected') : t('nav.connecting')}</span></div>
@@ -45,7 +66,7 @@ function AppSidebar({ onSearch }: { onSearch: () => void }) {
     <SidebarContent>
       <SidebarGroup><SidebarGroupContent><SidebarMenu>
         <SidebarMenuItem><SidebarMenuButton isActive={route.page === 'home'} onClick={() => go('home')} tooltip={t('nav.newWork')}><SquarePen /><span>{t('nav.newWork')}</span></SidebarMenuButton></SidebarMenuItem>
-        <SidebarMenuItem><SidebarMenuButton onClick={() => { setOpenMobile(false); onSearch(); }} tooltip={t('nav.searchWork')}><Search /><span>{t('nav.searchWork')}</span><kbd className="ml-auto text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">⌘K</kbd></SidebarMenuButton></SidebarMenuItem>
+        <SidebarMenuItem><SidebarMenuButton onClick={() => { onNavigate(); onSearch(); }} tooltip={t('nav.searchWork')}><Search /><span>{t('nav.searchWork')}</span>{!isMobile && <kbd className="ml-auto text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">⌘K</kbd>}</SidebarMenuButton></SidebarMenuItem>
         <SidebarMenuItem><SidebarMenuButton isActive={route.page === 'library'} onClick={() => go('library')} tooltip={t('nav.library')}><BookOpen /><span>{t('nav.library')}</span></SidebarMenuButton></SidebarMenuItem>
       </SidebarMenu></SidebarGroupContent></SidebarGroup>
       <SidebarGroup className="group-data-[collapsible=icon]:hidden">
@@ -53,12 +74,12 @@ function AppSidebar({ onSearch }: { onSearch: () => void }) {
         <SidebarGroupContent>
           {works.isError ? <ErrorState error={works.error} retry={() => { void works.refetch(); }} />
             : works.isPending ? <SidebarMenu>{[1, 2, 3].map(i => <SidebarMenuItem key={i}><SidebarMenuSkeleton /></SidebarMenuItem>)}</SidebarMenu>
-            : works.data.length ? <TaskTree works={works.data} selected={route.work} onNavigate={() => setOpenMobile(false)} />
-            : <p className="px-2 py-2 text-xs text-muted-foreground">{t('nav.noWorks')} {t('nav.noWorksHint')}</p>}
+            : works.data.length ? <TaskTree works={works.data} selected={route.work} onNavigate={onNavigate} />
+            : <div className="space-y-2 px-2 py-2"><p className="text-xs text-muted-foreground">{t('nav.noWorks')} {t('nav.noWorksHint')}</p><Button variant="outline" size="sm" className="w-full" onClick={() => go('home')}><SquarePen />{t('nav.newWork')}</Button></div>}
         </SidebarGroupContent>
       </SidebarGroup>
     </SidebarContent>
-    <SidebarFooter>
+    <SidebarFooter className="border-t border-sidebar-border">
       <SidebarMenu><SidebarMenuItem>
         <SidebarMenuButton size="lg" isActive={route.page === 'settings'} onClick={() => go('settings')} tooltip={t('nav.settings')}>
           <UserAvatar>{currentUser ? (currentUser.display_name || currentUser.name).slice(0, 1).toUpperCase() : <UserRound className="size-4" />}</UserAvatar>
@@ -67,15 +88,36 @@ function AppSidebar({ onSearch }: { onSearch: () => void }) {
         </SidebarMenuButton>
       </SidebarMenuItem></SidebarMenu>
     </SidebarFooter>
-    <SidebarRail />
-  </Sidebar>;
+  </>;
+}
+
+function Crumbs() {
+  const t = useT();
+  const route = useRoute();
+  const works = useWorks();
+  const pageName = route.page === 'home' ? t('nav.home') : route.page === 'library' ? t('nav.library') : route.page === 'settings' ? t('nav.settings') : t('nav.workspace');
+  const currentWork = route.work ? flattenWorks(works.data || []).find(w => w.id === route.work) : undefined;
+  const home = (e: React.MouseEvent) => { e.preventDefault(); navigate({ page: 'home' }); };
+  return <Breadcrumb className="min-w-0"><BreadcrumbList className="flex-nowrap">
+    <BreadcrumbItem className="hidden md:block"><BreadcrumbLink href="#/" onClick={home}>memory.talk</BreadcrumbLink></BreadcrumbItem>
+    <BreadcrumbSeparator className="hidden md:block" />
+    {currentWork ? <>
+      <BreadcrumbItem><BreadcrumbLink href="#/" onClick={home}>{pageName}</BreadcrumbLink></BreadcrumbItem>
+      <BreadcrumbSeparator />
+      <BreadcrumbItem className="min-w-0"><BreadcrumbPage className="block max-w-[45vw] truncate">{currentWork.goal}</BreadcrumbPage></BreadcrumbItem>
+    </> : <BreadcrumbItem><BreadcrumbPage>{pageName}</BreadcrumbPage></BreadcrumbItem>}
+  </BreadcrumbList></Breadcrumb>;
+}
+
+function Page({ onLibrary, selection }: { onLibrary: () => void; selection: (s: { layer: string; path?: string }) => void }) {
+  const route = useRoute();
+  return <Suspense fallback={<Loading />}>{route.page === 'home' ? <Home /> : route.page === 'work' && route.work ? <Workspace key={route.work} id={route.work} onLibrary={onLibrary} /> : route.page === 'library' ? <Library layer={route.layer || 'card'} path={route.path} onSelect={selection} /> : <Settings />}</Suspense>;
 }
 
 function ShellContent() {
   const t = useT();
   const route = useRoute();
-  const works = useWorks();
-  const { isMobile, openMobile, setOpenMobile } = useSidebar();
+  const { isMobile } = useSidebar();
   const [search, setSearch] = useState(false);
   const [searchLoaded, setSearchLoaded] = useState(false);
   useEffect(() => { if (search) setSearchLoaded(true); }, [search]);
@@ -88,41 +130,66 @@ function ShellContent() {
     };
     window.addEventListener('keydown', listener); return () => window.removeEventListener('keydown', listener);
   }, []);
-  useEffect(() => { setOpenMobile(false); }, [route.page, route.work, setOpenMobile]);
-  const pageName = route.page === 'home' ? t('nav.home') : route.page === 'library' ? t('nav.library') : route.page === 'settings' ? t('nav.settings') : t('nav.workspace');
-  const currentWork = route.work ? flattenWorks(works.data || []).find(w => w.id === route.work) : undefined;
   const library = <Suspense fallback={<Loading />}><Library compact {...selection} onSelect={setSelection} work={route.work} /></Suspense>;
+  const searchDialog = searchLoaded && <Suspense fallback={null}><SearchWorks open={search} onClose={() => setSearch(false)} /></Suspense>;
+  if (isMobile) return <><MobileShell onSearch={() => setSearch(true)} library={route.page === 'work' ? library : null} page={goInspector => <Page onLibrary={goInspector} selection={s => navigate({ page: 'library', ...s })} />} />{searchDialog}</>;
   return <>
-    <AppSidebar onSearch={() => setSearch(true)} />
+    <Sidebar collapsible="icon"><SidebarBody onSearch={() => setSearch(true)} onNavigate={() => undefined} /><SidebarRail /></Sidebar>
     <SidebarInset className="h-svh min-h-0 overflow-hidden">
       <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mr-2 h-4" />
-        <Breadcrumb className="min-w-0"><BreadcrumbList className="flex-nowrap">
-          <BreadcrumbItem className="hidden md:block"><BreadcrumbLink href="#/" onClick={e => { e.preventDefault(); navigate({ page: 'home' }); }}>memory.talk</BreadcrumbLink></BreadcrumbItem>
-          <BreadcrumbSeparator className="hidden md:block" />
-          {currentWork ? <>
-            <BreadcrumbItem><BreadcrumbLink href="#/" onClick={e => { e.preventDefault(); navigate({ page: 'home' }); }}>{pageName}</BreadcrumbLink></BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem className="min-w-0"><BreadcrumbPage className="block max-w-[40vw] truncate">{currentWork.goal}</BreadcrumbPage></BreadcrumbItem>
-          </> : <BreadcrumbItem><BreadcrumbPage>{pageName}</BreadcrumbPage></BreadcrumbItem>}
-        </BreadcrumbList></Breadcrumb>
+        <Crumbs />
         {route.page === 'work' && <Button variant="ghost" size="icon" className="ml-auto" aria-label={inspector ? t('nav.closeInspector') : t('nav.openInspector')} aria-pressed={inspector} onClick={() => setInspector(!inspector)}><PanelRight /></Button>}
       </header>
       <div className="flex min-h-0 flex-1">
         <main id="main-content" tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto outline-none">
-          <Suspense fallback={<Loading />}>{route.page === 'home' ? <Home /> : route.page === 'work' && route.work ? <Workspace key={route.work} id={route.work} onLibrary={() => setInspector(true)} /> : route.page === 'library' ? <Library layer={route.layer || 'card'} path={route.path} onSelect={selection => navigate({ page: 'library', ...selection })} /> : <Settings />}</Suspense>
+          <Page onLibrary={() => setInspector(true)} selection={s => navigate({ page: 'library', ...s })} />
         </main>
-        {route.page === 'work' && inspector && !isMobile && <aside className="flex w-96 shrink-0 flex-col border-l" aria-label={t('nav.inspector')}>
-          <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4 text-sm font-medium"><BookOpen className="size-4" />{t('nav.library')}<Button variant="ghost" size="icon" className="ml-auto size-7" aria-label={t('nav.closeInspectorPanel')} onClick={() => setInspector(false)}><X className="size-4" /></Button></div>
+        {route.page === 'work' && inspector && <aside className="flex w-80 shrink-0 flex-col border-l lg:w-96" aria-label={t('nav.inspector')}>
+          <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4 text-sm font-medium"><BookOpen className="size-4" />{t('nav.library')}</div>
           <div className="flex min-h-0 flex-1 flex-col">{library}</div>
         </aside>}
       </div>
     </SidebarInset>
-    {route.page === 'work' && isMobile && <Sheet open={inspector} onOpenChange={setInspector}><SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
-      <SheetHeader className="border-b px-4 py-3 text-left"><SheetTitle className="text-sm">{t('nav.library')}</SheetTitle><SheetDescription className="sr-only">{t('nav.inspector')}</SheetDescription></SheetHeader>
-      <div className="flex min-h-0 flex-1 flex-col">{library}</div>
-    </SheetContent></Sheet>}
-    {searchLoaded && <Suspense fallback={null}><SearchWorks open={search && !openMobile} onClose={() => setSearch(false)} /></Suspense>}
+    {searchDialog}
   </>;
+}
+
+/** 竖屏手机:侧栏 | 主内容 | 认知库面板 三列横向吸附。 */
+function MobileShell({ onSearch, library, page }: { onSearch: () => void; library: ReactNode; page: (goInspector: () => void) => ReactNode }) {
+  const t = useT();
+  const route = useRoute();
+  const track = useRef<HTMLDivElement>(null);
+  const [col, setCol] = useState(1);
+  const goTo = useCallback((index: number, smooth = true) => {
+    const el = track.current; const target = el?.children[index] as HTMLElement | undefined;
+    if (el && target) el.scrollTo({ left: target.offsetLeft, behavior: smooth ? 'smooth' : 'auto' });
+  }, []);
+  useEffect(() => { goTo(1, false); }, [goTo]);                                       // 初始停在主内容
+  useEffect(() => { goTo(1); }, [route.page, route.work, route.layer, route.path, goTo]);   // 导航后回到主内容
+  const onScroll = () => {
+    const el = track.current; if (!el) return;
+    const cols = [...el.children] as HTMLElement[];
+    const x = el.scrollLeft + el.clientWidth / 2;
+    setCol(Math.max(0, cols.findIndex(c => x >= c.offsetLeft && x < c.offsetLeft + c.offsetWidth)));
+  };
+  const safe = 'pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]';
+  return <div ref={track} onScroll={onScroll} className="flex h-dvh w-full snap-x snap-mandatory overflow-x-auto overflow-y-hidden overscroll-x-contain bg-background [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div className={cn('group flex h-full w-[min(85vw,20rem)] shrink-0 snap-start flex-col bg-sidebar text-sidebar-foreground', safe)} data-state="expanded" aria-label={t('nav.main')} aria-hidden={col !== 0}>
+      <SidebarBody onSearch={onSearch} onNavigate={() => goTo(1)} />
+    </div>
+    <div className={cn('flex h-full w-full shrink-0 snap-start flex-col', safe)} aria-hidden={col !== 1}>
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b px-3">
+        <Button variant="ghost" size="icon" aria-label={col === 0 ? t('nav.closeNav') : t('nav.openNav')} aria-expanded={col === 0} onClick={() => goTo(col === 0 ? 1 : 0)}><Menu /></Button>
+        <Crumbs />
+        {library && <Button variant="ghost" size="icon" className="ml-auto" aria-label={col === 2 ? t('nav.closeInspector') : t('nav.openInspector')} aria-pressed={col === 2} onClick={() => goTo(col === 2 ? 1 : 2)}><PanelRight /></Button>}
+      </header>
+      <main id="main-content" tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto outline-none">{page(() => goTo(2))}</main>
+    </div>
+    {library && <div className={cn('flex h-full w-[min(90vw,24rem)] shrink-0 snap-start flex-col border-l', safe)} aria-label={t('nav.inspector')} aria-hidden={col !== 2}>
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b px-4 text-sm font-medium"><BookOpen className="size-4" />{t('nav.library')}</div>
+      <div className="flex min-h-0 flex-1 flex-col">{library}</div>
+    </div>}
+  </div>;
 }

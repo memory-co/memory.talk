@@ -42,7 +42,7 @@ export function Workspace({ id, onLibrary }: { id: string; onLibrary: () => void
     </div>
     <Tabs value={selected?.id || ''} onValueChange={value => selectSession(id, value)} className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-2 border-b px-4" aria-label={t('work.sessions')}>
-        <TabsList className="h-auto min-w-0 justify-start overflow-x-auto rounded-none bg-transparent p-0" aria-label={t('work.sessionSwitch')}>{sessions.data?.map((session, index) => <TabsTrigger key={session.id} value={session.id} className="gap-2 rounded-none border-b-2 border-transparent px-3 py-2.5 shadow-none data-[state=active]:border-primary data-[state=active]:shadow-none">
+        <TabsList className="h-auto min-w-0 justify-start overflow-x-auto overscroll-x-contain rounded-none bg-transparent p-0" aria-label={t('work.sessionSwitch')}>{sessions.data?.map((session, index) => <TabsTrigger key={session.id} value={session.id} className="gap-2 rounded-none border-b-2 border-transparent px-3 py-2.5 shadow-none data-[state=active]:border-primary data-[state=active]:shadow-none">
           {['http', 'https'].includes(session.scheme) ? <ExternalLink className="size-3.5" /> : <Terminal className="size-3.5" />}
           {sessionLabel(t, session.scheme)}<span className="text-xs text-muted-foreground">{index + 1}</span><span className={`size-1.5 rounded-full ${session.alive ? 'bg-emerald-500' : 'bg-muted-foreground/40'}`} title={session.alive ? t('session.alive') : t('session.dead')} />
         </TabsTrigger>)}</TabsList>
