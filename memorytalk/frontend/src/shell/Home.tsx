@@ -1,9 +1,12 @@
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { ArrowRight, ArrowUp, BookOpen, CornerDownLeft, GitBranch, LoaderCircle, Sparkles, Terminal } from 'lucide-react';
+import { ArrowUp, BookOpen, GitBranch, LoaderCircle, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { queryClient } from '@/lib/query';
@@ -12,10 +15,10 @@ import { useUsers, useWorks } from '@/lib/queries';
 import { usePreferences } from '@/lib/store';
 import { useT } from '@/lib/i18n';
 import { dateLabel, flattenWorks, statusLabel, type Work } from '@/lib/types';
-import { ErrorState, Logo, Modal } from '@/components/Shared';
+import { ErrorState, Modal } from '@/components/Shared';
 
-export function WorkComposer({ parent, onCreated, compact = false }: {
-  parent?: string; onCreated?: () => void; compact?: boolean;
+export function WorkComposer({ parent, onCreated, autoFocus = false }: {
+  parent?: string; onCreated?: () => void; autoFocus?: boolean;
 }) {
   const t = useT();
   const [goal, setGoal] = useState('');
@@ -28,14 +31,16 @@ export function WorkComposer({ parent, onCreated, compact = false }: {
     },
   });
   const submit = (event?: FormEvent) => { event?.preventDefault(); if (goal.trim() && !mutation.isPending) mutation.mutate(); };
-  return <form onSubmit={submit} className={compact ? 'work-composer compact' : 'work-composer'}>
-    <Label className="sr-only" htmlFor={compact ? 'subwork-goal' : 'work-goal'}>{t('home.goalLabel')}</Label>
-    <Textarea className="border-0 p-0 shadow-none focus-visible:ring-0" id={compact ? 'subwork-goal' : 'work-goal'} value={goal} maxLength={2000} autoFocus={compact}
+  const id = parent ? 'subwork-goal' : 'work-goal';
+  return <form onSubmit={submit} className="space-y-3">
+    <Label className="sr-only" htmlFor={id}>{t('home.goalLabel')}</Label>
+    <Textarea id={id} value={goal} maxLength={2000} autoFocus={autoFocus} rows={3} className="min-h-24 resize-y text-base md:text-sm"
       onChange={e => setGoal(e.target.value)} placeholder={parent ? t('home.subworkPlaceholder') : t('home.workPlaceholder')}
       onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); } }} />
-    <div className="composer-footer"><span><GitBranch size={15} />{parent ? t('home.splitHint') : t('home.startHint')}</span>
-      <Button variant="default" type="submit" size="icon" className="rounded-full" disabled={!goal.trim() || mutation.isPending} aria-label={t('home.create')}>
-        {mutation.isPending ? <LoaderCircle size={20} className="spin" /> : <ArrowUp size={20} />}
+    <div className="flex items-center justify-between gap-3">
+      <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><GitBranch className="size-3.5" />{parent ? t('home.splitHint') : t('home.startHint')}<span className="hidden sm:inline"> · {t('home.hintEnter')} · {t('home.hintShift')}</span></span>
+      <Button type="submit" size="icon" className="shrink-0 rounded-full" disabled={!goal.trim() || mutation.isPending} aria-label={t('home.create')}>
+        {mutation.isPending ? <LoaderCircle className="animate-spin" /> : <ArrowUp />}
       </Button>
     </div>
     {mutation.isError && <ErrorState error={mutation.error} />}
@@ -45,7 +50,7 @@ export function WorkComposer({ parent, onCreated, compact = false }: {
 export function NewSubwork({ parent, open, onClose }: { parent: string; open: boolean; onClose: () => void }) {
   const t = useT();
   return <Modal open={open} onClose={onClose} title={t('home.subworkTitle')} description={t('home.subworkDescription')}>
-    <WorkComposer parent={parent} compact onCreated={onClose} />
+    <WorkComposer parent={parent} autoFocus onCreated={onClose} />
   </Modal>;
 }
 
@@ -56,29 +61,26 @@ export function Home() {
   const users = useUsers();
   const user = usePreferences(s => s.user);
   const profile = users.data?.find(u => u.name === user);
-  const recent = flattenWorks(works.data || []).filter(w => !w.parent).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 3);
-  return <div className="home-page">
-    <section className="welcome">
-      <div className="welcome-eyebrow"><Logo small /><span>{t('home.eyebrow')}</span></div>
-      <h1>{profile ? t('home.greetingNamed', { name: profile.display_name || profile.name }) : t('home.greeting')}</h1>
-      <p className="welcome-description">{t('home.description')}</p>
-      <WorkComposer />
-      <div className="composer-hint"><CornerDownLeft size={12} /> {t('home.hintEnter')} <span>·</span> {t('home.hintShift')}</div>
-      <div className="start-actions">
-        <Button variant="outline" size="sm" onClick={() => { const field = document.getElementById('work-goal') as HTMLTextAreaElement; field?.focus(); }}><Terminal size={16} />{t('home.startWork')}<ArrowRight size={14} /></Button>
-        <Button variant="outline" size="sm" onClick={() => navigate({ page: 'library', layer: 'card' })}><BookOpen size={16} />{t('home.fromLibrary')}<ArrowRight size={14} /></Button>
-      </div>
+  const recent = flattenWorks(works.data || []).filter(w => !w.parent).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 6);
+  return <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 p-4 pt-8 md:p-8 md:pt-16">
+    <div className="space-y-1">
+      <h1 className="text-2xl font-semibold tracking-tight">{profile ? t('home.greetingNamed', { name: profile.display_name || profile.name }) : t('home.greeting')}</h1>
+      <p className="text-sm text-muted-foreground">{t('home.description')}</p>
+    </div>
+    <Card><CardContent className="p-4"><WorkComposer /></CardContent></Card>
+    <section className="space-y-3">
+      <div className="flex items-center justify-between"><h2 className="text-sm font-medium">{t('home.recent')}</h2>
+        <Button variant="ghost" size="sm" onClick={() => navigate({ page: 'library', layer: 'card' })}><BookOpen />{t('home.fromLibrary')}</Button></div>
+      {works.isError ? <ErrorState error={works.error} retry={() => { void works.refetch(); }} />
+        : works.isPending ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-28" />)}</div>
+        : recent.length ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {recent.map(work => <Card key={work.id} role="button" tabIndex={0} className="flex cursor-pointer flex-col transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={() => navigate({ page: 'work', work: work.id })} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ page: 'work', work: work.id }); } }}>
+            <CardHeader className="p-4 pb-2"><CardDescription className="text-xs">{dateLabel(work.created_at, locale)}</CardDescription><CardTitle className="line-clamp-2 text-sm font-medium leading-snug">{work.goal}</CardTitle></CardHeader>
+            <CardFooter className="mt-auto p-4 pt-0"><Badge variant={work.status === 'doing' ? 'default' : 'secondary'}>{statusLabel(t, work.status)}</Badge></CardFooter>
+          </Card>)}
+        </div>
+        : <Card className="border-dashed"><CardHeader className="flex-row items-start gap-3 space-y-0"><Sparkles className="mt-0.5 size-5 text-muted-foreground" /><div className="space-y-1"><CardTitle className="text-sm">{t('home.emptyTitle')}</CardTitle><CardDescription>{t('home.emptyText')}</CardDescription></div></CardHeader></Card>}
     </section>
-    <section className="recent-section">
-      <div className="section-caption"><span>{t('home.recent')}</span><span className="caption-note">{t('home.recentNote')}</span></div>
-      {works.isError ? <ErrorState error={works.error} retry={() => { void works.refetch(); }} /> : recent.length ? <div className="recent-grid">
-        {recent.map(work => <Button variant="ghost" className="recent-card h-auto min-w-0 whitespace-normal grid grid-cols-[1fr_auto] md:block" key={work.id} onClick={() => navigate({ page: 'work', work: work.id })}>
-          <div className="recent-card-top"><GitBranch size={17} /><span>{dateLabel(work.created_at, locale)}</span></div>
-          <h3>{work.goal}</h3><div className="recent-card-bottom"><span className={`status-text ${work.status}`}><i />{statusLabel(t, work.status)}</span><ArrowUpRightIcon /></div>
-        </Button>)}
-      </div> : <div className="home-empty"><Sparkles size={18} /><div><strong>{works.isPending ? t('home.searching') : t('home.emptyTitle')}</strong><p>{t('home.emptyText')}</p></div></div>}
-    </section>
-    <footer className="home-footer"><span className="mini-dot" /> {t('home.footer')}</footer>
   </div>;
 }
-function ArrowUpRightIcon() { return <ArrowRight size={16} className="recent-arrow" />; }

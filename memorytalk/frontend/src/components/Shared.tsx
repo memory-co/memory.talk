@@ -9,11 +9,13 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
-export function Logo({ small = false }: { small?: boolean }) {
-  return <span className={cn('logo-mark', small && 'small')} aria-hidden="true"><span /><span /><span /></span>;
+export function Logo({ className }: { className?: string }) {
+  return <span className={cn('inline-flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground', className)} aria-hidden="true">
+    <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 17V9" /><path d="M12 17V5" /><path d="M18 17v-6" /></svg>
+  </span>;
 }
-export function UserAvatar({ children }: { children: ReactNode }) {
-  return <Avatar className="h-8 w-8 shrink-0"><AvatarFallback className="bg-accent text-xs text-accent-foreground">{children}</AvatarFallback></Avatar>;
+export function UserAvatar({ children, className }: { children: ReactNode; className?: string }) {
+  return <Avatar className={cn('h-8 w-8 shrink-0 rounded-lg', className)}><AvatarFallback className="rounded-lg bg-muted text-xs">{children}</AvatarFallback></Avatar>;
 }
 export function Loading({ label }: { label?: string }) {
   const t = useT();
@@ -21,10 +23,14 @@ export function Loading({ label }: { label?: string }) {
 }
 export function ErrorState({ error, retry }: { error: unknown; retry?: () => void }) {
   const t = useT();
-  return <Alert variant="destructive" className="my-3"><AlertCircle className="h-4 w-4" /><AlertDescription>{error instanceof Error ? error.message : t('common.loadFailed')}{retry && <Button variant="link" size="sm" className="ml-2 text-destructive" onClick={retry}>{t('common.reload')}</Button>}</AlertDescription></Alert>;
+  return <Alert variant="destructive" className="my-3"><AlertCircle className="h-4 w-4" /><AlertDescription>{error instanceof Error ? error.message : t('common.loadFailed')}{retry && <Button variant="link" size="sm" className="ml-2 h-auto p-0 text-destructive" onClick={retry}>{t('common.reload')}</Button>}</AlertDescription></Alert>;
 }
-export function Empty({ icon, title, children }: { icon?: ReactNode; title: string; children?: ReactNode }) {
-  return <div className="empty-state">{icon && <div className="empty-icon">{icon}</div>}<h3>{title}</h3>{children}</div>;
+export function Empty({ icon, title, children, className }: { icon?: ReactNode; title: string; children?: ReactNode; className?: string }) {
+  return <div className={cn('flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-8 text-center', className)}>
+    {icon && <div className="mb-1 flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">{icon}</div>}
+    <h3 className="text-base font-medium">{title}</h3>
+    <div className="flex flex-col items-center gap-3 text-sm text-muted-foreground [&>p]:max-w-sm">{children}</div>
+  </div>;
 }
 export function Modal({ open, onClose, title, description, children }: {
   open: boolean; onClose: () => void; title: string; description?: string; children: ReactNode;
@@ -32,7 +38,7 @@ export function Modal({ open, onClose, title, description, children }: {
   const focus = useDialogFocus();
   return <Dialog open={open} onOpenChange={value => { if (!value) onClose(); }}>
     <DialogContent {...focus}>
-      <DialogHeader className="pr-6 text-left"><DialogTitle>{title}</DialogTitle><DialogDescription className={description ? 'leading-relaxed' : 'sr-only'}>{description || title}</DialogDescription></DialogHeader>
+      <DialogHeader className="pr-6 text-left"><DialogTitle>{title}</DialogTitle><DialogDescription className={description ? '' : 'sr-only'}>{description || title}</DialogDescription></DialogHeader>
       {children}
     </DialogContent>
   </Dialog>;
