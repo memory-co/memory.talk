@@ -26,80 +26,94 @@
 
 | | origin | issue | card | 用户层 `<名>` |
 |---|---|---|---|---|
-| 形态 | 任何**不带后缀**的文件 | `<path>.issue/` 目录:`readme.md` + `meta.yaml` + `positions/*.md` | `<path>.card/` 目录:`readme.md` + `meta.yaml` | 它的 `check` 说了算 |
+| 形态 | 任何**不带后缀**的文件 | `<path>.issue/` 目录:`readme.md` + `positions/<主张>.md` | `<path>.card/readme.md` | 它的协议说了算 |
 | id | 文件路径 | `path`(不含后缀) | `path` | `path` |
-| 格式 | 原文 | markdown / yaml / markdown | markdown / yaml | 它的 `check` 说了算 |
+| 每个文件 | 原文 | frontmatter 字段 + markdown 正文 | frontmatter 字段 + markdown 正文 | 协议定 |
 | 标题 | 文件名 | 目录名 | 目录名 | 目录名 |
 | 层序 | 0(最底) | 1 | 2 | 之上,按 `collections.json` 的 `layers[]` 顺序 |
 
-**层就是一个校验函数 `check(diff, after)`**:一次写 = 对这个目录的一批文件改动,层看 diff(能表达只增不改、不能删)和改完的目录(跨文件约束),不过整批拒(422,理由带回)。读就是目录里的文件,不解析。对象目录里还可以放 `manager.json`(谁管它,机制文件,不在清单里)。目录树按主题组织,原文、`.issue/`、`.card/` 并排。
+**层是一份 YAML 协议**(`memorytalk/backend/services/collections/layers/<层>.yaml`,用户层 `~/.memory.talk/layers/<名>.yaml`;写法见 [designs collections-layer.md](../../designs/v5/collections-layer.md)):对象目录名的正则和允许的位置、目录里每种文件的正则、每种文件的字段(类型 / 枚举 / 引用 / 必填)和正文。一次写 = 对这个目录的一批文件改动,引擎按协议校验,不过整批拒(422,理由带回)。读就是目录里的文件,不解析。对象目录里还可以放 `manager.json`(谁管它,机制文件,不在协议里)。目录树按主题组织,原文、`.issue/`、`.card/` 并排。
 
 ### issue 层(内置)
 
-`<path>.issue/` 目录,三种文件;标题就是目录名。机制见 [designs issue.md](../../designs/v5/issue.md)。
+`<path>.issue/` 目录,两种文件;标题就是目录名。机制见 [designs issue.md](../../designs/v5/issue.md)。
 
 ```
 memory.talk/配置/该走文件还是环境变量.issue/
-├── readme.md                          问题的展开;纯 markdown,可空;必需
-├── meta.yaml                          可无
+├── readme.md                          问题:字段 links / summary + 正文(问题的展开);必需,不能删
 ├── positions/
-│   ├── 只用环境变量,不要配置文件.md     文件名 = 主张;阐述 + `## 论证` 下一行一条
+│   ├── 只用环境变量,不要配置文件.md     立场:文件名 = 主张;字段 links / rank / verdict + 正文(阐述 + ## 论证)
 │   └── 走配置文件,环境变量只做覆盖.md
 └── manager.json                       机制文件,可无
 ```
 
-**meta.yaml**
+**readme.md**
 
-```yaml
+```markdown
+---
 links:
 - {type: specializes, target: memory.talk/配置/配置怎么管}
-positions:                     # manager 的判定:排前面的当前占优;claim 必须是 positions/ 下已有的文件
-- {claim: 只用环境变量,不要配置文件, note: 试过了,够用}
 summary: 目前倾向只走环境变量
+---
+
+背景……
 ```
 
-| 键 | 改不改 | 说明 |
+| 字段 | 类型 | 说明 |
 |---|---|---|
-| `links[]` | 只增 | `{type, target}`;`type` ∈ `specializes` / `suggested_by` / `questions` / `replaces` / `related`;`target` 是对端 issue 的 path(`suggested_by` 可带 `#<主张>`);同 `(type, target)` 不重复 |
-| `positions[]` | 可改 | `{claim, note?}`,按占优程度从前到后 |
-| `summary` | 可改 | 一句总结 |
+| `links[]` | list of `{type, target}` | `type` ∈ `specializes` / `suggested_by` / `questions` / `replaces` / `related`;`target` 是对端 issue 的 path(可带 `#<主张>`) |
+| `summary` | text | 对整个问题现状的一句总结(manager 写) |
 
-**positions/<主张>.md**:普通 markdown,无 frontmatter;文件名非空、不含 `/`;`## 论证` 之后的列表行是论证,一行一条,不打分。谁、何时在 git(`git log -- positions/<主张>.md`)。
+**positions/<主张>.md**
 
-**check**:清单外的文件拒;`readme.md` 不能删;立场文件新建随意、改只能在末尾追加、不能删(改名 = 删 + 建,也不行);`meta.yaml` 按上表,`positions[].claim` 必须是已有立场,多余键拒。**读**:`files = {相对路径: 内容}`,不解析、不排序、不算分,怎么渲染是客户端的事。
+```markdown
+---
+rank: 1
+verdict: 试过了,够用
+links:
+- {type: supports, target: memory.talk/配置/本地开发怎么给配置}
+---
 
-没有 `origin` / `card` 字段:issue 不记它从哪来、不记写成了哪张卡(卡记 issue)。没有 id:id 就是 path;立场没有 id:主张就是文件名。
+为什么这么主张……
+
+## 论证
+
+- 试了一遍,环境变量够用(work_try#9)
+```
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `rank` | number | manager 的判定:数字越小越靠前;空 = 未判定。读的时候按 `rank` 升序再按文件名 |
+| `verdict` | string | 为什么排这 |
+| `links[]` | list of `{type, target}` | `type` ∈ `supports` / `refutes` / `depends_on` / `related` |
+
+没有 `origin` / `card` 字段:issue 不记它从哪来、不记写成了哪张卡(卡记 issue)。没有 id:id 就是 path;立场没有 id:主张就是文件名。正文不锁:「不改旧论证、改主意加新立场」是约定,历史在 git。
 
 ### card 层(内置)
 
-`<path>.card/` 目录,两个文件;标题就是目录名。维基式事实条目:可改、可删,历史在 git;**没有分数、没有状态位**。机制见 [designs card.md](../../designs/v5/card.md)。
+`<path>.card/readme.md`,一个文件;标题就是目录名。维基式事实条目:可改、可删,历史在 git;**没有分数、没有状态位**。机制见 [designs card.md](../../designs/v5/card.md)。
 
-```
-memory.talk/配置/配置只来自环境变量.card/
-├── readme.md          正文;必需,不能删
-├── meta.yaml          可无
-└── manager.json       机制文件,可无
-```
-
-**meta.yaml**
-
-```yaml
+```markdown
+---
 context: memory.talk v5
 links: [memory.talk/配置/另一张卡]
 issue: memory.talk/配置/该走文件还是环境变量
+---
+
+只用环境变量。配置文件是多出来的一份状态,要同步。
 ```
 
-| 键 | 类型 | 说明 |
+| 字段 | 类型 | 说明 |
 |---|---|---|
 | `context` | string | 在哪成立:关于哪个项目 / 用户 / 场景。「本地论」在卡上的落法——不是治理字段,是事实陈述的一部分 |
-| `links[]` | string[] | 相关卡的 path(内链,只有一种类型) |
-| `issue` | string \| null | 讨论页:这张卡对应的 issue 的 path(卡记 issue,issue 不记卡) |
+| `links[]` | list of ref card | 相关卡的 path(内链,只有一种类型) |
+| `issue` | ref issue | 讨论页:这张卡对应的 issue 的 path(卡记 issue,issue 不记卡) |
 
-**check**:只能有这两个文件;`readme.md` 不能删;`meta.yaml` 多余的键拒。没有 `title`(目录名就是)、没有 `status`(删就是删)、没有 id(id 就是 path)。
+没有 `title`(目录名就是)、没有 `status`(删就是删)、没有 id(id 就是 path)。
 
 ### 用户层
 
-`~/.memory.talk/layers/<名>.py`,里面一个 `Layer` 子类,和内置层一模一样(`name` / `files` / `check`);启动时载入,`collections.json` 的 `layers[]` 自动补一项 `{"name": "<名>", "builtin": false}`(一次最底层提交),新分支从始祖出发。文件没了但 `collections.json` 里还有 → 启动报错。写法见 [designs collections-layer.md](../../designs/v5/collections-layer.md)。
+`~/.memory.talk/layers/<名>.yaml`,一份和内置层一模一样的协议(文件名 = 层名);启动时载入,`collections.json` 的 `layers[]` 自动补一项 `{"name": "<名>", "builtin": false}`(一次最底层提交),新分支从始祖出发。协议写错(未知类型、正则不合法、`object.pattern` 不以 `.<名>` 结尾、两种文件重叠)或文件没了但 `collections.json` 里还有 → 启动报错。
 
 ## manager.json
 

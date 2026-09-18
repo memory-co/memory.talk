@@ -34,17 +34,17 @@
 | `GET` | `/api/users/{name}` | 一个 user 的档案 + 建的 / 动过的 work、最近的提交 |
 | `PUT` | `/api/users/{name}` | 改档案(display_name / email) |
 | `GET` | `/api/collections/config` | collections.json 本体 + 它的 git 历史(层的变化史) |
-| `GET` | `/api/collections/layers` | 有哪些层(最底在前)、各自允许的文件;用户层来自 <home>/layers/*.py |
+| `GET` | `/api/collections/layers` | 有哪些层(最底在前)及各自的协议;用户层来自 <home>/layers/*.yaml |
 | `GET` | `/api/collections/managed` | (暂缓,等 work 实现后启用)某个 work 管的所有对象;不传 work = 没人管的对象 |
 | `GET` | `/api/collections/manager` | (暂缓,等 work 实现后启用)这个路径归谁管(最近的 manager.json) |
 | `PUT` | `/api/collections/manager` | (暂缓,等 work 实现后启用)在这个目录(或对象)下放 manager.json,绑到一个 work |
 | `DELETE` | `/api/collections/manager` | (暂缓,等 work 实现后启用)解绑:删这个目录的 manager.json |
 | `GET` | `/api/collections/search` | git grep 整个 Collections(可限定层) |
-| `GET` | `/api/collections/tree` | 浏览目录树:对象(带后缀的目录折成一项)、目录、origin 文件 |
+| `GET` | `/api/collections/tree` | 浏览目录:有什么(items:对象折成一项、目录、origin 文件)+ 还能建什么(can_create)+ 这个名字行不行(candidate=) |
 | `GET` | `/api/collections/{layer}` | 一层的目录(按目录树列标题) |
 | `GET` | `/api/collections/{layer}/{path}` | 读一个对象(rev= 读历史版本) |
-| `POST` | `/api/collections/{layer}/{path}` | 建一个对象:目录里的文件(files);origin 用 content。整批交给层的 check,过了一个 [layer] 提交 |
-| `PUT` | `/api/collections/{layer}/{path}` | 改一个对象:files 加 / 改 / 删(null)目录里的文件,没提到的不动,整批交给层的 check;origin 整体替换 |
+| `POST` | `/api/collections/{layer}/{path}` | 建一个对象:目录里的文件(files);origin 用 content。整批按层的协议校验,过了一个 [layer] 提交;dry_run=1 只校验 |
+| `PUT` | `/api/collections/{layer}/{path}` | 改一个对象:files 加 / 改 / 删(null)目录里的文件,没提到的不动,整批按层的协议校验;origin 整体替换;dry_run=1 只校验 |
 | `DELETE` | `/api/collections/{layer}/{path}` | 删一个对象(历史在 git) |
 | `GET` | `/api/collections/history/{layer}/{path}` | 一个对象的 git log(这一层的分支上) |
 

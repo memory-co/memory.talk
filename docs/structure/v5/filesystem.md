@@ -11,9 +11,9 @@
 │   └── <按主题组织的目录树>/          ←   原文、.issue/、.card/、.<用户层>/ 并排
 │       ├── manager.json              ←   这一片归谁管(可选,任何目录)
 │       ├── 某份原文.md                ←   origin:不带后缀的文件
-│       ├── 某个问题.issue/            ←   issue:readme.md + meta.yaml + positions/<主张>.md + 可选 manager.json
-│       └── 某张卡.card/              ←   card:readme.md + meta.yaml + 可选 manager.json
-├── layers/                           ← 用户自定义层:<名>.py 各一个 Layer 子类,启动时载入(和内置层一模一样)
+│       ├── 某个问题.issue/            ←   issue:readme.md + positions/<主张>.md(每个文件 = frontmatter 字段 + 正文)+ 可选 manager.json
+│       └── 某张卡.card/              ←   card:readme.md(字段 context / links / issue + 正文)+ 可选 manager.json
+├── layers/                           ← 用户自定义层:<名>.yaml 各一份协议,启动时载入(和内置层一模一样)
 ├── users/                            ← user 档案(注册的实体;MEMORY_TALK_STORE=fs 时)
 │   └── <name>.json                   ←   name / display_name / email / created_at
 ├── works/                            ← 裸文件(现场层)

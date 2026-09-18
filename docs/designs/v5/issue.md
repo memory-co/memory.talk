@@ -1,6 +1,6 @@
 # issue —— 一个问题一个目录:readme.md 是问题,positions/ 一个立场一个文件;每个文件 = 字段 + 正文(v5 设计)
 
-> **状态:形态已实施,协议待改。** 现在 `layers/issue.py` 里是一个 Python 的 `check`;按 [collections-layer.md](collections-layer.md) 它要变成一份 `issue.yaml`(路径 + 每个文件的 formatter),校验和前端表单都从那份 YAML 来。没有行为,写就是写文件。API / CLI 见 [api collections.md](../../api/v5/collections.md) / [cli collection.md](../../cli/v5/collection.md),文件形态见 [structure collections.md](../../structure/v5/collections.md)。总定位见 [README.md](README.md)。
+> **状态:已实施。** `layers/issue.yaml` 就是这一层的协议:两种文件(`readme.md`、`positions/<主张>.md`),各自的字段和正文;引擎按它校验,前端按它出表单。没有行为,写就是写文件。API / CLI 见 [api collections.md](../../api/v5/collections.md) / [cli collection.md](../../cli/v5/collection.md),文件形态见 [structure collections.md](../../structure/v5/collections.md)。总定位见 [README.md](README.md)。
 
 相关:
 - collections(issue 是一个 layer;对象是任意位置的 `<名>.issue/` 目录): [collections.md](collections.md)

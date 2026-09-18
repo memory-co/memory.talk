@@ -1,6 +1,6 @@
 # collections layer —— 一个层 = 一份 YAML 协议:路径 + 每种文件的 formatter(v5 设计)
 
-> **状态:设计稿,代码未跟上。** 现在的层是一个 Python 类(`check` 写代码),前端对目录一无所知。本篇把层改成**一份 YAML**:声明这个层的对象目录里有哪些**路径**、每个路径的文件用什么 **formatter**(有哪些字段、字段是什么类型 / 枚举、正文是什么);后端用一个通用引擎把这份 YAML 同时当**校验规则**和**界面说明**;内置层和用户层是同一种东西。用户在前端的体感像 Notion 数据库里的一行:点开一个文件,上面是要填的字段(该选的给选项),下面写正文。总定位见 [README.md](README.md)。
+> **状态:已实施。** 层 = 一份 YAML(`memorytalk/backend/services/collections/layers/<层>.yaml`,用户层 `~/.memory.talk/layers/<名>.yaml`),`protocol.py` 是唯一引擎:读它校验写入,也原样交给 `GET /api/collections/layers`;`GET /tree` 带 `can_create` / `candidate`,`POST` / `PUT` 带 `dry_run`;前端的对象编辑器完全由协议驱动。总定位见 [README.md](README.md)。
 
 相关:
 - collections(层即分支,对象即带后缀的目录): [collections.md](collections.md)

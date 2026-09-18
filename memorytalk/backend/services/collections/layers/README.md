@@ -1,65 +1,46 @@
-# layers —— 一个层是 `Layer` 接口的一个实现:一个 check
+# layers —— 一个层 = 一份 YAML 协议
 
-```python
-class Layer(ABC):                                   # base.py
-    name: str                                       # = 分支 layer/<name>、后缀 .<name>、提交前缀 [<name>]
-    files: list[str]                                # 目录里允许的文件(给人看的清单;真正的规则在 check 里)
-    @abstractmethod
-    def check(self, changes: list[Change], after: dict[str, bytes]) -> str | None: ...   # None = 过;str = 理由(原样报给调用方,422)
+一份 YAML 说清三件事:**对象目录**叫什么(正则,必须以 `.<层>` 结尾)、能放哪(`under`);目录里允许哪些**文件**(每种一个正则);每种文件的 **formatter**(frontmatter 字段 + 正文)。
+`protocol.py` 是唯一的引擎:读这份 YAML 校验写入,也把它原样交给 `GET /api/collections/layers` 让前端画表单。**没有 Python 层**:协议说不清的规则就不是层的规则。协议全文见 [docs/designs/v5/collections-layer.md](../../../../../docs/designs/v5/collections-layer.md)。
 
-Change(path, old, new)     # 这次提交对一个对象目录的 diff:目录内相对路径;old=None 新增,new=None 删除
-after                      # 改完之后这个目录的全部文件
+```yaml
+layer: issue
+object: {pattern: ^(?P<name>[^/]+)\.issue$, name: 问题, under: .*}
+files:
+  - pattern: ^readme\.md$                   # 固定文件:没有捕获组,至多一个
+    label: 问题
+    required: true                            # 建对象时必须有;之后不能删
+    format:
+      fields:                                 # frontmatter;类型 string / text / number / bool / date / enum / ref / list / object
+        links: {type: list, item: {type: object, fields: {type: {type: enum, values: [...], required: true}, target: {type: ref, layer: issue, required: true}}}}
+        summary: {type: text}
+      body: markdown                          # 正文:markdown | text
+    template: ""
+  - pattern: ^positions/(?P<name>[^/]+)\.md$  # 一类文件:命名组 name 由用户起
+    name: 主张
+    label: 立场
+    format: {fields: {rank: {type: number}, verdict: {type: string}, links: {...}}, body: markdown}
+    template: "\n\n## 论证\n"
 ```
 
-形态(后缀、目录、路径拆分)从 `name` 派生,写在基类;子类只管 `name` / `files` / `check`。层无状态,一个实例服务所有对象。
-这是一个 pre-receive hook 的形状。层不认识 API、不认识读法、没有行为:**写就是写文件,层只负责说这批文件改动过不过。**
-看 diff 才能表达「只增不改」「不能删」;看 `after` 才能做跨文件约束(`meta.positions[].claim` 得是已有的立场)。
+## 引擎做什么(`Layer.check(changes, after)`)
 
-## 从 API 到 git
+| 协议里的 | 检查 |
+|---|---|
+| `object.pattern` / `under` | 新建对象:目录名整段匹配、父目录匹配 `under`、不在别的对象目录里 |
+| `files[].pattern` | 改动里每个路径必须整段匹配某一种;固定文件至多一个 |
+| `required` | 改完的目录里必须有;删它拒 |
+| `format.fields` | 解 frontmatter(必须是键值表);未声明的键拒;`required` 的键要有;按类型校验(enum 在 values 里、number、date、list、object 递归) |
+| 没有 `fields` | 文件不能有 frontmatter |
 
-```
-POST / PUT /api/collections/{layer}/{path}   {"files": {"<相对路径>": "<内容>" | null}, "subject"?, "reason"?}
-   │  CollectionsService.put():读出目录现有文件,和 files 比出 changes,算出 after(没变的不算,一个都没变 → 400)
-   │  layer.check(changes, after)            ← 拒 → 422,message 就是那句理由
-   ▼
-每个文件落到 <path>.<layer>/<相对路径>  →  Repo.commit(守卫:路径按后缀归哪层)  →  layer/<name> 一个提交 + stack 一个 merge 节点
-读:GET 给 {"layer", "path", "title": 目录名, "files": {相对路径: 内容}};origin 给 "content"。不解析、不合成视图,怎么渲染是客户端的事。
-```
+没有跨文件约束:每个文件只按自己的 formatter 校验,文件之间只有路径规则。载入时校验协议本身(未知键 / 类型、正则不合法、捕获组不叫 `name`、`object.pattern` 不以 `\.<层>$` 结尾、两种文件重叠),不合的层启动即报错。
 
-`manager.json` 是机制文件,任何层的任何目录都允许,不进 check。
+## 给前端的
 
-## 三个内置层
+- `GET /api/collections/layers`:每层 `protocol` = 这份 YAML 的 JSON,每种文件多算好 `fixed` / `example`(`positions/{name}.md`)。
+- `GET /api/collections/tree?path=&candidate=`:`can_create` 说这个目录还能建什么(普通目录按各层 `object` 规则,对象目录按文件种类),`candidate` 回答一个名字行不行。
+- `POST` / `PUT …?dry_run=1`:只校验不提交,返回 `{ok, reason}`。
 
-| 层 | 目录里允许 | check 的规则 |
-|---|---|---|
-| **origin**(`Origin`) | 没有目录:任何不带后缀的路径就是一个文件(覆盖 `suffix` / `split`) | 不校验,永远过 |
-| **issue**(`Issue`;schema `Issue.Meta` 挂在类里) | `readme.md`(必需)/ `meta.yaml` / `positions/<主张>.md` | 别的文件拒;`readme.md` 不能删;立场文件新建随意、改只能在末尾追加、不能删(改名 = 删 + 建,也不行);`meta.yaml` 按 `Meta`:`links[].type` 五种、`(type, target)` 不重复、`positions[].claim` 必须是已有立场、多余键拒 |
-| **card**(`Card`;schema `Card.Meta`) | `readme.md`(必需)/ `meta.yaml` | 别的文件拒;`readme.md` 不能删;`meta.yaml` 只有 `context` / `links[]` / `issue`,多余键拒 |
+## 内置层与用户层
 
-标题都是目录名,文件里不再写标题。「加一个立场」= PUT 一个新的 `positions/<主张>.md`;「加一条论证」= PUT 那个文件、末尾多一行;「排序」= PUT `meta.yaml`。提交主题由调用方给(`subject`),不给就是 `write / edit <path>`。
-
-## 用户层:`<home>/layers/<name>.py`
-
-和内置层一模一样:一个 `.py`,里面一个 `Layer` 子类。启动时载入(`load_user`),排在内置层之上,按文件名;`collections.json` 里自动补一项 `{"name", "builtin": false}`,新分支从始祖出发。
-
-```python
-# ~/.memory.talk/layers/experiment.py
-from memorytalk.backend.services.collections.layers import Layer, appended_only, load_yaml
-
-class Experiment(Layer):
-    name = "experiment"
-    files = ["readme.md", "result.yaml", "runs/*.md"]
-
-    def check(self, changes, after):
-        for c in changes:
-            if c.path == "readme.md" and c.new is None:
-                return "readme.md 不能删"
-            ...
-        return None if "readme.md" in after else "缺 readme.md"
-```
-
-没有 YAML、没有 schema 编译、没有加层的端点:加一层 = 放一个文件,重启。文件里没有 `Layer` 子类,或 `collections.json` 里记着的层找不到文件,启动即报错。
-
-## 要加一个内置层
-
-和用户层一样写,只是文件放在这个目录、实例放进 `__init__.py` 的 `BUILTIN`(最底在前)。已有仓库启动时 `Repo.ensure_layers` 会把缺的层补进 `collections.json`。
+内置 `origin.yaml` `issue.yaml` `card.yaml` 在本目录,顺序 `BUILTIN_ORDER`(最底在前);origin 没有对象目录、不校验。用户层 `~/.memory.talk/layers/<名>.yaml`,文件名 = 层名,启动时一起载入、登记进 `collections.json`(只记名字和 `builtin`)。加一层 = 放一份 YAML,重启。

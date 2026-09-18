@@ -5,7 +5,7 @@
 ```
 memory.talk collection
 ├── layers
-├── tree    [<path>]
+├── tree    [<path>] [--candidate <名字>]
 ├── ls      <layer> [--dir <路径>]
 ├── search  <query> [--layer <层>]
 │
@@ -24,16 +24,16 @@ memory.talk collection
 ## layers
 
 ```bash
-memory.talk collection layers                          # 最底在前:origin / issue / card / 用户层;各自允许的文件
+memory.talk collection layers                          # 最底在前:origin / issue / card / 用户层;各自的文件种类(* = 必需)
 ```
 
-没有 `layers add`:加一层 = 往 `~/.memory.talk/layers/` 放一个 `.py`(一个 `Layer` 子类,和内置层一模一样),`server restart`。写法见 [`../../designs/v5/collections-layer.md`](../../designs/v5/collections-layer.md)。
+没有 `layers add`:加一层 = 往 `~/.memory.talk/layers/` 放一份 `<名>.yaml`(和内置层一模一样的协议),`server restart`。写法见 [`../../designs/v5/collections-layer.md`](../../designs/v5/collections-layer.md)。
 
 ## tree / ls / search
 
 | 命令 | 说明 |
 |---|---|
-| `tree [<path>]` | 浏览目录:对象折成一项(带层名)、目录、origin 文件 |
+| `tree [<path>] [--candidate]` | 浏览目录:对象折成一项(带层名)、目录、origin 文件;末尾一行「可建:」列这里还能建什么;`--candidate` 问一个名字(对象目录名 / 文件路径)行不行 |
 | `ls <layer> [--dir]` | 一层的目录:按目录树列标题 |
 | `search <q> [--layer]` | `git grep`,每行一条:层 / 路径 / 行号 / 文本 |
 
@@ -50,20 +50,19 @@ memory.talk collection read card memory.talk/配置/配置只来自环境变量 
 
 ## write / edit / rm
 
+每个文件 = frontmatter 字段 + 正文;`--put <相对路径>=<内容>`(多次),内容可 `@file` / `@-`,edit 时 `null` 删。
+
 ```bash
-# 目录里的文件:--put <相对路径>=<内容>(多次);内容可 @file / @-;edit 时 null 删
-memory.talk collection write issue memory.talk/配置/该走文件还是环境变量 --put readme.md=@背景.md --reason '撞见的'
+memory.talk collection write issue memory.talk/配置/该走文件还是环境变量 --put readme.md=@问题.md --reason '撞见的'
 memory.talk collection edit  issue memory.talk/配置/该走文件还是环境变量 \
-    --put positions/只用环境变量.md=@为什么.md --subject 'position memory.talk/配置/该走文件还是环境变量: 只用环境变量'
-memory.talk collection edit  issue memory.talk/配置/该走文件还是环境变量 \
-    --put positions/只用环境变量.md=@- --subject 'argue …#只用环境变量: 够用' < 加了一行的文件.md       # 只能在末尾追加
-memory.talk collection edit  issue memory.talk/配置/该走文件还是环境变量 --put meta.yaml=@meta.yaml --subject 'rank …'
-memory.talk collection write card  memory.talk/配置/配置只来自环境变量 --put readme.md=@正文.md --put meta.yaml='issue: memory.talk/配置/该走文件还是环境变量'
-memory.talk collection write origin memory.talk/配置/旧方案.md --content @旧方案.md          # origin:原文
-memory.talk collection rm    card memory.talk/配置/配置只来自环境变量 --reason '过时'          # 删,历史在 git
+    --put positions/只用环境变量.md=@立场.md --subject 'position …: 只用环境变量'       # 立场.md:frontmatter 里 rank / verdict / links,正文是阐述 + ## 论证
+memory.talk collection edit  issue memory.talk/配置/该走文件还是环境变量 --put readme.md=@问题.md --subject 'summarize …'
+memory.talk collection write card  memory.talk/配置/配置只来自环境变量 --put readme.md=@卡.md          # 卡.md 的 frontmatter 里写 context / links / issue
+memory.talk collection write origin memory.talk/配置/旧方案.md --content @旧方案.md                   # origin:原文
+memory.talk collection rm    card memory.talk/配置/配置只来自环境变量 --reason '过时'                   # 删,历史在 git
 ```
 
-每个层允许哪些文件、哪些只增不改,看 `collection layers` 和 [`../../designs/v5/issue.md`](../../designs/v5/issue.md) / [`card.md`](../../designs/v5/card.md)。不过 check → exit 1 `invalid`,理由打印出来;已存在 → exit 1 `exists`。
+每个层有哪些文件、每种文件有哪些字段,看 `collection layers` 和 [`../../designs/v5/collections-layer.md`](../../designs/v5/collections-layer.md);想知道某个目录还能建什么,`collection tree <目录>`。不合协议 → exit 1 `invalid`,理由打印出来;已存在 → exit 1 `exists`。
 
 ## log
 

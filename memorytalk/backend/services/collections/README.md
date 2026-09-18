@@ -17,7 +17,7 @@ Collections 需要一种可追溯的分层文件存储结构：不同层分别�
 | `layer/origin` | 原文及其历史；承载仓库配置 `collections.json` |
 | `layer/issue` | 问题、立场、论证及其历史 |
 | `layer/card` | 事实词条及其历史 |
-| `layer/<自定义层>` | `<home>/layers/<名>.py` 里的 Layer 子类定义的对象及其历史 |
+| `layer/<自定义层>` | `<home>/layers/<名>.yaml` 协议定义的对象及其历史 |
 | `stack` | 汇集各层内容，提供统一读取和整体变更时间线 |
 
 始祖提交只包含 `collections.json`，记录层清单与顺序；这份共享的初始文件归最底层管理。除此之外，各层拥有的文件路径互不相交。层的上下关系表达认知上的分工，Git 拓扑中各层分支则从同一起点独立生长。
@@ -54,7 +54,7 @@ Collections 为各层维护独立的分支内容与历史，并通过**路径归
 
 跨层业务动作拆成各层自己的提交。例如对一张 card 开讨论页，会先提交新的 issue，再提交 card 的 `issue` 引用；业务上是一件事，历史中仍保留每层明确的责任边界。层与层之间是弱耦合：card 记它的 issue，issue 不记 card。
 
-这套约束由服务写入入口执行，当前以服务进程作为仓库唯一写者。新增层时，往 `<home>/layers/` 放一个 `.py`（一个 Layer 子类）重启即可：启动时登记进 `collections.json` 并建立分支，沿用统一的读写、历史与归属机制。
+这套约束由服务写入入口执行，当前以服务进程作为仓库唯一写者。新增层时，往 `<home>/layers/` 放一份 `<名>.yaml`（协议）重启即可：启动时登记进 `collections.json` 并建立分支，沿用统一的读写、历史与归属机制。
 
 ## 模块分工
 
@@ -64,4 +64,4 @@ Collections 为各层维护独立的分支内容与历史，并通过**路径归
 - [`manager.py`](manager.py)：沿目录祖先解析 `manager.json`，确定变更应交给哪个 work。
 - [`catalog.py`](catalog.py)：将对象组织为目录（按目录树列标题）。
 
-每一层就是一个校验函数 `check(diff, after)`，由 [`layers/`](layers/) 定义；没有行为，写就是写文件。本模块负责将它们放进同一个可追溯、可分层扩展的认知仓库，并通过 manager 收件箱与 work 连接。
+每一层是一份 YAML 协议（对象目录、文件种类、每种文件的字段与正文），[`layers/protocol.py`](layers/protocol.py) 是唯一引擎；没有行为，写就是写文件。本模块负责将它们放进同一个可追溯、可分层扩展的认知仓库，并通过 manager 收件箱与 work 连接。

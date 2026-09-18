@@ -1,6 +1,6 @@
 # memorytalk/backend(v5 服务)
 
-memory.talk v5 的 Python 包(pip:`memorytalk`,命令 `memory.talk`)。**work 树(带 created_by 与 users)、协议 server、Collections(origin / issue / card 三层 + 用户层;每层是一个 check(diff) 校验器;提交 author = user)、manager 收件箱、存储 provider(LocalFS / SQLite,测试两种都跑)都有最简实现。** 未做:鉴权网关、ttyd / 反代托管、`daemon` / `start` / `stop`、逐 round 标注、二进制 blob 外置、给人手工 `git commit` 用的 hook(服务进程是唯一写者)。 端点清单见 [docs/api/v5](../docs/api/v5/README.md);起服务 `memory.talk server start`,测试在仓库根 `pytest`。 按 **models / services / controllers** 三层分目录,外加 **work_servers/**(每个协议一个 server);内置 layer 定义在 services/collections/layers/ 下;services 下每个子包对应 [docs/designs/v5](../docs/designs/v5/README.md) 的一篇设计;底层逻辑照 shellbase `server/shellbase/` 原生实现。
+memory.talk v5 的 Python 包(pip:`memorytalk`,命令 `memory.talk`)。**work 树(带 created_by 与 users)、协议 server、Collections(origin / issue / card 三层 + 用户层;每层是一份 YAML 协议,一个引擎校验;提交 author = user)、manager 收件箱、存储 provider(LocalFS / SQLite,测试两种都跑)都有最简实现。** 未做:鉴权网关、ttyd / 反代托管、`daemon` / `start` / `stop`、逐 round 标注、二进制 blob 外置、给人手工 `git commit` 用的 hook(服务进程是唯一写者)。 端点清单见 [docs/api/v5](../docs/api/v5/README.md);起服务 `memory.talk server start`,测试在仓库根 `pytest`。 按 **models / services / controllers** 三层分目录,外加 **work_servers/**(每个协议一个 server);内置 layer 定义在 services/collections/layers/ 下;services 下每个子包对应 [docs/designs/v5](../docs/designs/v5/README.md) 的一篇设计;底层逻辑照 shellbase `server/shellbase/` 原生实现。
 
 ```
 memorytalk/backend/           # 服务本体;memorytalk/cli/ 是它的命令行客户端
@@ -37,11 +37,11 @@ memorytalk/backend/           # 服务本体;memorytalk/cli/ 是它的命令行�
 │   │   ├── repo.py           #     UserRepo:fs 版(users/<name>.json)/ db 版(users 表)
 │   │   └── __init__.py       #     UserService:注册 / 档案 / 活动统计(从 work 与 collections 现算)/ commit author
 │   ├── collections/          #   认知层 —— docs/designs/v5/collections.md / manager.md
-│   │   ├── layers/           #     每层一个类,实现 Layer 接口的 check(diff, after) -> None | str;用户层 = <home>/layers/*.py 里一模一样的子类,启动时载入(README.md:怎么写一层)
-│   │   │   ├── base.py       #       Layer(ABC:name / files / check;形态从 name 派生)+ Change + 小工具(appended_only / load_yaml)
-│   │   │   ├── origin.py     #       最底层:不带后缀的一切,原文,不校验
-│   │   │   ├── issue.py      #       <名>.issue/{readme.md, meta.yaml, positions/*.md};立场只增不改、不删;meta 的边和排序有约束
-│   │   │   └── card.py       #       <名>.card/{readme.md, meta.yaml};readme 不能删;meta 只有 context / links / issue
+│   │   ├── layers/           #     层 = 一份 YAML 协议;protocol.py 是唯一引擎(校验 + 给前端的说明);用户层 = <home>/layers/*.yaml(README.md)
+│   │   │   ├── protocol.py   #       from_yaml → Layer(object 规则 + 文件种类 + 字段类型);check(diff, after);can_create_files
+│   │   │   ├── origin.yaml   #       最底层:不带后缀的一切,原文,不校验
+│   │   │   ├── issue.yaml    #       <名>.issue/{readme.md, positions/{name}.md};每个文件 = frontmatter 字段 + 正文
+│   │   │   └── card.yaml     #       <名>.card/readme.md;字段 context / links / issue + 正文
 │   │   ├── git.py            #     git 原语:hash-object / write-tree / commit-tree / update-ref / ls-tree / show / log / grep,不认识层
 │   │   ├── repo.py           #     分层拓扑(在 git.py 上):layer/<名> 权威分支 + stack merge 视图 + 路径归属守卫 + collections.json 锚定
 │   │   ├── manager.py        #     manager.json:最近祖先解析
