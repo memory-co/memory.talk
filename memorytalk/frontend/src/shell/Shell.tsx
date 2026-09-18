@@ -13,7 +13,7 @@ import { Separator } from '@/components/ui/separator';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarMenuSkeleton, SidebarProvider, SidebarRail, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
 import { TaskTree } from './TaskTree';
 import { Home } from './Home';
-const SearchWorks = lazy(() => import('./SearchWorks').then(m => ({ default: m.SearchWorks })));
+const GlobalSearch = lazy(() => import('./GlobalSearch').then(m => ({ default: m.GlobalSearch })));
 const Library = lazy(() => import('@/collections/Library').then(m => ({ default: m.Library })));
 const Settings = lazy(() => import('@/settings/Settings').then(m => ({ default: m.Settings })));
 const Workspace = lazy(() => import('./Workspace').then(m => ({ default: m.Workspace })));
@@ -47,12 +47,11 @@ export function Shell() {
 }
 
 /** 侧栏的内容:桌面放进 <Sidebar>,手机放进吸附列,同一份。 */
-function SidebarBody({ onSearch, onNavigate, onClose }: { onSearch: () => void; onNavigate: () => void; onClose?: () => void }) {
+function SidebarBody({ onNavigate, onClose }: { onNavigate: () => void; onClose?: () => void }) {
   const t = useT();
   const route = useRoute();
   const works = useWorks(); const users = useUsers(); const system = useSystem();
   const user = usePreferences(s => s.user);
-  const { isMobile } = useSidebar();
   const currentUser = users.data?.find(u => u.name === user);
   const go = (page: 'home' | 'library' | 'settings') => { navigate({ page }); onNavigate(); };
   return <>
@@ -67,7 +66,6 @@ function SidebarBody({ onSearch, onNavigate, onClose }: { onSearch: () => void; 
     <SidebarContent>
       <SidebarGroup><SidebarGroupContent><SidebarMenu>
         <SidebarMenuItem><SidebarMenuButton isActive={route.page === 'home'} onClick={() => go('home')} tooltip={t('nav.newWork')}><SquarePen /><span>{t('nav.newWork')}</span></SidebarMenuButton></SidebarMenuItem>
-        <SidebarMenuItem><SidebarMenuButton onClick={() => { onNavigate(); onSearch(); }} tooltip={t('nav.searchWork')}><Search /><span>{t('nav.searchWork')}</span>{!isMobile && <kbd className="ml-auto text-xs text-muted-foreground group-data-[collapsible=icon]:hidden">⌘K</kbd>}</SidebarMenuButton></SidebarMenuItem>
         <SidebarMenuItem><SidebarMenuButton isActive={route.page === 'library'} onClick={() => go('library')} tooltip={t('nav.library')}><BookOpen /><span>{t('nav.library')}</span></SidebarMenuButton></SidebarMenuItem>
       </SidebarMenu></SidebarGroupContent></SidebarGroup>
       <SidebarGroup className="group-data-[collapsible=icon]:hidden">
@@ -132,16 +130,19 @@ function ShellContent() {
     window.addEventListener('keydown', listener); return () => window.removeEventListener('keydown', listener);
   }, []);
   const library = <Suspense fallback={<Loading />}><Library compact {...selection} onSelect={setSelection} work={route.work} /></Suspense>;
-  const searchDialog = searchLoaded && <Suspense fallback={null}><SearchWorks open={search} onClose={() => setSearch(false)} /></Suspense>;
+  const searchDialog = searchLoaded && <Suspense fallback={null}><GlobalSearch open={search} onClose={() => setSearch(false)} /></Suspense>;
   if (isMobile) return <><MobileShell onSearch={() => setSearch(true)} library={route.page === 'work' ? library : null} page={goInspector => <Page onLibrary={goInspector} selection={s => navigate({ page: 'library', ...s })} />} />{searchDialog}</>;
   return <>
-    <Sidebar collapsible="icon"><SidebarBody onSearch={() => setSearch(true)} onNavigate={() => undefined} /><SidebarRail /></Sidebar>
+    <Sidebar collapsible="icon"><SidebarBody onNavigate={() => undefined} /><SidebarRail /></Sidebar>
     <SidebarInset className="h-svh min-h-0 overflow-hidden">
       <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="mr-2 h-4" />
         <Crumbs />
-        {route.page === 'work' && <Button variant="ghost" size="icon" className="ml-auto" aria-label={inspector ? t('nav.closeInspector') : t('nav.openInspector')} aria-pressed={inspector} onClick={() => setInspector(!inspector)}><PanelRight /></Button>}
+        <div className="ml-auto flex items-center gap-1">
+          <Button variant="outline" size="sm" className="h-8 gap-2 text-muted-foreground" onClick={() => setSearch(true)} aria-label={t('search.title')}><Search className="size-3.5" /><span className="hidden lg:inline">{t('search.button')}</span><kbd className="hidden rounded border bg-muted px-1 font-mono text-[10px] lg:inline">⌘K</kbd></Button>
+          {route.page === 'work' && <Button variant="ghost" size="icon" aria-label={inspector ? t('nav.closeInspector') : t('nav.openInspector')} aria-pressed={inspector} onClick={() => setInspector(!inspector)}><PanelRight /></Button>}
+        </div>
       </header>
       <div className="flex min-h-0 flex-1">
         <main id="main-content" tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto outline-none">
@@ -173,13 +174,16 @@ function MobileShell({ onSearch, library, page }: { onSearch: () => void; librar
   const safe = 'pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]';
   return <div ref={track} onScroll={onScroll} className="flex h-dvh w-full snap-x snap-mandatory overflow-x-auto overflow-y-hidden overscroll-x-contain bg-background [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
     <div className={cn('group flex h-full w-full shrink-0 snap-start flex-col bg-sidebar text-sidebar-foreground', safe)} data-state="expanded" aria-label={t('nav.main')} aria-hidden={col !== 0}>
-      <SidebarBody onSearch={onSearch} onNavigate={() => goTo(1)} onClose={() => goTo(1)} />
+      <SidebarBody onNavigate={() => goTo(1)} onClose={() => goTo(1)} />
     </div>
     <div className={cn('flex h-full w-full shrink-0 snap-start flex-col', safe)} aria-hidden={col !== 1}>
       <header className="flex h-14 shrink-0 items-center gap-2 border-b px-3">
         <Button variant="ghost" size="icon" aria-label={col === 0 ? t('nav.closeNav') : t('nav.openNav')} aria-expanded={col === 0} onClick={() => goTo(col === 0 ? 1 : 0)}><Menu /></Button>
         <Crumbs />
-        {library && <Button variant="ghost" size="icon" className="ml-auto" aria-label={col === 2 ? t('nav.closeInspector') : t('nav.openInspector')} aria-pressed={col === 2} onClick={() => goTo(col === 2 ? 1 : 2)}><PanelRight /></Button>}
+        <div className="ml-auto flex items-center gap-1">
+          <Button variant="ghost" size="icon" onClick={onSearch} aria-label={t('search.title')}><Search /></Button>
+          {library && <Button variant="ghost" size="icon" aria-label={col === 2 ? t('nav.closeInspector') : t('nav.openInspector')} aria-pressed={col === 2} onClick={() => goTo(col === 2 ? 1 : 2)}><PanelRight /></Button>}
+        </div>
       </header>
       <main id="main-content" tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto outline-none">{page(() => goTo(2))}</main>
     </div>

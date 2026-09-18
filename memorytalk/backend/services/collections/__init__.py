@@ -9,8 +9,9 @@ from typing import Any
 from . import layers as layer_pkg
 from memorytalk.backend.config import Config
 from .layers import Change, Layer
-from memorytalk.backend.models.collections import (InboxItem, LayerInfo, Manager, Obj, RecentItem, RecentPage, Revision, SearchHit,
-                            TreeItem, TreeView)
+from memorytalk.backend.models.collections import (InboxItem, LayerInfo, Manager, Obj, RecentItem, RecentPage, Revision, TreeItem,
+                            TreeView)
+from memorytalk.backend.models.search import SearchHit
 from memorytalk.backend.services.work.inbox import Inbox
 from memorytalk.backend.services.work.repo import WorkRepo
 
@@ -214,13 +215,18 @@ class CollectionsService:
             if len(page) < 50:
                 return RecentPage(items=items, next=None)
 
-    def search(self, query: str, layer: str | None = None) -> list[SearchHit]:
+    def search(self, q: str, limit: int = 20, layer: str | None = None) -> list[SearchHit]:
+        """git grep 整个 stack,一行一条;命中折回对象。"""
         hits = []
-        for h in self.repo.grep(query):
-            lyr, path, _ = self.split(h.file)
+        for h in self.repo.grep(q):
+            if h.file == CONFIG_FILE or h.file.endswith(MANAGER_FILE):
+                continue
+            lyr, path, rel = self.split(h.file)
             if layer and lyr != layer:
                 continue
-            hits.append(SearchHit(layer=lyr, path=path, file=h.file, line=h.line, text=h.text))
+            hits.append(SearchHit(kind="collection", id=path, title=path.rsplit("/", 1)[-1], snippet=h.text, layer=lyr, file=h.file, line=h.line))
+            if len(hits) >= limit:
+                break
         return hits
 
     def _context(self, path: str) -> tuple[Layer | None, str, str]:

@@ -15,8 +15,9 @@ memory.talk
 │            inbox | manager | users | touch           # 收件箱 / manager / user
 │            servers                                    # 有哪些 work server(bash / claude / codex / kimi / http / default)及各自响应的协议
 ├── user     add | list | show | set | whoami           # 人:注册的实体,和 work 平级;不做权限
+├── search   <query> [--limit 20]                       # 综合搜索:工作 / 元认知 / 成员
 ├── collection                                          # 认知层(API 是 /api/collections)
-│            layers | tree | recent | search
+│            layers | tree | recent
 │            read | write | edit | rm | log             # 对象 CRUD + 历史
 │            manager | managed                          # manager.json
 
@@ -24,7 +25,7 @@ memory.talk
 
 **命令组名用单数**(`work` / `collection`),像 `docker container`;它们操作的是 API 里的复数资源(`/api/works` / `/api/collections`)。`col` 是 `collection` 的别名。
 
-分页面:[server.md](server.md) · [work.md](work.md) · [user.md](user.md) · [collection.md](collection.md)
+分页面:[server.md](server.md) · [work.md](work.md) · [user.md](user.md) · [collection.md](collection.md) · [search.md](search.md)
 
 ## 二、全局约定
 

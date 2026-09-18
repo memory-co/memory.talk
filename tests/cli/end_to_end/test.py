@@ -89,7 +89,7 @@ def test_cli_end_to_end(cli):
     log = cli("collection", "log", "card", "memory.talk/配置/配置只来自环境变量").stdout
     assert "alice" in log and "[card] edit" in log
     assert f"[issue] position {ip}" in cli("collection", "log", "issue", ip).stdout
-    assert "[issue]" in cli("col", "search", "起服务").stdout
+    assert "[issue]" in cli("search", "起服务").stdout and "[work]" in cli("search", "配置").stdout
     assert "该走文件还是环境变量.issue" in cli("col", "tree", "memory.talk/配置").stdout
     # cli("col", "manager", "memory.talk", "--set", w["id"], user="alice")
     # assert w["id"] in cli("col", "manager", ip).stdout

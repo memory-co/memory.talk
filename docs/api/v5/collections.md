@@ -26,7 +26,7 @@
 
 ---
 
-## 树、检索、目录
+## 配置、树、最近
 
 ### GET /api/collections/config
 
@@ -69,10 +69,6 @@
 ```
 
 `files` 是那次提交里这个对象动了哪些文件(origin 为空)。`layer=` 只看一层,`path=` 只看某个目录之下。`limit`(1–200)条一页,`next` 是下一页的游标(不透明字符串)——再请求时原样带上 `before=<next>`;`null` = 到底了。去重是全局的:翻到后面的页不会再看到前面出现过的对象。机制文件(`collections.json` / `manager.json`)的提交不算。
-
-### GET /api/collections/search?q=&layer=
-
-`git grep -n -i` 整个 stack;`layer=` 只留某层。返回 `[{"layer", "path", "file", "line", "text"}]`,一行一条。
 
 ---
 

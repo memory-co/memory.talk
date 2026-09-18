@@ -2,6 +2,8 @@
 档案是存的;活动统计(建了几个 work、动过几个、提交数)是从 work 与 collections 现算的派生信息。"""
 from __future__ import annotations
 
+from memorytalk.backend.models.search import SearchHit
+
 import subprocess
 from datetime import datetime, timezone
 
@@ -105,6 +107,12 @@ class UserService:
                 b["commits"] += 1
                 b["last_seen"] = max(b["last_seen"], date[:19] + "Z" if date else "")
         return agg
+
+    def search(self, q: str, limit: int = 20) -> list[SearchHit]:
+        """名字 / 显示名 / 邮箱里含 q 的成员,按活跃排。"""
+        needle = q.lower()
+        found = [u for u in self.list() if needle in f"{u.name} {u.display_name} {u.email}".lower()]
+        return [SearchHit(kind="user", id=u.name, title=u.display_name or u.name, snippet=u.email) for u in found[:limit]]
 
     def list(self) -> list[UserView]:
         act = self._activity()

@@ -1,6 +1,8 @@
 """WorkService:树、画布、会话(经 server 建现场)、痕迹、事件(docs/designs/v5/work.md)。"""
 from __future__ import annotations
 
+from memorytalk.backend.models.search import SearchHit
+
 from datetime import datetime
 from memorytalk.backend.models.work import (Canvas, CanvasPut, Event, Round, Session, SessionView, Work, WorkCreate, WorkUsers,
                          WorkNode, WorkUpdate)
@@ -84,6 +86,13 @@ class WorkService:
 
     def get(self, work_id: str) -> Work:
         return self.tree.get(work_id)
+
+    def search(self, q: str, limit: int = 20) -> list[SearchHit]:
+        """目标里含 q 的 work,新的在前。"""
+        needle = q.lower()
+        found = [w for w in self.tree.all() if needle in w.goal.lower()]
+        found.sort(key=lambda w: w.created_at, reverse=True)
+        return [SearchHit(kind="work", id=w.id, title=w.goal, snippet=w.status, status=w.status) for w in found[:limit]]
 
     def forest(self, root: str | None = None, created_by: str | None = None) -> list[WorkNode]:
         return self.tree.forest(root, created_by)

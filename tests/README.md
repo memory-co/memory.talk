@@ -1,6 +1,6 @@
 # tests
 
-**场景化**:每个目录一个场景,自带 `README.md`(在测什么 / 不在这测什么 / fixture 来源)和 `test.py`;test.py 里每个函数只断言一件事,函数名就是结论。目录按层分:`providers/` `collections/`(从 `basic/` 看起:两层各一个文件,stack 看到两个) `works/` `work_servers/` `adapters/` `users/` `cli/`。
+**场景化**:每个目录一个场景,自带 `README.md`(在测什么 / 不在这测什么 / fixture 来源)和 `test.py`;test.py 里每个函数只断言一件事,函数名就是结论。目录按层分:`providers/` `collections/`(从 `basic/` 看起:两层各一个文件,stack 看到两个) `works/` `work_servers/` `adapters/` `users/` `search/` `cli/`。
 
 ```
 pip install -e ".[dev]" && pytest          # 全部

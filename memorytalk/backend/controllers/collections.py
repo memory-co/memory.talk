@@ -1,11 +1,11 @@
-"""/api/collections —— 认知层:层、树、检索、对象(目录里的一组文件)CRUD、历史。"""
+"""/api/collections —— 认知层:层、树、最近、对象(目录里的一组文件)CRUD、历史。检索在 /api/search。"""
 from __future__ import annotations
 
 from memorytalk.backend.models.result import Result, ok
 from fastapi import APIRouter, Depends, Header, Query, Request
 
 from memorytalk.backend.models.collections import (CheckResult, LayerInfo, Manager, ManagerPut, Obj, ObjWrite, RecentPage, Revision,
-                                                     SearchHit, TreeItem, TreeView)
+                                                     TreeItem, TreeView)
 from memorytalk.backend.services.collections import CollectionsError, CollectionsService, Ctx
 
 router = APIRouter(prefix="/api/collections", tags=["collections"])
@@ -45,11 +45,6 @@ def tree(path: str = "", candidate: str | None = None, layer: str | None = None,
 def recent(layer: str | None = None, path: str = "", limit: int = Query(20, ge=1, le=200), before: str | None = None,
            svc: CollectionsService = Depends(collections)):
     return ok(svc.recent(layer, path, limit, before))
-
-
-@router.get("/search", response_model=Result[list[SearchHit]], summary="git grep 整个 Collections(可限定层)")
-def search(q: str, layer: str | None = None, svc: CollectionsService = Depends(collections)):
-    return ok(svc.search(q, layer))
 
 
 # ---- manager / managed:先注释掉,等 work 那边实现了再一起搞(service 里 svc.manager / set_manager / unset_manager / managed_by / unmanaged 都还在) ----

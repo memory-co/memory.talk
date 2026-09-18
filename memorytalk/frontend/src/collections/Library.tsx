@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowLeft, ArrowUpRight, BookOpen, Check, Clock3, FileText, Folder, Layers, LoaderCircle, MessageSquare, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, BookOpen, Check, Clock3, FileText, Folder, Layers, LoaderCircle, MessageSquare, Pencil, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, pathPart } from '@/lib/api';
 import { objectView } from '@/lib/collections';
@@ -20,7 +20,7 @@ import { queryClient } from '@/lib/query';
 import { usePreferences } from '@/lib/store';
 import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-import { dateLabel, layerLabel, type CollectionObject, type Revision, type SearchHit, type TreeView } from '@/lib/types';
+import { dateLabel, layerLabel, type CollectionObject, type Revision, type TreeView } from '@/lib/types';
 import { Empty, ErrorState, Loading, Markdown, Modal } from '@/components/Shared';
 import { FieldsForm } from './FieldsForm';
 
@@ -34,26 +34,18 @@ export function Library({ layer = 'card', path, onSelect, compact = false, work 
 }) {
   const t = useT();
   const layers = useLayers();
-  const [search, setSearch] = useState('');
-  const [term, setTerm] = useState('');
   const [create, setCreate] = useState(false);
-  useEffect(() => { const timer = setTimeout(() => setTerm(search.trim()), 300); return () => clearTimeout(timer); }, [search]);
-  const catalog = useQuery({ queryKey: ['tree', layer], queryFn: ({ signal }) => api<TreeView>(`/collections/tree?${new URLSearchParams({ layer, recursive: '1' })}`, { signal }) });
-  const results = useQuery({ queryKey: ['search', layer, term], queryFn: ({ signal }) => api<SearchHit[]>(`/collections/search?${new URLSearchParams({ q: term, layer })}`, { signal }), enabled: !!term });
-  const objects = term ? [...new Map((results.data || []).map(hit => [hit.path, { path: hit.path, title: hit.path.split('/').pop() || hit.path }])).values()] : (catalog.data?.items || []).map(i => ({ path: i.path, title: i.name }));
-  const query = term ? results : catalog;
+  const query = useQuery({ queryKey: ['tree', layer], queryFn: ({ signal }) => api<TreeView>(`/collections/tree?${new URLSearchParams({ layer, recursive: '1' })}`, { signal }) });
+  const objects = (query.data?.items || []).map(i => ({ path: i.path, title: i.name }));
   const definition = layers.data?.find(l => l.name === layer);
   const label = layerLabel(t, layer);
   const list = <div className="flex min-h-0 flex-1 flex-col">
     <div className="space-y-2 p-3">
-      <Tabs value={layer} onValueChange={value => { onSelect({ layer: value }); setSearch(''); }}><TabsList className="h-8 w-full justify-start overflow-x-auto overscroll-x-contain" aria-label={t('library.layers')}>{(layers.data || []).map(item => <TabsTrigger key={item.name} value={item.name} className="gap-1.5 text-xs"><LayerIcon layer={item.name} className="size-3.5" />{layerLabel(t, item.name)}</TabsTrigger>)}</TabsList></Tabs>
-      <div className="flex items-center gap-2">
-        <div className="relative min-w-0 flex-1"><Search className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" /><Input className="h-8 pl-8 pr-8 text-xs" aria-label={t('library.searchLabel')} value={search} onChange={e => setSearch(e.target.value)} placeholder={t('library.searchPlaceholder', { layer: label })} />{search && <Button variant="ghost" size="icon" className="absolute right-0.5 top-1/2 size-7 -translate-y-1/2" onClick={() => setSearch('')} aria-label={t('library.clearSearch')}><X className="size-3.5" /></Button>}</div>
-        {definition && <Button variant="outline" size="icon" className="size-8 shrink-0" onClick={() => setCreate(true)} aria-label={t('library.new', { layer: label })} title={t('library.new', { layer: label })}><Plus /></Button>}
-      </div>
+      <Tabs value={layer} onValueChange={value => onSelect({ layer: value })}><TabsList className="h-8 w-full justify-start overflow-x-auto overscroll-x-contain" aria-label={t('library.layers')}>{(layers.data || []).map(item => <TabsTrigger key={item.name} value={item.name} className="gap-1.5 text-xs"><LayerIcon layer={item.name} className="size-3.5" />{layerLabel(t, item.name)}</TabsTrigger>)}</TabsList></Tabs>
+      {definition && <Button variant="outline" size="sm" className="w-full" onClick={() => setCreate(true)}><Plus />{t('library.new', { layer: label })}</Button>}
       {layers.isError && <ErrorState error={layers.error} retry={() => { void layers.refetch(); }} />}
     </div>
-    <div className="flex items-center justify-between px-3 pb-1 text-xs text-muted-foreground"><span>{term ? t('library.results') : t('library.all')}</span><span>{objects.length}</span></div>
+    <div className="flex items-center justify-between px-3 pb-1 text-xs text-muted-foreground"><span>{label}</span><span>{objects.length}</span></div>
     <div className="min-h-0 flex-1 overflow-auto px-2 pb-2">
       {query.isPending ? <div className="space-y-2 p-1">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-11" />)}</div>
         : query.isError ? <ErrorState error={query.error} retry={() => { void query.refetch(); }} />
@@ -63,7 +55,7 @@ export function Library({ layer = 'card', path, onSelect, compact = false, work 
             <span className="min-w-0 flex-1"><span className="block truncate font-medium">{object.title || object.path.split('/').pop()}</span><span className="block truncate text-xs text-muted-foreground">{object.path.includes('/') ? object.path.slice(0, object.path.lastIndexOf('/')) : t('library.root')}</span></span>
           </button>)}
         </div>
-        : <Empty className="m-1" icon={term ? <Search className="size-5" /> : <Folder className="size-5" />} title={term ? t('library.noResults') : t('library.empty', { layer: label })}><p>{term ? t('library.noResultsText') : t('library.emptyText')}</p>{!term && definition && <Button variant="outline" size="sm" onClick={() => setCreate(true)}>{t('library.createFirst')}</Button>}</Empty>}
+        : <Empty className="m-1" icon={<Folder className="size-5" />} title={t('library.empty', { layer: label })}><p>{t('library.emptyText')}</p>{definition && <Button variant="outline" size="sm" onClick={() => setCreate(true)}>{t('library.createFirst')}</Button>}</Empty>}
     </div>
     {definition && !compact && <p className="flex items-start gap-1.5 border-t px-3 py-2 text-xs text-muted-foreground"><Layers className="mt-0.5 size-3.5 shrink-0" />{definition.description}</p>}
   </div>;

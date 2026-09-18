@@ -8,9 +8,10 @@ from memorytalk.backend.models.result import fail
 from memorytalk.backend.gateway import mount_frontend
 
 from memorytalk.backend.config import Config, RuntimeConfig, load_config, load_runtime_config
-from memorytalk.backend.controllers import collections, system, users, works
+from memorytalk.backend.controllers import collections, search, system, users, works
 from memorytalk.backend.models.work_server import WorkServerError
 from memorytalk.backend.services.collections import CollectionsError, CollectionsService
+from memorytalk.backend.services.search import SearchService
 from memorytalk.backend.services.work_servers import WorkServerService
 from memorytalk.backend.services.store import StoreService
 from memorytalk.backend.services.users import UserExists, UserNotFound, UserService
@@ -33,8 +34,9 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
     app.state.store, app.state.collections = store, collect_svc
     app.state.work_servers, app.state.works = work_server_svc, work_svc
     app.state.users = user_svc
+    app.state.search = SearchService(work_svc, collect_svc, user_svc)
 
-    for r in (system.router, works.router, users.router, collections.router):
+    for r in (system.router, works.router, users.router, collections.router, search.router):
         app.include_router(r)
 
     def _err(status: int, code: str):

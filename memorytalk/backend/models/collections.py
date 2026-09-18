@@ -71,14 +71,6 @@ class RecentPage(BaseModel):
     next: str | None = Field(None, description="下一页的游标,原样传回 before=;null = 到底了")
 
 
-class SearchHit(BaseModel):
-    layer: str
-    path: str = Field(description="对象 path(origin 为文件路径)")
-    file: str
-    line: int
-    text: str
-
-
 class TreeItem(BaseModel):
     name: str
     path: str = Field(description="仓库内路径;对象为不含后缀的 path")

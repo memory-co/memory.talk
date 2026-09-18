@@ -13,6 +13,7 @@ memorytalk/backend/           # 服务本体;memorytalk/cli/ 是它的命令行�
 │   ├── users.py              #   User(档案,存)/ UserView / UserProfile(带派生统计)
 │   ├── work.py               #   Work 节点(目标、created_by、状态、父子)、Canvas、Session、WorkUser、Round、Event
 │   ├── collections.py        #   LayerInfo / Obj(目录里的文件)/ ObjWrite / TreeView(items + can_create + candidate)/ CheckResult / Revision / SearchHit / Manager / InboxItem
+│   ├── search.py             #   SearchHit(kind: work / collection / user)/ SearchResult
 │   └── work_server.py        #   work server 契约:name + protocols / open(id, uri) → Window + Handle / handle / alive / destroy
 │
 ├── services/                 # 业务逻辑(每个子包对应一篇设计;**入口就是子包的 `__init__.py`**,导出该 service 类,main.py 按 `services/*` 扫描装配,不另加约定)
@@ -46,6 +47,7 @@ memorytalk/backend/           # 服务本体;memorytalk/cli/ 是它的命令行�
 │   │   ├── repo.py           #     分层拓扑(在 git.py 上):layer/<名> 权威分支 + stack merge 视图 + 路径归属守卫 + collections.json 锚定
 │   │   ├── manager.py        #     manager.json:最近祖先解析
 │   │   └── __init__.py       #     CollectionsService:层的装载、对象读(目录里的文件)、写(一批文件改动 → 算 diff → 层的 check → 一个 [层] 提交)、历史、检索、树、manager、投递
+│   ├── search/               #   综合搜索:把 q 交给每个 service 的 search(),汇总 —— docs/api/v5/search.md
 │   └── store/                #   装配 —— docs/designs/v5/provider.md
 │       └── __init__.py       #     StoreService:按 MEMORY_TALK_STORE 选 provider,按族建 work / user 仓储
 │
@@ -64,7 +66,8 @@ memorytalk/backend/           # 服务本体;memorytalk/cli/ 是它的命令行�
 ├── controllers/              # HTTP 面(FastAPI 路由;只做参数/响应,不含逻辑)
 │   ├── works.py              #   /api/works/…
 │   ├── users.py              #   /api/users/…(顶层:list / me / {name})
-│   ├── collections.py        #   /api/collections/…(层、树、检索、对象 CRUD、历史)
+│   ├── collections.py        #   /api/collections/…(层、树、最近、对象 CRUD、历史)
+│   ├── search.py             #   /api/search(综合搜索)
 │   ├── auth.py               #   /api/auth/{login,verify,logout,me}
 │   └── system.py             #   /api/system/{info,health}
 │
