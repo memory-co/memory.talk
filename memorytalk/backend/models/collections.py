@@ -22,7 +22,7 @@ class LayerInfo(BaseModel):
 class TreeView(BaseModel):
     path: str
     layer: str | None = Field(None, description="在某个对象目录里时:那一层")
-    items: list["TreeItem"] = Field(default_factory=list)
+    items: list["TreeItem"] = Field(default_factory=list, description="这里有什么;recursive=1 时拍平到底(不列目录),layer= 时只留那一层")
     can_create: dict = Field(default_factory=dict, description="这里还能建什么:objects[](按层)+ files[](按这一层的文件种类)")
     candidate: dict | None = Field(None, description="带 candidate= 时:这个名字行不行")
 
@@ -63,17 +63,6 @@ class SearchHit(BaseModel):
     text: str
 
 
-class CatalogEntry(BaseModel):
-    path: str
-    title: str
-
-
-class CatalogDir(BaseModel):
-    dir: str
-    objects: list[CatalogEntry] = Field(default_factory=list)
-    subdirs: list["CatalogDir"] = Field(default_factory=list)
-
-
 class TreeItem(BaseModel):
     name: str
     path: str = Field(description="仓库内路径;对象为不含后缀的 path")
@@ -100,5 +89,3 @@ class InboxItem(BaseModel):
     by: str | None = None
     routed_by: str = Field(description="哪个 manager.json 把它路由过来的(目录,'' = 根)")
 
-
-CatalogDir.model_rebuild()

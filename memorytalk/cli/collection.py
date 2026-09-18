@@ -14,11 +14,11 @@ def c_layers(api, a):
         lines.append(f"{l['order']}  {l['name']:<10} {('.' + l['name'] + '/') if l['suffix'] else '-':<12} {files:<40} {'' if l['builtin'] else '(用户层)'} {l['description']}")
     out(ls, a.json, "\n".join(lines))
 def c_tree(api, a):
-    v = api.call("GET", "/api/collections/tree", params={"path": a.path or "", "candidate": a.candidate})
+    v = api.call("GET", "/api/collections/tree", params={"path": a.path or "", "candidate": a.candidate, "layer": a.layer, "recursive": "1" if a.recursive else None})
     if a.json:
         return out(v, True)
     for i in v["items"]:
-        print(f"{i['name']:<40} {i['kind']:<7} {i.get('layer') or ''}")
+        print(f"{(i['path'] if a.recursive else i['name']):<40} {i['kind']:<7} {i.get('layer') or ''}")
     cc = v["can_create"]
     can = [f"{o['layer']}({o['example']})" for o in cc.get("objects", []) if o.get("can")] + [f"{f['example']}" for f in cc.get("files", []) if f.get("can") and "example" in f]
     if cc.get("files") and any(f.get("layer") == "origin" for f in cc["files"]):
@@ -26,15 +26,6 @@ def c_tree(api, a):
     print(f"可建: {', '.join(can) or '(无)'}")
     if v.get("candidate"):
         c = v["candidate"]; print(f"{c['name']}: {'可以' if c['can'] else '不行 — ' + c.get('reason', '')}")
-def _catalog(d, indent=0):
-    lines = [f"{'  ' * indent}- {o['title']}  ({o['path']})" for o in d["objects"]]
-    for sub in d["subdirs"]:
-        lines.append(f"{'  ' * indent}{sub['dir'].rsplit('/', 1)[-1]}/")
-        lines.extend(_catalog(sub, indent + 1))
-    return lines
-def c_ls(api, a):
-    cat = api.call("GET", f"/api/collections/{a.layer}", params={"dir": a.dir})
-    out(cat, a.json, "\n".join(_catalog(cat)) or "(空)")
 def c_search(api, a):
     hits = api.call("GET", "/api/collections/search", params={"q": a.query, "layer": a.layer})
     out(hits, a.json, "\n".join(f"[{h['layer']}] {h['path']}:{h['line']}  {h['text'].strip()}" for h in hits) or "(没找到)")
@@ -85,8 +76,7 @@ def c_managed(api, a):
 def register(top) -> None:
     c = top.add_parser("collection", aliases=["col"], help="认知层").add_subparsers(dest="sub", required=True)
     p = c.add_parser("layers", help="有哪些层;加用户层 = 往 ~/.memory.talk/layers/ 放一个 .py,重启"); p.set_defaults(fn=c_layers)
-    p = c.add_parser("tree"); p.add_argument("path", nargs="?"); p.add_argument("--candidate", help="问这个名字(对象目录名 / 文件路径)能不能建"); p.set_defaults(fn=c_tree)
-    p = c.add_parser("ls"); p.add_argument("layer"); p.add_argument("--dir", default=""); p.set_defaults(fn=c_ls)
+    p = c.add_parser("tree"); p.add_argument("path", nargs="?"); p.add_argument("--layer", help="只看这一层"); p.add_argument("-r", "--recursive", action="store_true", help="往下走到底,拍平列出"); p.add_argument("--candidate", help="问这个名字(对象目录名 / 文件路径)能不能建"); p.set_defaults(fn=c_tree)
     p = c.add_parser("search"); p.add_argument("query"); p.add_argument("--layer"); p.set_defaults(fn=c_search)
     p = c.add_parser("read"); p.add_argument("layer"); p.add_argument("path"); p.add_argument("--rev"); p.set_defaults(fn=c_read)
     for name, fn in (("write", c_write), ("edit", c_edit)):

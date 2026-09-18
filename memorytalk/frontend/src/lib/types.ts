@@ -32,9 +32,6 @@ export interface TreeView {
   candidate?: { name: string; matches: unknown; exists?: boolean; can: boolean; reason?: string } | null;
 }
 export interface TreeItem { name: string; path: string; kind: 'dir' | 'file' | 'object'; layer: string | null }
-export interface Catalog {
-  dir: string; objects: { path: string; title: string | null }[]; subdirs: Catalog[];
-}
 export interface CollectionObject {
   layer: string; path: string; title: string; files: Record<string, string>; content: string | null;
 }
@@ -48,9 +45,6 @@ const schemeNames: Record<string, string> = { codex: 'Codex', claude: 'Claude Co
 export const sessionLabel = (t: T, scheme: string) => schemeNames[scheme] || (['bash', 'http', 'https'].includes(scheme) ? t(`scheme.${scheme}` as Key) : scheme);
 export function flattenWorks(works: Work[]): Work[] {
   return works.flatMap(w => [w, ...flattenWorks(w.children || [])]);
-}
-export function flattenCatalog(c: Catalog): { path: string; title: string | null }[] {
-  return [...c.objects, ...c.subdirs.flatMap(flattenCatalog)];
 }
 export function dateLabel(value: string, locale: Locale = 'zh') {
   return new Date(value).toLocaleDateString(localeTag(locale), { month: 'short', day: 'numeric' });

@@ -62,6 +62,5 @@ Collections 为各层维护独立的分支内容与历史，并通过**路径归
 - [`repo.py`](repo.py)：分层仓库，维护层分支、`stack` 合并视图与路径归属守卫。
 - [`git.py`](git.py)：Git 原语，封装内容树、提交、引用和历史等操作。
 - [`manager.py`](manager.py)：沿目录祖先解析 `manager.json`，确定变更应交给哪个 work。
-- [`catalog.py`](catalog.py)：将对象组织为目录（按目录树列标题）。
 
 每一层是一份 YAML 协议（对象目录、文件种类、每种文件的字段与正文），[`layers/protocol.py`](layers/protocol.py) 是唯一引擎；没有行为，写就是写文件。本模块负责将它们放进同一个可追溯、可分层扩展的认知仓库，并通过 manager 收件箱与 work 连接。

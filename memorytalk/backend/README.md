@@ -12,7 +12,7 @@ memorytalk/backend/           # 服务本体;memorytalk/cli/ 是它的命令行�
 │   ├── result.py             #   Result[T]:统一响应信封 {data, message[, error]},每个端点的 response_model
 │   ├── users.py              #   User(档案,存)/ UserView / UserProfile(带派生统计)
 │   ├── work.py               #   Work 节点(目标、created_by、状态、父子)、Canvas、Session、WorkUser、Round、Event
-│   ├── collections.py        #   LayerInfo / Obj(目录里的文件)/ ObjWrite / Revision / SearchHit / Catalog / Tree / Manager / InboxItem
+│   ├── collections.py        #   LayerInfo / Obj(目录里的文件)/ ObjWrite / TreeView(items + can_create + candidate)/ CheckResult / Revision / SearchHit / Manager / InboxItem
 │   └── work_server.py        #   work server 契约:name + protocols / open(id, uri) → Window + Handle / handle / alive / destroy
 │
 ├── services/                 # 业务逻辑(每个子包对应一篇设计;**入口就是子包的 `__init__.py`**,导出该 service 类,main.py 按 `services/*` 扫描装配,不另加约定)
@@ -45,7 +45,6 @@ memorytalk/backend/           # 服务本体;memorytalk/cli/ 是它的命令行�
 │   │   ├── git.py            #     git 原语:hash-object / write-tree / commit-tree / update-ref / ls-tree / show / log / grep,不认识层
 │   │   ├── repo.py           #     分层拓扑(在 git.py 上):layer/<名> 权威分支 + stack merge 视图 + 路径归属守卫 + collections.json 锚定
 │   │   ├── manager.py        #     manager.json:最近祖先解析
-│   │   ├── catalog.py        #     一层的目录(按目录树列标题 = 末段)
 │   │   └── __init__.py       #     CollectionsService:层的装载、对象读(目录里的文件)、写(一批文件改动 → 算 diff → 层的 check → 一个 [层] 提交)、历史、检索、树、manager、投递
 │   └── store/                #   装配 —— docs/designs/v5/provider.md
 │       └── __init__.py       #     StoreService:按 MEMORY_TALK_STORE 选 provider,按族建 work / user 仓储

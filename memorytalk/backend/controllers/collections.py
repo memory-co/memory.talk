@@ -4,8 +4,8 @@ from __future__ import annotations
 from memorytalk.backend.models.result import Result, ok
 from fastapi import APIRouter, Depends, Header, Query, Request
 
-from memorytalk.backend.models.collections import (CatalogDir, CheckResult, LayerInfo, Manager, ManagerPut, Obj, ObjWrite,
-                                                     Revision, SearchHit, TreeItem, TreeView)
+from memorytalk.backend.models.collections import (CheckResult, LayerInfo, Manager, ManagerPut, Obj, ObjWrite, Revision, SearchHit,
+                                                     TreeItem, TreeView)
 from memorytalk.backend.services.collections import CollectionsError, CollectionsService, Ctx
 
 router = APIRouter(prefix="/api/collections", tags=["collections"])
@@ -35,9 +35,9 @@ def config(svc: CollectionsService = Depends(collections)) -> dict:
 
 
 @router.get("/tree", response_model=Result[TreeView],
-            summary="浏览目录:有什么(items:对象折成一项、目录、origin 文件)+ 还能建什么(can_create)+ 这个名字行不行(candidate=)")
-def tree(path: str = "", candidate: str | None = None, svc: CollectionsService = Depends(collections)):
-    return ok(svc.tree(path, candidate))
+            summary="浏览目录:有什么(items:对象折成一项、目录、origin 文件;layer= 只留一层,recursive=1 拍平到底)+ 还能建什么(can_create)+ 这个名字行不行(candidate=)")
+def tree(path: str = "", candidate: str | None = None, layer: str | None = None, recursive: bool = False, svc: CollectionsService = Depends(collections)):
+    return ok(svc.tree(path, candidate, layer, recursive))
 
 
 @router.get("/search", response_model=Result[list[SearchHit]], summary="git grep 整个 Collections(可限定层)")
@@ -72,12 +72,7 @@ def history(layer: str, path: str, svc: CollectionsService = Depends(collections
     return ok(svc.history(layer, path))
 
 
-# ---- 层级 / 对象 ----
-
-@router.get("/{layer}", response_model=Result[CatalogDir], summary="一层的目录(按目录树列标题)")
-def catalog(layer: str, dir: str = "", svc: CollectionsService = Depends(collections)):
-    return ok(svc.catalog(layer, dir))
-
+# ---- 对象 ----
 
 def _files(svc: CollectionsService, layer: str, req: ObjWrite) -> dict:
     """请求体 → 目录里的文件改动:origin 用 content,其余用 files。"""

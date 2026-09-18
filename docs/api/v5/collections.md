@@ -2,7 +2,7 @@
 
 认知层。层 = 一份 YAML 协议(内置 origin / issue / card;用户层是 `~/.memory.talk/layers/*.yaml`),一个引擎按它校验;对象 = 带后缀的目录 `<path>.<层>/`,里面一组文件,放在树的任何位置,标题就是目录名;origin = 不带后缀的文件。一次写 = 对一个对象目录的一批文件改动,交给层的 check(不过 → 422 `invalid`,`message` 是理由),过了一个 `[层名]` 提交,落在 `layer/<层>` 上再 merge 进 `stack`;碰了别的层的路径被守卫拒绝(409 `guard`)。机制见 [designs collections.md](../../designs/v5/collections.md) / [collections-layer.md](../../designs/v5/collections-layer.md) / [manager.md](../../designs/v5/manager.md)。
 
-`{path:path}` 直接放在 URL 里(可含 `/` 和中文)。固定子路径(`layers` `config` `tree` `search` `manager` `managed` `history`)先于 `{layer}`。
+`{path:path}` 直接放在 URL 里(可含 `/` 和中文)。固定子路径(`layers` `config` `tree` `search` `manager` `managed` `history`)先于 `{layer}/{path}`。
 
 ---
 
@@ -39,9 +39,9 @@
              {"sha": "…", "subject": "[origin] collections: init", …}]}
 ```
 
-### GET /api/collections/tree?path=&candidate=
+### GET /api/collections/tree?path=&layer=&recursive=&candidate=
 
-浏览一个目录:`items` 是这里有什么(对象折成一项,`path` 不含后缀;普通目录;origin 文件;`manager.json` / `collections.json` 不列),`can_create` 是这里还能建什么,`candidate=` 问一个名字行不行。
+浏览的唯一接口。`items` 是这里有什么(对象折成一项,`path` 不含后缀;普通目录;origin 文件;`manager.json` / `collections.json` 不列);`layer=` 只留那一层的对象 / 文件(目录保留,可以继续往下走);`recursive=1` 往下走到底,`items` 拍平(只有对象和文件,`path` 是全路径)——「某一层的全部对象」就是 `?layer=card&recursive=1`;`can_create` 是这里还能建什么,`candidate=` 问一个名字行不行。
 
 ```json
 {"path": "memory.talk/配置", "layer": null,
@@ -59,10 +59,6 @@
 ### GET /api/collections/search?q=&layer=
 
 `git grep -n -i` 整个 stack;`layer=` 只留某层。返回 `[{"layer", "path", "file", "line", "text"}]`,一行一条。
-
-### GET /api/collections/{layer}?dir=
-
-一层的目录:按目录树列 `{"path", "title"}`,`title` 就是路径末段(目录名)。origin 层列的是所有不带后缀的文件。
 
 ---
 

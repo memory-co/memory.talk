@@ -9,12 +9,10 @@ from typing import Any
 from . import layers as layer_pkg
 from memorytalk.backend.config import Config
 from .layers import Change, Layer
-from memorytalk.backend.models.collections import (CatalogDir, InboxItem, LayerInfo, Manager, Obj, Revision, SearchHit,
-                            TreeItem, TreeView)
+from memorytalk.backend.models.collections import (InboxItem, LayerInfo, Manager, Obj, Revision, SearchHit, TreeItem, TreeView)
 from memorytalk.backend.services.work.inbox import Inbox
 from memorytalk.backend.services.work.repo import WorkRepo
 
-from .catalog import build
 from .manager import FILE as MANAGER_FILE
 from .manager import ManagerIndex, manager_path
 from .repo import GuardError, Repo
@@ -170,9 +168,6 @@ class CollectionsService:
             out.append(self.get(layer, got[0]))
         return out
 
-    def catalog(self, layer: str, root: str = "") -> CatalogDir:
-        return build([(o.path, o.title) for o in self.list(layer)], root)
-
     def history(self, layer: str, path: str) -> list[Revision]:
         spec = self.layer(layer)
         if not self.exists(layer, path):
@@ -199,26 +194,41 @@ class CollectionsService:
                 return spec, got[0], got[1]
         return None, "", ""
 
-    def tree(self, path: str = "", candidate: str | None = None) -> TreeView:
-        """浏览一个目录:有什么(items)+ 还能建什么(can_create)+ 这个名字行不行(candidate)。"""
+    def tree(self, path: str = "", candidate: str | None = None, layer: str | None = None, recursive: bool = False) -> TreeView:
+        """浏览一个目录:有什么(items)+ 还能建什么(can_create)+ 这个名字行不行(candidate)。
+        layer= 只留那一层的对象 / 文件;recursive=1 往下走到底,items 拍平(不列目录)。"""
         prefix = path.strip("/")
+        if layer:
+            self.layer(layer)
         seen: dict[str, TreeItem] = {}
         for repo_path in self.repo.tree(prefix):
             rest = repo_path[len(prefix):].lstrip("/") if prefix else repo_path
-            if not rest or rest == CONFIG_FILE:
+            if not rest or repo_path == CONFIG_FILE or repo_path.endswith(MANAGER_FILE):
                 continue
-            head = rest.split("/", 1)[0]
-            full = f"{prefix}/{head}" if prefix else head
+            segs = rest.split("/")
+            obj_i = next((i for i, seg in enumerate(segs) if any(s.suffix and seg.endswith(s.suffix) for s in self.layers.values())), None)
+            if recursive:
+                if obj_i is not None:
+                    head = "/".join(segs[: obj_i + 1])
+                    kind, name = "object", segs[obj_i]
+                else:
+                    head, kind, name = rest, "file", segs[-1]
+            else:
+                head, kind, name = segs[0], ("object" if obj_i == 0 else "dir" if len(segs) > 1 else "file"), segs[0]
             if head in seen:
                 continue
-            obj_layer = next((n for n, s in self.layers.items() if s.suffix and head.endswith(s.suffix)), None)
-            if obj_layer:
-                seen[head] = TreeItem(name=head, path=full[: -len(self.layers[obj_layer].suffix)], kind="object", layer=obj_layer)
-            elif "/" in rest:
-                seen[head] = TreeItem(name=head, path=full, kind="dir")
-            elif head != MANAGER_FILE:
-                seen[head] = TreeItem(name=head, path=full, kind="file", layer=self.order[0])
-        items = sorted(seen.values(), key=lambda i: (i.kind != "dir", i.name))
+            full = f"{prefix}/{head}" if prefix else head
+            if kind == "object":
+                lyr = next(n for n, s in self.layers.items() if s.suffix and name.endswith(s.suffix))
+                item = TreeItem(name=name, path=full[: -len(self.layers[lyr].suffix)], kind="object", layer=lyr)
+            elif kind == "dir":
+                item = TreeItem(name=name, path=full, kind="dir")
+            else:
+                item = TreeItem(name=name, path=full, kind="file", layer=self.order[0])
+            if layer and item.kind != "dir" and item.layer != layer:
+                continue
+            seen[head] = item
+        items = sorted(seen.values(), key=lambda i: (i.kind != "dir", i.path))
         spec, obj_path, rel_dir = self._context(prefix)
         view = TreeView(path=prefix, layer=spec.name if spec else None, items=items)
         if spec:                                                              # 对象目录(或它的子目录):按这一层的文件种类回答

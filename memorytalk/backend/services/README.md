@@ -9,7 +9,6 @@ controllers ──▶ services ──▶ providers(介质原语)
                   │     git.py        git 原语(只跟命令行说话,不认识层)
                   │     repo.py       分层拓扑:layer/* 权威分支 + stack 合并视图 + 路径归属守卫 + collections.json 锚定
                   │     manager.py    manager.json:目录绑 work,最近祖先解析
-                  │     catalog.py    一层的目录 / 召回文本
                   │     __init__.py   CollectionsService:层的装载(内置 + 用户层)、对象读写(一批文件改动 → 层的 check → 一个提交)、历史、检索、树、投递
                   ├── work/          做事层:work 树、画布、会话(现场)、users(谁动过)、round、事件、收件箱
                   │     repo.py       WorkRepo 业务接口 + fs 版 / db 版两份实现

@@ -1,4 +1,4 @@
-"""collections/tree_and_search -- catalog, grep. See README.md."""
+"""collections/tree_and_search -- tree (per layer / recursive), grep. See README.md."""
 IP = "memory.talk/配置/该走文件还是环境变量"
 CP = "memory.talk/配置/配置只来自环境变量"
 
@@ -9,13 +9,19 @@ def _seed(client):
     client.post(f"/api/collections/issue/{IP}", json={"files": {"readme.md": "背景", "positions/只用环境变量.md": "够用"}})
 
 
-def test_catalog_groups_by_directory_and_titles_are_names(client):
+def test_recursive_tree_per_layer_lists_objects_flat(client):
     _seed(client)
-    cat = client.get("/api/collections/card").json()
-    assert {d["dir"] for d in cat["subdirs"]} == {"memory.talk", "其他"}
-    only = client.get("/api/collections/card", params={"dir": "memory.talk/配置"}).json()
-    assert [o["title"] for o in only["objects"]] == ["配置只来自环境变量"]
-    assert [o["title"] for o in client.get("/api/collections/issue", params={"dir": "memory.talk/配置"}).json()["objects"]] == ["该走文件还是环境变量"]
+    cards = client.get("/api/collections/tree", params={"layer": "card", "recursive": 1}).json()["items"]
+    assert [(i["path"], i["kind"]) for i in cards] == [(CP, "object"), ("其他/一张卡", "object")]
+    only = client.get("/api/collections/tree", params={"path": "memory.talk/配置", "layer": "issue", "recursive": 1}).json()["items"]
+    assert [i["path"] for i in only] == [IP]
+    assert client.get("/api/collections/tree", params={"layer": "nope"}).status_code == 404
+
+
+def test_layer_filter_keeps_directories_to_navigate(client):
+    _seed(client)
+    top = client.get("/api/collections/tree", params={"layer": "card"}).json()["items"]
+    assert [(i["name"], i["kind"]) for i in top] == [("memory.talk", "dir"), ("其他", "dir")]
 
 
 def test_tree_folds_objects_into_one_item(client):

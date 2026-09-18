@@ -53,8 +53,8 @@ def test_no_other_mechanism_files_in_the_repo(client, svc):
 
 @pytest.mark.skip(reason="/api/collections/manager 暂时注释掉了,等 work 实现后一起启用")
 def test_config_file_is_invisible_to_tree_catalog_and_inbox(client):
-    assert client.get("/api/collections/tree").json() == []
-    assert client.get("/api/collections/origin").json()["objects"] == []
+    assert client.get("/api/collections/tree").json()["items"] == []
+    assert client.get("/api/collections/tree", params={"layer": "origin", "recursive": 1}).json()["items"] == []
     w = client.post("/api/works", json={"goal": "x"}).json()
     client.put("/api/collections/manager", params={"path": ""}, json={"work": w["id"]})
     with _restart_with_layer("decision", DECISION):

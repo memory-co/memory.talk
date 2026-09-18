@@ -20,7 +20,7 @@ import { queryClient } from '@/lib/query';
 import { usePreferences } from '@/lib/store';
 import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-import { dateLabel, flattenCatalog, layerLabel, type Catalog, type CollectionObject, type Revision, type SearchHit, type TreeView } from '@/lib/types';
+import { dateLabel, layerLabel, type CollectionObject, type Revision, type SearchHit, type TreeView } from '@/lib/types';
 import { Empty, ErrorState, Loading, Markdown, Modal } from '@/components/Shared';
 import { FieldsForm } from './FieldsForm';
 
@@ -38,9 +38,9 @@ export function Library({ layer = 'card', path, onSelect, compact = false, work 
   const [term, setTerm] = useState('');
   const [create, setCreate] = useState(false);
   useEffect(() => { const timer = setTimeout(() => setTerm(search.trim()), 300); return () => clearTimeout(timer); }, [search]);
-  const catalog = useQuery({ queryKey: ['catalog', layer], queryFn: ({ signal }) => api<Catalog>(`/collections/${encodeURIComponent(layer)}`, { signal }) });
+  const catalog = useQuery({ queryKey: ['tree', layer], queryFn: ({ signal }) => api<TreeView>(`/collections/tree?${new URLSearchParams({ layer, recursive: '1' })}`, { signal }) });
   const results = useQuery({ queryKey: ['search', layer, term], queryFn: ({ signal }) => api<SearchHit[]>(`/collections/search?${new URLSearchParams({ q: term, layer })}`, { signal }), enabled: !!term });
-  const objects = term ? [...new Map((results.data || []).map(hit => [hit.path, { path: hit.path, title: hit.path.split('/').pop() || hit.path }])).values()] : catalog.data ? flattenCatalog(catalog.data) : [];
+  const objects = term ? [...new Map((results.data || []).map(hit => [hit.path, { path: hit.path, title: hit.path.split('/').pop() || hit.path }])).values()] : (catalog.data?.items || []).map(i => ({ path: i.path, title: i.name }));
   const query = term ? results : catalog;
   const definition = layers.data?.find(l => l.name === layer);
   const label = layerLabel(t, layer);
@@ -190,7 +190,7 @@ function ObjectEditor({ layer, protocol, path, initial, open, onClose, onSaved, 
     return () => clearTimeout(timer);
   }, [open, validPath, target, method, payload, work]);
   const mutation = useMutation({ mutationFn: () => api<CollectionObject>(target, { method, body: { ...payload, subject: subject || undefined, reason }, work }),
-    onSuccess: () => { for (const key of ['catalog', 'object', 'history', 'search']) void queryClient.invalidateQueries({ queryKey: [key] }); toast.success(path ? t('library.saved') : t('library.created')); onSaved(objectPath.trim()); } });
+    onSuccess: () => { for (const key of ['tree', 'object', 'history', 'search']) void queryClient.invalidateQueries({ queryKey: [key] }); toast.success(path ? t('library.saved') : t('library.created')); onSaved(objectPath.trim()); } });
   const ready = validPath && check !== 'pending' && check?.ok === true && !mutation.isPending;
   const label = layerLabel(t, layer);
   return <Modal open={open} onClose={() => { if (!mutation.isPending) { mutation.reset(); onClose(); } }} title={path ? t('library.editTitle', { layer: label }) : t('library.newTitle', { layer: label })} description={t('library.editorText')}>

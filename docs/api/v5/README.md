@@ -40,8 +40,7 @@
 | `PUT` | `/api/collections/manager` | (暂缓,等 work 实现后启用)在这个目录(或对象)下放 manager.json,绑到一个 work |
 | `DELETE` | `/api/collections/manager` | (暂缓,等 work 实现后启用)解绑:删这个目录的 manager.json |
 | `GET` | `/api/collections/search` | git grep 整个 Collections(可限定层) |
-| `GET` | `/api/collections/tree` | 浏览目录:有什么(items:对象折成一项、目录、origin 文件)+ 还能建什么(can_create)+ 这个名字行不行(candidate=) |
-| `GET` | `/api/collections/{layer}` | 一层的目录(按目录树列标题) |
+| `GET` | `/api/collections/tree` | 浏览目录:有什么(items;layer= 只留一层,recursive=1 拍平到底)+ 还能建什么(can_create)+ 这个名字行不行(candidate=) |
 | `GET` | `/api/collections/{layer}/{path}` | 读一个对象(rev= 读历史版本) |
 | `POST` | `/api/collections/{layer}/{path}` | 建一个对象:目录里的文件(files);origin 用 content。整批按层的协议校验,过了一个 [layer] 提交;dry_run=1 只校验 |
 | `PUT` | `/api/collections/{layer}/{path}` | 改一个对象:files 加 / 改 / 删(null)目录里的文件,没提到的不动,整批按层的协议校验;origin 整体替换;dry_run=1 只校验 |
