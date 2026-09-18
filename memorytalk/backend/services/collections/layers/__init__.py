@@ -1,39 +1,36 @@
-"""每个内置 layer 一个类(Origin / Issue / Card);用户层是 `<home>/layers/*.py` 里一模一样的 Layer 子类,启动时载入。
-一个层就是 Layer 接口的一个实现:check(changes, after) -> None | str;怎么写一层见 README.md。内置层的顺序在这里定(最底在前);用户层排在它们之上,按文件名。"""
+"""层 = 一份 YAML 协议(protocol.py 的引擎读它校验,前端读它画表单)。
+内置层是本目录下的 origin / issue / card 三份 YAML(顺序在 BUILTIN_ORDER 里定,最底在前);
+用户层是 `<home>/layers/*.yaml`,一模一样地载入,排在内置层之上,按文件名。怎么写一层见 README.md。"""
 from __future__ import annotations
 
-import importlib.util
-import inspect
 from pathlib import Path
 
-from .base import Change, Layer, appended_only, load_yaml
-from .card import Card
-from .issue import Issue
-from .origin import Origin
+from .protocol import Change, FileKind, Layer, ObjectRule, from_dict, from_yaml
 
-BUILTIN: list[Layer] = [Origin(), Issue(), Card()]
+BUILTIN_ORDER = ["origin", "issue", "card"]
+_HERE = Path(__file__).parent
+
+
+def load_builtin() -> list[Layer]:
+    return [from_yaml((_HERE / f"{name}.yaml").read_text(encoding="utf-8"), builtin=True) for name in BUILTIN_ORDER]
 
 
 def load_user(dir_: Path) -> list[Layer]:
-    """`<home>/layers/*.py`:每个文件里定义的 Layer 子类各一个实例(builtin=False),按文件名排。"""
+    """`<home>/layers/*.yaml`,按文件名排;文件里的 layer 名必须和文件名一致。"""
     out: list[Layer] = []
     if not dir_.is_dir():
         return out
-    for file in sorted(dir_.glob("*.py")):
+    for file in sorted(list(dir_.glob("*.yaml")) + list(dir_.glob("*.yml"))):
         if file.name.startswith("_"):
             continue
-        spec = importlib.util.spec_from_file_location(f"memorytalk_user_layers.{file.stem}", file)
-        mod = importlib.util.module_from_spec(spec)                       # type: ignore[arg-type]
-        spec.loader.exec_module(mod)                                      # type: ignore[union-attr]
-        classes = [c for _, c in inspect.getmembers(mod, inspect.isclass)
-                   if issubclass(c, Layer) and c is not Layer and c.__module__ == mod.__name__]
-        if not classes:
-            raise ValueError(f"{file}:里面没有 Layer 的子类")
-        for cls in classes:
-            layer = cls()
-            layer.builtin = False
-            out.append(layer)
+        try:
+            layer = from_yaml(file.read_text(encoding="utf-8"))
+        except ValueError as e:
+            raise ValueError(f"{file}:{e}") from None
+        if layer.name != file.stem:
+            raise ValueError(f"{file}:文件名和 layer 名不一致({layer.name})")
+        out.append(layer)
     return out
 
 
-__all__ = ["Layer", "Change", "BUILTIN", "load_user", "appended_only", "load_yaml"]
+__all__ = ["Layer", "FileKind", "ObjectRule", "Change", "BUILTIN_ORDER", "load_builtin", "load_user", "from_dict", "from_yaml"]

@@ -4,8 +4,8 @@ from __future__ import annotations
 from memorytalk.backend.models.result import Result, ok
 from fastapi import APIRouter, Depends, Header, Query, Request
 
-from memorytalk.backend.models.collections import (CatalogDir, LayerInfo, Manager, ManagerPut, Obj, ObjWrite, Revision,
-                                                     SearchHit, TreeItem)
+from memorytalk.backend.models.collections import (CatalogDir, CheckResult, LayerInfo, Manager, ManagerPut, Obj, ObjWrite,
+                                                     Revision, SearchHit, TreeItem, TreeView)
 from memorytalk.backend.services.collections import CollectionsError, CollectionsService, Ctx
 
 router = APIRouter(prefix="/api/collections", tags=["collections"])
@@ -24,7 +24,7 @@ def ctx(request: Request, x_memory_talk_user: str | None = Header(None, alias="X
 
 # ---- 固定路径先于 /{layer} ----
 
-@router.get("/layers", response_model=Result[list[LayerInfo]], summary="有哪些层(最底在前)、各自允许的文件;用户层来自 <home>/layers/*.py")
+@router.get("/layers", response_model=Result[list[LayerInfo]], summary="有哪些层(最底在前)及各自的协议;用户层来自 <home>/layers/*.yaml")
 def layers(svc: CollectionsService = Depends(collections)):
     return ok(svc.layer_infos())
 
@@ -34,9 +34,10 @@ def config(svc: CollectionsService = Depends(collections)) -> dict:
     return ok({"config": svc.anchor(), "history": [r.model_dump() for r in svc.anchor_history()]})
 
 
-@router.get("/tree", response_model=Result[list[TreeItem]], summary="浏览目录树:对象(带后缀的目录折成一项)、目录、origin 文件")
-def tree(path: str = "", svc: CollectionsService = Depends(collections)):
-    return ok(svc.tree(path))
+@router.get("/tree", response_model=Result[TreeView],
+            summary="浏览目录:有什么(items:对象折成一项、目录、origin 文件)+ 还能建什么(can_create)+ 这个名字行不行(candidate=)")
+def tree(path: str = "", candidate: str | None = None, svc: CollectionsService = Depends(collections)):
+    return ok(svc.tree(path, candidate))
 
 
 @router.get("/search", response_model=Result[list[SearchHit]], summary="git grep 整个 Collections(可限定层)")
@@ -89,9 +90,19 @@ def _files(svc: CollectionsService, layer: str, req: ObjWrite) -> dict:
     return dict(req.files)
 
 
-@router.post("/{layer}/{path:path}", response_model=Result[Obj], status_code=201,
-             summary="建一个对象:目录里的文件(files);origin 用 content。整批交给层的 check,过了一个 [layer] 提交")
-def create(layer: str, path: str, req: ObjWrite, svc: CollectionsService = Depends(collections), c: Ctx = Depends(ctx)):
+def _dry(fn) -> CheckResult:
+    try:
+        fn()
+        return CheckResult(ok=True)
+    except CollectionsError as e:
+        return CheckResult(ok=False, reason=str(e))
+
+
+@router.post("/{layer}/{path:path}", response_model=Result[Obj | CheckResult], status_code=201,
+             summary="建一个对象:目录里的文件(files);origin 用 content。整批按层的协议校验,过了一个 [layer] 提交;dry_run=1 只校验")
+def create(layer: str, path: str, req: ObjWrite, dry_run: bool = False, svc: CollectionsService = Depends(collections), c: Ctx = Depends(ctx)):
+    if dry_run:
+        return ok(_dry(lambda: svc.create(layer, path, _files(svc, layer, req), req.reason, c, req.subject, dry_run=True)))
     return ok(svc.create(layer, path, _files(svc, layer, req), req.reason, c, req.subject))
 
 
@@ -100,9 +111,11 @@ def get(layer: str, path: str, rev: str | None = Query(None), svc: CollectionsSe
     return ok(svc.get(layer, path, rev))
 
 
-@router.put("/{layer}/{path:path}", response_model=Result[Obj],
-            summary="改一个对象:files 加 / 改 / 删(null)目录里的文件,没提到的不动,整批交给层的 check;origin 整体替换")
-def update(layer: str, path: str, req: ObjWrite, svc: CollectionsService = Depends(collections), c: Ctx = Depends(ctx)):
+@router.put("/{layer}/{path:path}", response_model=Result[Obj | CheckResult],
+            summary="改一个对象:files 加 / 改 / 删(null)目录里的文件,没提到的不动,整批按层的协议校验;origin 整体替换;dry_run=1 只校验")
+def update(layer: str, path: str, req: ObjWrite, dry_run: bool = False, svc: CollectionsService = Depends(collections), c: Ctx = Depends(ctx)):
+    if dry_run:
+        return ok(_dry(lambda: svc.update(layer, path, _files(svc, layer, req), req.reason, c, req.subject, dry_run=True)))
     return ok(svc.update(layer, path, _files(svc, layer, req), req.reason, c, req.subject))
 
 

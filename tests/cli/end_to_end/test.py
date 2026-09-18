@@ -75,13 +75,15 @@ def test_cli_end_to_end(cli):
     cli("collection", "write", "issue", ip, "--put", "readme.md=背景:起服务要读几样配置", "--reason", "撞见的", user="alice")
     cli("col", "edit", "issue", ip, "--put", "positions/只用环境变量.md=为什么", "--subject", f"position {ip}: 只用环境变量", user="alice")
     cli("col", "edit", "issue", ip, "--put", "positions/只用环境变量.md=@-", "--subject", f"argue {ip}#只用环境变量: 够用",
-        inp="为什么\n\n## 论证\n- 试了一遍,够用(" + w["id"] + "#3)\n", user="alice")
-    assert cli("col", "edit", "issue", ip, "--put", "positions/只用环境变量.md=改了主意", check=False).returncode == 1     # 只增不改
-    cli("col", "edit", "issue", ip, "--put", "meta.yaml=positions:\n- {claim: 只用环境变量, note: 够用}\nsummary: 先这样", user="alice")
+        inp="---\nrank: 1\nverdict: 够用\n---\n\n为什么\n\n## 论证\n- 试了一遍,够用(" + w["id"] + "#3)\n", user="alice")
+    assert cli("col", "edit", "issue", ip, "--put", "notes.txt=x", check=False).returncode == 1                       # 协议外的文件
+    cli("col", "edit", "issue", ip, "--put", "readme.md=---\nsummary: 先这样\n---\n\n背景:起服务要读几样配置", "--subject", f"summarize {ip}", user="alice")
     r = json.loads(cli("--json", "collection", "read", "issue", ip).stdout)
-    assert r["title"] == "该走文件还是环境变量" and set(r["files"]) == {"readme.md", "meta.yaml", "positions/只用环境变量.md"}
+    assert r["title"] == "该走文件还是环境变量" and set(r["files"]) == {"readme.md", "positions/只用环境变量.md"}
     assert "== positions/只用环境变量.md" in cli("collection", "read", "issue", ip).stdout
-    cli("col", "write", "card", "memory.talk/配置/配置只来自环境变量", "--put", "readme.md=@-", "--put", "meta.yaml=issue: " + ip, inp="只用环境变量。\n", user="alice")
+    assert "可建: " in cli("col", "tree", ip + ".issue").stdout and "positions/{name}.md" in cli("col", "tree", ip + ".issue").stdout
+    assert "可以" in cli("col", "tree", ip + ".issue", "--candidate", "positions/再来一个.md").stdout
+    cli("col", "write", "card", "memory.talk/配置/配置只来自环境变量", "--put", "readme.md=@-", inp="---\nissue: " + ip + "\n---\n\n只用环境变量。\n", user="alice")
     cli("col", "edit", "card", "memory.talk/配置/配置只来自环境变量", "--put", "readme.md=只用环境变量。补一句。", "--reason", "补正文", user="alice")
     assert "补一句" in cli("collection", "read", "card", "memory.talk/配置/配置只来自环境变量").stdout
     log = cli("collection", "log", "card", "memory.talk/配置/配置只来自环境变量").stdout
@@ -93,7 +95,7 @@ def test_cli_end_to_end(cli):
     # assert w["id"] in cli("col", "manager", ip).stdout
     # assert ip in cli("work", "inbox", w["id"]).stdout
     # assert ip in cli("col", "managed", "--work", w["id"]).stdout
-    assert "positions/*.md" in cli("col", "layers").stdout
+    assert "positions/{name}.md" in cli("col", "layers").stdout
 
     cli("work", "set", child["id"], "--status", "done", user="alice")
     assert json.loads(cli("--json", "work", "set", w["id"], "--status", "done").stdout)["status"] == "done"

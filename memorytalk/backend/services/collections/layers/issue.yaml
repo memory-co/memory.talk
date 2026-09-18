@@ -1,0 +1,39 @@
+layer: issue
+description: 议事:一个问题(目录名)、几个立场(positions/ 一个一文件)、每个立场下的论证;排序是 manager 的判定
+object:
+  pattern: ^(?P<name>[^/]+)\.issue$
+  name: 问题
+files:
+  - pattern: ^readme\.md$
+    label: 问题
+    required: true
+    format:
+      fields:
+        links:
+          type: list
+          description: 和别的 issue 的边
+          item:
+            type: object
+            fields:
+              type: {type: enum, values: [specializes, suggested_by, questions, replaces, related], required: true}
+              target: {type: ref, layer: issue, required: true, description: "对端 issue 的 path,可带 #<主张>"}
+        summary: {type: text, description: "对整个问题现状的一句总结(manager 写)"}
+      body: markdown
+    template: ""
+  - pattern: ^positions/(?P<name>[^/]+)\.md$
+    name: 主张
+    label: 立场
+    format:
+      fields:
+        links:
+          type: list
+          description: 这个立场和别处的关系
+          item:
+            type: object
+            fields:
+              type: {type: enum, values: [supports, refutes, depends_on, related], required: true}
+              target: {type: ref, layer: issue, required: true}
+        rank: {type: number, description: "manager 的判定:数字越小越靠前;空 = 未判定"}
+        verdict: {type: string, description: "为什么排这"}
+      body: markdown
+    template: "\n\n## 论证\n"

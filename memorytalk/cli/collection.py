@@ -8,11 +8,24 @@ from ._common import out, value
 
 def c_layers(api, a):
     ls = api.call("GET", "/api/collections/layers")
-    out(ls, a.json, "\n".join(f"{l['order']}  {l['name']:<10} {('.' + l['name'] + '/') if l['suffix'] else '-':<12} "
-                              f"{', '.join(l['files']) or '(不带后缀的一切)':<40} {'' if l['builtin'] else '(用户层)'} {l['description']}" for l in ls))
+    lines = []
+    for l in ls:
+        files = ", ".join(f['example'] + ('*' if f['required'] else '') for f in l["protocol"]["files"]) or "(不带后缀的一切)"
+        lines.append(f"{l['order']}  {l['name']:<10} {('.' + l['name'] + '/') if l['suffix'] else '-':<12} {files:<40} {'' if l['builtin'] else '(用户层)'} {l['description']}")
+    out(ls, a.json, "\n".join(lines))
 def c_tree(api, a):
-    items = api.call("GET", "/api/collections/tree", params={"path": a.path or ""})
-    out(items, a.json, "\n".join(f"{i['name']:<40} {i['kind']:<7} {i.get('layer') or ''}" for i in items) or "(空)")
+    v = api.call("GET", "/api/collections/tree", params={"path": a.path or "", "candidate": a.candidate})
+    if a.json:
+        return out(v, True)
+    for i in v["items"]:
+        print(f"{i['name']:<40} {i['kind']:<7} {i.get('layer') or ''}")
+    cc = v["can_create"]
+    can = [f"{o['layer']}({o['example']})" for o in cc.get("objects", []) if o.get("can")] + [f"{f['example']}" for f in cc.get("files", []) if f.get("can") and "example" in f]
+    if cc.get("files") and any(f.get("layer") == "origin" for f in cc["files"]):
+        can.append("origin 文件")
+    print(f"可建: {', '.join(can) or '(无)'}")
+    if v.get("candidate"):
+        c = v["candidate"]; print(f"{c['name']}: {'可以' if c['can'] else '不行 — ' + c.get('reason', '')}")
 def _catalog(d, indent=0):
     lines = [f"{'  ' * indent}- {o['title']}  ({o['path']})" for o in d["objects"]]
     for sub in d["subdirs"]:
@@ -72,7 +85,7 @@ def c_managed(api, a):
 def register(top) -> None:
     c = top.add_parser("collection", aliases=["col"], help="认知层").add_subparsers(dest="sub", required=True)
     p = c.add_parser("layers", help="有哪些层;加用户层 = 往 ~/.memory.talk/layers/ 放一个 .py,重启"); p.set_defaults(fn=c_layers)
-    p = c.add_parser("tree"); p.add_argument("path", nargs="?"); p.set_defaults(fn=c_tree)
+    p = c.add_parser("tree"); p.add_argument("path", nargs="?"); p.add_argument("--candidate", help="问这个名字(对象目录名 / 文件路径)能不能建"); p.set_defaults(fn=c_tree)
     p = c.add_parser("ls"); p.add_argument("layer"); p.add_argument("--dir", default=""); p.set_defaults(fn=c_ls)
     p = c.add_parser("search"); p.add_argument("query"); p.add_argument("--layer"); p.set_defaults(fn=c_search)
     p = c.add_parser("read"); p.add_argument("layer"); p.add_argument("path"); p.add_argument("--rev"); p.set_defaults(fn=c_read)

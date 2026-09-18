@@ -1,0 +1,14 @@
+layer: card
+description: 记事:一条事实,像维基词条;标题是目录名,正文在 readme.md,语境 / 链接 / 讨论页在它的字段里。可改、可删,历史在 git。
+object:
+  name: 标题
+files:
+  - pattern: ^readme\.md$
+    label: 卡片
+    required: true
+    format:
+      fields:
+        context: {type: string, description: "在哪成立:关于哪个项目 / 用户 / 场景"}
+        links: {type: list, item: {type: ref, layer: card}, description: "相关卡的 path"}
+        issue: {type: ref, layer: issue, description: "讨论页:对应的 issue 的 path"}
+      body: markdown

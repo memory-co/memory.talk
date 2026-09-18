@@ -4,13 +4,9 @@ import pytest
 import subprocess
 
 DECISION = """
-from memorytalk.backend.services.collections.layers import Layer
-
-class Decision(Layer):
-    name = "decision"
-    files = ["readme.md"]
-    def check(self, changes, after):
-        return None if "readme.md" in after else "缺 readme.md"
+layer: decision
+files:
+  - {pattern: '^readme\\.md$', required: true}
 """
 
 
@@ -23,7 +19,7 @@ def _restart_with_layer(name, source):
     from memorytalk.backend.main import create_app
     d = Path(os.environ["MEMORY_TALK_HOME"]) / "layers"
     d.mkdir(parents=True, exist_ok=True)
-    (d / f"{name}.py").write_text(source)
+    (d / f"{name}.yaml").write_text(source)
     return TestClient(create_app(load_config(), load_runtime_config()))
 
 

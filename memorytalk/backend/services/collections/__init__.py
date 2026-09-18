@@ -1,4 +1,4 @@
-"""CollectionsService:认知层。层 = 一个 check(diff, after);对象 = 一个目录里的一组文件,按 path 读写;一次写 = 一批文件改动 → 层的 check → 一个 `[layer]` 提交;变动投递给 manager。"""
+"""CollectionsService:认知层。层 = 一份 YAML 协议(引擎据此校验);对象 = 一个目录里的一组文件,按 path 读写;一次写 = 一批文件改动 → 层的 check → 一个 `[layer]` 提交;变动投递给 manager。"""
 from __future__ import annotations
 
 import json
@@ -10,7 +10,7 @@ from . import layers as layer_pkg
 from memorytalk.backend.config import Config
 from .layers import Change, Layer
 from memorytalk.backend.models.collections import (CatalogDir, InboxItem, LayerInfo, Manager, Obj, Revision, SearchHit,
-                            TreeItem)
+                            TreeItem, TreeView)
 from memorytalk.backend.services.work.inbox import Inbox
 from memorytalk.backend.services.work.repo import WorkRepo
 
@@ -57,18 +57,23 @@ class CollectionsService:
     # ================================================================ 层
 
     def _load_layers(self) -> None:
-        """内置层 + <home>/layers/*.py 里的用户层;collections.json 里缺的补上(一次最底层提交),多出来的(文件没了)报错。"""
-        known = {l.name: l for l in layer_pkg.BUILTIN}
-        for l in layer_pkg.load_user(self.config.layers_dir):
+        """内置 YAML + <home>/layers/*.yaml;collections.json 里缺的补上(一次最底层提交),多出来的(文件没了)报错。"""
+        builtin = layer_pkg.load_builtin()
+        known = {l.name: l for l in builtin}
+        try:
+            user = layer_pkg.load_user(self.config.layers_dir)
+        except ValueError as e:
+            raise CollectionsError("bad_layer", str(e), 500) from None
+        for l in user:
             if l.name in known:
                 raise CollectionsError("bad_layer", f"层名重复:{l.name}", 500)
             known[l.name] = l
         cur = self.repo.layers() or []
         names = list(cur) + [n for n in known if n not in cur]
-        self.repo.ensure_layers(names, {l.name for l in layer_pkg.BUILTIN})
+        self.repo.ensure_layers(names, {l.name for l in builtin})
         missing = [n for n in self.repo.layers() if n not in known]
         if missing:
-            raise CollectionsError("bad_layer", f"collections.json 里有层 {', '.join(missing)},但既不是内置的,{self.config.layers_dir} 下也没有它的 .py", 500)
+            raise CollectionsError("bad_layer", f"collections.json 里有层 {', '.join(missing)},但既不是内置的,{self.config.layers_dir} 下也没有它的 .yaml", 500)
         self.order = list(self.repo.layers())
         self.layers = {n: known[n] for n in self.order}
 
@@ -87,8 +92,8 @@ class CollectionsService:
             raise CollectionsError("no_layer", f"没有这一层:{name}(有:{', '.join(self.order)})", 404) from None
 
     def _info(self, layer: Layer, order: int) -> LayerInfo:
-        return LayerInfo(name=layer.name, order=order, builtin=layer.builtin, suffix=layer.suffix, files=layer.files,
-                         description=layer.description)
+        return LayerInfo(name=layer.name, order=order, builtin=layer.builtin, suffix=layer.suffix,
+                         description=layer.description, protocol=layer.to_dict())
 
     def layer_infos(self) -> list[LayerInfo]:
         return [self._info(self.layers[n], i) for i, n in enumerate(self.order)]
@@ -183,8 +188,19 @@ class CollectionsService:
             hits.append(SearchHit(layer=lyr, path=path, file=h.file, line=h.line, text=h.text))
         return hits
 
-    def tree(self, path: str = "") -> list[TreeItem]:
-        """浏览一个目录:对象(带后缀的目录折叠成一项)、普通目录、origin 文件。"""
+    def _context(self, path: str) -> tuple[Layer | None, str, str]:
+        """一个目录在哪:(所在对象的层, 对象 path, 对象目录内的相对路径);不在对象里 → (None, '', '')。"""
+        for name in self.order:
+            spec = self.layers[name]
+            if spec.raw:
+                continue
+            got = spec.split(path)
+            if got:
+                return spec, got[0], got[1]
+        return None, "", ""
+
+    def tree(self, path: str = "", candidate: str | None = None) -> TreeView:
+        """浏览一个目录:有什么(items)+ 还能建什么(can_create)+ 这个名字行不行(candidate)。"""
         prefix = path.strip("/")
         seen: dict[str, TreeItem] = {}
         for repo_path in self.repo.tree(prefix):
@@ -202,7 +218,50 @@ class CollectionsService:
                 seen[head] = TreeItem(name=head, path=full, kind="dir")
             elif head != MANAGER_FILE:
                 seen[head] = TreeItem(name=head, path=full, kind="file", layer=self.order[0])
-        return sorted(seen.values(), key=lambda i: (i.kind != "dir", i.name))
+        items = sorted(seen.values(), key=lambda i: (i.kind != "dir", i.name))
+        spec, obj_path, rel_dir = self._context(prefix)
+        view = TreeView(path=prefix, layer=spec.name if spec else None, items=items)
+        if spec:                                                              # 对象目录(或它的子目录):按这一层的文件种类回答
+            existing = sorted(self._files(spec, obj_path) or {})
+            view.can_create = {"objects": [], "files": spec.can_create_files(rel_dir, existing)}
+            if candidate is not None:
+                rel = candidate.strip("/")
+                kind = spec.kind_of(rel)
+                exists = rel in existing
+                if kind is None:
+                    view.candidate = {"name": rel, "matches": None, "can": False, "reason": f"不匹配 {spec.name} 的任何一种文件"}
+                elif exists:
+                    view.candidate = {"name": rel, "matches": {"pattern": kind.pattern, "label": kind.label}, "exists": True, "can": False, "reason": "已存在"}
+                elif kind.fixed and any(kind.match(p) for p in existing):
+                    view.candidate = {"name": rel, "matches": {"pattern": kind.pattern, "label": kind.label}, "exists": False, "can": False, "reason": "固定文件,已存在"}
+                else:
+                    view.candidate = {"name": rel, "matches": {"pattern": kind.pattern, "label": kind.label}, "exists": False, "can": True}
+            return view
+        objects = []                                                          # 普通目录:按每一层的 object 规则回答
+        for name in self.order:
+            lyr = self.layers[name]
+            if lyr.raw:
+                continue
+            item = {"layer": name} | lyr.object.to_dict()                     # type: ignore[union-attr]
+            if lyr.object.under_regex.fullmatch(prefix):                      # type: ignore[union-attr]
+                item["can"] = True
+            else:
+                item |= {"can": False, "reason": f"{name} 不允许放在这里(under: {lyr.object.under})"}   # type: ignore[union-attr]
+            objects.append(item)
+        view.can_create = {"objects": objects, "files": [{"layer": self.order[0], "can": True}]}
+        if candidate is not None:
+            dirname = candidate.strip("/")
+            hit = next((l for l in self.layers.values() if not l.raw and l.object.regex.fullmatch(dirname)), None)  # type: ignore[union-attr]
+            if hit is None:
+                view.candidate = {"name": dirname, "matches": None, "can": False, "reason": "不匹配任何一层的对象目录名"}
+            else:
+                obj_name = hit.object.regex.fullmatch(dirname).group("name")   # type: ignore[union-attr]
+                full = f"{prefix}/{obj_name}" if prefix else obj_name
+                why = hit.check_object_path(full, inside_object=False)
+                exists = self.exists(hit.name, full)
+                view.candidate = {"name": dirname, "matches": {"layer": hit.name, "name": obj_name}, "exists": exists,
+                                  "can": why is None and not exists, **({"reason": why or "已存在"} if why or exists else {})}
+        return view
 
     # ---- 写:一次写 = 对一个对象目录的一批文件改动 → 层的 check(diff, after) → 一个 [layer] 提交 ----
 
@@ -224,9 +283,9 @@ class CollectionsService:
         return sha
 
     def put(self, layer: str, path: str, files: dict[str, str | bytes | None], reason: str, ctx: Ctx,
-            subject: str | None = None) -> str:
+            subject: str | None = None, dry_run: bool = False) -> str:
         """对象目录的一批文件改动(值为 None = 删)→ 算 diff → 层的 check → 不过 422(带理由);过了一次 [layer] 提交。
-        origin:files = {"": 内容}。"""
+        dry_run:只校验不提交,返回 ''。origin:files = {"": 内容}。"""
         spec = self.layer(layer)
         path = path.strip("/")
         if not path:
@@ -235,8 +294,12 @@ class CollectionsService:
             content = files.get("")
             if content is None:
                 raise CollectionsError("invalid", "origin 要有 content", 400)
-            return self.commit(layer, subject or f"write {path}", {path: _bytes(content)}, [], reason, ctx)
+            if self._context(path)[0] is not None:
+                raise CollectionsError("invalid", f"{path} 在一个对象目录里,不是 origin 文件", 400)
+            return "" if dry_run else self.commit(layer, subject or f"write {path}", {path: _bytes(content)}, [], reason, ctx)
         cur = self._files(spec, path) or {}
+        if not cur and (why := spec.check_object_path(path, inside_object=self._context(path.rsplit("/", 1)[0] if "/" in path else "")[0] is not None)):
+            raise CollectionsError("invalid", f"[{layer}] {path}:{why}", 422)
         after = dict(cur)
         changes: list[Change] = []
         for rel, content in files.items():
@@ -256,24 +319,26 @@ class CollectionsService:
         why = spec.check(changes, after)
         if why:
             raise CollectionsError("invalid", f"[{layer}] {path}:{why}", 422)
+        if dry_run:
+            return ""
         base = spec.obj_dir(path)
         puts = {f"{base}/{c.path}": c.new for c in changes if c.new is not None}
         deletes = [f"{base}/{c.path}" for c in changes if c.new is None]
         return self.commit(layer, subject or f"write {path}", puts, deletes, reason, ctx)
 
     def create(self, layer: str, path: str, files: dict[str, str | bytes | None], reason: str, ctx: Ctx,
-               subject: str | None = None) -> Obj:
+               subject: str | None = None, dry_run: bool = False) -> Obj | None:
         if self.exists(layer, path):
             raise CollectionsError("exists", f"{layer}:{path} 已存在", 409)
-        self.put(layer, path, files, reason, ctx, subject)
-        return self.get(layer, path)
+        self.put(layer, path, files, reason, ctx, subject, dry_run)
+        return None if dry_run else self.get(layer, path)
 
     def update(self, layer: str, path: str, files: dict[str, str | bytes | None], reason: str, ctx: Ctx,
-               subject: str | None = None) -> Obj:
+               subject: str | None = None, dry_run: bool = False) -> Obj | None:
         if not self.exists(layer, path):
             raise CollectionsError("not_found", f"{layer}:{path} 不存在", 404)
-        self.put(layer, path, files, reason, ctx, subject or f"edit {path}")
-        return self.get(layer, path)
+        self.put(layer, path, files, reason, ctx, subject or f"edit {path}", dry_run)
+        return None if dry_run else self.get(layer, path)
 
     def delete(self, layer: str, path: str, reason: str, ctx: Ctx) -> None:
         spec = self.layer(layer)

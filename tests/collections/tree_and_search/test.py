@@ -20,7 +20,7 @@ def test_catalog_groups_by_directory_and_titles_are_names(client):
 
 def test_tree_folds_objects_into_one_item(client):
     _seed(client)
-    items = {i["name"]: i for i in client.get("/api/collections/tree", params={"path": "memory.talk/配置"}).json()}
+    items = {i["name"]: i for i in client.get("/api/collections/tree", params={"path": "memory.talk/配置"}).json()["items"]}
     assert items["配置只来自环境变量.card"]["kind"] == "object" and items["该走文件还是环境变量.issue"]["layer"] == "issue"
 
 
