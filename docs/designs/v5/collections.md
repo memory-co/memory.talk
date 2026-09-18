@@ -143,7 +143,7 @@ git log --first-parent stack
 |---|---|---|
 | memory/ 仓库 | 裸 git,一条 main | collectbase 仓库:`layer/origin`、`layer/issue`、`layer/card`、`stack`,`cb init --layers origin,issue,card` |
 | issue / card 的对象模型 | issue.md / card.md | **不变** |
-| 文件形态与路径 | `issues/<id>.json`、`cards/**/<slug>.md`(按层分目录) | **对象变目录、带后缀、放哪都行**:`<名>.issue/`(readme.md + positions/)、`<名>.card/`(readme.md + meta.yaml);不再有按层分的顶层目录 |
+| 文件形态与路径 | `issues/<id>.json`、`cards/**/<slug>.md`(按层分目录) | **对象变目录、带后缀、放哪都行**:`<名>.issue/`(readme.md + positions/)、`<名>.card/`(readme.md);不再有按层分的顶层目录 |
 | 提交信息 | `card: write …` / `issue: argue …` | `[card] write …` / `[issue] argue …`(动词不变,层名前置) |
 | 跨对象的决定 | 一个 commit | 两个相邻提交 + 同一个 `Decision:` trailer(§6) |
 | 历史 | `git log -- <path>` | 同,外加 `git log layer/<名>` 看整层 |
