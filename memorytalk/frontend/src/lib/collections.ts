@@ -1,30 +1,21 @@
-import { parse, stringify } from 'yaml';
+import { splitFile } from './protocol';
 import type { CollectionObject } from './types';
 
 export function record(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
-export function readMeta(files: Record<string, string>): Record<string, unknown> {
-  return record(parse(files['meta.yaml'] || '{}'));
-}
-/** Domain views are derived from the public file contract, never persisted separately. */
-export function objectView(object?: CollectionObject): Record<string, unknown> {
-  if (!object) return {};
-  let meta: Record<string, unknown>;
-  try { meta = readMeta(object.files); }
-  catch { return { readme: object.files['readme.md'], body: object.files['readme.md'], invalidMeta: true }; }
-  if (object.layer === 'card') return { ...meta, body: object.files['readme.md'] || '' };
-  if (object.layer === 'issue') {
-    const files = Object.entries(object.files).filter(([name]) => name.startsWith('positions/') && name.endsWith('.md'));
-    const ranked = Array.isArray(meta.positions) ? meta.positions.map(record) : [];
-    const claims = files.map(([name]) => name.slice(10, -3));
-    const order = [...new Set([...ranked.map(r => String(r.claim)), ...claims.sort()])].filter(claim => claims.includes(claim));
-    return { ...meta, readme: object.files['readme.md'] || '', positions: order.map(claim => ({
-      claim, note: ranked.find(r => r.claim === claim)?.note || '', body: object.files[`positions/${claim}.md`],
-    })) };
-  }
-  return object.files;
-}
-export function cardFiles(content: string, context: string, previous?: Record<string, string>) {
-  return { 'readme.md': content, 'meta.yaml': stringify({ ...readMeta(previous || {}), context }) };
+export interface Position { rel: string; claim: string; fields: Record<string, unknown>; body: string; rank: number | null }
+/** 只读视图,从公开的文件契约派生;写入永远走文件本身。 */
+export function objectView(object?: CollectionObject): { fields: Record<string, unknown>; body: string; positions: Position[]; invalid?: boolean } {
+  if (!object) return { fields: {}, body: '', positions: [] };
+  const readme = object.files['readme.md'] ?? '';
+  let main: { fields: Record<string, unknown>; body: string };
+  try { main = splitFile(readme); } catch { return { fields: {}, body: readme, positions: [], invalid: true }; }
+  const positions: Position[] = Object.entries(object.files).filter(([name]) => name.startsWith('positions/') && name.endsWith('.md')).map(([rel, text]) => {
+    let parsed: { fields: Record<string, unknown>; body: string };
+    try { parsed = splitFile(text); } catch { parsed = { fields: {}, body: text }; }
+    const rank = typeof parsed.fields.rank === 'number' ? parsed.fields.rank : null;
+    return { rel, claim: rel.slice(10, -3), fields: parsed.fields, body: parsed.body, rank };
+  }).sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity) || a.claim.localeCompare(b.claim));
+  return { ...main, positions };
 }

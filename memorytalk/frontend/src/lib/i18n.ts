@@ -46,14 +46,16 @@ const en = {
   'settings.ttydArg': 'The window address carries', 'settings.ttydSocket': '. Current tmux socket: ', 'settings.ttydRestart': '. Restart the backend after changing it.',
   'settings.added': 'Added and switched identity', 'settings.username': 'Username', 'settings.usernameHint': 'Letters, digits, underscore, dot and hyphen.', 'settings.displayName': 'Display name',
   'settings.displayNamePlaceholder': 'How should we call you', 'settings.email': 'Email (optional)', 'settings.addAndUse': 'Add and use',
+  'editor.fields': 'Properties', 'editor.body': 'Content', 'editor.addFile': 'New {label}', 'editor.add': 'Add', 'editor.remove': 'Remove', 'editor.deleteFile': 'Delete file',
+  'editor.checking': 'Checking…', 'editor.valid': 'Looks good', 'editor.pathFor': 'Path (the last segment is the {name})', 'editor.subject': 'Commit subject (optional)', 'editor.subjectPlaceholder': 'e.g. position …: …',
+  'editor.refPlaceholder': 'Path of a {layer}', 'editor.origin': 'Content', 'library.unranked': 'Unranked',
   'library.subtitle': 'Sources, questions and conclusions from your work, gradually connected.', 'library.layers': 'Layers', 'library.new': 'New {layer}', 'library.searchLabel': 'Search meta cognition', 'library.searchPlaceholder': 'Search {layer} content…',
-  'library.clearSearch': 'Clear search', 'library.results': 'Results', 'library.all': 'All', 'library.root': 'root', 'library.noResults': 'Nothing found', 'library.empty': 'No {layer} yet', 'library.content': 'content',
+  'library.clearSearch': 'Clear search', 'library.results': 'Results', 'library.all': 'All', 'library.root': 'root', 'library.noResults': 'Nothing found', 'library.empty': 'No {layer} yet',
   'library.noResultsText': 'Try a shorter keyword, or switch layers.', 'library.emptyText': 'Start from a source, a question, or a conclusion.', 'library.createFirst': 'Create the first one',
   'library.back': 'Back to catalog', 'library.objectView': 'Object view', 'library.tabContent': 'Content', 'library.tabHistory': 'History', 'library.editCard': 'Edit card', 'library.invalidMeta': 'Metadata could not be parsed; showing the raw content.',
   'library.revision': 'Revision {rev}', 'library.backToCurrent': 'Back to current', 'library.viewDiscussion': 'View the discussion of this card', 'library.relatedCards': 'Related cards', 'library.summary': 'Current judgement', 'library.positions': 'Positions and arguments',
   'library.saved': 'Saved', 'library.created': 'Created', 'library.editTitle': 'Edit {layer}', 'library.newTitle': 'New {layer}', 'library.editorText': 'Every save leaves a traceable version in history.',
-  'library.pathLabel': 'Path', 'library.pathLabelTitled': 'Path (the last segment is the title)', 'library.pathPlaceholder': 'project/topic/name', 'library.context': 'Context', 'library.contextPlaceholder': 'Which project, scenario, or convention it applies to',
-  'library.issueBody': 'Question', 'library.body': 'Content', 'library.markdown': 'Markdown supported', 'library.reason': 'Reason (optional)', 'library.reasonPlaceholder': 'Why you are recording or changing this',
+  'library.pathLabel': 'Path', 'library.pathPlaceholder': 'project/topic/name', 'library.markdown': 'Markdown supported', 'library.reason': 'Reason (optional)', 'library.reasonPlaceholder': 'Why you are recording or changing this',
 };
 export type Key = keyof typeof en;
 
@@ -100,14 +102,16 @@ const zh: Record<Key, string> = {
   'settings.ttydArg': '窗口地址会携带', 'settings.ttydSocket': '。当前 tmux socket：', 'settings.ttydRestart': '。修改配置后需要重启后端。',
   'settings.added': '已添加并切换身份', 'settings.username': '用户名', 'settings.usernameHint': '支持英文字母、数字、下划线、点和连字符。', 'settings.displayName': '显示名称',
   'settings.displayNamePlaceholder': '如何称呼你', 'settings.email': '邮箱（可选）', 'settings.addAndUse': '添加并使用',
+  'editor.fields': '属性', 'editor.body': '正文', 'editor.addFile': '新建{label}', 'editor.add': '添加', 'editor.remove': '移除', 'editor.deleteFile': '删除文件',
+  'editor.checking': '校验中…', 'editor.valid': '通过校验', 'editor.pathFor': '路径（最后一段是{name}）', 'editor.subject': '提交主题（可选）', 'editor.subjectPlaceholder': '例如 position …: …',
+  'editor.refPlaceholder': '某个{layer}的路径', 'editor.origin': '原文', 'library.unranked': '未判定',
   'library.subtitle': '工作中的原文、问题与结论，在这里逐渐连接。', 'library.layers': '认知层', 'library.new': '新建{layer}', 'library.searchLabel': '搜索元认知', 'library.searchPlaceholder': '搜索{layer}内容…',
-  'library.clearSearch': '清空搜索', 'library.results': '搜索结果', 'library.all': '全部内容', 'library.root': '根目录', 'library.noResults': '没有找到相关内容', 'library.empty': '还没有{layer}', 'library.content': '内容',
+  'library.clearSearch': '清空搜索', 'library.results': '搜索结果', 'library.all': '全部内容', 'library.root': '根目录', 'library.noResults': '没有找到相关内容', 'library.empty': '还没有{layer}',
   'library.noResultsText': '试试更短的关键词，或切换其他层。', 'library.emptyText': '从一份原文、一个问题或一条结论开始。', 'library.createFirst': '创建第一条内容',
   'library.back': '返回目录', 'library.objectView': '对象视图', 'library.tabContent': '内容', 'library.tabHistory': '历史', 'library.editCard': '编辑卡片', 'library.invalidMeta': '元数据无法解析，当前显示原始正文。',
   'library.revision': '历史版本 {rev}', 'library.backToCurrent': '回到当前版本', 'library.viewDiscussion': '查看这张卡片的讨论', 'library.relatedCards': '相关卡片', 'library.summary': '当前判断', 'library.positions': '立场与论证',
   'library.saved': '内容已保存', 'library.created': '内容已创建', 'library.editTitle': '编辑{layer}', 'library.newTitle': '新建{layer}', 'library.editorText': '每次保存都会留下可追溯的版本历史。',
-  'library.pathLabel': '保存路径', 'library.pathLabelTitled': '保存路径（最后一段为标题）', 'library.pathPlaceholder': '项目/主题/名称', 'library.context': '适用语境', 'library.contextPlaceholder': '关于哪个项目、场景或约定',
-  'library.issueBody': '问题描述', 'library.body': '正文', 'library.markdown': '支持 Markdown', 'library.reason': '修改说明（可选）', 'library.reasonPlaceholder': '为什么记录或修改这条内容',
+  'library.pathLabel': '保存路径', 'library.pathPlaceholder': '项目/主题/名称', 'library.markdown': '支持 Markdown', 'library.reason': '修改说明（可选）', 'library.reasonPlaceholder': '为什么记录或修改这条内容',
 };
 
 const dictionaries: Record<Locale, Record<Key, string>> = { zh, en };

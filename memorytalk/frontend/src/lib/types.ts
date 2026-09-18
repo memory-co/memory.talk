@@ -1,4 +1,5 @@
 import { localeTag, type Key, type Locale, type T } from './i18n';
+import type { FileKind, Protocol } from './protocol';
 
 export type WorkStatus = 'todo' | 'doing' | 'done' | 'abandoned';
 export interface Work {
@@ -23,8 +24,14 @@ export interface SystemInfo {
 }
 export interface Layer {
   name: string; description: string; builtin: boolean; suffix: string | null;
-  files: string[];
+  protocol: Protocol;
 }
+export interface TreeView {
+  path: string; layer: string | null; items: TreeItem[];
+  can_create: { objects: { layer: string; example: string; name: string; can: boolean; reason?: string }[]; files: (Partial<FileKind> & { layer?: string; can: boolean; reason?: string; existing?: string[] })[] };
+  candidate?: { name: string; matches: unknown; exists?: boolean; can: boolean; reason?: string } | null;
+}
+export interface TreeItem { name: string; path: string; kind: 'dir' | 'file' | 'object'; layer: string | null }
 export interface Catalog {
   dir: string; objects: { path: string; title: string | null }[]; subdirs: Catalog[];
 }
