@@ -98,7 +98,7 @@ links:
 
 ### issue 层 = 一份协议
 
-规则不在代码里,在 `issue.yaml`([collections-layer.md §2](collections-layer.md)):两种文件、各自的字段和正文、哪个必需、哪个只能追加。引擎按它校验,前端按它出表单。落到规则就是:
+规则不在代码里,在 `issue.yaml`([collections-layer.md §2](collections-layer.md)):两种文件、各自的字段和正文、哪个必需。引擎按它校验,前端按它出表单。落到规则就是:
 
 | 文件 | 规则 |
 |---|---|
