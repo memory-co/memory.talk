@@ -14,7 +14,7 @@
 
 一个**问题**,底下挂几个**立场**(候选答案),每个立场底下是围绕它的**论证**(一行一条的讨论)。work 是做,card 是记,issue 是**议**:还没定的事待在这里。
 
-哪个立场当下占优,**不靠计数**,靠管这个 issue 的 work 看过论证之后做判断,把顺序和一句总结写进 `readme.md` 的字段里;判断可以随时改,历史在 git。
+哪个立场当下占优,**不靠计数**,靠管这个 issue 的 work 看过论证之后做判断,写进每个立场自己的 `rank` / `verdict` 字段,整体的一句总结写进 `readme.md` 的 `summary`;判断可以随时改,历史在 git。
 
 ---
 
@@ -22,22 +22,22 @@
 
 ```
 memory.talk/配置/该走文件还是环境变量.issue/
-├── readme.md             ← 问题:字段(links / ranking / summary)+ 正文(问题的展开);标题就是目录名
+├── readme.md             ← 问题:字段(links / summary)+ 正文(问题的展开);标题就是目录名
 ├── positions/
-│   ├── 只用环境变量,不要配置文件.md     ← 一个立场:文件名就是主张;字段(links)+ 正文(阐述 + ## 论证)
+│   ├── 只用环境变量,不要配置文件.md     ← 一个立场:文件名就是主张;字段(links / rank / verdict)+ 正文(阐述 + ## 论证)
 │   └── 走配置文件,环境变量只做覆盖.md
 └── manager.json          ← 谁管它(机制文件,见 manager.md;可无)
 ```
 
 **目录名就是问题,文件名就是主张。** `该走文件还是环境变量` 既是路径末段也是标题;`positions/只用环境变量,不要配置文件.md` 的文件名就是这个立场的主张。都不在文件里再写一遍,也没有 `p1` 这种编号。
 
-**每个文件 = 字段 + 正文。** 字段在 frontmatter,正文在下面;像 Notion 里的一行,上面是属性,下面是内容。没有单独的元数据文件:一个文件的边、排序、总结就在它自己头上,和正文一起提交、一起有历史。
+**每个文件 = 字段 + 正文。** 字段在 frontmatter,正文在下面;像 Notion 里的一行,上面是属性,下面是内容。没有单独的元数据文件,也没有「关于别的文件的表」:一个立场的边、排名、判语就在它自己头上,和正文一起提交、一起有历史。
 
 **为什么拆成多个文件:**
 
-- **变动落在该落的地方。** 加立场 = 新建一个文件;给某个立场加论证 = 改那一个文件;连边、改排序 = 改 `readme.md` 的字段。`git log -- positions/<主张>.md` 是一个立场的全部历史,`git log -- readme.md` 是问题和判断的变化史。
+- **变动落在该落的地方。** 加立场 = 新建一个文件;给某个立场加论证、改它的排名 = 改那一个文件;改总结 = 改 `readme.md`。`git log -- positions/<主张>.md` 是一个立场的全部历史,包括它的地位怎么变的。
 - **立场是文件的单位。** 两个人同时给不同立场加论证,碰的是不同文件。
-- **人能直接读写。** `cat readme.md` 是问题和当前判断,`ls positions/` 是有几个立场。
+- **人能直接读写。** `cat readme.md` 是问题和总结,`ls positions/` 是有几个立场,`head` 一个立场就是它的排名和判语。
 - **冷热分开。** `readme.md` 的正文建了基本不动,字段偶尔改;`positions/` 是活跃的那一半。
 
 ### readme.md
@@ -47,9 +47,6 @@ memory.talk/配置/该走文件还是环境变量.issue/
 links:
   - {type: specializes, target: memory.talk/配置/配置怎么管}
   - {type: suggested_by, target: memory.talk/架构/该不该拆服务#先拆成两个服务}
-ranking:                        # manager 的判定:排在前面的是当前占优的
-  - {position: 只用环境变量,不要配置文件, note: 试过了,够用;本地开发的痛点用 .env 解}
-  - {position: 走配置文件,环境变量只做覆盖, note: 配置文件的灵活性目前没人需要}
 summary: 目前倾向只走环境变量;等 work_try 把 .env 那条路验完再定。
 ---
 
@@ -61,11 +58,10 @@ summary: 目前倾向只走环境变量;等 work_try 把 .env 那条路验完再
 | 部分 | 改不改 | 说明 |
 |---|---|---|
 | `links[]` | 只增 | 和别的 issue 的边,`{type, target}`;`type` ∈ `specializes`(本 issue 是 target 的子问题)/ `suggested_by`(被 target 引出)/ `questions`(质疑 target 的前提)/ `replaces`(重述并取代 target)/ `related`;`target` 是对端 issue 的 path(可带 `#<主张>` 指到对端的某个立场) |
-| `ranking[]` | 可改 | **立场的排序**:按当前占优程度从前到后,每项 `position`(= `positions/` 下的文件名,协议里是 `ref {file}`,只能选已有的)+ 一句 `note`(为什么排这)。没列进来的立场排在后面,按文件名 |
-| `summary` | 可改 | 对整个 issue 现状的一句总结 |
+| `summary` | 可改 | 对整个 issue 现状的一句总结(manager 写) |
 | 正文 | 可改 | 问题的展开——背景、为什么冒出来、边界。可以为空(只有目录名的 issue 也合法) |
 
-`ranking` 和 `summary` 是**判断**,不是计算:由 manager work 里的人或 agent 读完论证之后写下来。改了就是一次 `[issue]` 提交,`git log -- readme.md` 是这个问题「风向」的变化史。没有 `ranking` = 还没人判断,立场按文件名列。
+`summary` 和各立场的 `rank` / `verdict` 是**判断**,不是计算:由 manager work 里的人或 agent 读完论证之后写下来。改了就是一次 `[issue]` 提交(一次可以改几个立场的 `rank`,一个提交)。
 
 ### positions/<主张>.md
 
@@ -73,6 +69,8 @@ summary: 目前倾向只走环境变量;等 work_try 把 .env 那条路验完再
 
 ```markdown
 ---
+rank: 1
+verdict: 试过了,够用;本地开发的痛点用 .env 解
 links:
   - {type: depends_on, target: memory.talk/配置/本地开发怎么给配置}
 ---
@@ -86,13 +84,15 @@ links:
 - 可以配一个 .env 文件给本地用,服务本身还是只读环境变量
 ```
 
-**文件名是主张,字段是这个立场和别处的关系,正文是阐述 + 论证。** `## 论证` 下一行一条讨论——支持也好、反对也好、补一个证据也好,就是一句话,**不打 +1 / -1**。证据顺手写在括号里(work 的 round、origin 路径、URL,系统不解析)。
+**文件名是主张,字段是它的排名、判语和它与别处的关系,正文是阐述 + 论证。** `## 论证` 下一行一条讨论——支持也好、反对也好、补一个证据也好,就是一句话,**不打 +1 / -1**。证据顺手写在括号里(work 的 round、origin 路径、URL,系统不解析)。
 
 谁、何时——在 git:每个立场一次提交、每条论证一次提交,`git log -- positions/<主张>.md` 就是这个立场的完整记录。
 
 | 部分 | 改不改 | 说明 |
 |---|---|---|
 | 文件名 | 不改 | 主张本身。改主意是加新立场,不是改旧的(也不重命名) |
+| `rank` | 可改 | manager 的判定:数字越小越靠前;空 = 未判定。读的时候按 `rank` 升序、再按文件名;重复和空洞不校验 |
+| `verdict` | 可改 | 为什么排这,一句话 |
 | `links[]` | 可改 | 这个立场和别的 issue(或对端的某个立场)的关系:`supports` / `refutes` / `depends_on` / `related` |
 | 正文:阐述 | 建时写 | 之后要补充,走论证 |
 | 正文:`## 论证` 列表 | 只增 | 一条一行,append 到末尾;协议上整个正文是 `append_only` |
@@ -103,8 +103,8 @@ links:
 
 | 文件 | 规则 |
 |---|---|
-| `readme.md` | 必需;不能删;字段只能是 `links` / `ranking` / `summary`,`links[].type` 五选一,`ranking[].position` 必须是 `positions/` 下**存在**的文件名;正文随便改 |
-| `positions/*.md` | 新建随意(文件名非空、不含 `/`);字段只能是 `links`;正文只能在末尾追加;不能删(改名 = 删 + 建,所以也不行) |
+| `readme.md` | 必需;不能删;字段只能是 `links` / `summary`,`links[].type` 五选一;正文随便改 |
+| `positions/*.md` | 新建随意(文件名非空、不含 `/`);字段只能是 `links` / `rank` / `verdict`,可改;正文只能在末尾追加;不能删(改名 = 删 + 建,所以也不行) |
 | `manager.json` | 机制文件,系统的,任何层都允许,不进校验 |
 | 其他任何文件 | **拒** |
 
@@ -123,7 +123,8 @@ links:
 | 加立场 | 新建 `positions/<主张>.md`(阐述) | `position <path>: <主张>` |
 | 加论证 | 改 `positions/<主张>.md`,`## 论证` 下多一行——协议只放行末尾追加 | `argue <path>#<主张>: <一句话>` |
 | 连边 | 改 `readme.md` 的 `links`(或某个立场的 `links`) | `link <path> <type> <target>` |
-| 排序 / 总结 | 改 `readme.md` 的 `ranking` / `summary` | `rank <path>: <首位主张>` |
+| 排序 | 改一个或几个立场的 `rank` / `verdict`(一次 put,一个提交) | `rank <path>: <首位主张>` |
+| 总结 | 改 `readme.md` 的 `summary` | `summarize <path>` |
 
 「只增不改」不靠约定:改立场正文、删立场、改名都被协议拒;层守卫兜底(`[card]` 提交碰不到 `.issue/`)。
 
@@ -150,8 +151,8 @@ links:
 
 v4 用 +1 / -1 累成 credence 现算排序,v5 不这么做。理由:论证的分量不等,数条数没意义;而且这个 issue 本来就有人管——manager work 在推它,读完论证做个判断是它的本职。所以:
 
-- **排序是 manager 的判断**,写在 `readme.md` 的 `ranking` 里,带理由;改了留历史。
-- **issue 不设「已解决」**;多个立场长期并存合法;没有立场的 issue、没有 `ranking` 的 issue 都合法。
+- **排序是 manager 的判断**,写在每个立场自己的 `rank` / `verdict` 里;改了留历史。
+- **issue 不设「已解决」**;多个立场长期并存合法;没有立场的 issue、立场都没有 `rank` 的 issue 都合法。
 - **立场只增不改**;改主意加新立场。
 - **manager 判定的是「当下谁占优」,不是拍板**。要变成事实,去写卡([card.md](card.md));卡指回这个 issue,issue 继续开着当讨论页。
 
@@ -162,4 +163,4 @@ v4 用 +1 / -1 累成 credence 现算排序,v5 不这么做。理由:论证的�
 - **新 issue 默认谁管**:倾向不自动写 `manager.json`,靠所在文件夹的继承链。
 - **立场文件的正文能不能事后改**:目前定「建时写、之后走论证」;若发现阐述常要修,再放开。
 - **主张当文件名的长度和字符**:文件名有长度上限、不能含 `/`;主张太长时怎么办(截断?要求短句?)先不定,靠约定「主张是一句短话」。
-- **改 `ranking` 要不要限定只有 manager work 能做**:现在不做权限(user.md),谁都能改;先靠约定。
+- **改 `rank` / `verdict` 要不要限定只有 manager work 能做**:现在不做权限(user.md),谁都能改;先靠约定。

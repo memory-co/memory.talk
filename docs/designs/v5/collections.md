@@ -83,7 +83,7 @@ issue 和 card **只是两个内置的 layer**。它们的对象模型([issue.md
 |---|---|---|---|
 | **名字** | = layer 名 = 提交信息里的 `[层名]` = 分支 `layer/<名字>` | `issue` | `card` |
 | **路径** | 对象怎么认:**目录名后缀 `.<层>/`**,放在树的任何位置;没有后缀的就是 origin | `<任意路径>/<名>.issue/`(readme.md + positions/*.md) | `<任意路径>/<名>.card/`(readme.md) |
-| **协议** | 一份 YAML:目录里允许哪些路径、每个文件的 formatter(字段 / 枚举 / 引用 / 正文)、哪些必需、哪些只能追加;后端用它校验,前端用它画表单([collections-layer.md](collections-layer.md)) | `readme.md`(字段 links / ranking / summary + 正文)+ `positions/*.md`(字段 links + 正文,正文只能追加);别的文件拒绝 | `readme.md`(字段 context / links / issue + 正文);别的文件拒绝 |
+| **协议** | 一份 YAML:目录里允许哪些路径、每个文件的 formatter(字段 / 枚举 / 引用 / 正文)、哪些必需、哪些只能追加;后端用它校验,前端用它画表单([collections-layer.md](collections-layer.md)) | `readme.md`(字段 links / summary + 正文)+ `positions/*.md`(字段 links / rank / verdict + 正文,正文只能追加);别的文件拒绝 | `readme.md`(字段 context / links / issue + 正文);别的文件拒绝 |
 
 schema 决定的事:
 

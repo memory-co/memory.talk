@@ -47,14 +47,7 @@ files:
             fields:
               type:   {type: enum, values: [specializes, suggested_by, questions, replaces, related], required: true}
               target: {type: ref, layer: issue, required: true}
-        ranking:                    # manager 的判定:排在前面的当前占优
-          type: list
-          item:
-            type: object
-            fields:
-              position: {type: ref, file: "positions/*.md", required: true}   # 引用本目录里匹配这个模式的文件
-              note:     {type: string}
-        summary: {type: text}
+        summary: {type: text}       # 对整个问题现状的一句总结(manager 写)
       body: markdown                # 正文:问题的展开
     template: ""
 
@@ -71,6 +64,8 @@ files:
             fields:
               type:   {type: enum, values: [supports, refutes, depends_on, related], required: true}
               target: {type: ref, layer: issue, required: true}             # 对端 issue 的 path,可带 #<主张>
+        rank:    {type: number, description: manager 的判定:数字越小越靠前;空 = 未判定}
+        verdict: {type: string, description: 为什么排这}
       body: markdown                # 正文:阐述 + ## 论证
     template: "\n\n## 论证\n"
 ```
@@ -103,13 +98,12 @@ files:
 | `date` | | 日期 | 日期选择 |
 | `enum` | `values: [...]` | 选择 | 下拉 |
 | `ref` | `layer: <层>` | 关联(另一个库) | 搜索选一个对象的 path |
-| `ref` | `file: <本目录的路径模式>` | 关联(同一页里的行) | 下拉,选项 = 目录里匹配该模式的文件名 |
 | `list` | `item: <字段>` | 多选 / 多个关联 | 可增删的列表 |
 | `object` | `fields: {...}` | (一行里的一组子属性) | 一组子字段;只允许出现在 `list.item` 里,不再嵌套 |
 
 每个字段都可以带 `required: true` 和 `description`。就这些;没有的类型不做,需要的层把字段留成 `text` 自己写。
 
-**协议里没有的**:`manager.json`(机制文件,系统的);层序(在 `collections.json`);行为(没有行为);跨文件的算术或条件约束(只有 `ref {file}` 这一种跨文件关系)。
+**协议里没有的**:`manager.json`(机制文件,系统的);层序(在 `collections.json`);行为(没有行为);**任何跨文件的约束**——每个文件只按自己的 formatter 校验,文件之间只有路径规则。
 
 ---
 
@@ -123,7 +117,6 @@ files:
 | `required` | 改完的目录里必须有;删它拒 |
 | `append_only` | 改前存在的文件,改后的**正文**必须是「改前正文 + 追加」;否则拒(frontmatter 不受限) |
 | `format.fields` | 解析 frontmatter;未声明的键拒;`required` 的键要有;按 `type` 校验(枚举在 `values` 里、number 是数、date 能解析、list 是列表、object 递归) |
-| `ref {file}` | 值必须是改完的目录里匹配该模式的文件名 |
 | `ref {layer}` | 值是字符串路径;**不检查对端存在**(弱耦合,对端可能还没建、也可能删了) |
 
 不在表里的就不校验。这就是「协议」的意思:后端不会比 YAML 更严,前端也不会比 YAML 更松。
@@ -172,10 +165,10 @@ GET /api/collections/affordances?path=<仓库里的一个目录或对象>
 
 - **层 = 一个数据库**,对象列表就是它的行。
 - **对象 = 一页**,页里按协议的 `files` 顺序列出文件:固定文件一项,带 `*` 的一组(每个已有文件一项,末尾一个「新建 <label>」按钮,点了问「<name>」)。
-- **文件 = 打开就是「属性 + 正文」**:上面是 `fields` 的表单(该选的下拉、该关联的搜索、`ref {file}` 从本页的文件里选),下面是 `body` 的编辑器;没有 `fields` 就只有正文;`append_only` 的文件旧正文只读、下面一个追加框,字段照常可改。
+- **文件 = 打开就是「属性 + 正文」**:上面是 `fields` 的表单(该选的下拉、该关联的搜索),下面是 `body` 的编辑器;没有 `fields` 就只有正文;`append_only` 的文件旧正文只读、下面一个追加框,字段照常可改。
 - **建对象** = 建它所有 `required` 的文件,各自按 `template` 预填。
 - **保存前 dry-run**,不过的理由显示在对应文件旁边,保存按钮禁用;通过了再真提交。
-- 读的一侧允许按层做只读渲染(issue 的立场按 `ranking` 排、卡片 `context` 放标题下),规则:**特化只产生展示,不产生写入**。
+- 读的一侧允许按层做只读渲染(issue 的立场按各自的 `rank` 排、卡片 `context` 放标题下),规则:**特化只产生展示,不产生写入**。
 
 ---
 
