@@ -94,8 +94,7 @@ links:
 | `rank` | 可改 | manager 的判定:数字越小越靠前;空 = 未判定。读的时候按 `rank` 升序、再按文件名;重复和空洞不校验 |
 | `verdict` | 可改 | 为什么排这,一句话 |
 | `links[]` | 可改 | 这个立场和别的 issue(或对端的某个立场)的关系:`supports` / `refutes` / `depends_on` / `related` |
-| 正文:阐述 | 建时写 | 之后要补充,走论证 |
-| 正文:`## 论证` 列表 | 只增 | 一条一行,append 到末尾;协议上整个正文是 `append_only` |
+| 正文 | 可改 | 阐述 + `## 论证` 列表(一条一行,加在末尾)。协议不锁正文;「不改旧论证、改主意加新立场」是约定,历史在 git |
 
 ### issue 层 = 一份协议
 
@@ -104,7 +103,7 @@ links:
 | 文件 | 规则 |
 |---|---|
 | `readme.md` | 必需;不能删;字段只能是 `links` / `summary`,`links[].type` 五选一;正文随便改 |
-| `positions/*.md` | 新建随意(文件名非空、不含 `/`);字段只能是 `links` / `rank` / `verdict`,可改;正文只能在末尾追加;不能删(改名 = 删 + 建,所以也不行) |
+| `positions/*.md` | 新建随意(文件名非空、不含 `/`);字段只能是 `links` / `rank` / `verdict`;正文随便改 |
 | `manager.json` | 机制文件,系统的,任何层都允许,不进校验 |
 | 其他任何文件 | **拒** |
 
@@ -121,12 +120,12 @@ links:
 | 建 issue | 新建 `readme.md`(字段可空、正文可空) | `write <path>` |
 | 改展开 | 改 `readme.md` 正文 | `edit <path>` |
 | 加立场 | 新建 `positions/<主张>.md`(阐述) | `position <path>: <主张>` |
-| 加论证 | 改 `positions/<主张>.md`,`## 论证` 下多一行——协议只放行末尾追加 | `argue <path>#<主张>: <一句话>` |
+| 加论证 | 改 `positions/<主张>.md`,`## 论证` 下多一行 | `argue <path>#<主张>: <一句话>` |
 | 连边 | 改 `readme.md` 的 `links`(或某个立场的 `links`) | `link <path> <type> <target>` |
 | 排序 | 改一个或几个立场的 `rank` / `verdict`(一次 put,一个提交) | `rank <path>: <首位主张>` |
 | 总结 | 改 `readme.md` 的 `summary` | `summarize <path>` |
 
-「只增不改」不靠约定:改立场正文、删立场、改名都被协议拒;层守卫兜底(`[card]` 提交碰不到 `.issue/`)。
+协议只管形状(有哪些文件、哪些字段);「不改旧论证、改主意加新立场」是约定不是校验——反正历史在 git,改了看得见。层守卫兜底(`[card]` 提交碰不到 `.issue/`)。
 
 ---
 
@@ -153,7 +152,7 @@ v4 用 +1 / -1 累成 credence 现算排序,v5 不这么做。理由:论证的�
 
 - **排序是 manager 的判断**,写在每个立场自己的 `rank` / `verdict` 里;改了留历史。
 - **issue 不设「已解决」**;多个立场长期并存合法;没有立场的 issue、立场都没有 `rank` 的 issue 都合法。
-- **立场只增不改**;改主意加新立场。
+- **改主意加新立场**,不改旧的;这是约定,不是校验。
 - **manager 判定的是「当下谁占优」,不是拍板**。要变成事实,去写卡([card.md](card.md));卡指回这个 issue,issue 继续开着当讨论页。
 
 ---

@@ -83,7 +83,7 @@ issue 和 card **只是两个内置的 layer**。它们的对象模型([issue.md
 |---|---|---|---|
 | **名字** | = layer 名 = 提交信息里的 `[层名]` = 分支 `layer/<名字>` | `issue` | `card` |
 | **路径** | 对象怎么认:**目录名后缀 `.<层>/`**,放在树的任何位置;没有后缀的就是 origin | `<任意路径>/<名>.issue/`(readme.md + positions/*.md) | `<任意路径>/<名>.card/`(readme.md) |
-| **协议** | 一份 YAML:目录里允许哪些路径、每个文件的 formatter(字段 / 枚举 / 引用 / 正文)、哪些必需、哪些只能追加;后端用它校验,前端用它画表单([collections-layer.md](collections-layer.md)) | `readme.md`(字段 links / summary + 正文)+ `positions/*.md`(字段 links / rank / verdict + 正文,正文只能追加);别的文件拒绝 | `readme.md`(字段 context / links / issue + 正文);别的文件拒绝 |
+| **协议** | 一份 YAML:目录里允许哪些路径、每个文件的 formatter(字段 / 枚举 / 引用 / 正文)、哪些必需;后端用它校验,前端用它画表单([collections-layer.md](collections-layer.md)) | `readme.md`(字段 links / summary + 正文)+ `positions/*.md`(字段 links / rank / verdict + 正文);别的文件拒绝 | `readme.md`(字段 context / links / issue + 正文);别的文件拒绝 |
 
 schema 决定的事:
 
@@ -102,7 +102,7 @@ collectbase 的层是有序的:**事实在最下,推论在上;上层改不动下
 
 ```
 上   card    ← 争完的结论;可改、可删(维基式,git 记历史);从 issue 派生
-     issue   ← 争的过程;立场 / 论证只增不改;从 origin 消化而来
+     issue   ← 争的过程;从 origin 消化而来
 下   origin  ← 事实:外部来的、原样的、未消化的材料;上层改不动。见 [origin.md](origin.md)
 ```
 
