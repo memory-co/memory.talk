@@ -13,7 +13,7 @@ export function useRoute(): Route {
     try { return { page: 'work', work: decodeURIComponent(pathname.slice(6)) }; }
     catch { return { page: 'home' }; }
   }
-  if (pathname === '/library') return { page: 'library', layer: query.get('layer') || 'card', path: query.get('path') || undefined };
+  if (pathname === '/library') return { page: 'library', layer: query.get('layer') || 'all', path: query.get('path') || undefined };
   if (pathname === '/settings') return { page: 'settings' };
   return { page: 'home' };
 }

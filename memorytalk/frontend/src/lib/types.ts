@@ -43,7 +43,7 @@ export interface SearchResult { query: string; hits: SearchHit[]; counts: Record
 export interface InboxItem { ts: string; layer: string; path: string; subject: string; by: string | null }
 export const workStatuses: WorkStatus[] = ['todo', 'doing', 'done', 'abandoned'];
 export const statusLabel = (t: T, status: WorkStatus) => t(`status.${status}`);
-export const layerLabel = (t: T, layer: string) => (['origin', 'issue', 'card'].includes(layer) ? t(`layer.${layer}` as Key) : layer);
+export const layerLabel = (t: T, layer: string) => (['origin', 'issue', 'card', 'all'].includes(layer) ? t(`layer.${layer}` as Key) : layer);
 const schemeNames: Record<string, string> = { codex: 'Codex', claude: 'Claude Code', kimi: 'Kimi' };
 export const sessionLabel = (t: T, scheme: string) => schemeNames[scheme] || (['bash', 'http', 'https'].includes(scheme) ? t(`scheme.${scheme}` as Key) : scheme);
 export function flattenWorks(works: Work[]): Work[] {

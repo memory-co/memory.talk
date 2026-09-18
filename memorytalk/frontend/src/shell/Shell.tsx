@@ -110,7 +110,7 @@ function Crumbs() {
 
 function Page({ onLibrary, selection }: { onLibrary: () => void; selection: (s: { layer: string; path?: string }) => void }) {
   const route = useRoute();
-  return <Suspense fallback={<Loading />}>{route.page === 'home' ? <Home /> : route.page === 'work' && route.work ? <Workspace key={route.work} id={route.work} onLibrary={onLibrary} /> : route.page === 'library' ? <Library layer={route.layer || 'card'} path={route.path} onSelect={selection} /> : <Settings />}</Suspense>;
+  return <Suspense fallback={<Loading />}>{route.page === 'home' ? <Home /> : route.page === 'work' && route.work ? <Workspace key={route.work} id={route.work} onLibrary={onLibrary} /> : route.page === 'library' ? <Library layer={route.layer || 'all'} path={route.path} onSelect={selection} /> : <Settings />}</Suspense>;
 }
 
 function ShellContent() {
@@ -121,7 +121,7 @@ function ShellContent() {
   const [searchLoaded, setSearchLoaded] = useState(false);
   useEffect(() => { if (search) setSearchLoaded(true); }, [search]);
   const [inspector, setInspector] = useState(false);
-  const [selection, setSelection] = useState<{ layer: string; path?: string }>({ layer: 'card' });
+  const [selection, setSelection] = useState<{ layer: string; path?: string }>({ layer: 'all' });
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setSearch(true); }
