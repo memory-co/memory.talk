@@ -34,8 +34,8 @@
 ```
 Collections(一个 collectbase 仓库,~/.memory.talk/memory/)
 ├── layer/origin   ← origin:任何**不带层后缀**的文件或目录          schema 极薄:原文 + 可选 meta;最底层,只读
-├── layer/issue    ← issue :任何 `<名>.issue/` 目录(里面 readme.md + meta.yaml + positions/*.md)  标题 = 目录名;每个立场一个文件;meta.yaml 放边和 manager 的排序
-├── layer/card     ← card  :任何 `<名>.card/` 目录(里面 readme.md + meta.yaml)  标题 = 目录名;meta.yaml 放 context / links / issue
+├── layer/issue    ← issue :任何 `<名>.issue/` 目录(里面 readme.md + positions/*.md,每个文件 = frontmatter 字段 + 正文)  标题 = 目录名;每个立场一个文件;边和排序在 readme.md 的字段里
+├── layer/card     ← card  :任何 `<名>.card/` 目录(里面一个 readme.md:字段 context / links / issue + 正文)  标题 = 目录名
 └── layer/<你的>   ← 用户自定义的 layer:`<名>.<层>/`,~/.memory.talk/layers/<名>.py 里一个 Layer 子类就行
     stack          ← 合并视图:所有 layer 的文件并在一起,日常读写站在这里
 ```
@@ -49,12 +49,10 @@ memory.talk/
 │   ├── 旧的 settings 方案.md                  ← origin:一份原文
 │   ├── 该走文件还是环境变量.issue/            ← issue:围绕它的讨论
 │   │   ├── readme.md
-│   │   ├── meta.yaml
-│   │   ├── positions/p1.md
+│   │   ├── positions/只用环境变量.md
 │   │   └── manager.json
 │   └── 配置只来自环境变量.card/               ← card:争完的结论
-│       ├── readme.md
-│       └── meta.yaml
+│       └── readme.md
 └── design/
     └── v5-总设计.pdf → blob/…                ← origin:二进制外置
 ```

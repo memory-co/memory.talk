@@ -29,23 +29,17 @@
 
 ## 2. 协议
 
-以 issue 为例,完整的一份:
+以 issue 为例,完整的一份(两种文件,都是「字段 + 正文」):
 
 ```yaml
 layer: issue
 description: 议事:一个问题、几个立场、每个立场下的论证;排序是 manager 的判定
 files:
-  - path: readme.md                 # 固定文件
-    label: 问题的展开
+  - path: readme.md                 # 固定文件:问题本身
+    label: 问题
     required: true                  # 建对象时必须有;之后不能删
     format:
-      body: markdown                # 只有正文,没有字段
-    template: ""
-
-  - path: meta.yaml
-    label: 边与排序
-    format:
-      fields:                       # 只有字段,没有正文(yaml 文件)
+      fields:                       # frontmatter
         links:
           type: list
           item:
@@ -53,24 +47,35 @@ files:
             fields:
               type:   {type: enum, values: [specializes, suggested_by, questions, replaces, related], required: true}
               target: {type: ref, layer: issue, required: true}
-        positions:
+        ranking:                    # manager 的判定:排在前面的当前占优
           type: list
           item:
             type: object
             fields:
-              claim: {type: ref, file: "positions/*.md", required: true}    # 引用本目录里匹配这个模式的文件
-              note:  {type: string}
+              position: {type: ref, file: "positions/*.md", required: true}   # 引用本目录里匹配这个模式的文件
+              note:     {type: string}
         summary: {type: text}
-      body: none
+      body: markdown                # 正文:问题的展开
+    template: ""
 
   - path: positions/*.md            # 模式:* 是用户起的名字
     name: 主张                       # * 那一段叫什么,新建时问用户
     label: 立场
-    append_only: true               # 已有的只能在末尾续写;新建随意
+    append_only: true               # 已有的正文只能在末尾续写;字段可改;新建随意
     format:
-      body: markdown
+      fields:
+        links:
+          type: list
+          item:
+            type: object
+            fields:
+              type:   {type: enum, values: [supports, refutes, depends_on, related], required: true}
+              target: {type: ref, layer: issue, required: true}             # 对端 issue 的 path,可带 #<主张>
+      body: markdown                # 正文:阐述 + ## 论证
     template: "\n\n## 论证\n"
 ```
+
+**每个文件 = 字段 + 正文**,像 Notion 里的一行:上面是属性,下面是页面内容。没有单独的元数据文件——一个文件的元数据就在它自己头上(`.md` 的 frontmatter),字段和正文一起提交、一起有历史。
 
 ### 词汇表
 
@@ -82,9 +87,9 @@ files:
 | `name` | 字符串 | 只对带 `*` 的路径:`*` 那一段叫什么(界面新建时问的问题) |
 | `label` | 字符串 | 界面显示的名字 |
 | `required` | bool | 建对象时必须有;之后不能删。只对固定文件 |
-| `append_only` | bool | 已有文件的改动只能是在末尾追加;新建不限 |
-| `format.fields` | 字段表 | 文件头部的字段。`.md` 文件是 frontmatter,`.yaml` / `.json` 文件就是全部内容 |
-| `format.body` | `markdown` / `text` / `none` | 字段之后的正文。`none` = 这个文件只有字段 |
+| `append_only` | bool | 已有文件的**正文**只能在末尾追加(字段照常可改);新建不限 |
+| `format.fields` | 字段表 | 文件头部的字段(`.md` 的 frontmatter)。没有 `fields` 就是纯正文文件 |
+| `format.body` | `markdown` / `text` | 字段之后的正文 |
 | `template` | 字符串 | 新建时正文的初始内容 |
 
 **字段级**(`fields` 里每一项,Notion 的「属性类型」):
@@ -116,11 +121,10 @@ files:
 |---|---|
 | `files[].path` | 改动里每个路径必须匹配某一项;否则拒 |
 | `required` | 改完的目录里必须有;删它拒 |
-| `append_only` | 改前存在的文件,改后必须是「改前 + 追加」;否则拒 |
-| `format.fields` | 解析 frontmatter / yaml;未声明的键拒;`required` 的键要有;按 `type` 校验(枚举在 `values` 里、number 是数、date 能解析、list 是列表、object 递归) |
+| `append_only` | 改前存在的文件,改后的**正文**必须是「改前正文 + 追加」;否则拒(frontmatter 不受限) |
+| `format.fields` | 解析 frontmatter;未声明的键拒;`required` 的键要有;按 `type` 校验(枚举在 `values` 里、number 是数、date 能解析、list 是列表、object 递归) |
 | `ref {file}` | 值必须是改完的目录里匹配该模式的文件名 |
 | `ref {layer}` | 值是字符串路径;**不检查对端存在**(弱耦合,对端可能还没建、也可能删了) |
-| `format.body: none` | 文件里只能有字段,不能有正文 |
 
 不在表里的就不校验。这就是「协议」的意思:后端不会比 YAML 更严,前端也不会比 YAML 更松。
 
@@ -143,8 +147,7 @@ GET /api/collections/affordances?path=<仓库里的一个目录或对象>
 
 {"path": "memory.talk/配置/该走文件还是环境变量.issue",                              // 对象目录:能建这一层协议里的文件
  "objects": [],
- "files": [{"path": "meta.yaml", "label": "边与排序", "exists": false, "can": true},
-           {"path": "readme.md", "label": "问题的展开", "exists": true, "can": false, "reason": "固定文件,已存在"},
+ "files": [{"path": "readme.md", "label": "问题", "exists": true, "can": false, "reason": "固定文件,已存在"},
            {"path": "positions/*.md", "name": "主张", "label": "立场", "exists": false, "can": true, "existing": ["只用环境变量"]}]}
 ```
 
@@ -169,10 +172,10 @@ GET /api/collections/affordances?path=<仓库里的一个目录或对象>
 
 - **层 = 一个数据库**,对象列表就是它的行。
 - **对象 = 一页**,页里按协议的 `files` 顺序列出文件:固定文件一项,带 `*` 的一组(每个已有文件一项,末尾一个「新建 <label>」按钮,点了问「<name>」)。
-- **文件 = 打开就是「属性 + 正文」**:上面是 `fields` 的表单(该选的下拉、该关联的搜索、`ref {file}` 从本页的文件里选),下面是 `body` 的编辑器;`body: none` 就只有表单;`append_only` 的文件旧正文只读、下面一个追加框。
+- **文件 = 打开就是「属性 + 正文」**:上面是 `fields` 的表单(该选的下拉、该关联的搜索、`ref {file}` 从本页的文件里选),下面是 `body` 的编辑器;没有 `fields` 就只有正文;`append_only` 的文件旧正文只读、下面一个追加框,字段照常可改。
 - **建对象** = 建它所有 `required` 的文件,各自按 `template` 预填。
 - **保存前 dry-run**,不过的理由显示在对应文件旁边,保存按钮禁用;通过了再真提交。
-- 读的一侧允许按层做只读渲染(issue 的立场按 `meta.positions` 排、卡片 `context` 放标题下),规则:**特化只产生展示,不产生写入**。
+- 读的一侧允许按层做只读渲染(issue 的立场按 `ranking` 排、卡片 `context` 放标题下),规则:**特化只产生展示,不产生写入**。
 
 ---
 
@@ -182,24 +185,21 @@ GET /api/collections/affordances?path=<仓库里的一个目录或对象>
 
 **origin** 是唯一的特例:没有目录、没有协议,`origin.yaml` 只有 `layer: origin` 和一句 `description`,引擎对它永远放行。
 
-**card**:
+**card**:一个文件,字段 + 正文。
 
 ```yaml
 layer: card
 description: 记事:一条事实,像维基词条;标题是目录名
 files:
   - path: readme.md
-    label: 正文
+    label: 卡片
     required: true
-    format: {body: markdown}
-  - path: meta.yaml
-    label: 语境与关联
     format:
       fields:
         context: {type: string, description: 在哪成立}
         links:   {type: list, item: {type: ref, layer: card}}
         issue:   {type: ref, layer: issue, description: 讨论页}
-      body: none
+      body: markdown
 ```
 
 **issue**:§2 那份。

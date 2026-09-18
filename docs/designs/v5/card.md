@@ -111,9 +111,9 @@ card 是 Collections([collections.md](collections.md))里内置的一个 **layer
 | | |
 |---|---|
 | layer 名 | `card`;分支 `layer/card`;提交信息以 `[card]` 开头 |
-| 形态 | **`<任意路径>/<名>.card/`**——一张卡一个带后缀的目录,放哪都行;**目录名就是标题**;里面 `readme.md` 是正文(必需),`meta.yaml` 是 `context` / `links[]` / `issue`(可无),可放 `manager.json`;目录树按主题组织,原文、讨论页、词条并排 |
-| check | 只能有这两个文件;`readme.md` 不能删;`meta.yaml` 只有 `context` / `links[]→card` / `issue→issue`,多余的键拒。**没有 title**(目录名就是)、**没有 status**——在与不在由文件在不在决定,历史由 git 记 |
-| 行为 | 没有。写、改、删就是提交文件;从 issue 写出来 = 建卡时 `meta.yaml` 的 `issue` 指过去;对卡开讨论页 = 建一个 issue + 改卡的 `meta.yaml`,两个普通提交 |
+| 形态 | **`<任意路径>/<名>.card/`**——一张卡一个带后缀的目录,放哪都行;**目录名就是标题**;里面只有一个 `readme.md`(必需):frontmatter 字段 `context` / `links[]` / `issue` + 正文;可放 `manager.json`;目录树按主题组织,原文、讨论页、词条并排 |
+| 协议 | 一个文件,字段 + 正文(`card.yaml`,见 [collections-layer.md §7](collections-layer.md));`readme.md` 不能删;字段只有 `context` / `links[]→card` / `issue→issue`,多余的键拒。**没有 title**(目录名就是)、**没有 status**——在与不在由文件在不在决定,历史由 git 记 |
+| 行为 | 没有。写、改、删就是提交文件;从 issue 写出来 = 建卡时 `issue` 字段指过去;对卡开讨论页 = 建一个 issue + 改卡的 `issue` 字段,两个普通提交 |
 | 层序 | 在 issue 之上:card 是争完的结论,从 issue 派生;改卡碰不到 issue |
 | 历史 | `git log layer/card` = 全部编辑史;`git log -- <路径>.card/` = 这一张的 |
 | manager | 按文件夹:所在主题文件夹的 `manager.json` 管这一片(不分层);卡自己的目录里也可以放一个,单独管这一张 |
