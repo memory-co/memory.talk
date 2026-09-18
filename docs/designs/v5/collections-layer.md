@@ -19,9 +19,10 @@
 
 ## 1. 一句话
 
-**一个层 = 一份 YAML,说清两件事:**
-1. **路径**:对象目录里允许哪些文件——每种文件一个**正则**,匹配的路径才能进来;哪些必需;
-2. **formatter**:每个路径的文件长什么样——frontmatter 里有哪些字段(类型、枚举、引用、必填),正文是 markdown 还是没有正文。
+**一个层 = 一份 YAML,说清三件事:**
+1. **对象目录**:这一层的对象目录叫什么样的名字(正则,必须以 `.<层>` 结尾)、允许放在哪些位置;
+2. **路径**:对象目录里允许哪些文件——每种文件一个**正则**,匹配的路径才能进来;哪些必需;
+3. **formatter**:每个路径的文件长什么样——frontmatter 里有哪些字段(类型、枚举、引用、必填),正文是 markdown 还是没有正文。
 
 其余一切(校验、表单、「这里能不能建」)由通用引擎从这份 YAML 推出来。
 
@@ -34,6 +35,10 @@
 ```yaml
 layer: issue
 description: 议事:一个问题、几个立场、每个立场下的论证;排序是 manager 的判定
+object:
+  pattern: ^(?P<name>[^/]+)\.issue$   # 对象目录的名字;捕获组 name 就是标题;必须以 .issue 结尾(层守卫靠后缀认归属)
+  name: 问题                         # name 那段叫什么,新建对象时问用户
+  under: .*                          # 允许放在哪些目录下(相对仓库根的目录路径的正则);默认任意
 files:
   - pattern: ^readme\.md$           # 正则,匹配对象目录内的相对路径;没有捕获组 = 固定文件,至多一个
     label: 问题
@@ -73,6 +78,14 @@ files:
 
 ### 词汇表
 
+**对象级**(`object`):
+
+| 键 | 取值 | 含义 |
+|---|---|---|
+| `pattern` | 正则,整段匹配对象目录名(不含父路径) | 必须带命名捕获组 `name`,且以 `\.<层>$` 结尾——后缀是层归属的依据,不能变。省略 = `^(?P<name>[^/]+)\.<层>$` |
+| `name` | 字符串 | `name` 那段叫什么(新建对象时问的问题;它就是标题) |
+| `under` | 正则,整段匹配父目录路径(相对仓库根,`''` 是根) | 这一层的对象允许放在哪。省略 = 任意目录;不能放进别的对象目录里(对象不嵌套,这条是系统规则) |
+
 **文件级**(`files[]` 每一项):
 
 | 键 | 取值 | 含义 |
@@ -111,6 +124,7 @@ files:
 
 | 协议里的 | 引擎检查 |
 |---|---|
+| `object.pattern` / `object.under` | 新建对象时,目录名必须整段匹配 `pattern`,父目录必须匹配 `under`,且父目录不在任何对象目录之内;否则拒 |
 | `files[].pattern` | 改动里每个路径必须整段匹配某一项的正则;否则拒。固定文件(无捕获组)至多一个 |
 | `required` | 改完的目录里必须有;删它拒 |
 | `format.fields` | 解析 frontmatter;未声明的键拒;`required` 的键要有;按 `type` 校验(枚举在 `values` 里、number 是数、date 能解析、list 是列表、object 递归) |
@@ -131,8 +145,11 @@ GET /api/collections/affordances?path=<仓库里的一个目录>[&candidate=<想
 `path` 可以是普通目录、对象目录,或对象目录里的子目录(比如 `….issue/positions`);服务端找到它所属的对象和层,把层协议里每种文件的正则拿来对着看:
 
 ```json
-{"path": "memory.talk/配置",                                   // 普通目录:能建任何层的对象、能放 origin 文件
- "objects": [{"layer": "issue"}, {"layer": "card"}, {"layer": "decision"}],
+{"path": "memory.talk/配置",                                   // 普通目录:按每一层的 object 规则回答能不能在这建对象;origin 文件总能放
+ "objects": [
+   {"layer": "issue",    "pattern": "^(?P<name>[^/]+)\\.issue$",    "name": "问题", "can": true,  "example": "<问题>.issue"},
+   {"layer": "card",     "pattern": "^(?P<name>[^/]+)\\.card$",     "name": "标题", "can": true,  "example": "<标题>.card"},
+   {"layer": "decision", "pattern": "^(?P<name>[^/]+)\\.decision$", "name": "决定", "can": false, "reason": "decision 只允许放在 decisions/ 下(under)"}],
  "files": []}
 
 {"path": "memory.talk/配置/该走文件还是环境变量.issue",          // 对象目录:按这一层协议逐种文件回答
@@ -148,9 +165,12 @@ GET /api/collections/affordances?path=<仓库里的一个目录>[&candidate=<想
  "files": [{"pattern": "^positions/(?P<name>[^/]+)\\.md$", "label": "立场", "name": "主张", "fixed": false, "existing": ["positions/只用环境变量.md"], "can": true}]}
 ```
 
-带上 `candidate` 就是问「这个名字行不行」:
+带上 `candidate` 就是问「这个名字行不行」——在普通目录问的是对象目录名,在对象目录问的是文件路径:
 
 ```json
+GET …?path=memory.talk/配置&candidate=要不要加配置文件.issue
+{"candidate": "要不要加配置文件.issue", "matches": {"layer": "issue", "name": "要不要加配置文件"}, "exists": false, "can": true}
+
 GET …?path=….issue&candidate=positions/走配置文件.md
 {"candidate": "positions/走配置文件.md", "matches": {"pattern": "^positions/(?P<name>[^/]+)\\.md$", "label": "立场"}, "exists": false, "can": true}
 
@@ -180,7 +200,7 @@ GET …?path=….issue&candidate=notes.txt
 - **层 = 一个数据库**,对象列表就是它的行。
 - **对象 = 一页**,页里按协议的 `files` 顺序列出文件:固定文件一项,带捕获组的一组(每个已有文件一项,末尾一个「新建 <label>」按钮,点了问「<name>」,名字代回正则得到路径,先拿 `candidate` 问后端再建)。
 - **文件 = 打开就是「属性 + 正文」**:上面是 `fields` 的表单(该选的下拉、该关联的搜索),下面是 `body` 的编辑器;没有 `fields` 就只有正文。
-- **建对象** = 建它所有 `required` 的文件,各自按 `template` 预填。
+- **建对象** = 在某个目录里点「新建 <层>」,问一个「<object.name>」,名字代回 `object.pattern` 得到目录名;然后建它所有 `required` 的文件,各自按 `template` 预填。
 - **保存前 dry-run**,不过的理由显示在对应文件旁边,保存按钮禁用;通过了再真提交。
 - 读的一侧允许按层做只读渲染(issue 的立场按各自的 `rank` 排、卡片 `context` 放标题下),规则:**特化只产生展示,不产生写入**。
 
@@ -190,13 +210,15 @@ GET …?path=….issue&candidate=notes.txt
 
 `memorytalk/backend/services/collections/layers/` 下放 `origin.yaml` `issue.yaml` `card.yaml`;用户层放 `~/.memory.talk/layers/<名>.yaml`,启动时一起载入,登记进 `collections.json`(只记名字和 `builtin`)。**没有 Python 子类这条路了**——协议说不清的规则就不该是层的规则。
 
-**origin** 是唯一的特例:没有目录、没有协议,`origin.yaml` 只有 `layer: origin` 和一句 `description`,引擎对它永远放行。
+**origin** 是唯一的特例:没有对象目录、没有协议,`origin.yaml` 只有 `layer: origin` 和一句 `description`;任何不带层后缀的文件都是它,引擎对它永远放行。
 
 **card**:一个文件,字段 + 正文。
 
 ```yaml
 layer: card
 description: 记事:一条事实,像维基词条;标题是目录名
+object:
+  name: 标题                          # pattern 省略 = ^(?P<name>[^/]+)\.card$
 files:
   - pattern: ^readme\.md$
     label: 卡片
@@ -217,7 +239,7 @@ files:
 
 不存在了——规则只有一份。要防的只剩「协议本身写错」:
 
-- 载入时校验 YAML 合不合协议词汇表(未知的键、未知的 `type`、`object` 嵌套过深、正则编译不过、捕获组不叫 `name`、两种文件的正则能匹配同一个路径),不合的层启动即报错。
+- 载入时校验 YAML 合不合协议词汇表(未知的键、未知的 `type`、`object` 字段嵌套过深、正则编译不过、捕获组不叫 `name`、`object.pattern` 不以 `\.<层>$` 结尾、两种文件的正则能匹配同一个路径),不合的层启动即报错。
 - 测试:每个载入的层,按 `required` + `template` 建出来的目录必须过校验;带捕获组的正则用一个样例名代回去造一个文件也必须过。内置层和 `<home>/layers/*.yaml` 一起跑。
 
 ---
