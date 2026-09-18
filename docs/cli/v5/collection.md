@@ -6,6 +6,7 @@
 memory.talk collection
 ├── layers
 ├── tree    [<path>] [--layer <层>] [-r] [--candidate <名字>]
+├── recent  [--layer <层>] [--path <目录>] [--limit 20] [--before <sha>]
 ├── search  <query> [--layer <层>]
 │
 ├── read    <layer> <path> [--rev <sha>]
@@ -28,11 +29,12 @@ memory.talk collection layers                          # 最底在前:origin / i
 
 没有 `layers add`:加一层 = 往 `~/.memory.talk/layers/` 放一份 `<名>.yaml`(和内置层一模一样的协议),`server restart`。写法见 [`../../designs/v5/collections-layer.md`](../../designs/v5/collections-layer.md)。
 
-## tree / search
+## tree / recent / search
 
 | 命令 | 说明 |
 |---|---|
 | `tree [<path>] [--layer] [-r] [--candidate]` | 浏览目录:对象折成一项(带层名)、目录、origin 文件;`--layer` 只看一层,`-r` 往下走到底拍平列出(`tree --layer card -r` = 全部卡片);末尾一行「可建:」列这里还能建什么;`--candidate` 问一个名字(对象目录名 / 文件路径)行不行 |
+| `recent [--layer] [--path] [--limit] [--before]` | 最近改过的对象,每个一次、新的在前,每行 sha / 时间 / 谁 / 层 / 路径 / 动了哪些文件;最后一行给 `--before` 游标,再往下翻 |
 | `search <q> [--layer]` | `git grep`,每行一条:层 / 路径 / 行号 / 文本 |
 
 ## read

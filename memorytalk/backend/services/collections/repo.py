@@ -166,6 +166,13 @@ class Repo:
     def log(self, ref: str, path: str | None = None, limit: int = 50) -> list[Revision]:
         return self.git.log(ref, path, limit, first_parent=(ref == self.stack))   # stack 的时间线:每个 merge 节点 = 一次层提交
 
+    def log_files(self, path: str | None = None, limit: int = 50, before: str | None = None) -> list[tuple[Revision, list[str]]]:
+        """stack 时间线上的提交 + 每次碰的文件;before = 从这个提交的前一个开始(不含)。"""
+        ref = f"{before}^" if before else self.stack
+        if before and self.git.resolve(ref) is None:
+            return []
+        return self.git.log_files(ref, path, limit, first_parent=True)
+
     def grep(self, query: str) -> list[GrepHit]:
         return self.git.grep(query, self.stack)
 

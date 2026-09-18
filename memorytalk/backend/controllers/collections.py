@@ -4,8 +4,8 @@ from __future__ import annotations
 from memorytalk.backend.models.result import Result, ok
 from fastapi import APIRouter, Depends, Header, Query, Request
 
-from memorytalk.backend.models.collections import (CheckResult, LayerInfo, Manager, ManagerPut, Obj, ObjWrite, Revision, SearchHit,
-                                                     TreeItem, TreeView)
+from memorytalk.backend.models.collections import (CheckResult, LayerInfo, Manager, ManagerPut, Obj, ObjWrite, RecentPage, Revision,
+                                                     SearchHit, TreeItem, TreeView)
 from memorytalk.backend.services.collections import CollectionsError, CollectionsService, Ctx
 
 router = APIRouter(prefix="/api/collections", tags=["collections"])
@@ -38,6 +38,13 @@ def config(svc: CollectionsService = Depends(collections)) -> dict:
             summary="浏览目录:有什么(items:对象折成一项、目录、origin 文件;layer= 只留一层,recursive=1 拍平到底)+ 还能建什么(can_create)+ 这个名字行不行(candidate=)")
 def tree(path: str = "", candidate: str | None = None, layer: str | None = None, recursive: bool = False, svc: CollectionsService = Depends(collections)):
     return ok(svc.tree(path, candidate, layer, recursive))
+
+
+@router.get("/recent", response_model=Result[RecentPage],
+            summary="最近改过的对象:沿 stack 时间线往回,文件折回对象,每个对象只出现一次;layer= / path= 过滤,before=<sha> 翻页,next 是下一页游标")
+def recent(layer: str | None = None, path: str = "", limit: int = Query(20, ge=1, le=200), before: str | None = None,
+           svc: CollectionsService = Depends(collections)):
+    return ok(svc.recent(layer, path, limit, before))
 
 
 @router.get("/search", response_model=Result[list[SearchHit]], summary="git grep 整个 Collections(可限定层)")

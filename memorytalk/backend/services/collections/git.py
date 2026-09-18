@@ -132,6 +132,23 @@ class Git:
             revs.append(Revision(sha=sha, author=author, date=date, subject=subject, body=body.strip()))
         return revs
 
+    def log_files(self, ref: str, path: str | None = None, limit: int = 50, first_parent: bool = False) -> list[tuple[Revision, list[str]]]:
+        """log + 每次提交碰了哪些文件(--name-only)。merge 节点用 --first-parent 时,文件是相对第一个父的差异。"""
+        fmt = "%x1e%H%x1f%an%x1f%aI%x1f%s"
+        args = ["git", "log", f"--max-count={limit}", f"--format={fmt}", "--name-only"] + (["--first-parent", "-m"] if first_parent else []) + [ref]
+        if path:
+            args += ["--", path]
+        out = subprocess.run(args, cwd=self.root, capture_output=True, text=True).stdout
+        revs: list[tuple[Revision, list[str]]] = []
+        for rec in out.split("\x1e"):
+            if not rec.strip():
+                continue
+            head, _, rest = rec.partition("\n")
+            sha, author, date, subject = (head.split("\x1f") + [""] * 4)[:4]
+            files = [l.strip() for l in rest.splitlines() if l.strip()]
+            revs.append((Revision(sha=sha, author=author, date=date, subject=subject), files))
+        return revs
+
     def grep(self, query: str, ref: str) -> list[GrepHit]:
         out = subprocess.run(["git", "grep", "-n", "-i", "-I", "--", query, ref], cwd=self.root, capture_output=True, text=True).stdout
         hits = []

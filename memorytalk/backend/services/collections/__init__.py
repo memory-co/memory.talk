@@ -9,7 +9,8 @@ from typing import Any
 from . import layers as layer_pkg
 from memorytalk.backend.config import Config
 from .layers import Change, Layer
-from memorytalk.backend.models.collections import (InboxItem, LayerInfo, Manager, Obj, Revision, SearchHit, TreeItem, TreeView)
+from memorytalk.backend.models.collections import (InboxItem, LayerInfo, Manager, Obj, RecentItem, RecentPage, Revision, SearchHit,
+                            TreeItem, TreeView)
 from memorytalk.backend.services.work.inbox import Inbox
 from memorytalk.backend.services.work.repo import WorkRepo
 
@@ -173,6 +174,45 @@ class CollectionsService:
         if not self.exists(layer, path):
             raise CollectionsError("not_found", f"{layer}:{path} 不存在", 404)
         return self.repo.log(self.repo.layer_ref(layer), spec.obj_dir(path))
+
+    def recent(self, layer: str | None = None, path: str = "", limit: int = 20, before: str | None = None) -> RecentPage:
+        """最近改过的对象:沿 stack 的时间线往回走,文件折回对象,每个对象只出现一次(最近那次),新的在前。
+        分页:每次都从头走(去重才是全局的),跳过到 before(上一页最后一项的游标 "<sha>|<层>|<path>")之后再收。"""
+        if layer:
+            self.layer(layer)
+        prefix = path.strip("/")
+        items: list[RecentItem] = []
+        seen: set[tuple[str, str]] = set()
+        emitting = before is None
+        cursor: str | None = None
+        while True:
+            page = self.repo.log_files(prefix or None, 50, cursor)
+            if not page:
+                return RecentPage(items=items, next=None)
+            for rev, files in page:
+                touched: dict[tuple[str, str], list[str]] = {}
+                for f in files:
+                    if f == CONFIG_FILE or f.endswith(MANAGER_FILE):
+                        continue
+                    lyr, obj, rel = self.split(f)
+                    if layer and lyr != layer:
+                        continue
+                    touched.setdefault((lyr, obj), []).append(rel)
+                for (lyr, obj), rels in touched.items():
+                    if (lyr, obj) in seen:
+                        continue
+                    seen.add((lyr, obj))
+                    token = f"{rev.sha}|{lyr}|{obj}"
+                    if not emitting:
+                        emitting = token == before
+                        continue
+                    items.append(RecentItem(layer=lyr, path=obj, title=obj.rsplit("/", 1)[-1], files=sorted(r for r in rels if r),
+                                            sha=rev.sha, subject=rev.subject, author=rev.author, date=rev.date))
+                    if len(items) >= limit:
+                        return RecentPage(items=items, next=token)
+                cursor = rev.sha
+            if len(page) < 50:
+                return RecentPage(items=items, next=None)
 
     def search(self, query: str, layer: str | None = None) -> list[SearchHit]:
         hits = []

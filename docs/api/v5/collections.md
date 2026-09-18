@@ -56,6 +56,20 @@
 
 `path` 是对象目录(或它的子目录)时,`layer` 是那一层,`can_create.objects` 为空(对象不嵌套),`can_create.files` 按这一层的文件种类逐种回答:`example` / `label` / `fixed` / `existing`(已有的)/ `can` / `reason`(固定文件已存在);子目录只列能落到这里的种类。此时 `candidate` 问的是对象目录内的文件路径:匹配哪一种、存不存在、能不能建。
 
+### GET /api/collections/recent?layer=&path=&limit=20&before=
+
+最近改过的对象,像 `git log` 一样往下翻:沿 `stack` 的时间线往回走,每次提交碰的文件按后缀折回对象,**每个对象只出现一次**(落在它最近那次提交上),新的在前。
+
+```json
+{"items": [{"layer": "issue", "path": "memory.talk/配置/该走文件还是环境变量", "title": "该走文件还是环境变量", "files": ["positions/只用环境变量.md"],
+            "sha": "…", "subject": "[issue] position …: 只用环境变量", "author": "alice", "date": "…"},
+           {"layer": "card", "path": "memory.talk/配置/配置只来自环境变量", "title": "…", "files": ["readme.md"], …},
+           {"layer": "origin", "path": "memory.talk/资料.md", "title": "资料.md", "files": [], …}],
+ "next": "<sha>"}
+```
+
+`files` 是那次提交里这个对象动了哪些文件(origin 为空)。`layer=` 只看一层,`path=` 只看某个目录之下。`limit`(1–200)条一页,`next` 是下一页的游标(不透明字符串)——再请求时原样带上 `before=<next>`;`null` = 到底了。去重是全局的:翻到后面的页不会再看到前面出现过的对象。机制文件(`collections.json` / `manager.json`)的提交不算。
+
 ### GET /api/collections/search?q=&layer=
 
 `git grep -n -i` 整个 stack;`layer=` 只留某层。返回 `[{"layer", "path", "file", "line", "text"}]`,一行一条。

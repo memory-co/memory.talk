@@ -26,6 +26,12 @@ def c_tree(api, a):
     print(f"可建: {', '.join(can) or '(无)'}")
     if v.get("candidate"):
         c = v["candidate"]; print(f"{c['name']}: {'可以' if c['can'] else '不行 — ' + c.get('reason', '')}")
+def c_recent(api, a):
+    page = api.call("GET", "/api/collections/recent", params={"layer": a.layer, "path": a.path or "", "limit": a.limit, "before": a.before})
+    lines = [f"{i['sha'][:7]}  {i['date'][:16]}  {i['author']:<10} [{i['layer']}] {i['path']}" + (f"  ({', '.join(i['files'])})" if i['files'] else "") for i in page["items"]]
+    if page.get("next"):
+        lines.append(f"…  再往下:--before {page['next']}")
+    out(page, a.json, "\n".join(lines) or "(空)")
 def c_search(api, a):
     hits = api.call("GET", "/api/collections/search", params={"q": a.query, "layer": a.layer})
     out(hits, a.json, "\n".join(f"[{h['layer']}] {h['path']}:{h['line']}  {h['text'].strip()}" for h in hits) or "(没找到)")
@@ -77,6 +83,7 @@ def register(top) -> None:
     c = top.add_parser("collection", aliases=["col"], help="认知层").add_subparsers(dest="sub", required=True)
     p = c.add_parser("layers", help="有哪些层;加用户层 = 往 ~/.memory.talk/layers/ 放一个 .py,重启"); p.set_defaults(fn=c_layers)
     p = c.add_parser("tree"); p.add_argument("path", nargs="?"); p.add_argument("--layer", help="只看这一层"); p.add_argument("-r", "--recursive", action="store_true", help="往下走到底,拍平列出"); p.add_argument("--candidate", help="问这个名字(对象目录名 / 文件路径)能不能建"); p.set_defaults(fn=c_tree)
+    p = c.add_parser("recent", help="最近改过的对象"); p.add_argument("--layer"); p.add_argument("--path"); p.add_argument("--limit", type=int, default=20); p.add_argument("--before", help="从这个提交往前翻(上一页给的游标)"); p.set_defaults(fn=c_recent)
     p = c.add_parser("search"); p.add_argument("query"); p.add_argument("--layer"); p.set_defaults(fn=c_search)
     p = c.add_parser("read"); p.add_argument("layer"); p.add_argument("path"); p.add_argument("--rev"); p.set_defaults(fn=c_read)
     for name, fn in (("write", c_write), ("edit", c_edit)):

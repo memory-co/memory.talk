@@ -16,7 +16,7 @@ memory.talk
 │            servers                                    # 有哪些 work server(bash / claude / codex / kimi / http / default)及各自响应的协议
 ├── user     add | list | show | set | whoami           # 人:注册的实体,和 work 平级;不做权限
 ├── collection                                          # 认知层(API 是 /api/collections)
-│            layers | tree | search
+│            layers | tree | recent | search
 │            read | write | edit | rm | log             # 对象 CRUD + 历史
 │            manager | managed                          # manager.json
 

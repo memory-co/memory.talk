@@ -55,6 +55,22 @@ class Revision(BaseModel):
     body: str = ""
 
 
+class RecentItem(BaseModel):
+    layer: str
+    path: str = Field(description="对象 path(origin 为文件路径)")
+    title: str
+    files: list[str] = Field(default_factory=list, description="那次提交里这个对象动了哪些文件(相对路径;origin 为空)")
+    sha: str
+    subject: str
+    author: str
+    date: str
+
+
+class RecentPage(BaseModel):
+    items: list[RecentItem]
+    next: str | None = Field(None, description="下一页的游标,原样传回 before=;null = 到底了")
+
+
 class SearchHit(BaseModel):
     layer: str
     path: str = Field(description="对象 path(origin 为文件路径)")

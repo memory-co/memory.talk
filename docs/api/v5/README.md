@@ -39,6 +39,7 @@
 | `GET` | `/api/collections/manager` | (暂缓,等 work 实现后启用)这个路径归谁管(最近的 manager.json) |
 | `PUT` | `/api/collections/manager` | (暂缓,等 work 实现后启用)在这个目录(或对象)下放 manager.json,绑到一个 work |
 | `DELETE` | `/api/collections/manager` | (暂缓,等 work 实现后启用)解绑:删这个目录的 manager.json |
+| `GET` | `/api/collections/recent` | 最近改过的对象:文件折回对象、每个一次、新的在前;layer= / path= 过滤,before=<sha> 翻页 |
 | `GET` | `/api/collections/search` | git grep 整个 Collections(可限定层) |
 | `GET` | `/api/collections/tree` | 浏览目录:有什么(items;layer= 只留一层,recursive=1 拍平到底)+ 还能建什么(can_create)+ 这个名字行不行(candidate=) |
 | `GET` | `/api/collections/{layer}/{path}` | 读一个对象(rev= 读历史版本) |
