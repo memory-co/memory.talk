@@ -24,7 +24,7 @@
 2. **路径**:对象目录里允许哪些文件——每种文件一个**正则**,匹配的路径才能进来;哪些必需;
 3. **formatter**:每个路径的文件长什么样——frontmatter 里有哪些字段(类型、枚举、引用、必填),正文是 markdown 还是没有正文。
 
-其余一切(校验、表单、「这里能不能建」)由通用引擎从这份 YAML 推出来。
+其余一切(校验、表单、tree 里的「这里能不能建」)由通用引擎从这份 YAML 推出来。
 
 ---
 
@@ -134,51 +134,51 @@ files:
 
 ---
 
-## 4. 「这里能不能建」:后端直接回答
+## 4. 「这里能不能建」:tree 接口顺带回答
 
-因为每种文件都有正则,「某个目录下还能加什么」是可以算出来的,不该让前端猜。一个只读端点:
-
-```
-GET /api/collections/affordances?path=<仓库里的一个目录>[&candidate=<想建的相对路径>]
-```
-
-`path` 可以是普通目录、对象目录,或对象目录里的子目录(比如 `….issue/positions`);服务端找到它所属的对象和层,把层协议里每种文件的正则拿来对着看:
+因为每种文件、每个对象目录都有正则,「某个目录下还能加什么」是可以算出来的,不该让前端猜。也不用新接口——浏览目录本来就走 `GET /api/collections/tree?path=`,它现在只返回「这里有什么」(`items`);多加一个字段 **`can_create`**,说「这里还能建什么」:
 
 ```json
-{"path": "memory.talk/配置",                                   // 普通目录:按每一层的 object 规则回答能不能在这建对象;origin 文件总能放
- "objects": [
-   {"layer": "issue",    "pattern": "^(?P<name>[^/]+)\\.issue$",    "name": "问题", "can": true,  "example": "<问题>.issue"},
-   {"layer": "card",     "pattern": "^(?P<name>[^/]+)\\.card$",     "name": "标题", "can": true,  "example": "<标题>.card"},
-   {"layer": "decision", "pattern": "^(?P<name>[^/]+)\\.decision$", "name": "决定", "can": false, "reason": "decision 只允许放在 decisions/ 下(under)"}],
- "files": []}
+GET /api/collections/tree?path=memory.talk/配置                 // 普通目录
+{"path": "memory.talk/配置",
+ "items": [ …现在的 dir / file / object 列表… ],
+ "can_create": {
+   "objects": [                                                // 按每一层的 object 规则:能不能在这建对象
+     {"layer": "issue",    "pattern": "^(?P<name>[^/]+)\\.issue$",    "name": "问题", "can": true,  "example": "<问题>.issue"},
+     {"layer": "card",     "pattern": "^(?P<name>[^/]+)\\.card$",     "name": "标题", "can": true,  "example": "<标题>.card"},
+     {"layer": "decision", "pattern": "^(?P<name>[^/]+)\\.decision$", "name": "决定", "can": false, "reason": "decision 只允许放在 decisions/ 下(under)"}],
+   "files": [{"layer": "origin", "can": true}]}}              // origin 文件总能放
 
-{"path": "memory.talk/配置/该走文件还是环境变量.issue",          // 对象目录:按这一层协议逐种文件回答
+GET /api/collections/tree?path=memory.talk/配置/该走文件还是环境变量.issue   // 对象目录:按这一层协议逐种文件回答
+{"path": "…/该走文件还是环境变量.issue",
  "layer": "issue",
- "objects": [],
- "files": [
-   {"pattern": "^readme\\.md$", "label": "问题", "fixed": true, "existing": ["readme.md"], "can": false, "reason": "固定文件,已存在"},
-   {"pattern": "^positions/(?P<name>[^/]+)\\.md$", "label": "立场", "name": "主张", "fixed": false,
-    "existing": ["positions/只用环境变量.md"], "can": true, "example": "positions/<主张>.md"}]}
+ "items": [ …readme.md、positions/ … ],
+ "can_create": {
+   "objects": [],                                              // 对象不嵌套
+   "files": [
+     {"pattern": "^readme\\.md$", "label": "问题", "fixed": true, "existing": ["readme.md"], "can": false, "reason": "固定文件,已存在"},
+     {"pattern": "^positions/(?P<name>[^/]+)\\.md$", "label": "立场", "name": "主张", "fixed": false,
+      "existing": ["positions/只用环境变量.md"], "can": true, "example": "positions/<主张>.md"}]}}
 
-{"path": "memory.talk/配置/该走文件还是环境变量.issue/positions", // 对象里的子目录:只列正则能落到这个子目录的那些
- "layer": "issue",
- "files": [{"pattern": "^positions/(?P<name>[^/]+)\\.md$", "label": "立场", "name": "主张", "fixed": false, "existing": ["positions/只用环境变量.md"], "can": true}]}
+GET /api/collections/tree?path=….issue/positions                 // 对象里的子目录:只列正则能落到这里的那些文件种类
+{"path": "…/positions", "layer": "issue", "items": [ … ],
+ "can_create": {"objects": [], "files": [{"pattern": "^positions/(?P<name>[^/]+)\\.md$", "label": "立场", "name": "主张", "fixed": false, "existing": ["positions/只用环境变量.md"], "can": true}]}}
 ```
 
-带上 `candidate` 就是问「这个名字行不行」——在普通目录问的是对象目录名,在对象目录问的是文件路径:
+再加一个可选参数 **`candidate`**,问「这个名字行不行」——在普通目录问的是对象目录名,在对象目录问的是文件路径;有它时多返回一个 `candidate` 字段:
 
 ```json
-GET …?path=memory.talk/配置&candidate=要不要加配置文件.issue
-{"candidate": "要不要加配置文件.issue", "matches": {"layer": "issue", "name": "要不要加配置文件"}, "exists": false, "can": true}
+GET /api/collections/tree?path=memory.talk/配置&candidate=要不要加配置文件.issue
+"candidate": {"name": "要不要加配置文件.issue", "matches": {"layer": "issue", "name": "要不要加配置文件"}, "exists": false, "can": true}
 
-GET …?path=….issue&candidate=positions/走配置文件.md
-{"candidate": "positions/走配置文件.md", "matches": {"pattern": "^positions/(?P<name>[^/]+)\\.md$", "label": "立场"}, "exists": false, "can": true}
+GET /api/collections/tree?path=….issue&candidate=positions/走配置文件.md
+"candidate": {"name": "positions/走配置文件.md", "matches": {"pattern": "^positions/(?P<name>[^/]+)\\.md$", "label": "立场"}, "exists": false, "can": true}
 
-GET …?path=….issue&candidate=notes.txt
-{"candidate": "notes.txt", "matches": null, "can": false, "reason": "不匹配 issue 的任何一种文件"}
+GET /api/collections/tree?path=….issue&candidate=notes.txt
+"candidate": {"name": "notes.txt", "matches": null, "can": false, "reason": "不匹配 issue 的任何一种文件"}
 ```
 
-前端的「新建」按钮只从 `can: true` 里长出来,用户填的名字在提交前先用 `candidate` 问一遍;树浏览到任何位置,该位置能干什么一目了然。内容合不合规仍然由写入时的校验说了算(以及 §5 的 dry-run)。
+前端的「新建」按钮只从 `can_create` 里 `can: true` 的项长出来,用户填的名字在提交前先用 `candidate` 问一遍;浏览到任何位置,该位置有什么、能建什么,一次请求都在。内容合不合规仍然由写入时的校验说了算(以及 §5 的 dry-run)。
 
 ---
 
@@ -187,7 +187,7 @@ GET …?path=….issue&candidate=notes.txt
 | 端点 | 变化 |
 |---|---|
 | `GET /api/collections/layers` | 每层带整份协议(YAML 转 JSON),前端据此画表单 |
-| `GET /api/collections/affordances?path=` | 新增,§4 |
+| `GET /api/collections/tree?path=[&candidate=]` | 返回体多一个 `can_create`(这里能建什么),带 `candidate` 时多一个 `candidate`(这个名字行不行),§4 |
 | `POST` / `PUT /api/collections/{layer}/{path}?dry_run=1` | 走完校验不提交,返回 `{"ok": true}` 或 `{"ok": false, "reason": "…"}`(200) |
 | 写入口 | 不变:`files` 一批文件改动,`subject` / `reason` 可选 |
 
