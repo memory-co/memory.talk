@@ -20,7 +20,7 @@ import { queryClient } from '@/lib/query';
 import { usePreferences } from '@/lib/store';
 import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-import { dateLabel, layerLabel, type CollectionObject, type Revision, type TreeView } from '@/lib/types';
+import { dateLabel, layerLabel, type CollectionObject, type RecentPage, type Revision, type TreeView } from '@/lib/types';
 import { Empty, ErrorState, Loading, Markdown, Modal } from '@/components/Shared';
 import { FieldsForm } from './FieldsForm';
 
@@ -35,28 +35,22 @@ export function Library({ layer = 'card', path, onSelect, compact = false, work 
   const t = useT();
   const layers = useLayers();
   const [create, setCreate] = useState(false);
-  const query = useQuery({ queryKey: ['tree', layer], queryFn: ({ signal }) => api<TreeView>(`/collections/tree?${new URLSearchParams({ layer, recursive: '1' })}`, { signal }) });
-  const objects = (query.data?.items || []).map(i => ({ path: i.path, title: i.name }));
+  const [view, setView] = useState<'recent' | 'tree'>('recent');
+  const [dir, setDir] = useState('');
+  useEffect(() => { setDir(''); }, [layer]);
   const definition = layers.data?.find(l => l.name === layer);
   const label = layerLabel(t, layer);
   const list = <div className="flex min-h-0 flex-1 flex-col">
     <div className="space-y-2 p-3">
       <Tabs value={layer} onValueChange={value => onSelect({ layer: value })}><TabsList className="h-8 w-full justify-start overflow-x-auto overscroll-x-contain" aria-label={t('library.layers')}>{(layers.data || []).map(item => <TabsTrigger key={item.name} value={item.name} className="gap-1.5 text-xs"><LayerIcon layer={item.name} className="size-3.5" />{layerLabel(t, item.name)}</TabsTrigger>)}</TabsList></Tabs>
-      {definition && <Button variant="outline" size="sm" className="w-full" onClick={() => setCreate(true)}><Plus />{t('library.new', { layer: label })}</Button>}
+      <div className="flex items-center gap-2">
+        <Tabs value={view} onValueChange={v => setView(v as 'recent' | 'tree')} className="min-w-0 flex-1"><TabsList className="h-8 w-full" aria-label={t('library.view')}><TabsTrigger value="recent" className="flex-1 gap-1.5 text-xs"><Clock3 className="size-3.5" />{t('library.viewRecent')}</TabsTrigger><TabsTrigger value="tree" className="flex-1 gap-1.5 text-xs"><Folder className="size-3.5" />{t('library.viewTree')}</TabsTrigger></TabsList></Tabs>
+        {definition && <Button variant="outline" size="icon" className="size-8 shrink-0" onClick={() => setCreate(true)} aria-label={t('library.new', { layer: label })} title={t('library.new', { layer: label })}><Plus /></Button>}
+      </div>
       {layers.isError && <ErrorState error={layers.error} retry={() => { void layers.refetch(); }} />}
     </div>
-    <div className="flex items-center justify-between px-3 pb-1 text-xs text-muted-foreground"><span>{label}</span><span>{objects.length}</span></div>
-    <div className="min-h-0 flex-1 overflow-auto px-2 pb-2">
-      {query.isPending ? <div className="space-y-2 p-1">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-11" />)}</div>
-        : query.isError ? <ErrorState error={query.error} retry={() => { void query.refetch(); }} />
-        : objects.length ? <div className="flex flex-col gap-0.5">
-          {objects.map(object => <button type="button" key={object.path} aria-current={path === object.path ? 'true' : undefined} className={cn('flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground', path === object.path && 'bg-accent text-accent-foreground')} onClick={() => onSelect({ layer, path: object.path })}>
-            <LayerIcon layer={layer} className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-            <span className="min-w-0 flex-1"><span className="block truncate font-medium">{object.title || object.path.split('/').pop()}</span><span className="block truncate text-xs text-muted-foreground">{object.path.includes('/') ? object.path.slice(0, object.path.lastIndexOf('/')) : t('library.root')}</span></span>
-          </button>)}
-        </div>
-        : <Empty className="m-1" icon={<Folder className="size-5" />} title={t('library.empty', { layer: label })}><p>{t('library.emptyText')}</p>{definition && <Button variant="outline" size="sm" onClick={() => setCreate(true)}>{t('library.createFirst')}</Button>}</Empty>}
-    </div>
+    {view === 'recent' ? <RecentList layer={layer} path={path} onSelect={onSelect} onCreate={definition ? () => setCreate(true) : undefined} />
+      : <TreeList layer={layer} dir={dir} setDir={setDir} path={path} onSelect={onSelect} />}
     {definition && !compact && <p className="flex items-start gap-1.5 border-t px-3 py-2 text-xs text-muted-foreground"><Layers className="mt-0.5 size-3.5 shrink-0" />{definition.description}</p>}
   </div>;
   const detail = path && <ObjectDetail key={`${layer}/${path}`} layer={layer} path={path} work={work} onSelect={onSelect} onClose={() => onSelect({ layer })} />;
@@ -66,6 +60,55 @@ export function Library({ layer = 'card', path, onSelect, compact = false, work 
       <div className={cn('min-h-0 flex-1 flex-col', path ? 'flex' : 'hidden md:flex')}>{detail || <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">{t('library.subtitle')}</div>}</div>
     </>}
     {definition && <ObjectEditor layer={layer} protocol={definition.protocol} open={create} onClose={() => setCreate(false)} work={work} onSaved={objectPath => { setCreate(false); onSelect({ layer, path: objectPath }); }} />}
+  </div>;
+}
+
+/** 最近修改:/collections/recent,每个对象一次、新的在前,往下翻。 */
+function RecentList({ layer, path, onSelect, onCreate }: { layer: string; path?: string; onSelect: (s: Selection) => void; onCreate?: () => void }) {
+  const t = useT();
+  const locale = usePreferences(s => s.locale);
+  const [pages, setPages] = useState<RecentPage[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  useEffect(() => { setPages([]); setCursor(null); }, [layer]);
+  const page = useQuery({ queryKey: ['recent', layer, cursor], queryFn: ({ signal }) => api<RecentPage>(`/collections/recent?${new URLSearchParams({ layer, limit: '30', ...(cursor ? { before: cursor } : {}) })}`, { signal }) });
+  useEffect(() => { if (page.data) setPages(prev => (cursor ? [...prev.filter(p => p !== page.data), page.data] : [page.data])); }, [page.data, cursor]);
+  const items = pages.flatMap(p => p.items);
+  const last = pages[pages.length - 1];
+  return <div className="min-h-0 flex-1 overflow-auto px-2 pb-2">
+    <div className="flex items-center justify-between px-1 pb-1 text-xs text-muted-foreground"><span>{t('library.viewRecent')}</span><span>{items.length}</span></div>
+    {page.isPending && !items.length ? <div className="space-y-2 p-1">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-12" />)}</div>
+      : page.isError ? <ErrorState error={page.error} retry={() => { void page.refetch(); }} />
+      : items.length ? <div className="flex flex-col gap-0.5">
+        {items.map(item => <button type="button" key={item.path} aria-current={path === item.path ? 'true' : undefined} className={cn('flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground', path === item.path && 'bg-accent text-accent-foreground')} onClick={() => onSelect({ layer, path: item.path })}>
+          <LayerIcon layer={layer} className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1"><span className="block truncate font-medium">{item.title}</span><span className="block truncate text-xs text-muted-foreground">{item.path.includes('/') ? item.path.slice(0, item.path.lastIndexOf('/')) : t('library.root')} · {item.author} · {dateLabel(item.date, locale)}</span><span className="block truncate text-xs text-muted-foreground">{item.subject}</span></span>
+        </button>)}
+        {last?.next && <Button variant="ghost" size="sm" className="w-full" disabled={page.isFetching} onClick={() => setCursor(last.next)}>{page.isFetching ? <LoaderCircle className="animate-spin" /> : null}{t('library.loadMore')}</Button>}
+      </div>
+      : <Empty className="m-1" icon={<Clock3 className="size-5" />} title={t('library.empty', { layer: layerLabel(t, layer) })}><p>{t('library.emptyText')}</p>{onCreate && <Button variant="outline" size="sm" onClick={onCreate}>{t('library.createFirst')}</Button>}</Empty>}
+  </div>;
+}
+
+/** 文件目录:/collections/tree 一层一层走,只留这一层的对象(目录保留)。 */
+function TreeList({ layer, dir, setDir, path, onSelect }: { layer: string; dir: string; setDir: (d: string) => void; path?: string; onSelect: (s: Selection) => void }) {
+  const t = useT();
+  const tree = useQuery({ queryKey: ['tree', layer, dir], queryFn: ({ signal }) => api<TreeView>(`/collections/tree?${new URLSearchParams({ path: dir, layer })}`, { signal }) });
+  const items = tree.data?.items || [];
+  const crumbs = dir ? dir.split('/') : [];
+  return <div className="min-h-0 flex-1 overflow-auto px-2 pb-2">
+    <div className="flex flex-wrap items-center gap-1 px-1 pb-1 font-mono text-xs text-muted-foreground">
+      <button type="button" className="hover:text-foreground" onClick={() => setDir('')}>/</button>
+      {crumbs.map((seg, i) => <span key={i} className="flex items-center gap-1"><span>/</span><button type="button" className="hover:text-foreground" onClick={() => setDir(crumbs.slice(0, i + 1).join('/'))}>{seg}</button></span>)}
+    </div>
+    {tree.isPending ? <div className="space-y-2 p-1">{[1, 2, 3].map(i => <Skeleton key={i} className="h-9" />)}</div>
+      : tree.isError ? <ErrorState error={tree.error} retry={() => { void tree.refetch(); }} />
+      : <div className="flex flex-col gap-0.5">
+        {dir && <button type="button" className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent" onClick={() => setDir(dir.includes('/') ? dir.slice(0, dir.lastIndexOf('/')) : '')}><ArrowLeft className="size-4" />{t('library.up')}</button>}
+        {items.map(item => item.kind === 'dir'
+          ? <button type="button" key={item.path} className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={() => setDir(item.path)}><Folder className="size-4 text-muted-foreground" /><span className="truncate">{item.name}</span></button>
+          : <button type="button" key={item.path} aria-current={path === item.path ? 'true' : undefined} className={cn('flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent', path === item.path && 'bg-accent')} onClick={() => onSelect({ layer, path: item.path })}><LayerIcon layer={item.layer || layer} className="size-4 text-muted-foreground" /><span className="truncate">{item.kind === 'object' ? item.path.split('/').pop() : item.name}</span></button>)}
+        {!items.length && <p className="px-2 py-3 text-xs text-muted-foreground">{t('library.emptyDir')}</p>}
+      </div>}
   </div>;
 }
 

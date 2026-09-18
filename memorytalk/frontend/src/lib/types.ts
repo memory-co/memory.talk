@@ -31,6 +31,8 @@ export interface TreeView {
   can_create: { objects: { layer: string; example: string; name: string; can: boolean; reason?: string }[]; files: (Partial<FileKind> & { layer?: string; can: boolean; reason?: string; existing?: string[] })[] };
   candidate?: { name: string; matches: unknown; exists?: boolean; can: boolean; reason?: string } | null;
 }
+export interface RecentItem { layer: string; path: string; title: string; files: string[]; sha: string; subject: string; author: string; date: string }
+export interface RecentPage { items: RecentItem[]; next: string | null }
 export interface TreeItem { name: string; path: string; kind: 'dir' | 'file' | 'object'; layer: string | null }
 export interface CollectionObject {
   layer: string; path: string; title: string; files: Record<string, string>; content: string | null;
