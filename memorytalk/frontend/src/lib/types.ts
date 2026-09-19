@@ -33,7 +33,7 @@ export interface TreeView {
 }
 export interface RecentItem { layer: string; path: string; title: string; files: string[]; sha: string; subject: string; author: string; date: string }
 export interface RecentPage { items: RecentItem[]; next: string | null }
-export interface TreeItem { name: string; path: string; kind: 'dir' | 'file' | 'object'; layer: string | null }
+export interface TreeItem { name: string; path: string; kind: 'dir' | 'file' | 'object'; layer: string | null; object?: string | null; rel?: string | null }
 export interface CollectionObject {
   layer: string; path: string; title: string; files: Record<string, string>; content: string | null;
 }

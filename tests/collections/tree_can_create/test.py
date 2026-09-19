@@ -18,6 +18,15 @@ def test_object_directory_lists_file_kinds_with_state(client):
     assert (position["example"], position["name"], position["can"], position["existing"]) == ("positions/{name}.md", "主张", True, ["positions/甲.md"])
 
 
+def test_inside_an_object_items_are_its_files(client):
+    client.post(f"/api/collections/issue/{IP}", json={"files": {"readme.md": "", "positions/甲.md": "a"}})
+    v = client.get("/api/collections/tree", params={"path": f"{IP}.issue"}).json()
+    assert [(i["name"], i["kind"], i["layer"], i.get("object"), i.get("rel")) for i in v["items"]] == [
+        ("positions", "dir", None, None, None), ("readme.md", "file", "issue", IP, "readme.md")]
+    inner = client.get("/api/collections/tree", params={"path": f"{IP}.issue/positions"}).json()["items"]
+    assert [(i["name"], i["rel"]) for i in inner] == [("甲.md", "positions/甲.md")]
+
+
 def test_subdirectory_only_lists_kinds_that_land_there(client):
     client.post(f"/api/collections/issue/{IP}", json={"files": {"readme.md": ""}})
     v = client.get("/api/collections/tree", params={"path": f"{IP}.issue/positions"}).json()

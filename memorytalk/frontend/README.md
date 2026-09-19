@@ -1,6 +1,6 @@
 # memory.talk 前端
 
-前端采用与 shellbase 一致的技术栈：React 18、TypeScript、Vite、Tailwind CSS、Zustand、TanStack Query，UI 统一采用 shadcn/ui（New York / Radix）、Lucide、Sonner。Markdown 展示使用 react-markdown 与 remark-gfm，认知对象的元数据通过 YAML 解析。
+前端采用与 shellbase 一致的技术栈：React 18、TypeScript、Vite、Tailwind CSS、Zustand、TanStack Query，UI 统一采用 shadcn/ui（New York / Radix）、Lucide、Sonner。Markdown 展示使用 react-markdown 与 remark-gfm，正文编辑用 Milkdown Crepe（所见即所得，参考 turbome.ai 的方案，主题变量映射到 shadcn token），文件的 frontmatter 通过 YAML 解析。
 
 ## 页面组织
 
@@ -43,8 +43,9 @@ npm run build
 ## 与后端的边界
 
 - `api.ts` 统一处理响应信封、错误和 `X-Memory-Talk-User` / `X-Memory-Talk-Work` 请求头；服务端数据由 TanStack Query 管理。
-- 认知对象按最新接口的 `files` / `content` 读取。标题来自路径末段；card 和 issue 的正文来自 `readme.md`，元数据来自 `meta.yaml`。界面派生阅读视图，保存时仍提交文件内容；编辑卡片正文和语境会保留已有的关联元数据。
-- 自定义层提供通用文件阅读视图，具体校验由后端负责。当前未提供自定义层编辑器和 issue 论证编辑界面。
+- 元认知页的单位是**一个文件**，像 Notion 的一页：标题、属性行、正文。文件目录视图就是文件系统（`.issue/` 目录照常进去看 `readme.md`、`positions/…`），最近修改视图一行一个文件。浏览、修改、新建都在同一页上，没有弹层。
+- 一个文件长什么样由后端 `GET /api/collections/layers` 里的协议决定：按 `files[].pattern` 找到这个文件的种类，`format.fields` 画属性表单，正文按 `format.body` 用 Markdown 编辑器或纯文本。新建时用 `GET /api/collections/tree` 的 `can_create` 决定「这里能建什么」（普通目录：某层的对象或 origin 文件；对象目录里：这一层的某种文件），只写一个文件（新对象 `POST` 主文件；对象里的文件 `PUT {files: {rel: …}}`），输入时用 `?dry_run=1` 预校验。
+- 前端不认识具体哪一层，也不做校验；校验由后端按协议负责。
 - 会话记录和终端快照按需轮询，切换页面后停止相应轮询。当前没有原生 agent 消息发送或流式推送接口，因此对话记录为阅读视图，交互在终端内完成。
 - 配置 `MEMORY_TALK_TTYD_URL` 后可以嵌入浏览器终端；地址需对浏览器可访问，并支持 `?arg=<session_id>` 来连接同一 tmux socket。未配置时展示真实的终端快照与接入提示。
 - 网页直接使用会话 URL，提供独立窗口入口；外部站点可能限制 iframe 嵌入。当前没有本地服务反向代理，浏览器必须能访问目标地址。

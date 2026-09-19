@@ -53,7 +53,7 @@ const en = {
   'library.subtitle': 'Sources, questions and conclusions from your work, gradually connected.', 'library.layers': 'Layers', 'library.new': 'New {layer}', 'library.root': 'root', 'library.empty': 'No {layer} yet', 'library.emptyText': 'Start from a source, a question, or a conclusion.', 'library.createFirst': 'Create the first one',
   'library.back': 'Back to catalog', 'library.objectView': 'Object view', 'library.tabContent': 'Content', 'library.tabHistory': 'History', 'library.invalidMeta': 'Metadata could not be parsed; showing the raw content.',
   'library.revision': 'Revision {rev}', 'library.backToCurrent': 'Back to current', 'library.viewDiscussion': 'View the discussion of this card', 'library.relatedCards': 'Related cards', 'library.summary': 'Current judgement', 'library.positions': 'Positions and arguments',
-  'library.saved': 'Saved', 'library.created': 'Created', 'library.newTitle': 'New {layer}',
+  'library.saved': 'Saved', 'library.created': 'Created', 'library.deleted': 'Deleted', 'library.newFile': 'New {layer} file', 'library.untitled': 'Untitled', 'library.fileName': 'File name', 'library.noSuchFile': 'This file does not exist', 'library.siblings': 'Files in this directory', 'library.confirmDelete': 'Delete {path}?',
   'library.pathLabel': 'Path', 'library.pathPlaceholder': 'project/topic/name', 'library.markdown': 'Markdown supported', 'library.reason': 'Reason (optional)', 'library.reasonPlaceholder': 'Why you are recording or changing this',
 };
 export type Key = keyof typeof en;
@@ -108,7 +108,7 @@ const zh: Record<Key, string> = {
   'library.subtitle': '工作中的原文、问题与结论，在这里逐渐连接。', 'library.layers': '认知层', 'library.new': '新建{layer}', 'library.root': '根目录', 'library.empty': '还没有{layer}', 'library.emptyText': '从一份原文、一个问题或一条结论开始。', 'library.createFirst': '创建第一条内容',
   'library.back': '返回目录', 'library.objectView': '对象视图', 'library.tabContent': '内容', 'library.tabHistory': '历史', 'library.invalidMeta': '元数据无法解析，当前显示原始正文。',
   'library.revision': '历史版本 {rev}', 'library.backToCurrent': '回到当前版本', 'library.viewDiscussion': '查看这张卡片的讨论', 'library.relatedCards': '相关卡片', 'library.summary': '当前判断', 'library.positions': '立场与论证',
-  'library.saved': '内容已保存', 'library.created': '内容已创建', 'library.newTitle': '新建{layer}',
+  'library.saved': '内容已保存', 'library.created': '内容已创建', 'library.deleted': '已删除', 'library.newFile': '新建{layer}文件', 'library.untitled': '未命名', 'library.fileName': '文件名', 'library.noSuchFile': '这个文件不存在', 'library.siblings': '同目录的其他文件', 'library.confirmDelete': '删除 {path}？',
   'library.pathLabel': '保存路径', 'library.pathPlaceholder': '项目/主题/名称', 'library.markdown': '支持 Markdown', 'library.reason': '修改说明（可选）', 'library.reasonPlaceholder': '为什么记录或修改这条内容',
 };
 

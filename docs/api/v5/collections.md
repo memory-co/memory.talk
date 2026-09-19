@@ -54,7 +54,7 @@
  "candidate": {"name": "要不要加配置文件.issue", "matches": {"layer": "issue", "name": "要不要加配置文件"}, "exists": false, "can": true}}
 ```
 
-`path` 是对象目录(或它的子目录)时,`layer` 是那一层,`can_create.objects` 为空(对象不嵌套),`can_create.files` 按这一层的文件种类逐种回答:`example` / `label` / `fixed` / `existing`(已有的)/ `can` / `reason`(固定文件已存在);子目录只列能落到这里的种类。此时 `candidate` 问的是对象目录内的文件路径:匹配哪一种、存不存在、能不能建。
+`path` 是对象目录(或它的子目录)时,它还是一个文件系统:`items` 列目录里的文件(`kind: file`,`layer` 是对象那一层,多带 `object`(对象 path)和 `rel`(目录内相对路径,如 `positions/只用环境变量.md`))和子目录;`layer` 是那一层,`can_create.objects` 为空(对象不嵌套),`can_create.files` 按这一层的文件种类逐种回答:`example` / `label` / `fixed` / `existing`(已有的)/ `can` / `reason`(固定文件已存在);子目录只列能落到这里的种类。此时 `candidate` 问的是对象目录内的文件路径:匹配哪一种、存不存在、能不能建。
 
 ### GET /api/collections/recent?layer=&path=&limit=20&before=
 

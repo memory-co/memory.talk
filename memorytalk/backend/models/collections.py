@@ -76,6 +76,8 @@ class TreeItem(BaseModel):
     path: str = Field(description="仓库内路径;对象为不含后缀的 path")
     kind: Literal["dir", "file", "object"]
     layer: str | None = Field(None, description="object / file 属于哪层")
+    object: str | None = Field(None, description="对象目录里的文件:所属对象的 path")
+    rel: str | None = Field(None, description="对象目录里的文件:目录内相对路径")
 
 
 class Manager(BaseModel):

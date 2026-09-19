@@ -246,12 +246,27 @@ class CollectionsService:
         prefix = path.strip("/")
         if layer:
             self.layer(layer)
+        ctx_spec, ctx_obj, ctx_rel = self._context(prefix)
         seen: dict[str, TreeItem] = {}
         for repo_path in self.repo.tree(prefix):
             rest = repo_path[len(prefix):].lstrip("/") if prefix else repo_path
             if not rest or repo_path == CONFIG_FILE or repo_path.endswith(MANAGER_FILE):
                 continue
             segs = rest.split("/")
+            if ctx_spec:                                                          # 在对象目录里:文件是对象的文件,目录照常
+                head = rest if recursive else segs[0]
+                if head in seen:
+                    continue
+                full = f"{prefix}/{head}" if prefix else head
+                inner = full[len(ctx_spec.obj_dir(ctx_obj)) + 1:]
+                if recursive or len(segs) == 1:
+                    item = TreeItem(name=head.rsplit("/", 1)[-1], path=full, kind="file", layer=ctx_spec.name, object=ctx_obj, rel=inner)
+                else:
+                    item = TreeItem(name=head, path=full, kind="dir")
+                if layer and item.kind != "dir" and item.layer != layer:
+                    continue
+                seen[head] = item
+                continue
             obj_i = next((i for i, seg in enumerate(segs) if any(s.suffix and seg.endswith(s.suffix) for s in self.layers.values())), None)
             if recursive:
                 if obj_i is not None:
@@ -275,7 +290,7 @@ class CollectionsService:
                 continue
             seen[head] = item
         items = sorted(seen.values(), key=lambda i: (i.kind != "dir", i.path))
-        spec, obj_path, rel_dir = self._context(prefix)
+        spec, obj_path, rel_dir = ctx_spec, ctx_obj, ctx_rel
         view = TreeView(path=prefix, layer=spec.name if spec else None, items=items)
         if spec:                                                              # 对象目录(或它的子目录):按这一层的文件种类回答
             existing = sorted(self._files(spec, obj_path) or {})

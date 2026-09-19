@@ -108,9 +108,9 @@ function Crumbs() {
   </BreadcrumbList></Breadcrumb>;
 }
 
-function Page({ onLibrary, selection }: { onLibrary: () => void; selection: (s: { filter: string; layer?: string; path?: string }) => void }) {
+function Page({ onLibrary, selection }: { onLibrary: () => void; selection: (s: { filter: string; layer?: string; path?: string; file?: string }) => void }) {
   const route = useRoute();
-  return <Suspense fallback={<Loading />}>{route.page === 'home' ? <Home /> : route.page === 'work' && route.work ? <Workspace key={route.work} id={route.work} onLibrary={onLibrary} /> : route.page === 'library' ? <Library filter={route.filter || 'all'} layer={route.layer} path={route.path} onSelect={selection} /> : <Settings />}</Suspense>;
+  return <Suspense fallback={<Loading />}>{route.page === 'home' ? <Home /> : route.page === 'work' && route.work ? <Workspace key={route.work} id={route.work} onLibrary={onLibrary} /> : route.page === 'library' ? <Library filter={route.filter || 'all'} layer={route.layer} path={route.path} file={route.file} onSelect={selection} /> : <Settings />}</Suspense>;
 }
 
 function ShellContent() {
@@ -121,7 +121,7 @@ function ShellContent() {
   const [searchLoaded, setSearchLoaded] = useState(false);
   useEffect(() => { if (search) setSearchLoaded(true); }, [search]);
   const [inspector, setInspector] = useState(false);
-  const [selection, setSelection] = useState<{ filter: string; layer?: string; path?: string }>({ filter: 'all' });
+  const [selection, setSelection] = useState<{ filter: string; layer?: string; path?: string; file?: string }>({ filter: 'all' });
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setSearch(true); }
