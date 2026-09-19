@@ -44,6 +44,7 @@ class Panel(BaseModel):
 class Column(BaseModel):
     id: str = Field(description="前端自定,画布内唯一")
     panels: list[Panel] = Field(default_factory=list, description="从上到下")
+    collapsed: bool = Field(False, description="整列收起 = 缩成一条窄边")
 
 
 class Canvas(BaseModel):

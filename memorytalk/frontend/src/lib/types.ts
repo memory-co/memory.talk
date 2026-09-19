@@ -13,7 +13,7 @@ export interface Session {
   handle?: { kind: string; capabilities: string[] } | null;
 }
 export interface Panel { session: string; collapsed: boolean }
-export interface Column { id: string; panels: Panel[] }
+export interface Column { id: string; panels: Panel[]; collapsed: boolean }
 export interface Canvas { version: number; columns: Column[] }
 export interface Round { id: string; timestamp: string | null; role: string; text: string }
 export interface User {

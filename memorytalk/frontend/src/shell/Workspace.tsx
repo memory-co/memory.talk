@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { DialogFooter } from '@/components/ui/dialog';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen, ChevronDown, ChevronRight, Columns3, ExternalLink, GitBranch, LoaderCircle, Plus, Terminal, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, Columns3, ExternalLink, GitBranch, LoaderCircle, Plus, Terminal, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApiError, api } from '@/lib/api';
 import { queryClient } from '@/lib/query';
@@ -20,7 +20,7 @@ import { PanelView } from './PanelView';
 /** 画布 = 几列,每列从上到下摆会话(docs/structure/v5/work.md#canvas)。没画布 / 没提到的会话补到第一列;已不存在的会话丢掉。 */
 function layout(canvas: Canvas | undefined, sessions: Session[]): Column[] {
   const ids = new Set(sessions.map(s => s.id));
-  const columns: Column[] = (canvas?.columns.length ? canvas.columns : [{ id: 'c1', panels: [] }]).map(c => ({ id: c.id, panels: c.panels.filter(p => ids.has(p.session)) }));
+  const columns: Column[] = (canvas?.columns.length ? canvas.columns : [{ id: 'c1', panels: [], collapsed: false }]).map(c => ({ id: c.id, collapsed: !!c.collapsed, panels: c.panels.filter(p => ids.has(p.session)) }));
   const placed = new Set(columns.flatMap(c => c.panels.map(p => p.session)));
   for (const s of sessions) if (!placed.has(s.id)) columns[0].panels.push({ session: s.id, collapsed: false });
   return columns;
@@ -45,7 +45,7 @@ export function Workspace({ id, onLibrary }: { id: string; onLibrary: () => void
     onSuccess: data => queryClient.setQueryData(['canvas', id], data),
     onError: (error: Error) => { if (error instanceof ApiError && error.status === 409) { toast.message(t('work.layoutConflict')); void queryClient.invalidateQueries({ queryKey: ['canvas', id] }); } else toast.error(error.message); },
   });
-  const edit = (fn: (cols: Column[]) => Column[]) => save.mutate(fn(columns.map(c => ({ id: c.id, panels: c.panels.map(p => ({ ...p })) }))));
+  const edit = (fn: (cols: Column[]) => Column[]) => save.mutate(fn(columns.map(c => ({ id: c.id, collapsed: c.collapsed, panels: c.panels.map(p => ({ ...p })) }))));
   const find = (cols: Column[], session: string) => { for (let ci = 0; ci < cols.length; ci++) { const pi = cols[ci].panels.findIndex(p => p.session === session); if (pi >= 0) return [ci, pi] as const; } return null; };
   const toggle = (session: string) => edit(cols => { const at = find(cols, session); if (at) cols[at[0]].panels[at[1]].collapsed = !cols[at[0]].panels[at[1]].collapsed; return cols; });
   const move = (session: string, dir: 'left' | 'right' | 'up' | 'down') => edit(cols => {
@@ -55,8 +55,9 @@ export function Workspace({ id, onLibrary }: { id: string; onLibrary: () => void
     else cols[ci].panels.splice(Math.max(0, Math.min(cols[ci].panels.length, pi + (dir === 'up' ? -1 : 1))), 0, panel);
     return cols;
   });
-  const addColumn = () => edit(cols => { let n = cols.length + 1; while (cols.some(c => c.id === `c${n}`)) n++; return [...cols, { id: `c${n}`, panels: [] }]; });
-  const removeColumn = (colId: string) => edit(cols => { const i = cols.findIndex(c => c.id === colId); if (i < 0 || cols.length === 1) return cols; const [gone] = cols.splice(i, 1); cols[Math.max(0, i - 1)].panels.push(...gone.panels); return cols; });
+  const addColumn = () => edit(cols => { let n = cols.length + 1; while (cols.some(c => c.id === `c${n}`)) n++; return [...cols, { id: `c${n}`, panels: [], collapsed: false }]; });
+  const removeColumn = (colId: string) => edit(cols => cols.length > 1 ? cols.filter(c => c.id !== colId || c.panels.length > 0) : cols);   // 只有空列能删
+  const toggleColumn = (colId: string) => edit(cols => cols.map(c => (c.id === colId ? { ...c, collapsed: !c.collapsed } : c)));
   const placeNew = (session: Session, colId: string) => { if (columns[0]?.id !== colId) edit(cols => { const at = find(cols, session.id); const panel = at ? cols[at[0]].panels.splice(at[1], 1)[0] : { session: session.id, collapsed: false }; (cols.find(c => c.id === colId) || cols[0]).panels.push(panel); return cols; }); };
   if (work.isPending) return <Loading />;
   if (work.isError) return <div className="p-4"><ErrorState error={work.error} retry={() => { void work.refetch(); }} /></div>;
@@ -75,8 +76,16 @@ export function Workspace({ id, onLibrary }: { id: string; onLibrary: () => void
         <div className="flex flex-wrap justify-center gap-2">{!ended && <Button onClick={() => setAdding(columns[0].id)}><Plus />{t('work.addSession')}</Button>}<Button variant="outline" onClick={onLibrary}><BookOpen />{t('work.viewLibrary')}</Button></div>
       </Empty></div>
       : <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:flex-row md:items-start md:overflow-x-auto md:overflow-y-hidden" aria-label={t('work.sessions')}>
-        {columns.map((column, ci) => <section key={column.id} className={cn('flex min-w-0 flex-col gap-3 md:h-full md:min-w-[28rem] md:flex-1 md:overflow-y-auto md:pr-1', columns.length > 1 && 'md:basis-0')} aria-label={t('work.column', { n: ci + 1 })}>
-          {columns.length > 1 && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Columns3 className="size-3.5" />{t('work.column', { n: ci + 1 })}<span>{column.panels.length}</span><Button variant="ghost" size="icon" className="ml-auto size-7" aria-label={t('work.removeColumn')} title={t('work.removeColumn')} onClick={() => removeColumn(column.id)}><X className="size-3.5" /></Button></div>}
+        {columns.map((column, ci) => column.collapsed
+          ? <button key={column.id} type="button" className="flex shrink-0 items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground hover:bg-accent md:h-full md:w-10 md:flex-col md:justify-start md:px-0 md:py-3" aria-label={t('work.expandColumn')} title={t('work.expandColumn')} aria-expanded={false} onClick={() => toggleColumn(column.id)}>
+            <ChevronsRight className="size-4" /><span className="md:[writing-mode:vertical-rl]">{t('work.column', { n: ci + 1 })} · {column.panels.length}</span>
+          </button>
+          : <section key={column.id} className={cn('flex min-w-0 flex-col gap-3 md:h-full md:min-w-[28rem] md:flex-1 md:overflow-y-auto md:pr-1', columns.length > 1 && 'md:basis-0')} aria-label={t('work.column', { n: ci + 1 })}>
+          {columns.length > 1 && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Columns3 className="size-3.5" />{t('work.column', { n: ci + 1 })}<span>{column.panels.length}</span>
+            <div className="ml-auto flex items-center">
+              {column.panels.length === 0 && <Button variant="ghost" size="icon" className="size-7" aria-label={t('work.removeColumn')} title={t('work.removeColumn')} onClick={() => removeColumn(column.id)}><X className="size-3.5" /></Button>}
+              <Button variant="ghost" size="icon" className="size-7" aria-label={t('work.collapseColumn')} title={t('work.collapseColumn')} aria-expanded onClick={() => toggleColumn(column.id)}><ChevronsLeft className="size-3.5" /></Button>
+            </div></div>}
           {column.panels.map((panel, pi) => { const session = byId.get(panel.session); if (!session) return null; const index = (sessions.data || []).findIndex(s => s.id === session.id) + 1; return <div key={session.id} className="flex shrink-0 flex-col overflow-hidden rounded-lg border bg-card">
             <div className="flex items-center gap-1 border-b bg-muted/40 px-2 py-1">
               <Button variant="ghost" size="icon" className="size-7" aria-label={panel.collapsed ? t('work.expand') : t('work.collapse')} aria-expanded={!panel.collapsed} onClick={() => toggle(session.id)}>{panel.collapsed ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}</Button>

@@ -51,5 +51,5 @@ class CanvasStore:
         cur = self.get(work_id)
         if not any(p.session == session_id for c in cur.columns for p in c.panels):
             return
-        columns = [Column(id=c.id, panels=[p for p in c.panels if p.session != session_id]) for c in cur.columns]
+        columns = [Column(id=c.id, collapsed=c.collapsed, panels=[p for p in c.panels if p.session != session_id]) for c in cur.columns]
         self._save(work_id, cur, columns)

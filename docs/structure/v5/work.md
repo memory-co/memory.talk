@@ -44,7 +44,7 @@ work 的画布:**几列,每列从上到下摆会话**,每个会话可收起。�
   "version": 3,
   "columns": [
     {"id": "c1", "panels": [{"session": "work_2026…2f2f-s1", "collapsed": false}, {"session": "work_2026…2f2f-s2", "collapsed": true}]},
-    {"id": "c2", "panels": [{"session": "work_2026…2f2f-s3", "collapsed": false}]}
+    {"id": "c2", "panels": [{"session": "work_2026…2f2f-s3", "collapsed": false}], "collapsed": true}
   ]
 }
 ```
@@ -54,6 +54,7 @@ work 的画布:**几列,每列从上到下摆会话**,每个会话可收起。�
 | `version` | 乐观锁;`PUT` 必须带当前值,成功后 +1;会话开 / 关时服务端自己改画布也 +1 |
 | `columns[].id` | 前端自定,画布内唯一 |
 | `columns[].panels[]` | 这一列从上到下的格子 |
+| `columns[].collapsed` | 整列收起 = 缩成一条窄边;列只有空了才能删 |
 | `panels[].session` | 装的是哪个会话;一个会话最多出现在一个格子里 |
 | `panels[].collapsed` | 收起 = 只剩标题行 |
 

@@ -138,10 +138,10 @@ user:谁当前正在操作、谁历史操作过。只做可见性,不做权限�
 ```json
 {"version": 3,
  "columns": [{"id": "c1", "panels": [{"session": "work_…-s1", "collapsed": false}, {"session": "work_…-s2", "collapsed": true}]},
-             {"id": "c2", "panels": [{"session": "work_…-s3", "collapsed": false}]}]}
+             {"id": "c2", "panels": [{"session": "work_…-s3", "collapsed": false}], "collapsed": true}]}
 ```
 
-布局 = 几列,每列从上到下摆会话,每个可收起。从未写过 = `version 0`、空 `columns`(前端当一列画)。
+布局 = 几列,每列从上到下摆会话;会话可收起(只剩标题行),整列也可收起(缩成一条窄边)。从未写过 = `version 0`、空 `columns`(前端当一列画)。
 
 ## PUT /api/works/{work_id}/canvas
 
