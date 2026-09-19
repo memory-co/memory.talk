@@ -73,5 +73,6 @@
   --crepe-font-title: inherit; --crepe-font-default: inherit; --crepe-base-font-size: 15px;
   --crepe-shadow-1: 0 1px 2px 0 rgb(0 0 0 / 0.05); --crepe-shadow-2: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 }
-.milkdown.milkdown .ProseMirror { padding: 0.5rem 0.25rem; min-height: 16rem; }
-.milkdown.milkdown .ProseMirror h1, .milkdown.milkdown .ProseMirror h2, .milkdown.milkdown .ProseMirror h3 { font-family: inherit; }
+.milkdown.milkdown .ProseMirror { padding: 0.5rem 0.25rem; min-height: 100%; }
+.milkdown.milkdown .ProseMirror h1, .milkdown.milkdown .ProseMirror h2, .milkdown.milkdown .ProseMirror h3, .milkdown.milkdown .ProseMirror h4 { font-family: inherit; font-weight: 600; }
+.milkdown.milkdown .ProseMirror h1 { font-size: 1.75em; } .milkdown.milkdown .ProseMirror h2 { font-size: 1.5em; } .milkdown.milkdown .ProseMirror h3 { font-size: 1.25em; } .milkdown.milkdown .ProseMirror h4 { font-size: 1.1em; }

@@ -18,7 +18,7 @@ import { usePreferences } from '@/lib/store';
 import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { dateLabel, layerLabel, type CollectionObject, type RecentPage, type Revision, type TreeView } from '@/lib/types';
-import { Empty, ErrorState, Loading, Markdown } from '@/components/Shared';
+import { Empty, ErrorState, Loading } from '@/components/Shared';
 import { FieldsForm } from './FieldsForm';
 const MarkdownEditor = lazy(() => import('@/components/MarkdownEditor'));
 
@@ -277,7 +277,8 @@ export function FilePage({ layer, path, file, creating, onClose, onOpen, onDir, 
         : <>
           {parsed.invalid && <ErrorState error={new Error(t('library.invalidMeta'))} />}
           <Properties fields={parsed.fields} protocol={protocol} onOpen={onOpen} />
-          {kind?.format.body === 'text' ? <pre className="overflow-auto whitespace-pre-wrap break-all rounded-md border bg-muted p-3 font-mono text-xs">{parsed.body}</pre> : <Markdown text={parsed.body} />}
+          {kind?.format.body === 'text' ? <pre className="overflow-auto whitespace-pre-wrap break-all rounded-md border bg-muted p-3 font-mono text-xs">{parsed.body}</pre>
+            : <Suspense fallback={<Skeleton className="h-32" />}><MarkdownEditor key={`${revision}:${object.dataUpdatedAt}`} value={parsed.body} readOnly /></Suspense>}
           {siblings.length > 0 && <div className="space-y-1 border-t pt-4"><h4 className="text-xs font-medium text-muted-foreground">{t('library.siblings')}</h4>{siblings.map(f => <Button key={f} variant="ghost" size="sm" className="h-8 w-full justify-start gap-2 font-normal" onClick={() => onOpen({ layer, path: objectPath, file: f })}><FileText className="size-3.5 text-muted-foreground" /><span className="truncate">{fileTitle({ layer, path: objectPath, file: f }, kindOf(protocol, f))}</span><span className="ml-auto truncate font-mono text-xs text-muted-foreground">{f}</span></Button>)}</div>}
         </>}
     </div>}</div>

@@ -1,6 +1,6 @@
 # memory.talk 前端
 
-前端采用与 shellbase 一致的技术栈：React 18、TypeScript、Vite、Tailwind CSS、Zustand、TanStack Query，UI 统一采用 shadcn/ui（New York / Radix）、Lucide、Sonner。Markdown 展示使用 react-markdown 与 remark-gfm，正文编辑用 Milkdown Crepe（所见即所得，参考 turbome.ai 的方案，主题变量映射到 shadcn token），文件的 frontmatter 通过 YAML 解析。
+前端采用与 shellbase 一致的技术栈：React 18、TypeScript、Vite、Tailwind CSS、Zustand、TanStack Query，UI 统一采用 shadcn/ui（New York / Radix）、Lucide、Sonner。Markdown 展示使用 react-markdown 与 remark-gfm，正文的阅读和编辑都用 Milkdown Crepe（所见即所得，参考 turbome.ai 的方案；阅读就是只读模式，读写渲染一致；主题变量映射到 shadcn token），文件的 frontmatter 通过 YAML 解析。
 
 ## 页面组织
 
