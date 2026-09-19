@@ -68,7 +68,6 @@ export function Workspace({ id, onLibrary }: { id: string; onLibrary: () => void
       <Select value={work.data.status} disabled={update.isPending} onValueChange={value => update.mutate(value as WorkStatus)}><SelectTrigger aria-label={t('work.statusLabel')} className="h-8 w-32"><SelectValue /></SelectTrigger><SelectContent>{workStatuses.map(value => <SelectItem key={value} value={value}>{statusLabel(t, value)}</SelectItem>)}</SelectContent></Select>
       <Button variant="outline" size="sm" onClick={() => setSubwork(true)} disabled={ended}><GitBranch />{t('work.split')}</Button>
       <Button variant="outline" size="sm" onClick={addColumn} disabled={save.isPending}><Columns3 />{t('work.addColumn')}</Button>
-      <Button size="sm" onClick={() => setAdding(columns[0]?.id || 'c1')} disabled={ended}><Plus />{t('work.addSession')}</Button>
     </div>
     {sessions.isPending || canvas.isPending ? <Loading /> : sessions.isError ? <div className="p-4"><ErrorState error={sessions.error} retry={() => { void sessions.refetch(); }} /></div>
       : total === 0 && columns.length === 1 ? <div className="flex flex-1 p-4"><Empty icon={<Terminal className="size-5" />} title={ended ? t('work.endedTitle') : t('work.readyTitle')}>
