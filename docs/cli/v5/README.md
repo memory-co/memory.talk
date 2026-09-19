@@ -10,11 +10,12 @@
 memory.talk
 ├── version                                             # 版本号(也可 -V / --version)
 ├── server   start | stop | restart | status          # 本地 API 服务(后台守护)
+├── setup | login [<name>] | logout                   # 门:首次建 admin;密码换 token 存本地;退出
 ├── work     create | list | show | set               # work 树
 │            attach | sessions | detach | capture | rounds   # 会话(现场)
 │            inbox | manager | users | touch           # 收件箱 / manager / user
 │            servers                                    # 有哪些 work server(bash / claude / codex / kimi / http / default)及各自响应的协议
-├── user     add | list | show | set | whoami           # 人:注册的实体,和 work 平级;不做权限
+├── user     add | list | show | set | whoami | passwd  # 人:注册的实体,和 work 平级;admin 建账号 / 设密码
 ├── search   <query> [--limit 20]                       # 综合搜索:工作 / 元认知 / 成员
 ├── collection                                          # 认知层(API 是 /api/collections)
 │            layers | tree | recent
@@ -32,7 +33,8 @@ memory.talk
 | 全局 flag | 环境变量 | 默认 | 说明 |
 |---|---|---|---|
 | `--server <url>` | `MEMORY_TALK_SERVER` | `http://127.0.0.1:8000` | API 在哪 |
-| `--user <名字>` | `MEMORY_TALK_USER` | 无 | **我是谁**:进 `X-Memory-Talk-User`,**必须是 `user add` 注册过的名字**(否则 exit 1)。建 work 时写进 `created_by`,动 work 时记进 users,collection 的提交以它为 author(名字 + 档案里的邮箱)。不带照样能用,只是匿名 |
+| `--user <名字>` | `MEMORY_TALK_USER` | 最近登录的 | **用谁的登录态**:`login` 过的人的 token 存在 `<home>/credentials.json`(按服务地址分开,一个地址可存几个人),这个 flag 挑其中一个。身份从 token 来:建 work 时写进 `created_by`,动 work 时记进 users,collection 的提交以它为 author。没登录 → exit 1 并提示 `memory.talk login` |
+| `--token <串>` | `MEMORY_TALK_TOKEN` | 无 | 直接给 token,不走 credentials.json(agent 会话里用:把某个人 login 拿到的 token 放进环境) |
 | `--work <id>` | `MEMORY_TALK_WORK` | 无 | **在哪个 work 里操作**:进 `X-Memory-Talk-Work`。自己造成的变动不投给自己的收件箱。agent 会话由 work 拉起时,这个变量已经在它的环境里 |
 | `--json` | — | 关 | 结构化输出(机器 / LLM 用);默认 Markdown,TTY 下用 rich 渲染 |
 
@@ -45,8 +47,10 @@ memory.talk
 
 ```bash
 memory.talk server start                                     # 起服务(一次)
-memory.talk user add alice --email alice@example.com         # 注册(一次)
-export MEMORY_TALK_USER=alice
+memory.talk setup                                            # 首次:给 admin 设密码,顺便登录(一次)
+memory.talk user add alice --email alice@example.com --password '…'   # admin 建账号(一次)
+memory.talk login alice                                      # alice 登录,token 存本地
+export MEMORY_TALK_USER=alice                                # 之后用 alice 的登录态
 W=$(memory.talk work create --goal '把配置改成环境变量' --json | jq -r .id)
 memory.talk work attach $W codex:///home/alice/memory.talk   # 在这个 work 里开一个 Codex 会话,打印窗地址
 memory.talk collection write issue memory.talk/配置/该走文件还是环境变量 --put readme.md='起服务要读几样配置……'

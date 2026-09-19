@@ -67,7 +67,7 @@ def test_fresh_user_has_zero_activity(client):
 
 def test_list_contains_every_registered_user_even_idle(client):
     client.post("/api/users", json={"name": "dave"})
-    assert {u["name"] for u in client.get("/api/users").json()} == {"alice", "bob", "carol", "dave"}
+    assert {u["name"] for u in client.get("/api/users").json()} == {"admin", "alice", "bob", "carol", "dave"}
 
 
 def test_list_orders_active_first_then_by_name(client, H):
@@ -76,10 +76,10 @@ def test_list_orders_active_first_then_by_name(client, H):
     assert names[0] == "bob" and names[1:] == sorted(names[1:], reverse=True)   # 没动过的按名字倒序(同 last_seen 空)
 
 
-def test_me_follows_the_header(client, H):
-    assert client.get("/api/users/me").json() is None
+def test_me_is_the_logged_in_user(client, H):
+    assert client.get("/api/users/me").json()["name"] == "admin"
     assert client.get("/api/users/me", headers=H("alice")).json()["name"] == "alice"
-    assert client.get("/api/users/me", headers=H("nobody")).status_code == 404
+    assert client.get("/api/users/me", headers=H("nobody")).status_code == 401
 
 
 # ====================================================================== U

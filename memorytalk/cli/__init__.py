@@ -16,20 +16,21 @@ import os
 
 from memorytalk import __version__
 
-from . import collection, search, server, user, work
+from . import auth, collection, search, server, user, work
 from ._common import DEFAULT_SERVER, Api
 
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="memory.talk", description="memory.talk v5 —— 跑 code agent 的工作台,记忆是它的副产物")
     ap.add_argument("--server", default=os.environ.get("MEMORY_TALK_SERVER", DEFAULT_SERVER), help="API 在哪")
-    ap.add_argument("--user", default=os.environ.get("MEMORY_TALK_USER"), help="我是谁(须注册过)")
+    ap.add_argument("--user", default=os.environ.get("MEMORY_TALK_USER"), help="用谁的登录态(credentials.json 里存的;默认最近登录的)")
+    ap.add_argument("--token", default=os.environ.get("MEMORY_TALK_TOKEN"), help="直接给 token(agent 会话里用),不走 credentials.json")
     ap.add_argument("--work", default=os.environ.get("MEMORY_TALK_WORK"), help="在哪个 work 里操作")
     ap.add_argument("--json", action="store_true", help="结构化输出")
     ap.add_argument("-V", "--version", action="version", version=f"memory.talk {__version__}")
     top = ap.add_subparsers(dest="cmd", required=True)
     top.add_parser("version", help="版本号").set_defaults(local=lambda a: print(f"memory.talk {__version__}"))
-    for group in (server, work, user, collection, search):
+    for group in (server, auth, work, user, collection, search):
         group.register(top)
     return ap
 
@@ -39,7 +40,7 @@ def main(argv: list[str] | None = None) -> None:
     if getattr(a, "local", None):          # server 组:本地动作,不经 API
         a.local(a)
         return
-    a.fn(Api(a.server, a.user, a.work), a)
+    a.fn(Api(a.server, a.user, a.work, a.token), a)
 
 
 __all__ = ["main", "build_parser"]

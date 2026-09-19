@@ -42,14 +42,21 @@ def home(tmp_path, monkeypatch, request):
     subprocess.run(["tmux", "-L", os.environ["MEMORY_TALK_TMUX_SOCKET"], "kill-server"], capture_output=True)
 
 
+PASSWORD = "pw-123456"
+
+
 @pytest.fixture
 def client(home):
+    """起一个服务:setup 出 admin(默认以 admin 身份请求),再建 alice / bob / carol 并各登录一次;c.tokens 里是各人的 token。"""
     from memorytalk.backend.config import load_config, load_runtime_config
     from memorytalk.backend.main import create_app
     app = create_app(load_config(), load_runtime_config())
     with TestClient(app) as c:
+        c.tokens = {"admin": c.post("/api/auth/setup", json={"password": PASSWORD}).json()["token"]}
+        c.headers["Authorization"] = f"Bearer {c.tokens['admin']}"
         for name in ("alice", "bob", "carol"):
-            c.post("/api/users", json={"name": name})
+            c.post("/api/users", json={"name": name, "password": PASSWORD})
+            c.tokens[name] = c.post("/api/auth/login", json={"name": name, "password": PASSWORD}).json()["token"]
         yield c
 
 
@@ -58,9 +65,21 @@ def svc(client):
     return client.app.state
 
 
+def login_as(client, name: str) -> str:
+    """拿某个注册过的人的 token(没登录过就由 admin 给他设密码再登录一次,缓存在 client.tokens);没这个人 → 一个无效 token。"""
+    if name not in client.tokens:
+        admin = {"Authorization": f"Bearer {client.tokens['admin']}"}
+        if client.get(f"/api/users/{name}", headers=admin).status_code != 200:
+            return "no-such-token"
+        client.put(f"/api/users/{name}/password", json={"new_password": PASSWORD}, headers=admin)
+        client.tokens[name] = client.post("/api/auth/login", json={"name": name, "password": PASSWORD}).json()["token"]
+    return client.tokens[name]
+
+
 @pytest.fixture
-def H():
-    return lambda user: {"X-Memory-Talk-User": user}
+def H(client):
+    """以某个人的身份请求:H("alice") → 她的 Bearer 头;不存在的名字 → 无效 token(401)。"""
+    return lambda user: {"Authorization": f"Bearer {login_as(client, user)}"}
 
 
 # ---- 各场景共用的小工具 ----

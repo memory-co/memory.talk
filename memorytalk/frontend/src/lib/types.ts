@@ -14,9 +14,11 @@ export interface Session {
 }
 export interface Round { id: string; timestamp: string | null; role: string; text: string }
 export interface User {
-  name: string; display_name: string; email: string;
+  name: string; display_name: string; email: string; created_at: string; role: 'admin' | 'member';
   works_created: number; works_touched: number; commits: number;
 }
+export interface AuthStatus { setup_required: boolean; authenticated: boolean; user: User | null }
+export interface LoginResult { token: string; user: User }
 export interface Server { name: string; protocols: string[]; description: string }
 export interface SystemInfo {
   home: string; collections: string; workspace: string; tmux_socket: string;

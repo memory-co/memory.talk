@@ -64,11 +64,16 @@ def _scalar(s: str) -> Any:
 # ================================================================ HTTP
 
 class Api:
-    def __init__(self, server: str, user: str | None, work: str | None) -> None:
+    def __init__(self, server: str, user: str | None, work: str | None, token: str | None = None) -> None:
+        """token:--token / MEMORY_TALK_TOKEN,否则 credentials.json 里存的(--user 挑谁的,默认最近登录的)。"""
+        from .auth import saved_token
         self.base = server.rstrip("/")
+        self.user = user
         headers = {}
-        if user:
-            headers["X-Memory-Talk-User"] = user
+        if not token:
+            self.user, token = saved_token(self.base, user)
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         if work:
             headers["X-Memory-Talk-Work"] = work
         self.c = httpx.Client(base_url=self.base, headers=headers, timeout=30)
@@ -84,6 +89,10 @@ class Api:
             body = None
         if r.status_code >= 400:
             msg = f"{body.get('error', r.status_code)}: {body.get('message')}" if isinstance(body, dict) else f"{r.status_code}: {r.text[:200]}"
+            if isinstance(body, dict) and body.get("error") == "setup_required":
+                msg += ";先 memory.talk setup"
+            elif r.status_code == 401:
+                msg += ";先 memory.talk login" + (f" --user {self.user}" if self.user else "")
             raise Fail(msg, 1)
         return body["data"] if isinstance(body, dict) and "data" in body else body   # 信封:{"data", "message"}
 

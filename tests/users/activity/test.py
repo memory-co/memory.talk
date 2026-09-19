@@ -19,10 +19,10 @@ def test_history_is_ordered_by_last_activity(client, H):
     assert [x["user"] for x in client.get(f"/api/works/{t['id']}/users").json()["history"]] == ["bob", "alice"]
 
 
-def test_anonymous_operation_is_not_recorded(client, H):
+def test_every_operation_is_recorded_to_whoever_is_logged_in(client, H):
     t = _work(client, H)
-    client.patch(f"/api/works/{t['id']}", json={"goal": "匿名也能改"})
-    assert [x["user"] for x in client.get(f"/api/works/{t['id']}/users").json()["history"]] == ["alice"]
+    client.patch(f"/api/works/{t['id']}", json={"goal": "默认的 client 是 admin"})
+    assert [x["user"] for x in client.get(f"/api/works/{t['id']}/users").json()["history"]] == ["admin", "alice"]
 
 
 def test_heartbeat_touch(client, H):

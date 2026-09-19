@@ -15,7 +15,9 @@
 │       └── 某张卡.card/              ←   card:readme.md(字段 context / links / issue + 正文)+ 可选 manager.json
 ├── layers/                           ← 用户自定义层:<名>.yaml 各一份协议,启动时载入(和内置层一模一样)
 ├── users/                            ← user 档案(注册的实体;MEMORY_TALK_STORE=fs 时)
-│   └── <name>.json                   ←   name / display_name / email / created_at
+│   └── <name>.json                   ←   name / display_name / email / created_at / role / password(scrypt 哈希,不出接口)
+├── auth/tokens/<sha256>.json         ← 登录态:token 的哈希 → {user, created_at}(logout / 改密码即删)
+├── credentials.json                  ← CLI 的登录态(客户端的事,按服务地址分开;memory.talk login 写)
 ├── works/                            ← 裸文件(现场层)
 │   └── <work_id>/
 │       ├── work.json                 ←   目标 / 父 / 状态
@@ -41,7 +43,7 @@
 
 ## works/(裸文件;MEMORY_TALK_STORE=fs)
 
-介质可换:`MEMORY_TALK_STORE=sqlite` 时这一半(连同 users/)全在 `memory.sqlite`(`MEMORY_TALK_SQLITE` 可改路径)的四张表里(`users` / `works` / `work_docs` / `work_logs`),业务层不感知(见 [designs provider.md](../../designs/v5/provider.md))。
+介质可换:`MEMORY_TALK_STORE=sqlite` 时这一半(连同 users/、auth/)全在 `memory.sqlite`(`MEMORY_TALK_SQLITE` 可改路径)的五张表里(`users` / `auth_tokens` / `works` / `work_docs` / `work_logs`),业务层不感知(见 [designs provider.md](../../designs/v5/provider.md))。
 
 - **原子写**:`work.json` / `canvas.json` / `sessions.json` / `members.json` / `manager.json` 写临时文件后 `os.replace`。
 - **只追加**:`events.jsonl` / `inbox.jsonl` / `rounds.jsonl`,从不改既有行。

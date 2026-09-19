@@ -98,7 +98,7 @@ work 的一个会话 = 一个现场。**在 work 里打开就是它的**,归属�
 
 | 字段 | 说明 |
 |---|---|
-| `user` | 团队里的一个人;客户端在请求头 `X-Memory-Talk-User` 里自报,服务端不校验 |
+| `user` | 团队里的一个人;来自登录态(token),见 [designs auth.md](../../designs/v5/auth.md) |
 | `first_seen` / `last_seen` | 第一次 / 最近一次操作这个 work |
 | `ops` | 操作次数(带身份的、会动这个 work 的请求 + 打开 + 心跳) |
 

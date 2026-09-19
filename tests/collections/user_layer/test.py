@@ -45,6 +45,7 @@ def _write(name, text):
 def client(home):
     _write("experiment", EXPERIMENT)
     with TestClient(_app()) as c:
+        c.headers["Authorization"] = "Bearer " + c.post("/api/auth/setup", json={"password": "pw-123456"}).json()["token"]
         yield c
 
 

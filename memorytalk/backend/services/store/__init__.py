@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from memorytalk.backend.config import Config
 from memorytalk.backend.providers import load_store
+from memorytalk.backend.services.auth.repo import TokenRepo, make_token_repo
 from memorytalk.backend.services.users.repo import UserRepo, make_user_repo
 from memorytalk.backend.services.work.repo import WorkRepo, make_work_repo
 
@@ -14,6 +15,7 @@ class StoreService:
         self.provider = load_store(config.home)
         self.work_repo: WorkRepo = make_work_repo(self.provider)
         self.user_repo: UserRepo = make_user_repo(self.provider)
+        self.token_repo: TokenRepo = make_token_repo(self.provider)
 
 
 __all__ = ["StoreService"]

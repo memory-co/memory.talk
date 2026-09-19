@@ -9,10 +9,10 @@ export const pathPart = (path: string) => path.split('/').map(encodeURIComponent
 export async function api<T>(path: string, options: {
   method?: string; body?: unknown; work?: string; signal?: AbortSignal;
 } = {}): Promise<T> {
-  const user = usePreferences.getState().user;
+  const token = usePreferences.getState().token;
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
-  if (user) headers['X-Memory-Talk-User'] = user;
+  if (token) headers.Authorization = `Bearer ${token}`;              // 身份来自登录态(docs/designs/v5/auth.md)
   if (options.work) headers['X-Memory-Talk-Work'] = options.work;
   let response: Response;
   try {
@@ -26,6 +26,9 @@ export async function api<T>(path: string, options: {
   }
   const result = await response.json().catch(() => null);
   if (!response.ok || result?.error) {
+    // 门说的话直接改登录态:还没 setup → setup 页;token 不认了 → 登录页
+    if (result?.error === 'setup_required') usePreferences.getState().setSetupRequired(true);
+    else if (response.status === 401 && !path.startsWith('/auth/')) usePreferences.getState().clearSession();
     const detail = Array.isArray(result?.detail)
       ? result.detail.map((d: { msg: string }) => d.msg).join(t('api.separator')) : result?.detail;
     throw new ApiError(result?.message || detail || t('api.failed', { status: response.status }), response.status, result?.error);

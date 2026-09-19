@@ -38,6 +38,7 @@ def test_config_lists_builtin_layers_bottom_first(client):
 
 def test_a_new_layer_file_is_registered_by_a_commit_on_startup(client):
     with _restart_with_layer("decision", DECISION) as c2:
+        c2.headers["Authorization"] = client.headers["Authorization"]        # 同一个 store,admin 的 token 还认
         r = c2.get("/api/collections/config").json()
     assert r["config"]["layers"][-1] == {"name": "decision", "builtin": False}
     assert r["history"][0]["subject"] == "[origin] collections: add layers decision"

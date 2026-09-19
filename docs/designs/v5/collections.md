@@ -115,7 +115,7 @@ origin 在最底、issue 在中、card 在上:issue 从 origin 消化出来,card
 
 ## 5. 谁做的:commit 的 author 就是 user
 
-collections 的每个动作是一个 commit,做它的人(请求头 `X-Memory-Talk-User`)就是 commit 的 **author**——立场谁提的、论证谁给的、卡谁改的,全在 `git log` / `git blame` 里,对象里不另存 user 字段。agent 做的提交挂在驱动它的 user 名下,body 的 `Work:` 记它在哪个 work 里做的。没带身份的提交 author 退回服务配置的默认名。详见 [user.md §5](user.md)。
+collections 的每个动作是一个 commit,做它的人(登录态里的名字,[auth.md](auth.md))就是 commit 的 **author**——立场谁提的、论证谁给的、卡谁改的,全在 `git log` / `git blame` 里,对象里不另存 user 字段。agent 做的提交挂在驱动它的 user 名下,body 的 `Work:` 记它在哪个 work 里做的。服务自己做的提交(比如启动时登记新层)用服务配置的默认名。详见 [user.md §5](user.md)。
 
 ---
 

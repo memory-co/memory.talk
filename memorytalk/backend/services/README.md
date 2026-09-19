@@ -12,7 +12,8 @@ controllers ──▶ services ──▶ providers(介质原语)
                   │     __init__.py   CollectionsService:层的装载(内置 + 用户层)、对象读写(一批文件改动 → 层的 check → 一个提交)、历史、检索、树、投递
                   ├── work/          做事层:work 树、画布、会话(现场)、users(谁动过)、round、事件、收件箱
                   │     repo.py       WorkRepo 业务接口 + fs 版 / db 版两份实现
-                  ├── users/         人:注册的实体,档案走仓储;活动统计从 work 与 collections 现算
+                  ├── users/         人:注册的实体,档案走仓储(密码哈希在记录里);活动统计从 work 与 collections 现算
+                  ├── auth/          门:没有 admin 先 setup;登录换 token(只存哈希);main.py 的中间件靠它把 token 变成名字
                   ├── work_servers/  现场怎么建:tmux 基类、agent 基类(把手多一项读 round)、注册表、URI 解析、各平台会话记录 adapter
                   ├── search/        综合搜索:自己不搜,把 q 交给每个 service 的 search(),汇总各家的命中
                   └── store/         装配:按 MEMORY_TALK_STORE 选 provider,按族建 work / user 仓储

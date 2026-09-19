@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from memorytalk.backend.models.result import Result, ok
-from fastapi import APIRouter, Depends, Header, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 
 from memorytalk.backend.models.collections import InboxItem
 from memorytalk.backend.models.work_server import WorkServerInfo
@@ -22,11 +22,9 @@ def collections(request: Request) -> CollectionsService:
     return request.app.state.collections
 
 
-def user(request: Request, x_memory_talk_user: str | None = Header(None, alias="X-Memory-Talk-User")) -> str | None:
-    """谁在操作:请求头里的名字必须是注册过的 user(身份,不是权限);没带 = 匿名。"""
-    if x_memory_talk_user:
-        request.app.state.users.get(x_memory_talk_user)        # 未注册 → 404 not_found
-    return x_memory_talk_user
+def user(request: Request) -> str | None:
+    """谁在操作:门(中间件)解析 token 放进 request.state 的名字(身份,不是权限)。"""
+    return request.state.user
 
 
 @router.get("", response_model=Result[list[WorkNode]], summary="work 树(森林;root= 只看一棵;created_by= 只看某人建的)")
@@ -85,7 +83,7 @@ def users(work_id: str, svc: WorkService = Depends(works)):
     return ok(svc.list_users(work_id))
 
 
-@router.post("/{work_id}/users/touch", response_model=Result[WorkUsers], summary="我在操作这个 work(心跳;身份来自 X-Memory-Talk-User)")
+@router.post("/{work_id}/users/touch", response_model=Result[WorkUsers], summary="我在操作这个 work(心跳;身份来自登录态)")
 def touch(work_id: str, svc: WorkService = Depends(works), who: str | None = Depends(user)):
     svc.touch(work_id, who)
     return ok(svc.list_users(work_id))

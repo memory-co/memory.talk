@@ -11,7 +11,8 @@ v5 的三层:**work**(做事,裸文件)、**issue**(议事,git)、**card**(记�
 | Work | 树上一个节点:目标、父、状态(没有 project) | `works/<id>/work.json` | [work.md](work.md) |
 | Canvas / Panel | work 的画布:24×16 网格上的块;**视图,可随时重排** | `works/<id>/canvas.json` | [work.md](work.md#canvas) |
 | Session | work 的会话 = 一个现场:URI + 建它的 server;**身份脱离布局** | `works/<id>/sessions.json` | [work.md](work.md#session) |
-| **User** | 注册的实体,和 work 平级:名字 / 显示名 / 邮箱 / 注册时间;不做权限 | `users/<name>.json`(或 `users` 表) | [api users.md](../../api/v5/users.md) |
+| **User** | 注册的实体,和 work 平级:名字 / 显示名 / 邮箱 / 注册时间 / 角色(admin 只有一个);密码哈希存在记录里不出接口 | `users/<name>.json`(或 `users` 表) | [api users.md](../../api/v5/users.md) |
+| Token | 登录态:随机串的 sha256 → 谁的、何时发;logout / 改密码即删 | `auth/tokens/<sha256>.json`(或 `auth_tokens` 表) | [api auth.md](../../api/v5/auth.md) |
 | WorkUser | 谁动过这个 work;只做可见性;work 另有 `created_by` 归属(指向一个注册的 User) | `works/<id>/users.json` | [work.md](work.md#workuserusers) |
 | Round | agent 会话的会话痕迹,append-only | `works/<id>/sessions/<session>/rounds.jsonl` | [work.md](work.md#round) |
 | Event | work 自己的时间线,append-only | `works/<id>/events.jsonl` | [work.md](work.md#event) |

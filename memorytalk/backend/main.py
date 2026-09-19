@@ -8,8 +8,9 @@ from memorytalk.backend.models.result import fail
 from memorytalk.backend.gateway import mount_frontend
 
 from memorytalk.backend.config import Config, RuntimeConfig, load_config, load_runtime_config
-from memorytalk.backend.controllers import collections, search, system, users, works
+from memorytalk.backend.controllers import auth, collections, search, system, users, works
 from memorytalk.backend.models.work_server import WorkServerError
+from memorytalk.backend.services.auth import AuthError, AuthService
 from memorytalk.backend.services.collections import CollectionsError, CollectionsService
 from memorytalk.backend.services.search import SearchService
 from memorytalk.backend.services.work_servers import WorkServerService
@@ -34,10 +35,27 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
     app.state.store, app.state.collections = store, collect_svc
     app.state.work_servers, app.state.works = work_server_svc, work_svc
     app.state.users = user_svc
+    app.state.auth = AuthService(user_svc, store.token_repo)
     app.state.search = SearchService(work_svc, collect_svc, user_svc)
 
-    for r in (system.router, works.router, users.router, collections.router, search.router):
+    for r in (system.router, auth.router, works.router, users.router, collections.router, search.router):
         app.include_router(r)
+
+    OPEN = {"/api/auth/status", "/api/auth/setup", "/api/auth/login", "/api/system/health"}
+
+    @app.middleware("http")
+    async def gate(request: Request, call_next):
+        """门(docs/designs/v5/auth.md):没有 admin → 只放 setup;有了 → 没有效 token 的 /api 请求一律 401。前端页面和静态资源不拦。"""
+        path = request.url.path
+        if path.startswith("/api") and path not in OPEN:
+            svc: AuthService = request.app.state.auth
+            if svc.setup_required():
+                return JSONResponse(fail("setup_required", "还没有 admin 账号,先 POST /api/auth/setup"), status_code=409)
+            name = svc.resolve(auth.bearer(request))
+            if name is None:
+                return JSONResponse(fail("unauthorized", "要登录:Authorization: Bearer <token>"), status_code=401)
+            request.state.user = name
+        return await call_next(request)
 
     def _err(status: int, code: str):
         async def handler(_: Request, exc: Exception):
@@ -48,6 +66,10 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
         app.add_exception_handler(exc_type, _err(404, "not_found"))
     app.add_exception_handler(WorkConflict, _err(409, "conflict"))
     app.add_exception_handler(UserExists, _err(409, "exists"))
+
+    @app.exception_handler(AuthError)
+    async def _auth(_: Request, exc: AuthError):
+        return JSONResponse(fail(exc.code, str(exc)), status_code=exc.status)
 
     @app.exception_handler(CollectionsError)
     async def _collect(_: Request, exc: CollectionsError):

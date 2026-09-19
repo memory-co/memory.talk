@@ -15,11 +15,8 @@ def collections(request: Request) -> CollectionsService:
     return request.app.state.collections
 
 
-def ctx(request: Request, x_memory_talk_user: str | None = Header(None, alias="X-Memory-Talk-User"),
-        x_memory_talk_work: str | None = Header(None, alias="X-Memory-Talk-Work")) -> Ctx:
-    if x_memory_talk_user:
-        request.app.state.users.get(x_memory_talk_user)        # 未注册 → 404 not_found
-    return Ctx(user=x_memory_talk_user, work=x_memory_talk_work)
+def ctx(request: Request, x_memory_talk_work: str | None = Header(None, alias="X-Memory-Talk-Work")) -> Ctx:
+    return Ctx(user=request.state.user, work=x_memory_talk_work)      # 人来自登录态,work 来自请求头
 
 
 # ---- 固定路径先于 /{layer} ----

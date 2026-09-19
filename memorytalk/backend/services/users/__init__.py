@@ -45,10 +45,13 @@ class UserService:
     # ---- 注册 / 档案(存的)----
 
     def register(self, req: UserCreate) -> User:
+        """建账号。密码哈希存进记录,不进 User 模型;admin 这个名字的 role 固定是 admin。"""
+        from memorytalk.backend.services.auth import ADMIN, hash_password     # 局部引,避免循环
         if self.repo.get(req.name):
             raise UserExists(req.name)
-        u = User(name=req.name, display_name=req.display_name, email=req.email, created_at=_now())
-        self.repo.put(u.name, u.model_dump())
+        u = User(name=req.name, display_name=req.display_name, email=req.email, created_at=_now(),
+                 role="admin" if req.name == ADMIN else "member")
+        self.repo.put(u.name, u.model_dump() | {"password": hash_password(req.password) if req.password else ""})
         return u
 
     def get(self, name: str) -> User:
@@ -61,15 +64,15 @@ class UserService:
         return self.repo.get(name) is not None
 
     def update(self, name: str, req: UserUpdate) -> User:
-        u = self.get(name)
-        data = u.model_dump()
+        data = self.repo.get(name)                       # 整条记录(含密码哈希)改字段再放回,别把密码丢了
+        if data is None:
+            raise UserNotFound(name)
         for k in ("display_name", "email"):
             v = getattr(req, k)
             if v is not None:
                 data[k] = v
-        u = User(**data)
         self.repo.put(name, data)
-        return u
+        return User(**data)
 
     def author(self, name: str | None) -> tuple[str, str] | None:
         """commit author:注册档案里的名字 + 邮箱(空则 <name>@memory.talk)。没带身份 → None(用服务默认名)。"""

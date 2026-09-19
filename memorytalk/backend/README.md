@@ -1,6 +1,6 @@
 # memorytalk/backend(v5 服务)
 
-memory.talk v5 的 Python 包(pip:`memorytalk`,命令 `memory.talk`)。**work 树(带 created_by 与 users)、协议 server、Collections(origin / issue / card 三层 + 用户层;每层是一份 YAML 协议,一个引擎校验;提交 author = user)、manager 收件箱、存储 provider(LocalFS / SQLite,测试两种都跑)都有最简实现。** 未做:鉴权网关、ttyd / 反代托管、`daemon` / `start` / `stop`、逐 round 标注、二进制 blob 外置、给人手工 `git commit` 用的 hook(服务进程是唯一写者)。 端点清单见 [docs/api/v5](../docs/api/v5/README.md);起服务 `memory.talk server start`,测试在仓库根 `pytest`。 按 **models / services / controllers** 三层分目录,外加 **work_servers/**(每个协议一个 server);内置 layer 定义在 services/collections/layers/ 下;services 下每个子包对应 [docs/designs/v5](../docs/designs/v5/README.md) 的一篇设计;底层逻辑照 shellbase `server/shellbase/` 原生实现。
+memory.talk v5 的 Python 包(pip:`memorytalk`,命令 `memory.talk`)。**work 树(带 created_by 与 users)、协议 server、Collections(origin / issue / card 三层 + 用户层;每层是一份 YAML 协议,一个引擎校验;提交 author = user)、manager 收件箱、存储 provider(LocalFS / SQLite,测试两种都跑)都有最简实现。** 门(setup / 登录 / token,`main.py` 的中间件)也有。未做:ttyd / 反代托管、`daemon` / `start` / `stop`、逐 round 标注、二进制 blob 外置、给人手工 `git commit` 用的 hook(服务进程是唯一写者)。 端点清单见 [docs/api/v5](../docs/api/v5/README.md);起服务 `memory.talk server start`,测试在仓库根 `pytest`。 按 **models / services / controllers** 三层分目录,外加 **work_servers/**(每个协议一个 server);内置 layer 定义在 services/collections/layers/ 下;services 下每个子包对应 [docs/designs/v5](../docs/designs/v5/README.md) 的一篇设计;底层逻辑照 shellbase `server/shellbase/` 原生实现。
 
 ```
 memorytalk/backend/           # 服务本体;memorytalk/cli/ 是它的命令行客户端
@@ -10,7 +10,8 @@ memorytalk/backend/           # 服务本体;memorytalk/cli/ 是它的命令行�
 │
 ├── models/                   # 数据模型(纯结构,不含 IO)
 │   ├── result.py             #   Result[T]:统一响应信封 {data, message[, error]},每个端点的 response_model
-│   ├── users.py              #   User(档案,存)/ UserView / UserProfile(带派生统计)
+│   ├── users.py              #   User(档案,存;role)/ UserCreate(带初始密码)/ UserView / UserProfile(带派生统计)
+│   ├── auth.py               #   AuthStatus / SetupRequest / LoginRequest / LoginResult / PasswordChange
 │   ├── work.py               #   Work 节点(目标、created_by、状态、父子)、Canvas、Session、WorkUser、Round、Event
 │   ├── collections.py        #   LayerInfo / Obj(目录里的文件)/ ObjWrite / TreeView(items + can_create + candidate)/ CheckResult / Revision / SearchHit / Manager / InboxItem
 │   ├── search.py             #   SearchHit(kind: work / collection / user)/ SearchResult
@@ -23,7 +24,7 @@ memorytalk/backend/           # 服务本体;memorytalk/cli/ 是它的命令行�
 │   │   ├── tree.py           #     work 树:建节点、父子、状态、完成收拢
 │   │   ├── canvas.py         #     画布(24×16 网格剖分)—— work 的视图,可随时重排
 │   │   ├── sessions.py       #     会话(现场)登记:会话 id ↔ URI ↔ server ↔ 活着(唯一权威,脱离布局)
-│   │   ├── users.py          #     user:谁动过这个 work,只做可见性不做权限(身份来自 X-Memory-Talk-User)
+│   │   ├── users.py          #     user:谁动过这个 work,只做可见性不做权限(身份来自登录态)
 │   │   ├── repo.py           #     WorkRepo:业务仓储接口 + fs 版 / db 版两份实现(业务概念在这,provider 只见字节 / 表)
 │   │   ├── rounds.py         #     agent 会话的 rounds.jsonl(append-only)
 │   │   ├── inbox.py          #     收件箱:manager.json 路由过来的变动(append-only)
@@ -36,7 +37,10 @@ memorytalk/backend/           # 服务本体;memorytalk/cli/ 是它的命令行�
 │   │   └── adapters/         #     读各平台会话记录:claude_code / codex / kimi
 │   ├── users/                #   user:注册的实体 —— docs/designs/v5/user.md
 │   │   ├── repo.py           #     UserRepo:fs 版(users/<name>.json)/ db 版(users 表)
-│   │   └── __init__.py       #     UserService:注册 / 档案 / 活动统计(从 work 与 collections 现算)/ commit author
+│   │   └── __init__.py       #     UserService:注册(密码哈希进记录)/ 档案 / 活动统计(从 work 与 collections 现算)/ commit author
+│   ├── auth/                 #   门 —— docs/designs/v5/auth.md
+│   │   ├── repo.py           #     TokenRepo:fs 版(auth/tokens/<sha256>.json)/ db 版(auth_tokens 表)
+│   │   └── __init__.py       #     AuthService:setup(立 admin)/ 登录换 token / 解析 token / 改密码(作废 token);scrypt 哈希
 │   ├── collections/          #   认知层 —— docs/designs/v5/collections.md / manager.md
 │   │   ├── layers/           #     层 = 一份 YAML 协议;protocol.py 是唯一引擎(校验 + 给前端的说明);用户层 = <home>/layers/*.yaml(README.md)
 │   │   │   ├── protocol.py   #       from_yaml → Layer(object 规则 + 文件种类 + 字段类型);check(diff, after);can_create_files
@@ -65,10 +69,10 @@ memorytalk/backend/           # 服务本体;memorytalk/cli/ 是它的命令行�
 │
 ├── controllers/              # HTTP 面(FastAPI 路由;只做参数/响应,不含逻辑)
 │   ├── works.py              #   /api/works/…
-│   ├── users.py              #   /api/users/…(顶层:list / me / {name})
+│   ├── users.py              #   /api/users/…(list / me / {name} / {name}/password;建账号只有 admin)
 │   ├── collections.py        #   /api/collections/…(层、树、最近、对象 CRUD、历史)
 │   ├── search.py             #   /api/search(综合搜索)
-│   ├── auth.py               #   /api/auth/{login,verify,logout,me}
+│   ├── auth.py               #   /api/auth/{status,setup,login,logout} + current_user / require_admin 依赖
 │   └── system.py             #   /api/system/{info,health}
 │
 └── (frontend/ 在 memorytalk/frontend,tests/ 在仓库根)

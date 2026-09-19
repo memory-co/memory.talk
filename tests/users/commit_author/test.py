@@ -13,9 +13,9 @@ def test_author_email_comes_from_the_profile(client, H):
     assert git_authors(client, 1) == ["dave", "<dave@example.com>"]
 
 
-def test_anonymous_write_uses_service_default(client, svc):
-    client.post("/api/collections/card/x/匿名卡", json={"files": {"readme.md": "匿名卡"}})
-    assert git_authors(client, 1) == [svc.config.git_author_name, f"<{svc.config.git_author_email}>"]
+def test_default_email_is_name_at_memory_talk(client):
+    client.post("/api/collections/card/x/管理员的卡", json={"files": {"readme.md": "admin 建的"}})
+    assert git_authors(client, 1) == ["admin", "<admin@memory.talk>"]
 
 
 def test_profile_counts_commits(client, H):

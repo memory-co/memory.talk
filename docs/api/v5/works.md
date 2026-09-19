@@ -1,6 +1,6 @@
 # Works API
 
-work 树、画布、会话(现场)、user、痕迹、事件、召回。带 `X-Memory-Talk-User` 头的请求,凡会动某个 work 的(建、改、重排画布、开 / 重入 / 关会话、打开 work 本身),都会把这个人记进该 work 的users 名单。字段语义见 [`../../structure/v5/work.md`](../../structure/v5/work.md)。
+work 树、画布、会话(现场)、user、痕迹、事件、召回。登录后的请求(身份来自 token,见 [auth.md](auth.md)),凡会动某个 work 的(建、改、重排画布、开 / 重入 / 关会话、打开 work 本身),都会把这个人记进该 work 的users 名单。字段语义见 [`../../structure/v5/work.md`](../../structure/v5/work.md)。
 
 ---
 
@@ -129,7 +129,7 @@ user:谁当前正在操作、谁历史操作过。只做可见性,不做权限�
 
 ## POST /api/works/{work_id}/users/touch
 
-心跳:「我在操作这个 work」。身份来自 `X-Memory-Talk-User`;不带头则什么都不记。返回同上。前端开着 work 页面时每 30 秒调一次。
+心跳:「我在操作这个 work」。身份来自登录态。返回同上。前端开着 work 页面时每 30 秒调一次。
 
 ---
 

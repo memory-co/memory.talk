@@ -51,7 +51,7 @@ function SidebarBody({ onNavigate, onClose }: { onNavigate: () => void; onClose?
   const t = useT();
   const route = useRoute();
   const works = useWorks(); const users = useUsers(); const system = useSystem();
-  const user = usePreferences(s => s.user);
+  const user = usePreferences(s => s.user); const role = usePreferences(s => s.role);
   const currentUser = users.data?.find(u => u.name === user);
   const go = (page: 'home' | 'library' | 'settings') => { navigate({ page }); onNavigate(); };
   return <>
@@ -81,8 +81,8 @@ function SidebarBody({ onNavigate, onClose }: { onNavigate: () => void; onClose?
     <SidebarFooter className="border-t border-sidebar-border">
       <SidebarMenu><SidebarMenuItem>
         <SidebarMenuButton size="lg" isActive={route.page === 'settings'} onClick={() => go('settings')} tooltip={t('nav.settings')}>
-          <UserAvatar>{currentUser ? (currentUser.display_name || currentUser.name).slice(0, 1).toUpperCase() : <UserRound className="size-4" />}</UserAvatar>
-          <div className="grid flex-1 text-left text-sm leading-tight"><span className="truncate font-semibold">{currentUser?.display_name || currentUser?.name || user || t('user.guest')}</span><span className="truncate text-xs text-muted-foreground">{currentUser ? t('nav.teamWorkspace') : t('nav.chooseIdentity')}</span></div>
+          <UserAvatar>{(currentUser?.display_name || user).slice(0, 1).toUpperCase() || <UserRound className="size-4" />}</UserAvatar>
+          <div className="grid flex-1 text-left text-sm leading-tight"><span className="truncate font-semibold">{currentUser?.display_name || user}</span><span className="truncate text-xs text-muted-foreground">{role === 'admin' ? t('auth.roleAdmin') : t('nav.teamWorkspace')}</span></div>
           <ChevronsUpDown className="ml-auto size-4" />
         </SidebarMenuButton>
       </SidebarMenuItem></SidebarMenu>

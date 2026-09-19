@@ -9,6 +9,10 @@
 |---|---|---|
 | `GET` | `/api/system/health` | 健康检查 |
 | `GET` | `/api/system/info` | 运行信息:路径、存储 provider、tmux socket、有没有窗 |
+| `GET` | `/api/auth/status` | 门的状态:要不要先 setup;这次带的 token 有效吗、是谁(不拦) |
+| `POST` | `/api/auth/setup` | 首次:建 admin 账号并登录;admin 已存在 → 404(不拦) |
+| `POST` | `/api/auth/login` | 密码换 token;之后 Authorization: Bearer <token>(不拦) |
+| `POST` | `/api/auth/logout` | 作废这次带的 token |
 | `GET` | `/api/works` | work 树(森林;root= 只看一棵;created_by= 只看某人建的) |
 | `POST` | `/api/works` | 开工:建一个 work(parent= 挂到树上) |
 | `GET` | `/api/works/servers` | 有哪些 work server(bash / claude / codex / kimi / http / default)及各自响应的协议;attach 时按协议去找它们 |
@@ -24,15 +28,16 @@
 | `POST` | `/api/works/{work_id}/sessions` | 在 work 里打开一个块:协议 → server 建现场,登记会话,交回窗 + 把手 |
 | `GET` | `/api/works/{work_id}/users` | user:谁当前正在操作(current)、谁历史操作过(history)。只做可见性,不做权限 |
 | `DELETE` | `/api/works/{work_id}/sessions/{session_id}` | 关闭即回收:销毁现场 + 删登记 |
-| `POST` | `/api/works/{work_id}/users/touch` | 我在操作这个 work(心跳;身份来自 X-Memory-Talk-User) |
+| `POST` | `/api/works/{work_id}/users/touch` | 我在操作这个 work(心跳;身份来自登录态) |
 | `POST` | `/api/works/{work_id}/sessions/{session_id}/attach` | 重入:幂等取回同一个现场 |
 | `GET` | `/api/works/{work_id}/sessions/{session_id}/capture` | 观测:抓终端屏幕(把手 capture) |
 | `GET` | `/api/works/{work_id}/sessions/{session_id}/rounds` | 痕迹:agent 会话的 round(先从把手同步新 round,再读 rounds.jsonl) |
 | `GET` | `/api/users` | 所有注册的 user,带活动统计,按最近活动倒序 |
-| `POST` | `/api/users` | 注册一个 user(name 唯一;之后请求头 X-Memory-Talk-User 用它) |
-| `GET` | `/api/users/me` | 我是谁:X-Memory-Talk-User 对应的 user 档案(没带 → null) |
+| `POST` | `/api/users` | 建一个账号(admin;name 唯一;可带初始密码) |
+| `GET` | `/api/users/me` | 我是谁:token 对应的档案 |
 | `GET` | `/api/users/{name}` | 一个 user 的档案 + 建的 / 动过的 work、最近的提交 |
-| `PUT` | `/api/users/{name}` | 改档案(display_name / email) |
+| `PUT` | `/api/users/{name}` | 改档案(display_name / email):自己的,或 admin 改谁的都行 |
+| `PUT` | `/api/users/{name}/password` | 改密码:自己的要带 old_password;admin 给别人设不用。改完这个人的 token 全部作废 |
 | `GET` | `/api/collections/config` | collections.json 本体 + 它的 git 历史(层的变化史) |
 | `GET` | `/api/collections/layers` | 有哪些层(最底在前)及各自的协议;用户层来自 <home>/layers/*.yaml |
 | `GET` | `/api/collections/managed` | (暂缓,等 work 实现后启用)某个 work 管的所有对象;不传 work = 没人管的对象 |
@@ -48,7 +53,7 @@
 | `DELETE` | `/api/collections/{layer}/{path}` | 删一个对象(历史在 git) |
 | `GET` | `/api/collections/history/{layer}/{path}` | 一个对象的 git log(这一层的分支上) |
 
-分页面:[system.md](system.md) · [works.md](works.md) · [users.md](users.md) · [collections.md](collections.md)
+分页面:[system.md](system.md) · [auth.md](auth.md) · [works.md](works.md) · [users.md](users.md) · [collections.md](collections.md) · [search.md](search.md)
 
 ## 通用约定
 
@@ -58,14 +63,16 @@
   | 状态 | `error` | 何时 |
   |---|---|---|
   | 400 | `bad_uri` / `no_server` / `cmd_not_found` / `guard` | URI 没协议 / 连 default 都没有 / 命令不在 PATH / 空改动、路径不合法 |
+  | 401 | `unauthorized` | 没带 token / token 不认识 / 密码不对 |
+  | 403 | `forbidden` | member 做 admin 的事 |
   | 404 | `not_found` / `no_layer` | work、会话、对象、层不存在 |
-  | 409 | `exists` / `conflict` / `guard` | 对象已存在 / work 状态、画布、结束后 attach / **跨层提交被守卫拒绝** |
+  | 409 | `exists` / `conflict` / `guard` / `setup_required` | 对象已存在 / work 状态、画布、结束后 attach / **跨层提交被守卫拒绝** / 还没 admin |
   | 422 | `invalid` | 对象不符合层的 schema(或 FastAPI 默认校验) |
   | 502 | `platform` | tmux 起不来 |
 
-- **身份自报、必须注册、不做权限**:`X-Memory-Talk-User: <名字>` 是谁在操作,名字必须是 `POST /api/users` 注册过的(否则 404)——建 work 时写进 `created_by`,动 work 时记进它的 users,collections 的每个 commit 以它为 **author**(档案里的邮箱,没填则 `<名字>@memory.talk`);不带头 = 匿名,照样能操作。整个实例给一个团队用。
+- **先立 admin,再进门;身份来自 token,权限只有一档**:没有 `admin` 账号时除 `/api/auth/{status,setup}` 外一律 409 `setup_required`;有了之后每个请求 `Authorization: Bearer <token>`(`POST /api/auth/login` 换来的),否则 401。token 对应的名字就是谁在操作——建 work 时写进 `created_by`,动 work 时记进它的 users,collections 的每个 commit 以它为 **author**(档案里的邮箱,没填则 `<名字>@memory.talk`)。admin 只多三件事:建账号、给人设密码、改别人档案;其余谁都能动。整个实例给一个团队用。见 [auth.md](auth.md)。
 - **Collections 的每个写动作一个 `[层名]` 提交**,写请求可带 `reason`(进 `Reason:`)。跨层的决定是两个相邻提交 + 同一个 `Decision:` / `Discussion:` trailer。
-- **时间**:ISO 8601 UTC。**无分页**。**没有鉴权、没有网关**。
+- **时间**:ISO 8601 UTC。**无分页**。鉴权只有上面那道门,没有网关、没有 HTTPS(挂公网自己放反代)。
 
 ## ID
 

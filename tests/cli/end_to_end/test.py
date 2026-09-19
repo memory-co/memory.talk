@@ -47,14 +47,20 @@ def test_cli_end_to_end(cli):
     assert "运行中" in cli("server", "status").stdout
     assert "已在跑" in cli("server", "start").stdout                      # 幂等
 
-    # user:注册后才能当身份
-    p = cli("work", "create", "--goal", "x", user="ghost", check=False)
-    assert p.returncode == 1 and "not_found" in p.stderr
-    cli("user", "add", "alice", "--email", "alice@example.com")
+    # 门:没 admin 什么都不能做 → setup → login;user add 要 admin
+    p = cli("work", "list", check=False)
+    assert p.returncode == 1 and "setup_required" in p.stderr
+    cli("setup", "--password", "admin-pw-1")
+    assert cli("setup", "--password", "x", check=False).returncode == 1
+    assert "先 memory.talk login" in cli("work", "list", user="ghost", check=False).stderr
+    cli("user", "add", "alice", "--email", "alice@example.com", "--password", "alice-pw-1")
     assert cli("user", "add", "alice", check=False).returncode == 1
     assert "alice" in cli("user", "list").stdout
-    assert cli("user", "whoami", check=False).returncode == 2
+    assert cli("login", "alice", "--password", "wrong", check=False).returncode == 1
+    cli("login", "alice", "--password", "alice-pw-1")
     assert "alice@example.com" in cli("user", "whoami", user="alice").stdout
+    assert "admin" in cli("user", "whoami", user="admin").stdout
+    assert cli("user", "add", "eve", user="alice", check=False).returncode == 1          # member 不能建账号
 
     # work
     w = json.loads(cli("--json", "work", "create", "--goal", "把配置改成环境变量", user="alice").stdout)
@@ -77,7 +83,7 @@ def test_cli_end_to_end(cli):
     cli("col", "edit", "issue", ip, "--put", "positions/只用环境变量.md=@-", "--subject", f"argue {ip}#只用环境变量: 够用",
         inp="---\nrank: 1\nverdict: 够用\n---\n\n为什么\n\n## 论证\n- 试了一遍,够用(" + w["id"] + "#3)\n", user="alice")
     assert cli("col", "edit", "issue", ip, "--put", "notes.txt=x", check=False).returncode == 1                       # 协议外的文件
-    cli("col", "edit", "issue", ip, "--put", "readme.md=---\nsummary: 先这样\n---\n\n背景:起服务要读几样配置", "--subject", f"summarize {ip}", user="alice")
+    cli("col", "edit", "issue", ip, "--put", "readme.md=背景:起服务要读几样配置;先这样", "--subject", f"edit {ip}", user="alice")
     r = json.loads(cli("--json", "collection", "read", "issue", ip).stdout)
     assert r["title"] == "该走文件还是环境变量" and set(r["files"]) == {"readme.md", "positions/只用环境变量.md"}
     assert "== positions/只用环境变量.md" in cli("collection", "read", "issue", ip).stdout
@@ -99,5 +105,10 @@ def test_cli_end_to_end(cli):
 
     cli("work", "set", child["id"], "--status", "done", user="alice")
     assert json.loads(cli("--json", "work", "set", w["id"], "--status", "done").stdout)["status"] == "done"
+    cli("user", "passwd", "alice", "--new-password", "alice-pw-2", user="admin")            # admin 给 alice 改密码 → 她的登录态作废
+    assert cli("work", "list", user="alice", check=False).returncode == 1
+    cli("logout", user="alice")                                                              # 作废了的也能退干净
+    cli("logout", user="admin")
+    assert cli("work", "list", user="admin", check=False).returncode == 1
     assert "已停止" in cli("server", "stop").stdout
     assert cli("server", "status", check=False).returncode == 1

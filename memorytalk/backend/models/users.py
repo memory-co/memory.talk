@@ -1,5 +1,8 @@
-"""user —— 团队里的一个人。**注册的实体**,和 work 平级,有自己的存储(docs/designs/v5/user.md)。不做权限。"""
+"""user —— 团队里的一个人。**注册的实体**,和 work 平级,有自己的存储(docs/designs/v5/user.md)。
+权限只有一档:admin 管账号(docs/designs/v5/auth.md),其余谁都能动。密码哈希存在记录里,任何模型都不带它出去。"""
 from __future__ import annotations
+
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -9,12 +12,14 @@ class User(BaseModel):
     display_name: str = ""
     email: str = Field("", description="commit author 的邮箱;空则用 <name>@memory.talk")
     created_at: str
+    role: Literal["admin", "member"] = Field("member", description="admin 这个名字的账号固定是 admin;它管账号,别的没差别")
 
 
 class UserCreate(BaseModel):
     name: str = Field(pattern=r"^[A-Za-z0-9_.\-]{1,64}$")
     display_name: str = ""
     email: str = ""
+    password: str = Field("", description="初始密码(admin 建账号时给);空 = 先不能登录,之后再设")
 
 
 class UserUpdate(BaseModel):

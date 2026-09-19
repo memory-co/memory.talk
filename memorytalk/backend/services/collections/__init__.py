@@ -30,7 +30,7 @@ class CollectionsError(RuntimeError):
 
 @dataclass(frozen=True)
 class Ctx:
-    """谁在动:人(X-Memory-Talk-User)和它所在的 work(X-Memory-Talk-Work)。"""
+    """谁在动:人(登录态)和它所在的 work(X-Memory-Talk-Work)。"""
     user: str | None = None
     work: str | None = None
 
