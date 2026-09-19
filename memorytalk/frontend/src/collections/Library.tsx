@@ -20,7 +20,8 @@ import { cn } from '@/lib/utils';
 import { dateLabel, layerLabel, type CollectionObject, type RecentPage, type Revision, type TreeView } from '@/lib/types';
 import { Empty, ErrorState, Loading } from '@/components/Shared';
 import { FieldsForm } from './FieldsForm';
-const MarkdownEditor = lazy(() => import('@/components/MarkdownEditor'));
+const loadEditor = () => import('@/components/MarkdownEditor');
+const MarkdownEditor = lazy(loadEditor);
 
 /** filter = 左边列表在看哪层(all | 某层),只由 Tab 改;layer + path (+ file) = 右边打开的文件,由点列表项决定。两者互不影响。
  *  单位是文件:origin 一个文件就是 path;有对象的层,path 是对象、file 是目录里的相对路径(readme.md / positions/x.md)。 */
@@ -48,6 +49,7 @@ export function Library({ filter = ALL, layer, path, file, onSelect, compact = f
   const [view, setView] = useState<'recent' | 'tree'>('recent');
   const [dir, setDir] = useState('');
   useEffect(() => { setDir(''); setCreating(null); }, [filter]);
+  useEffect(() => { void loadEditor().catch(() => { /* 点开文件时再加载 */ }); }, []);   // 预取编辑器 chunk(最大的一块),点文件之前就缓存好
   const definition = layers.data?.find(l => l.name === filter);
   const here = view === 'tree' ? dir : open ? parent(fullPath(open)) : '';   // 「这里」= 文件目录视图的当前目录;最近修改视图里就是打开的文件所在目录
   const tree = useQuery({ queryKey: ['tree', filter, here], queryFn: ({ signal }) => api<TreeView>(`/collections/tree?${new URLSearchParams({ path: here, ...(filter === ALL ? {} : { layer: filter }) })}`, { signal }) });
