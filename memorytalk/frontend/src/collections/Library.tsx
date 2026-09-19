@@ -5,12 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowLeft, ArrowUpRight, BookOpen, Check, Clock3, FileText, Folder, Layers, LoaderCircle, MessageSquare, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, BookOpen, Check, Clock3, FileText, Folder, Layers, LoaderCircle, MessageSquare, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, pathPart } from '@/lib/api';
 import { objectView } from '@/lib/collections';
@@ -21,7 +21,7 @@ import { usePreferences } from '@/lib/store';
 import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { dateLabel, layerLabel, type CollectionObject, type RecentPage, type Revision, type TreeView } from '@/lib/types';
-import { Empty, ErrorState, Loading, Markdown, Modal } from '@/components/Shared';
+import { Empty, ErrorState, Loading, Markdown } from '@/components/Shared';
 import { FieldsForm } from './FieldsForm';
 
 /** filter = 左边列表在看哪层(all | 某层),只由 Tab 改;layer + path = 右边打开的对象,由点列表项决定。两者互不影响。 */
@@ -38,36 +38,37 @@ export function Library({ filter = ALL, layer, path, onSelect, compact = false, 
   const select = (obj: { layer: string; path: string } | null) => onSelect(obj ? { filter, ...obj } : { filter });
   const t = useT();
   const layers = useLayers();
-  const [create, setCreate] = useState(false);
+  const [creating, setCreating] = useState<string | null>(null);        // 正在新建哪一层的对象(右边就是同一个页面,编辑态)
   const [view, setView] = useState<'recent' | 'tree'>('recent');
   const [dir, setDir] = useState('');
-  useEffect(() => { setDir(''); }, [filter]);
+  useEffect(() => { setDir(''); setCreating(null); }, [filter]);
   const definition = layers.data?.find(l => l.name === filter);
-  const label = layerLabel(t, filter);
+  const creatable = (layers.data || []).filter(l => l.protocol.object);
+  const newLabel = (l: { name: string; protocol: Protocol }) => t('library.new', { layer: l.protocol.object?.name || layerLabel(t, l.name) });
   const list = <div className="flex min-h-0 flex-1 flex-col">
     <div className="space-y-2 p-3">
       <Tabs value={filter} onValueChange={value => onSelect({ filter: value, ...(open || {}) })}><TabsList className="h-8 w-full justify-start overflow-x-auto overscroll-x-contain" aria-label={t('library.layers')}><TabsTrigger value={ALL} className="gap-1.5 text-xs"><Layers className="size-3.5" />{t('layer.all')}</TabsTrigger>{(layers.data || []).map(item => <TabsTrigger key={item.name} value={item.name} className="gap-1.5 text-xs"><LayerIcon layer={item.name} className="size-3.5" />{layerLabel(t, item.name)}</TabsTrigger>)}</TabsList></Tabs>
       <div className="flex items-center gap-2">
         <Tabs value={view} onValueChange={v => setView(v as 'recent' | 'tree')} className="min-w-0 flex-1"><TabsList className="h-8 w-full" aria-label={t('library.view')}><TabsTrigger value="recent" className="flex-1 gap-1.5 text-xs"><Clock3 className="size-3.5" />{t('library.viewRecent')}</TabsTrigger><TabsTrigger value="tree" className="flex-1 gap-1.5 text-xs"><Folder className="size-3.5" />{t('library.viewTree')}</TabsTrigger></TabsList></Tabs>
-        {definition && <Button variant="outline" size="icon" className="size-8 shrink-0" onClick={() => setCreate(true)} aria-label={t('library.new', { layer: label })} title={t('library.new', { layer: label })}><Plus /></Button>}
+        {definition?.protocol.object ? <Button variant="outline" size="sm" className="h-8 shrink-0" onClick={() => setCreating(definition.name)}><Plus />{newLabel(definition)}</Button>
+          : filter === ALL && creatable.length > 0 && <Select value="" onValueChange={value => setCreating(value)}><SelectTrigger className="h-8 w-auto shrink-0 gap-1" aria-label={t('library.newObject')}><Plus className="size-3.5" /><SelectValue placeholder={t('library.newObject')} /></SelectTrigger><SelectContent align="end">{creatable.map(l => <SelectItem key={l.name} value={l.name}>{newLabel(l)}</SelectItem>)}</SelectContent></Select>}
       </div>
       {layers.isError && <ErrorState error={layers.error} retry={() => { void layers.refetch(); }} />}
     </div>
-    {view === 'recent' ? <RecentList filter={filter} selected={open?.path} onOpen={select} onCreate={definition ? () => setCreate(true) : undefined} />
+    {view === 'recent' ? <RecentList filter={filter} selected={open?.path} onOpen={select} onCreate={definition?.protocol.object ? () => setCreating(definition.name) : undefined} />
       : <TreeList filter={filter} dir={dir} setDir={setDir} selected={open?.path} onOpen={select} />}
     {definition && !compact && <p className="flex items-start gap-1.5 border-t px-3 py-2 text-xs text-muted-foreground"><Layers className="mt-0.5 size-3.5 shrink-0" />{definition.description}</p>}
   </div>;
-  const detail = open && <ObjectDetail key={`${open.layer}/${open.path}`} layer={open.layer} path={open.path} work={work} onOpen={select} onClose={() => select(null)} />;
+  const page = creating ? <ObjectPage key={`new/${creating}`} layer={creating} creating work={work} onOpen={o => { setCreating(null); select(o); }} onClose={() => setCreating(null)} />
+    : open && <ObjectPage key={`${open.layer}/${open.path}`} layer={open.layer} path={open.path} work={work} onOpen={select} onClose={() => select(null)} />;
   return <div className={cn('flex min-h-0 flex-1', compact ? 'flex-col' : 'flex-col md:flex-row')}>
-    {compact ? (open ? detail : list) : <>
-      <div className={cn('flex min-h-0 flex-col md:w-80 md:shrink-0 md:border-r', open ? 'hidden md:flex' : 'flex-1 md:flex-none')}>{list}</div>
-      <div className={cn('min-h-0 flex-1 flex-col', open ? 'flex' : 'hidden md:flex')}>{detail || <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">{t('library.subtitle')}</div>}</div>
+    {compact ? (page || list) : <>
+      <div className={cn('flex min-h-0 flex-col md:w-80 md:shrink-0 md:border-r', page ? 'hidden md:flex' : 'flex-1 md:flex-none')}>{list}</div>
+      <div className={cn('min-h-0 flex-1 flex-col', page ? 'flex' : 'hidden md:flex')}>{page || <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">{t('library.subtitle')}</div>}</div>
     </>}
-    {definition && <ObjectEditor layer={filter} protocol={definition.protocol} open={create} onClose={() => setCreate(false)} work={work} onSaved={objectPath => { setCreate(false); select({ layer: filter, path: objectPath }); }} />}
   </div>;
 }
 
-/** 最近修改:/collections/recent,每个对象一次、新的在前,往下翻。 */
 function RecentList({ filter, selected, onOpen, onCreate }: { filter: string; selected?: string; onOpen: (o: { layer: string; path: string }) => void; onCreate?: () => void }) {
   const t = useT();
   const locale = usePreferences(s => s.locale);
@@ -126,54 +127,6 @@ function FieldsTable({ fields }: { fields: Record<string, unknown> }) {
   return <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-md border bg-muted/40 px-3 py-2 text-xs">{entries.map(([k, v]) => <div key={k} className="contents"><dt className="text-muted-foreground">{k}</dt><dd className="min-w-0 break-all font-mono">{typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? String(v) : JSON.stringify(v)}</dd></div>)}</dl>;
 }
 
-export function ObjectDetail({ layer, path, onClose, onOpen, work }: {
-  layer: string; path: string; work?: string; onClose: () => void; onOpen: (o: { layer: string; path: string }) => void;
-}) {
-  const t = useT();
-  const locale = usePreferences(s => s.locale);
-  const layers = useLayers();
-  const protocol = layers.data?.find(l => l.name === layer)?.protocol;
-  const [tab, setTab] = useState<'content' | 'history'>('content');
-  const [revision, setRevision] = useState('');
-  const [editing, setEditing] = useState(false);
-  const object = useQuery({ queryKey: ['object', layer, path, revision], queryFn: ({ signal }) => api<CollectionObject>(`/collections/${encodeURIComponent(layer)}/${pathPart(path)}${revision ? `?rev=${encodeURIComponent(revision)}` : ''}`, { signal }) });
-  const history = useQuery({ queryKey: ['history', layer, path], queryFn: ({ signal }) => api<Revision[]>(`/collections/history/${encodeURIComponent(layer)}/${pathPart(path)}`, { signal }), enabled: tab === 'history' });
-  const view = objectView(object.data);
-  const linkButton = (label: string, hint: string | undefined, onClick: () => void, key?: string | number) =>
-    <Button key={key} variant="outline" className="h-auto w-full justify-start gap-2 whitespace-normal px-3 py-2 text-left font-normal" onClick={onClick}><MessageSquare className="size-4 shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 break-all">{label}</span>{hint && <Badge variant="secondary" className="shrink-0">{hint}</Badge>}<ArrowUpRight className="size-4 shrink-0 text-muted-foreground" /></Button>;
-  const issueLinks = (links: unknown) => Array.isArray(links) ? <div className="space-y-2">{links.map((value, i) => { const link = asObject(value); return linkButton(text(link.target), text(link.type), () => onOpen({ layer: 'issue', path: text(link.target).split('#')[0] }), i); })}</div> : null;
-  return <div className="flex min-h-0 flex-1 flex-col">
-    <div className="flex items-center gap-2 border-b px-3 py-2">
-      <Button variant="ghost" size="icon" className="size-8" onClick={onClose} aria-label={t('library.back')}><ArrowLeft /></Button>
-      <Badge variant="secondary">{layerLabel(t, layer)}</Badge>
-      <Tabs value={tab} onValueChange={value => setTab(value as 'content' | 'history')} className="ml-auto"><TabsList className="h-8" aria-label={t('library.objectView')}><TabsTrigger value="content" className="text-xs">{t('library.tabContent')}</TabsTrigger><TabsTrigger value="history" className="gap-1 text-xs"><Clock3 className="size-3.5" />{t('library.tabHistory')}</TabsTrigger></TabsList></Tabs>
-      {!revision && object.data && <Button variant="ghost" size="icon" className="size-8" onClick={() => setEditing(true)} aria-label={t('library.editCard')}><Pencil /></Button>}
-    </div>
-    <div className="min-h-0 flex-1 overflow-auto">{object.isPending ? <Loading /> : object.isError ? <div className="p-4"><ErrorState error={object.error} retry={() => { void object.refetch(); }} /></div> : <div className="mx-auto flex max-w-3xl flex-col gap-4 p-4 md:p-6">
-      <div><p className="truncate font-mono text-xs text-muted-foreground">{path}</p><h2 className="mt-1 text-xl font-semibold tracking-tight">{object.data.title || path.split('/').pop()}</h2></div>
-      {!!view.invalid && <ErrorState error={new Error(t('library.invalidMeta'))} />}
-      {revision && <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-xs"><Clock3 className="size-3.5" /><span>{t('library.revision', { rev: revision.slice(0, 7) })}</span><Button variant="link" size="sm" className="ml-auto h-auto p-0 text-xs" onClick={() => setRevision('')}>{t('library.backToCurrent')}</Button></div>}
-      {tab === 'history' ? history.isPending ? <Loading /> : history.isError ? <ErrorState error={history.error} /> : <ol className="ml-1.5 space-y-4 border-l pl-5">{history.data?.map(item => <li key={item.sha} className="relative"><span className="absolute -left-[26px] top-1.5 size-2.5 rounded-full border-2 border-background bg-muted-foreground" /><button type="button" className="block w-full text-left" onClick={() => { setRevision(item.sha); setTab('content'); }}><span className="block text-sm font-medium break-all">{item.subject}</span><span className="mt-1 block text-xs text-muted-foreground">{item.author} · {dateLabel(item.date, locale)} · <span className="font-mono">{item.sha.slice(0, 7)}</span></span></button></li>)}</ol>
-        : layer === 'origin' ? <Markdown text={object.data.content || ''} />
-        : layer === 'card' ? <>
-          {text(view.fields.context) && <p className="text-sm text-muted-foreground">{text(view.fields.context)}</p>}
-          <Markdown text={view.body} />
-          {text(view.fields.issue) && linkButton(t('library.viewDiscussion'), undefined, () => onOpen({ layer: 'issue', path: text(view.fields.issue) }))}
-          {Array.isArray(view.fields.links) && view.fields.links.length > 0 && <div className="space-y-2"><Separator /><h4 className="text-xs font-medium text-muted-foreground">{t('library.relatedCards')}</h4>{view.fields.links.filter(link => typeof link === 'string').map(link => <Button variant="link" key={String(link)} className="h-auto justify-start gap-1.5 p-0 text-sm font-normal" onClick={() => onOpen({ layer: 'card', path: String(link) })}><BookOpen className="size-3.5" />{String(link)}</Button>)}</div>}
-        </> : layer === 'issue' ? <>
-          <Markdown text={view.body} />
-          {text(view.fields.summary) && <Card className="bg-muted/40"><CardHeader className="p-4 pb-1"><CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t('library.summary')}</CardTitle></CardHeader><CardContent className="p-4 pt-0"><Markdown text={text(view.fields.summary)} /></CardContent></Card>}
-          <h3 className="mt-2 text-sm font-medium">{t('library.positions')} <span className="text-muted-foreground">{view.positions.length}</span></h3>
-          {view.positions.map(p => <Card key={p.rel}><CardHeader className="p-4 pb-2"><CardTitle className="flex flex-wrap items-baseline gap-2 text-sm font-medium"><Badge variant={p.rank === null ? 'outline' : 'default'} className="font-mono">{p.rank === null ? t('library.unranked') : `#${p.rank}`}</Badge>{p.claim}</CardTitle>{text(p.fields.verdict) && <p className="text-xs text-muted-foreground">{text(p.fields.verdict)}</p>}</CardHeader><CardContent className="space-y-3 p-4 pt-0"><Markdown text={p.body} />{issueLinks(p.fields.links)}</CardContent></Card>)}
-          {issueLinks(view.fields.links)}
-        </> : <div className="space-y-5">{Object.entries(object.data.files).map(([name, value]) => { let parsed = { fields: {} as Record<string, unknown>, body: value }; try { parsed = splitFile(value); } catch { /* 原样 */ } return <section key={name} className="space-y-2"><h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><FileText className="size-3.5" />{name}</h3><FieldsTable fields={parsed.fields} />{kindOf(protocol, name)?.format.body === 'text' ? <pre className="overflow-auto whitespace-pre-wrap break-all rounded-md border bg-muted p-3 font-mono text-xs">{parsed.body}</pre> : <Markdown text={parsed.body} />}</section>; })}</div>}
-    </div>}</div>
-    {protocol && <ObjectEditor layer={layer} protocol={protocol} path={path} initial={object.data} open={editing} onClose={() => setEditing(false)} onSaved={() => setEditing(false)} work={work} />}
-  </div>;
-}
-
-/* ------------------------------------------------------------------ 编辑器:完全由协议驱动 ------------------------------------------------------------------ */
-
 type Draft = { fields: Record<string, unknown>; body: string; kind?: FileKind };
 function parseAll(files: Record<string, string>, protocol: Protocol): Record<string, Draft> {
   const out: Record<string, Draft> = {};
@@ -196,56 +149,100 @@ function serialize(drafts: Record<string, Draft>, deleted: Set<string>): Record<
   return files;
 }
 
-function ObjectEditor({ layer, protocol, path, initial, open, onClose, onSaved, work }: {
-  layer: string; protocol: Protocol; path?: string; initial?: CollectionObject; open: boolean; onClose: () => void; onSaved: (path: string) => void; work?: string;
+/** 一个对象一页:浏览、修改、新建都在这里,没有弹层。creating = 新建这一层的对象(编辑态、带路径输入);否则打开 path,点「编辑」就地改。 */
+export function ObjectPage({ layer, path, creating = false, onClose, onOpen, work }: {
+  layer: string; path?: string; creating?: boolean; work?: string; onClose: () => void; onOpen: (o: { layer: string; path: string }) => void;
 }) {
   const t = useT();
-  const raw = !protocol.object;                                                       // origin:一个文件,原文
+  const locale = usePreferences(s => s.locale);
+  const layers = useLayers();
+  const protocol = layers.data?.find(l => l.name === layer)?.protocol;
+  const raw = !!protocol && !protocol.object;
+  const [tab, setTab] = useState<'content' | 'history'>('content');
+  const [revision, setRevision] = useState('');
+  const [editing, setEditing] = useState(creating);
+  const object = useQuery({ queryKey: ['object', layer, path, revision], queryFn: ({ signal }) => api<CollectionObject>(`/collections/${encodeURIComponent(layer)}/${pathPart(path || '')}${revision ? `?rev=${encodeURIComponent(revision)}` : ''}`, { signal }), enabled: !!path });
+  const history = useQuery({ queryKey: ['history', layer, path], queryFn: ({ signal }) => api<Revision[]>(`/collections/history/${encodeURIComponent(layer)}/${pathPart(path || '')}`, { signal }), enabled: !!path && tab === 'history' });
+  const view = objectView(object.data);
+  // ---- 编辑态 ----
   const [objectPath, setObjectPath] = useState(path || '');
   const [content, setContent] = useState('');
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [deleted, setDeleted] = useState<Set<string>>(new Set());
   const [subject, setSubject] = useState('');
   const [reason, setReason] = useState('');
-  useEffect(() => {
-    if (!open) return;
+  const beginEdit = () => {
+    if (!protocol) return;
     setObjectPath(path || ''); setSubject(''); setReason(''); setDeleted(new Set());
-    if (raw) { setContent(initial?.content || ''); return; }
-    if (initial) { setDrafts(parseAll(initial.files, protocol)); return; }
-    const fresh: Record<string, Draft> = {};
-    for (const kind of protocol.files) if (kind.required && kind.fixed) fresh[kind.example] = { fields: {}, body: kind.template, kind };
-    setDrafts(fresh);
-  }, [open, path, initial, protocol, raw]);
+    if (raw) setContent(object.data?.content || '');
+    else if (object.data) setDrafts(parseAll(object.data.files, protocol));
+    else { const fresh: Record<string, Draft> = {}; for (const kind of protocol.files) if (kind.required && kind.fixed) fresh[kind.example] = { fields: {}, body: kind.template, kind }; setDrafts(fresh); }
+    setEditing(true);
+  };
+  useEffect(() => { if (creating && protocol && !Object.keys(drafts).length) beginEdit(); }, [creating, protocol]);   // eslint-disable-line react-hooks/exhaustive-deps
   const payload = useMemo(() => (raw ? { content } : { files: serialize(drafts, deleted) }), [raw, content, drafts, deleted]);
   const validPath = !!objectPath.trim() && !objectPath.split('/').some(p => !p.trim() || p === '..');
   const target = `/collections/${encodeURIComponent(layer)}/${pathPart(objectPath.trim())}`;
   const method = path ? 'PUT' : 'POST';
-  // 保存前 dry-run:协议不过的理由显示在表单里,而不是保存失败后的 toast
   const [check, setCheck] = useState<{ ok: boolean; reason?: string | null } | 'pending' | null>(null);
   useEffect(() => {
-    if (!open || !validPath) { setCheck(null); return; }
+    if (!editing || !validPath) { setCheck(null); return; }
     setCheck('pending');
     const timer = setTimeout(() => { api<{ ok: boolean; reason?: string | null }>(`${target}?dry_run=1`, { method, body: payload, work }).then(setCheck).catch((e: Error) => setCheck({ ok: false, reason: e.message })); }, 400);
     return () => clearTimeout(timer);
-  }, [open, validPath, target, method, payload, work]);
-  const mutation = useMutation({ mutationFn: () => api<CollectionObject>(target, { method, body: { ...payload, subject: subject || undefined, reason }, work }),
-    onSuccess: () => { for (const key of ['tree', 'object', 'history', 'search']) void queryClient.invalidateQueries({ queryKey: [key] }); toast.success(path ? t('library.saved') : t('library.created')); onSaved(objectPath.trim()); } });
-  const ready = validPath && check !== 'pending' && check?.ok === true && !mutation.isPending;
-  const label = layerLabel(t, layer);
-  return <Modal open={open} onClose={() => { if (!mutation.isPending) { mutation.reset(); onClose(); } }} title={path ? t('library.editTitle', { layer: label }) : t('library.newTitle', { layer: label })} description={t('library.editorText')}>
-    <form className="grid gap-4" onSubmit={e => { e.preventDefault(); if (ready) mutation.mutate(); }}>
-      {!path && <div className="grid gap-2"><Label htmlFor="object-path">{raw ? t('library.pathLabel') : t('editor.pathFor', { name: protocol.object?.name || '' })}</Label><Input id="object-path" autoFocus value={objectPath} onChange={e => setObjectPath(e.target.value)} placeholder={t('library.pathPlaceholder')} required /></div>}
-      {raw ? <div className="grid gap-2"><Label htmlFor="object-content">{t('editor.origin')}</Label><Textarea id="object-content" className="min-h-40 max-h-96 resize-y font-mono text-sm" value={content} onChange={e => setContent(e.target.value)} placeholder={t('library.markdown')} /></div>
+  }, [editing, validPath, target, method, payload, work]);
+  const save = useMutation({ mutationFn: () => api<CollectionObject>(target, { method, body: { ...payload, subject: subject || undefined, reason }, work }),
+    onSuccess: saved => { for (const key of ['tree', 'recent', 'object', 'history', 'search']) void queryClient.invalidateQueries({ queryKey: [key] }); toast.success(path ? t('library.saved') : t('library.created')); setEditing(false); if (!path) onOpen({ layer, path: saved.path }); } });
+  const ready = validPath && check !== 'pending' && check?.ok === true && !save.isPending;
+  const cancel = () => { if (creating) onClose(); else setEditing(false); };
+  const linkButton = (label: string, hint: string | undefined, onClick: () => void, key?: string | number) =>
+    <Button key={key} variant="outline" className="h-auto w-full justify-start gap-2 whitespace-normal px-3 py-2 text-left font-normal" onClick={onClick}><MessageSquare className="size-4 shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 break-all">{label}</span>{hint && <Badge variant="secondary" className="shrink-0">{hint}</Badge>}<ArrowUpRight className="size-4 shrink-0 text-muted-foreground" /></Button>;
+  const issueLinks = (links: unknown) => Array.isArray(links) ? <div className="space-y-2">{links.map((value, i) => { const link = asObject(value); return linkButton(text(link.target), text(link.type), () => onOpen({ layer: 'issue', path: text(link.target).split('#')[0] }), i); })}</div> : null;
+  const title = creating ? t('library.newTitle', { layer: protocol?.object?.name || layerLabel(t, layer) }) : object.data?.title || path?.split('/').pop();
+  return <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
+      <Button variant="ghost" size="icon" className="size-8" onClick={editing ? cancel : onClose} aria-label={editing ? t('common.cancel') : t('library.back')}>{editing ? <X /> : <ArrowLeft />}</Button>
+      <Badge variant="secondary">{layerLabel(t, layer)}</Badge>
+      {editing ? <>
+        <span className={cn('ml-auto flex items-center gap-1.5 text-xs', check && check !== 'pending' && !check.ok ? 'text-destructive' : 'text-muted-foreground')}>{check === 'pending' ? <><LoaderCircle className="size-3.5 animate-spin" />{t('editor.checking')}</> : check?.ok ? <><Check className="size-3.5" />{t('editor.valid')}</> : check ? <span className="max-w-[40vw] truncate" title={check.reason || ''}>{check.reason}</span> : null}</span>
+        <Button variant="outline" size="sm" className="h-8" onClick={cancel} disabled={save.isPending}>{t('common.cancel')}</Button>
+        <Button size="sm" className="h-8" disabled={!ready} onClick={() => save.mutate()}>{save.isPending && <LoaderCircle className="animate-spin" />}{t('common.save')}</Button>
+      </> : <>
+        <Tabs value={tab} onValueChange={value => setTab(value as 'content' | 'history')} className="ml-auto"><TabsList className="h-8" aria-label={t('library.objectView')}><TabsTrigger value="content" className="text-xs">{t('library.tabContent')}</TabsTrigger><TabsTrigger value="history" className="gap-1 text-xs"><Clock3 className="size-3.5" />{t('library.tabHistory')}</TabsTrigger></TabsList></Tabs>
+        {!revision && object.data && protocol && <Button variant="outline" size="sm" className="h-8" onClick={beginEdit}><Pencil />{t('editor.edit')}</Button>}
+      </>}
+    </div>
+    <div className="min-h-0 flex-1 overflow-auto">{editing && protocol ? <div className="mx-auto flex max-w-3xl flex-col gap-4 p-4 md:p-6">
+      <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
+      {creating && <div className="grid gap-2"><Label htmlFor="object-path">{raw ? t('library.pathLabel') : t('editor.pathFor', { name: protocol.object?.name || '' })}</Label><Input id="object-path" autoFocus value={objectPath} onChange={e => setObjectPath(e.target.value)} placeholder={t('library.pathPlaceholder')} required /></div>}
+      {raw ? <div className="grid gap-2"><Label htmlFor="object-content">{t('editor.origin')}</Label><Textarea id="object-content" className="min-h-60 resize-y font-mono text-sm" value={content} onChange={e => setContent(e.target.value)} placeholder={t('library.markdown')} /></div>
         : <ProtocolFiles protocol={protocol} objectPath={objectPath} drafts={drafts} deleted={deleted} onDrafts={setDrafts} onDeleted={setDeleted} />}
       <div className="grid gap-2 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor="object-subject">{t('editor.subject')}</Label><Input id="object-subject" value={subject} onChange={e => setSubject(e.target.value)} placeholder={t('editor.subjectPlaceholder')} /></div><div className="grid gap-2"><Label htmlFor="object-reason">{t('library.reason')}</Label><Input id="object-reason" value={reason} onChange={e => setReason(e.target.value)} placeholder={t('library.reasonPlaceholder')} /></div></div>
-      <p className={cn('flex items-center gap-1.5 text-xs', check && check !== 'pending' && !check.ok ? 'text-destructive' : 'text-muted-foreground')}>{check === 'pending' ? <><LoaderCircle className="size-3.5 animate-spin" />{t('editor.checking')}</> : check?.ok ? <><Check className="size-3.5" />{t('editor.valid')}</> : check ? check.reason : null}</p>
-      {mutation.isError && <ErrorState error={mutation.error} />}
-      <DialogFooter><Button type="button" variant="outline" onClick={onClose} disabled={mutation.isPending}>{t('common.cancel')}</Button><Button type="submit" disabled={!ready}>{mutation.isPending && <LoaderCircle className="animate-spin" />}{t('common.save')}</Button></DialogFooter>
-    </form>
-  </Modal>;
+      {check && check !== 'pending' && !check.ok && <ErrorState error={new Error(check.reason || '')} />}
+      {save.isError && <ErrorState error={save.error} />}
+    </div>
+    : !path ? null : object.isPending ? <Loading /> : object.isError ? <div className="p-4"><ErrorState error={object.error} retry={() => { void object.refetch(); }} /></div> : <div className="mx-auto flex max-w-3xl flex-col gap-4 p-4 md:p-6">
+      <div><p className="truncate font-mono text-xs text-muted-foreground">{path}</p><h2 className="mt-1 text-xl font-semibold tracking-tight">{title}</h2></div>
+      {!!view.invalid && <ErrorState error={new Error(t('library.invalidMeta'))} />}
+      {revision && <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-xs"><Clock3 className="size-3.5" /><span>{t('library.revision', { rev: revision.slice(0, 7) })}</span><Button variant="link" size="sm" className="ml-auto h-auto p-0 text-xs" onClick={() => setRevision('')}>{t('library.backToCurrent')}</Button></div>}
+      {tab === 'history' ? history.isPending ? <Loading /> : history.isError ? <ErrorState error={history.error} /> : <ol className="ml-1.5 space-y-4 border-l pl-5">{history.data?.map(item => <li key={item.sha} className="relative"><span className="absolute -left-[26px] top-1.5 size-2.5 rounded-full border-2 border-background bg-muted-foreground" /><button type="button" className="block w-full text-left" onClick={() => { setRevision(item.sha); setTab('content'); }}><span className="block text-sm font-medium break-all">{item.subject}</span><span className="mt-1 block text-xs text-muted-foreground">{item.author} · {dateLabel(item.date, locale)} · <span className="font-mono">{item.sha.slice(0, 7)}</span></span></button></li>)}</ol>
+        : layer === 'origin' ? <Markdown text={object.data.content || ''} />
+        : layer === 'card' ? <>
+          {text(view.fields.context) && <p className="text-sm text-muted-foreground">{text(view.fields.context)}</p>}
+          <Markdown text={view.body} />
+          {text(view.fields.issue) && linkButton(t('library.viewDiscussion'), undefined, () => onOpen({ layer: 'issue', path: text(view.fields.issue) }))}
+          {Array.isArray(view.fields.links) && view.fields.links.length > 0 && <div className="space-y-2"><Separator /><h4 className="text-xs font-medium text-muted-foreground">{t('library.relatedCards')}</h4>{view.fields.links.filter(link => typeof link === 'string').map(link => <Button variant="link" key={String(link)} className="h-auto justify-start gap-1.5 p-0 text-sm font-normal" onClick={() => onOpen({ layer: 'card', path: String(link) })}><BookOpen className="size-3.5" />{String(link)}</Button>)}</div>}
+        </> : layer === 'issue' ? <>
+          <Markdown text={view.body} />
+          {text(view.fields.summary) && <Card className="bg-muted/40"><CardHeader className="p-4 pb-1"><CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t('library.summary')}</CardTitle></CardHeader><CardContent className="p-4 pt-0"><Markdown text={text(view.fields.summary)} /></CardContent></Card>}
+          <h3 className="mt-2 text-sm font-medium">{t('library.positions')} <span className="text-muted-foreground">{view.positions.length}</span></h3>
+          {view.positions.map(p => <Card key={p.rel}><CardHeader className="p-4 pb-2"><CardTitle className="flex flex-wrap items-baseline gap-2 text-sm font-medium"><Badge variant={p.rank === null ? 'outline' : 'default'} className="font-mono">{p.rank === null ? t('library.unranked') : `#${p.rank}`}</Badge>{p.claim}</CardTitle>{text(p.fields.verdict) && <p className="text-xs text-muted-foreground">{text(p.fields.verdict)}</p>}</CardHeader><CardContent className="space-y-3 p-4 pt-0"><Markdown text={p.body} />{issueLinks(p.fields.links)}</CardContent></Card>)}
+          {issueLinks(view.fields.links)}
+        </> : <div className="space-y-5">{Object.entries(object.data.files).map(([name, value]) => { let parsed = { fields: {} as Record<string, unknown>, body: value }; try { parsed = splitFile(value); } catch { /* 原样 */ } return <section key={name} className="space-y-2"><h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><FileText className="size-3.5" />{name}</h3><FieldsTable fields={parsed.fields} />{kindOf(protocol, name)?.format.body === 'text' ? <pre className="overflow-auto whitespace-pre-wrap break-all rounded-md border bg-muted p-3 font-mono text-xs">{parsed.body}</pre> : <Markdown text={parsed.body} />}</section>; })}</div>}
+    </div>}</div>
+  </div>;
 }
 
-/** 对象 = 一页;文件 = 属性 + 正文;带 name 的种类有「新建 <label>」。 */
 function ProtocolFiles({ protocol, objectPath, drafts, deleted, onDrafts, onDeleted }: {
   protocol: Protocol; objectPath: string; drafts: Record<string, Draft>; deleted: Set<string>;
   onDrafts: (d: Record<string, Draft>) => void; onDeleted: (d: Set<string>) => void;
