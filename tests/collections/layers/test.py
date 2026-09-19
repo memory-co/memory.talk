@@ -17,7 +17,7 @@ def test_issue_protocol_describes_two_kinds_of_files(client):
     assert issue["protocol"]["object"] == {"pattern": "^(?P<name>[^/]+)\\.issue$", "name": "问题", "under": ".*", "example": "{name}.issue"}
     readme, position = issue["protocol"]["files"]
     assert (readme["example"], readme["fixed"], readme["required"]) == ("readme.md", True, True)
-    assert set(readme["format"]["fields"]) == {"links", "summary"} and readme["format"]["body"] == "markdown"
+    assert set(readme["format"]["fields"]) == {"links"} and readme["format"]["body"] == "markdown"
     assert (position["example"], position["fixed"], position["name"], position["label"]) == ("positions/{name}.md", False, "主张", "立场")
     assert position["format"]["fields"]["rank"]["type"] == "number" and position["template"].strip() == "## 论证"
     assert readme["format"]["fields"]["links"]["item"]["fields"]["type"]["values"][0] == "specializes"

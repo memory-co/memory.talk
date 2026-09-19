@@ -13,7 +13,6 @@ files:
     format:
       fields:                                 # frontmatter;类型 string / text / number / bool / date / enum / ref / list / object
         links: {type: list, item: {type: object, fields: {type: {type: enum, values: [...], required: true}, target: {type: ref, layer: issue, required: true}}}}
-        summary: {type: text}
       body: markdown                          # 正文:markdown | text
     template: ""
   - pattern: ^positions/(?P<name>[^/]+)\.md$  # 一类文件:命名组 name 由用户起

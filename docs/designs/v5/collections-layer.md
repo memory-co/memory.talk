@@ -52,7 +52,6 @@ files:
             fields:
               type:   {type: enum, values: [specializes, suggested_by, questions, replaces, related], required: true}
               target: {type: ref, layer: issue, required: true}
-        summary: {type: text}       # 对整个问题现状的一句总结(manager 写)
       body: markdown                # 正文:问题的展开
     template: ""
 

@@ -29,7 +29,7 @@ def test_required_file_cannot_be_deleted_but_others_can(client, issue):
 
 
 def test_fields_are_validated_by_type(client, issue):
-    ok = _put(client, {"readme.md": "---\nlinks:\n- {type: specializes, target: memory.talk/更大的问题}\nsummary: 先这样\n---\n\n背景"})
+    ok = _put(client, {"readme.md": "---\nlinks:\n- {type: specializes, target: memory.talk/更大的问题}\n---\n\n背景"})
     assert ok.status_code == 200
     bad = lambda files: _put(client, files).json()["message"]
     assert "只能是" in bad({"readme.md": "---\nlinks:\n- {type: nope, target: x}\n---\n"})               # enum

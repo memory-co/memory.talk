@@ -17,7 +17,6 @@ files:
             fields:
               type: {type: enum, values: [specializes, suggested_by, questions, replaces, related], required: true}
               target: {type: ref, layer: issue, required: true, description: "对端 issue 的 path,可带 #<主张>"}
-        summary: {type: text, description: "对整个问题现状的一句总结(manager 写)"}
       body: markdown
     template: ""
   - pattern: ^positions/(?P<name>[^/]+)\.md$

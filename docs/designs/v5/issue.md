@@ -22,7 +22,7 @@
 
 ```
 memory.talk/配置/该走文件还是环境变量.issue/
-├── readme.md             ← 问题:字段(links / summary)+ 正文(问题的展开);标题就是目录名
+├── readme.md             ← 问题:字段(links)+ 正文(问题的展开);标题就是目录名
 ├── positions/
 │   ├── 只用环境变量,不要配置文件.md     ← 一个立场:文件名就是主张;字段(links / rank / verdict)+ 正文(阐述 + ## 论证)
 │   └── 走配置文件,环境变量只做覆盖.md
@@ -58,7 +58,6 @@ summary: 目前倾向只走环境变量;等 work_try 把 .env 那条路验完再
 | 部分 | 改不改 | 说明 |
 |---|---|---|
 | `links[]` | 只增 | 和别的 issue 的边,`{type, target}`;`type` ∈ `specializes`(本 issue 是 target 的子问题)/ `suggested_by`(被 target 引出)/ `questions`(质疑 target 的前提)/ `replaces`(重述并取代 target)/ `related`;`target` 是对端 issue 的 path(可带 `#<主张>` 指到对端的某个立场) |
-| `summary` | 可改 | 对整个 issue 现状的一句总结(manager 写) |
 | 正文 | 可改 | 问题的展开——背景、为什么冒出来、边界。可以为空(只有目录名的 issue 也合法) |
 
 `summary` 和各立场的 `rank` / `verdict` 是**判断**,不是计算:由 manager work 里的人或 agent 读完论证之后写下来。改了就是一次 `[issue]` 提交(一次可以改几个立场的 `rank`,一个提交)。
@@ -102,7 +101,7 @@ links:
 
 | 文件 | 规则 |
 |---|---|
-| `readme.md` | 必需;不能删;字段只能是 `links` / `summary`,`links[].type` 五选一;正文随便改 |
+| `readme.md` | 必需;不能删;字段只能是 `links`,`links[].type` 五选一;正文随便改 |
 | `positions/*.md` | 新建随意(文件名非空、不含 `/`);字段只能是 `links` / `rank` / `verdict`;正文随便改 |
 | `manager.json` | 机制文件,系统的,任何层都允许,不进校验 |
 | 其他任何文件 | **拒** |
