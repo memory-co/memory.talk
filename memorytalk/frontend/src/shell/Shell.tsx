@@ -108,9 +108,9 @@ function Crumbs() {
   </BreadcrumbList></Breadcrumb>;
 }
 
-function Page({ onLibrary, selection }: { onLibrary: () => void; selection: (s: { layer: string; path?: string }) => void }) {
+function Page({ onLibrary, selection }: { onLibrary: () => void; selection: (s: { filter: string; layer?: string; path?: string }) => void }) {
   const route = useRoute();
-  return <Suspense fallback={<Loading />}>{route.page === 'home' ? <Home /> : route.page === 'work' && route.work ? <Workspace key={route.work} id={route.work} onLibrary={onLibrary} /> : route.page === 'library' ? <Library layer={route.layer || 'all'} path={route.path} onSelect={selection} /> : <Settings />}</Suspense>;
+  return <Suspense fallback={<Loading />}>{route.page === 'home' ? <Home /> : route.page === 'work' && route.work ? <Workspace key={route.work} id={route.work} onLibrary={onLibrary} /> : route.page === 'library' ? <Library filter={route.filter || 'all'} layer={route.layer} path={route.path} onSelect={selection} /> : <Settings />}</Suspense>;
 }
 
 function ShellContent() {
@@ -121,7 +121,7 @@ function ShellContent() {
   const [searchLoaded, setSearchLoaded] = useState(false);
   useEffect(() => { if (search) setSearchLoaded(true); }, [search]);
   const [inspector, setInspector] = useState(false);
-  const [selection, setSelection] = useState<{ layer: string; path?: string }>({ layer: 'all' });
+  const [selection, setSelection] = useState<{ filter: string; layer?: string; path?: string }>({ filter: 'all' });
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setSearch(true); }
@@ -169,7 +169,7 @@ function MobileShell({ onSearch, library, page }: { onSearch: () => void; librar
     if (el && target) el.scrollTo({ left: target.offsetLeft, behavior: smooth ? 'smooth' : 'auto' });
   }, []);
   useEffect(() => { goTo(1, false); }, [goTo]);                                       // 初始停在主内容
-  useEffect(() => { goTo(1); }, [route.page, route.work, route.layer, route.path, goTo]);   // 导航后回到主内容
+  useEffect(() => { goTo(1); }, [route.page, route.work, route.filter, route.layer, route.path, goTo]);   // 导航后回到主内容
   const onScroll = () => { const el = track.current; if (el) setCol(Math.round(el.scrollLeft / el.clientWidth)); };   // 三列等宽:一列一页
   const safe = 'pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]';
   return <div ref={track} onScroll={onScroll} className="flex h-dvh w-full snap-x snap-mandatory overflow-x-auto overflow-y-hidden overscroll-x-contain bg-background [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

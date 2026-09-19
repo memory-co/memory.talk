@@ -24,54 +24,57 @@ import { dateLabel, layerLabel, type CollectionObject, type RecentPage, type Rev
 import { Empty, ErrorState, Loading, Markdown, Modal } from '@/components/Shared';
 import { FieldsForm } from './FieldsForm';
 
-type Selection = { layer: string; path?: string };
+/** filter = 左边列表在看哪层(all | 某层),只由 Tab 改;layer + path = 右边打开的对象,由点列表项决定。两者互不影响。 */
+type Selection = { filter: string; layer?: string; path?: string };
 const ALL = 'all';
 function LayerIcon({ layer, className }: { layer: string; className?: string }) {
   return layer === 'card' ? <BookOpen className={className} /> : layer === 'issue' ? <MessageSquare className={className} /> : layer === ALL ? <Layers className={className} /> : <FileText className={className} />;
 }
 
-export function Library({ layer = ALL, path, onSelect, compact = false, work }: Selection & {
+export function Library({ filter = ALL, layer, path, onSelect, compact = false, work }: Selection & {
   onSelect: (selection: Selection) => void; compact?: boolean; work?: string;
 }) {
+  const open = layer && path ? { layer, path } : null;
+  const select = (obj: { layer: string; path: string } | null) => onSelect(obj ? { filter, ...obj } : { filter });
   const t = useT();
   const layers = useLayers();
   const [create, setCreate] = useState(false);
   const [view, setView] = useState<'recent' | 'tree'>('recent');
   const [dir, setDir] = useState('');
-  useEffect(() => { setDir(''); }, [layer]);
-  const definition = layers.data?.find(l => l.name === layer);
-  const label = layerLabel(t, layer);
+  useEffect(() => { setDir(''); }, [filter]);
+  const definition = layers.data?.find(l => l.name === filter);
+  const label = layerLabel(t, filter);
   const list = <div className="flex min-h-0 flex-1 flex-col">
     <div className="space-y-2 p-3">
-      <Tabs value={layer} onValueChange={value => onSelect({ layer: value })}><TabsList className="h-8 w-full justify-start overflow-x-auto overscroll-x-contain" aria-label={t('library.layers')}><TabsTrigger value={ALL} className="gap-1.5 text-xs"><Layers className="size-3.5" />{t('layer.all')}</TabsTrigger>{(layers.data || []).map(item => <TabsTrigger key={item.name} value={item.name} className="gap-1.5 text-xs"><LayerIcon layer={item.name} className="size-3.5" />{layerLabel(t, item.name)}</TabsTrigger>)}</TabsList></Tabs>
+      <Tabs value={filter} onValueChange={value => onSelect({ filter: value, ...(open || {}) })}><TabsList className="h-8 w-full justify-start overflow-x-auto overscroll-x-contain" aria-label={t('library.layers')}><TabsTrigger value={ALL} className="gap-1.5 text-xs"><Layers className="size-3.5" />{t('layer.all')}</TabsTrigger>{(layers.data || []).map(item => <TabsTrigger key={item.name} value={item.name} className="gap-1.5 text-xs"><LayerIcon layer={item.name} className="size-3.5" />{layerLabel(t, item.name)}</TabsTrigger>)}</TabsList></Tabs>
       <div className="flex items-center gap-2">
         <Tabs value={view} onValueChange={v => setView(v as 'recent' | 'tree')} className="min-w-0 flex-1"><TabsList className="h-8 w-full" aria-label={t('library.view')}><TabsTrigger value="recent" className="flex-1 gap-1.5 text-xs"><Clock3 className="size-3.5" />{t('library.viewRecent')}</TabsTrigger><TabsTrigger value="tree" className="flex-1 gap-1.5 text-xs"><Folder className="size-3.5" />{t('library.viewTree')}</TabsTrigger></TabsList></Tabs>
         {definition && <Button variant="outline" size="icon" className="size-8 shrink-0" onClick={() => setCreate(true)} aria-label={t('library.new', { layer: label })} title={t('library.new', { layer: label })}><Plus /></Button>}
       </div>
       {layers.isError && <ErrorState error={layers.error} retry={() => { void layers.refetch(); }} />}
     </div>
-    {view === 'recent' ? <RecentList layer={layer} path={path} onSelect={onSelect} onCreate={definition ? () => setCreate(true) : undefined} />
-      : <TreeList layer={layer} dir={dir} setDir={setDir} path={path} onSelect={onSelect} />}
+    {view === 'recent' ? <RecentList filter={filter} selected={open?.path} onOpen={select} onCreate={definition ? () => setCreate(true) : undefined} />
+      : <TreeList filter={filter} dir={dir} setDir={setDir} selected={open?.path} onOpen={select} />}
     {definition && !compact && <p className="flex items-start gap-1.5 border-t px-3 py-2 text-xs text-muted-foreground"><Layers className="mt-0.5 size-3.5 shrink-0" />{definition.description}</p>}
   </div>;
-  const detail = path && <ObjectDetail key={`${layer}/${path}`} layer={layer} path={path} work={work} onSelect={onSelect} onClose={() => onSelect({ layer })} />;
+  const detail = open && <ObjectDetail key={`${open.layer}/${open.path}`} layer={open.layer} path={open.path} work={work} onOpen={select} onClose={() => select(null)} />;
   return <div className={cn('flex min-h-0 flex-1', compact ? 'flex-col' : 'flex-col md:flex-row')}>
-    {compact ? (path ? detail : list) : <>
-      <div className={cn('flex min-h-0 flex-col md:w-80 md:shrink-0 md:border-r', path ? 'hidden md:flex' : 'flex-1 md:flex-none')}>{list}</div>
-      <div className={cn('min-h-0 flex-1 flex-col', path ? 'flex' : 'hidden md:flex')}>{detail || <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">{t('library.subtitle')}</div>}</div>
+    {compact ? (open ? detail : list) : <>
+      <div className={cn('flex min-h-0 flex-col md:w-80 md:shrink-0 md:border-r', open ? 'hidden md:flex' : 'flex-1 md:flex-none')}>{list}</div>
+      <div className={cn('min-h-0 flex-1 flex-col', open ? 'flex' : 'hidden md:flex')}>{detail || <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">{t('library.subtitle')}</div>}</div>
     </>}
-    {definition && <ObjectEditor layer={layer} protocol={definition.protocol} open={create} onClose={() => setCreate(false)} work={work} onSaved={objectPath => { setCreate(false); onSelect({ layer, path: objectPath }); }} />}
+    {definition && <ObjectEditor layer={filter} protocol={definition.protocol} open={create} onClose={() => setCreate(false)} work={work} onSaved={objectPath => { setCreate(false); select({ layer: filter, path: objectPath }); }} />}
   </div>;
 }
 
 /** 最近修改:/collections/recent,每个对象一次、新的在前,往下翻。 */
-function RecentList({ layer, path, onSelect, onCreate }: { layer: string; path?: string; onSelect: (s: Selection) => void; onCreate?: () => void }) {
+function RecentList({ filter, selected, onOpen, onCreate }: { filter: string; selected?: string; onOpen: (o: { layer: string; path: string }) => void; onCreate?: () => void }) {
   const t = useT();
   const locale = usePreferences(s => s.locale);
   const [pages, setPages] = useState<RecentPage[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
-  useEffect(() => { setPages([]); setCursor(null); }, [layer]);
-  const page = useQuery({ queryKey: ['recent', layer, cursor], queryFn: ({ signal }) => api<RecentPage>(`/collections/recent?${new URLSearchParams({ ...(layer === ALL ? {} : { layer }), limit: '30', ...(cursor ? { before: cursor } : {}) })}`, { signal }) });
+  useEffect(() => { setPages([]); setCursor(null); }, [filter]);
+  const page = useQuery({ queryKey: ['recent', filter, cursor], queryFn: ({ signal }) => api<RecentPage>(`/collections/recent?${new URLSearchParams({ ...(filter === ALL ? {} : { layer: filter }), limit: '30', ...(cursor ? { before: cursor } : {}) })}`, { signal }) });
   useEffect(() => { if (page.data) setPages(prev => (cursor ? [...prev.filter(p => p !== page.data), page.data] : [page.data])); }, [page.data, cursor]);
   const items = pages.flatMap(p => p.items);
   const last = pages[pages.length - 1];
@@ -80,20 +83,20 @@ function RecentList({ layer, path, onSelect, onCreate }: { layer: string; path?:
     {page.isPending && !items.length ? <div className="space-y-2 p-1">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-12" />)}</div>
       : page.isError ? <ErrorState error={page.error} retry={() => { void page.refetch(); }} />
       : items.length ? <div className="flex flex-col gap-0.5">
-        {items.map(item => <button type="button" key={`${item.layer}:${item.path}`} aria-current={path === item.path ? 'true' : undefined} className={cn('flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground', path === item.path && 'bg-accent text-accent-foreground')} onClick={() => onSelect({ layer: item.layer, path: item.path })}>
+        {items.map(item => <button type="button" key={`${item.layer}:${item.path}`} aria-current={selected === item.path ? 'true' : undefined} className={cn('flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground', selected === item.path && 'bg-accent text-accent-foreground')} onClick={() => onOpen({ layer: item.layer, path: item.path })}>
           <LayerIcon layer={item.layer} className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <span className="min-w-0 flex-1"><span className="block truncate font-medium">{item.title}</span><span className="block truncate text-xs text-muted-foreground">{item.path.includes('/') ? item.path.slice(0, item.path.lastIndexOf('/')) : t('library.root')} · {item.author} · {dateLabel(item.date, locale)}</span><span className="block truncate text-xs text-muted-foreground">{item.subject}</span></span>
         </button>)}
         {last?.next && <Button variant="ghost" size="sm" className="w-full" disabled={page.isFetching} onClick={() => setCursor(last.next)}>{page.isFetching ? <LoaderCircle className="animate-spin" /> : null}{t('library.loadMore')}</Button>}
       </div>
-      : <Empty className="m-1" icon={<Clock3 className="size-5" />} title={t('library.empty', { layer: layerLabel(t, layer) })}><p>{t('library.emptyText')}</p>{onCreate && <Button variant="outline" size="sm" onClick={onCreate}>{t('library.createFirst')}</Button>}</Empty>}
+      : <Empty className="m-1" icon={<Clock3 className="size-5" />} title={t('library.empty', { layer: layerLabel(t, filter) })}><p>{t('library.emptyText')}</p>{onCreate && <Button variant="outline" size="sm" onClick={onCreate}>{t('library.createFirst')}</Button>}</Empty>}
   </div>;
 }
 
 /** 文件目录:/collections/tree 一层一层走,只留这一层的对象(目录保留)。 */
-function TreeList({ layer, dir, setDir, path, onSelect }: { layer: string; dir: string; setDir: (d: string) => void; path?: string; onSelect: (s: Selection) => void }) {
+function TreeList({ filter, dir, setDir, selected, onOpen }: { filter: string; dir: string; setDir: (d: string) => void; selected?: string; onOpen: (o: { layer: string; path: string }) => void }) {
   const t = useT();
-  const tree = useQuery({ queryKey: ['tree', layer, dir], queryFn: ({ signal }) => api<TreeView>(`/collections/tree?${new URLSearchParams({ path: dir, ...(layer === ALL ? {} : { layer }) })}`, { signal }) });
+  const tree = useQuery({ queryKey: ['tree', filter, dir], queryFn: ({ signal }) => api<TreeView>(`/collections/tree?${new URLSearchParams({ path: dir, ...(filter === ALL ? {} : { layer: filter }) })}`, { signal }) });
   const items = tree.data?.items || [];
   const crumbs = dir ? dir.split('/') : [];
   return <div className="min-h-0 flex-1 overflow-auto px-2 pb-2">
@@ -107,7 +110,7 @@ function TreeList({ layer, dir, setDir, path, onSelect }: { layer: string; dir: 
         {dir && <button type="button" className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent" onClick={() => setDir(dir.includes('/') ? dir.slice(0, dir.lastIndexOf('/')) : '')}><ArrowLeft className="size-4" />{t('library.up')}</button>}
         {items.map(item => item.kind === 'dir'
           ? <button type="button" key={item.path} className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={() => setDir(item.path)}><Folder className="size-4 text-muted-foreground" /><span className="truncate">{item.name}</span></button>
-          : <button type="button" key={item.path} aria-current={path === item.path ? 'true' : undefined} className={cn('flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent', path === item.path && 'bg-accent')} onClick={() => onSelect({ layer: item.layer || layer, path: item.path })}><LayerIcon layer={item.layer || layer} className="size-4 text-muted-foreground" /><span className="truncate">{item.kind === 'object' ? item.path.split('/').pop() : item.name}</span></button>)}
+          : <button type="button" key={item.path} aria-current={selected === item.path ? 'true' : undefined} className={cn('flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent', selected === item.path && 'bg-accent')} onClick={() => onOpen({ layer: item.layer || 'origin', path: item.path })}><LayerIcon layer={item.layer || filter} className="size-4 text-muted-foreground" /><span className="truncate">{item.kind === 'object' ? item.path.split('/').pop() : item.name}</span></button>)}
         {!items.length && <p className="px-2 py-3 text-xs text-muted-foreground">{t('library.emptyDir')}</p>}
       </div>}
   </div>;
@@ -123,8 +126,8 @@ function FieldsTable({ fields }: { fields: Record<string, unknown> }) {
   return <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-md border bg-muted/40 px-3 py-2 text-xs">{entries.map(([k, v]) => <div key={k} className="contents"><dt className="text-muted-foreground">{k}</dt><dd className="min-w-0 break-all font-mono">{typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean' ? String(v) : JSON.stringify(v)}</dd></div>)}</dl>;
 }
 
-export function ObjectDetail({ layer, path, onClose, onSelect, work }: {
-  layer: string; path: string; work?: string; onClose: () => void; onSelect: (s: Selection) => void;
+export function ObjectDetail({ layer, path, onClose, onOpen, work }: {
+  layer: string; path: string; work?: string; onClose: () => void; onOpen: (o: { layer: string; path: string }) => void;
 }) {
   const t = useT();
   const locale = usePreferences(s => s.locale);
@@ -138,7 +141,7 @@ export function ObjectDetail({ layer, path, onClose, onSelect, work }: {
   const view = objectView(object.data);
   const linkButton = (label: string, hint: string | undefined, onClick: () => void, key?: string | number) =>
     <Button key={key} variant="outline" className="h-auto w-full justify-start gap-2 whitespace-normal px-3 py-2 text-left font-normal" onClick={onClick}><MessageSquare className="size-4 shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1 break-all">{label}</span>{hint && <Badge variant="secondary" className="shrink-0">{hint}</Badge>}<ArrowUpRight className="size-4 shrink-0 text-muted-foreground" /></Button>;
-  const issueLinks = (links: unknown) => Array.isArray(links) ? <div className="space-y-2">{links.map((value, i) => { const link = asObject(value); return linkButton(text(link.target), text(link.type), () => onSelect({ layer: 'issue', path: text(link.target).split('#')[0] }), i); })}</div> : null;
+  const issueLinks = (links: unknown) => Array.isArray(links) ? <div className="space-y-2">{links.map((value, i) => { const link = asObject(value); return linkButton(text(link.target), text(link.type), () => onOpen({ layer: 'issue', path: text(link.target).split('#')[0] }), i); })}</div> : null;
   return <div className="flex min-h-0 flex-1 flex-col">
     <div className="flex items-center gap-2 border-b px-3 py-2">
       <Button variant="ghost" size="icon" className="size-8" onClick={onClose} aria-label={t('library.back')}><ArrowLeft /></Button>
@@ -155,8 +158,8 @@ export function ObjectDetail({ layer, path, onClose, onSelect, work }: {
         : layer === 'card' ? <>
           {text(view.fields.context) && <p className="text-sm text-muted-foreground">{text(view.fields.context)}</p>}
           <Markdown text={view.body} />
-          {text(view.fields.issue) && linkButton(t('library.viewDiscussion'), undefined, () => onSelect({ layer: 'issue', path: text(view.fields.issue) }))}
-          {Array.isArray(view.fields.links) && view.fields.links.length > 0 && <div className="space-y-2"><Separator /><h4 className="text-xs font-medium text-muted-foreground">{t('library.relatedCards')}</h4>{view.fields.links.filter(link => typeof link === 'string').map(link => <Button variant="link" key={String(link)} className="h-auto justify-start gap-1.5 p-0 text-sm font-normal" onClick={() => onSelect({ layer: 'card', path: String(link) })}><BookOpen className="size-3.5" />{String(link)}</Button>)}</div>}
+          {text(view.fields.issue) && linkButton(t('library.viewDiscussion'), undefined, () => onOpen({ layer: 'issue', path: text(view.fields.issue) }))}
+          {Array.isArray(view.fields.links) && view.fields.links.length > 0 && <div className="space-y-2"><Separator /><h4 className="text-xs font-medium text-muted-foreground">{t('library.relatedCards')}</h4>{view.fields.links.filter(link => typeof link === 'string').map(link => <Button variant="link" key={String(link)} className="h-auto justify-start gap-1.5 p-0 text-sm font-normal" onClick={() => onOpen({ layer: 'card', path: String(link) })}><BookOpen className="size-3.5" />{String(link)}</Button>)}</div>}
         </> : layer === 'issue' ? <>
           <Markdown text={view.body} />
           {text(view.fields.summary) && <Card className="bg-muted/40"><CardHeader className="p-4 pb-1"><CardTitle className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{t('library.summary')}</CardTitle></CardHeader><CardContent className="p-4 pt-0"><Markdown text={text(view.fields.summary)} /></CardContent></Card>}
