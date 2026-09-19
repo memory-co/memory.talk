@@ -49,7 +49,7 @@ export function Library({ filter = ALL, layer, path, file, onSelect, compact = f
   const [dir, setDir] = useState('');
   useEffect(() => { setDir(''); setCreating(null); }, [filter]);
   const definition = layers.data?.find(l => l.name === filter);
-  const here = view === 'tree' ? dir : '';
+  const here = view === 'tree' ? dir : open ? parent(fullPath(open)) : '';   // 「这里」= 文件目录视图的当前目录;最近修改视图里就是打开的文件所在目录
   const tree = useQuery({ queryKey: ['tree', filter, here], queryFn: ({ signal }) => api<TreeView>(`/collections/tree?${new URLSearchParams({ path: here, ...(filter === ALL ? {} : { layer: filter }) })}`, { signal }) });
   // 这里能建什么:tree.can_create 说了算;filter 只是过滤掉别的层
   const options = useMemo(() => {
@@ -59,7 +59,7 @@ export function Library({ filter = ALL, layer, path, file, onSelect, compact = f
     for (const f of cc.files) {
       if (!f.can || !f.layer || (filter !== ALL && f.layer !== filter)) continue;
       const protocol = layers.data.find(l => l.name === f.layer)?.protocol;
-      if (inObject && f.pattern) { const kind = protocol?.files.find(k => k.pattern === f.pattern); if (kind) out.push({ key: `file:${f.pattern}`, label: kind.label, value: { layer: f.layer, dir: here, object: objectOf(here, f.layer), kind } }); }
+      if (inObject && f.pattern) { const kind = protocol?.files.find(k => k.pattern === f.pattern); if (kind) out.push({ key: `file:${f.pattern}`, label: t('library.new', { layer: kind.label }), value: { layer: f.layer, dir: here, object: objectOf(here, f.layer), kind } }); }
       else if (!inObject) out.push({ key: 'origin', label: t('library.newFile', { layer: layerLabel(t, f.layer) }), value: { layer: f.layer, dir: here } });
     }
     for (const o of cc.objects) {
@@ -102,6 +102,8 @@ const same = (a: FileRef | null | undefined, b: FileRef) => !!a && a.layer === b
 
 function RecentList({ filter, selected, onOpen }: { filter: string; selected: FileRef | null; onOpen: (ref: FileRef) => void }) {
   const t = useT();
+  const layers = useLayers();
+  const title = (ref: FileRef) => fileTitle(ref, kindOf(layers.data?.find(l => l.name === ref.layer)?.protocol, ref.file || ''));
   const locale = usePreferences(s => s.locale);
   const [pages, setPages] = useState<RecentPage[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -118,7 +120,7 @@ function RecentList({ filter, selected, onOpen }: { filter: string; selected: Fi
       : rows.length ? <div className="flex flex-col gap-0.5">
         {rows.map(({ item, ref }) => <button type="button" key={`${ref.layer}:${ref.path}:${ref.file || ''}`} aria-current={same(selected, ref) ? 'true' : undefined} className={cn('flex w-full items-start gap-2.5 rounded-md px-2 py-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground', same(selected, ref) && 'bg-accent text-accent-foreground')} onClick={() => onOpen(ref)}>
           <LayerIcon layer={item.layer} className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1"><span className="block truncate font-medium">{fileTitle(ref)}</span><span className="block truncate font-mono text-xs text-muted-foreground">{fullPath(ref)}</span><span className="block truncate text-xs text-muted-foreground">{item.author} · {dateLabel(item.date, locale)} · {item.subject}</span></span>
+          <span className="min-w-0 flex-1"><span className="block truncate font-medium">{title(ref)}</span><span className="block truncate font-mono text-xs text-muted-foreground">{fullPath(ref)}</span><span className="block truncate text-xs text-muted-foreground">{item.author} · {dateLabel(item.date, locale)} · {item.subject}</span></span>
         </button>)}
         {last?.next && <Button variant="ghost" size="sm" className="w-full" disabled={page.isFetching} onClick={() => setCursor(last.next)}>{page.isFetching ? <LoaderCircle className="animate-spin" /> : null}{t('library.loadMore')}</Button>}
       </div>
@@ -201,10 +203,11 @@ export function FilePage({ layer, path, file, creating, onClose, onOpen, onDir, 
   // ---- 编辑态:名字(新建时)、属性、正文、提交说明 ----
   const [name, setName] = useState('');
   const [fields, setFields] = useState<Record<string, unknown>>({});
-  const [body, setBody] = useState('');
+  const [body, setBody] = useState(() => creating?.kind?.template || '');
+  const [session, setSession] = useState(0);                                  // 每次进入编辑态 +1:正文编辑器非受控,靠 key 重新挂载拿到新内容
   const [subject, setSubject] = useState('');
   const [reason, setReason] = useState('');
-  const beginEdit = () => { setFields(parsed?.fields || {}); setBody(creating ? kind?.template || '' : parsed?.body || ''); setSubject(''); setReason(''); setEditing(true); };
+  const beginEdit = () => { setFields(parsed?.fields || {}); setBody(creating ? kind?.template || '' : parsed?.body || ''); setSubject(''); setReason(''); setSession(n => n + 1); setEditing(true); };
   useEffect(() => { if (creating && protocol) beginEdit(); }, [creating, protocol]);   // eslint-disable-line react-hooks/exhaustive-deps
   // 新建时目标是什么:对象 = dir/name;对象里的文件 = instantiate(kind, name)(固定文件不用起名)
   const needName = !!creating && !(creating.object && kind?.fixed);
@@ -232,7 +235,10 @@ export function FilePage({ layer, path, file, creating, onClose, onOpen, onDir, 
   const cancel = () => { if (creating) onClose(); else setEditing(false); };
   const ref: FileRef = { layer, path: objectPath, file: rel };
   const title = creating ? (trimmed || t('library.untitled')) : fileTitle(ref, kind);
-  const shown = creating ? `${[creating.dir, needName ? (trimmed || '…') : ''].filter(Boolean).join('/')}${creating.object ? '' : protocol?.object ? `.${layer}` : ''}${targetRel ? `/${targetRel}` : ''}` : fullPath(ref);
+  // 新建时预览会落到哪个路径:对象里的文件 = 对象目录/实例化的文件名;新对象 = dir/名字.layer/主文件;origin = dir/名字
+  const shown = !creating ? fullPath(ref)
+    : creating.object ? `${creating.object}.${layer}/${kind ? (kind.fixed ? kind.example : instantiate(kind, trimmed || '…')) : ''}`
+    : `${[creating.dir, trimmed || '…'].filter(Boolean).join('/')}${protocol?.object ? `.${layer}/${targetRel || ''}` : ''}`;
   const siblings = !creating && object.data && !raw ? Object.keys(object.data.files).filter(f => f !== rel).sort() : [];
   return <div className="flex min-h-0 flex-1 flex-col">
     <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
@@ -257,7 +263,7 @@ export function FilePage({ layer, path, file, creating, onClose, onOpen, onDir, 
       </div>
       {kind?.format.fields && <div className="border-y py-3"><FieldsForm fields={kind.format.fields} value={fields} onChange={setFields} idPrefix="file" /></div>}
       {(kind?.format.body ?? 'markdown') === 'markdown'
-        ? <Suspense fallback={<Skeleton className="h-64" />}><MarkdownEditor value={body} onChange={setBody} placeholder={t('library.markdown')} className="min-h-64 rounded-md border px-3 py-1" /></Suspense>
+        ? <Suspense fallback={<Skeleton className="h-64" />}><MarkdownEditor key={session} value={body} onChange={setBody} placeholder={t('library.markdown')} className="min-h-64 rounded-md border px-3 py-1" /></Suspense>
         : <div className="grid gap-1.5"><Label htmlFor="file-body" className="sr-only">{t('editor.body')}</Label><Textarea id="file-body" className="min-h-60 resize-y font-mono text-sm" value={body} onChange={e => setBody(e.target.value)} /></div>}
       <div className="grid gap-2 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor="file-subject">{t('editor.subject')}</Label><Input id="file-subject" value={subject} onChange={e => setSubject(e.target.value)} placeholder={t('editor.subjectPlaceholder')} /></div><div className="grid gap-2"><Label htmlFor="file-reason">{t('library.reason')}</Label><Input id="file-reason" value={reason} onChange={e => setReason(e.target.value)} placeholder={t('library.reasonPlaceholder')} /></div></div>
       {check && check !== 'pending' && !check.ok && <ErrorState error={new Error(check.reason || '')} />}

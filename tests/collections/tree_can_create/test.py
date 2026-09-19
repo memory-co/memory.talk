@@ -23,6 +23,7 @@ def test_inside_an_object_items_are_its_files(client):
     v = client.get("/api/collections/tree", params={"path": f"{IP}.issue"}).json()
     assert [(i["name"], i["kind"], i["layer"], i.get("object"), i.get("rel")) for i in v["items"]] == [
         ("positions", "dir", None, None, None), ("readme.md", "file", "issue", IP, "readme.md")]
+    assert {f["layer"] for f in v["can_create"]["files"]} == {"issue"}
     inner = client.get("/api/collections/tree", params={"path": f"{IP}.issue/positions"}).json()["items"]
     assert [(i["name"], i["rel"]) for i in inner] == [("甲.md", "positions/甲.md")]
 

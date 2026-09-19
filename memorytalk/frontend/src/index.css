@@ -38,17 +38,6 @@
   * { @apply border-border; }
   body { @apply bg-background text-foreground; }
   svg { flex-shrink: 0; }
-  /* Milkdown Crepe(正文编辑器)的主题变量全部指向 shadcn token,不另起一套颜色 */
-  .milkdown {
-    --crepe-color-background: hsl(var(--background)); --crepe-color-on-background: hsl(var(--foreground));
-    --crepe-color-surface: hsl(var(--popover)); --crepe-color-surface-low: hsl(var(--muted)); --crepe-color-on-surface: hsl(var(--foreground)); --crepe-color-on-surface-variant: hsl(var(--muted-foreground));
-    --crepe-color-outline: hsl(var(--border)); --crepe-color-primary: hsl(var(--primary)); --crepe-color-secondary: hsl(var(--secondary)); --crepe-color-on-secondary: hsl(var(--secondary-foreground));
-    --crepe-color-inverse: hsl(var(--primary)); --crepe-color-on-inverse: hsl(var(--primary-foreground)); --crepe-color-hover: hsl(var(--accent)); --crepe-color-selected: hsl(var(--accent)); --crepe-color-inline-area: hsl(var(--muted));
-    --crepe-color-error: hsl(var(--destructive)); --crepe-color-inline-code: hsl(var(--destructive));
-    --crepe-font-title: inherit; --crepe-font-default: inherit; --crepe-base-font-size: 15px;
-    --crepe-shadow-1: 0 1px 2px 0 rgb(0 0 0 / 0.05); --crepe-shadow-2: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  }
-  .milkdown .ProseMirror { padding: 0.5rem 0.25rem; min-height: 16rem; }
 }
 
 @layer components {
@@ -73,3 +62,16 @@
 }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* Milkdown Crepe(正文编辑器)的主题变量全部指向 shadcn token,不另起一套颜色。Crepe 自己的 CSS 是懒加载、无 layer 的,所以这里不放进 @layer,并用双类名压过它。 */
+.milkdown.milkdown {
+  --crepe-color-background: hsl(var(--background)); --crepe-color-on-background: hsl(var(--foreground));
+  --crepe-color-surface: hsl(var(--popover)); --crepe-color-surface-low: hsl(var(--muted)); --crepe-color-on-surface: hsl(var(--foreground)); --crepe-color-on-surface-variant: hsl(var(--muted-foreground));
+  --crepe-color-outline: hsl(var(--border)); --crepe-color-primary: hsl(var(--primary)); --crepe-color-secondary: hsl(var(--secondary)); --crepe-color-on-secondary: hsl(var(--secondary-foreground));
+  --crepe-color-inverse: hsl(var(--primary)); --crepe-color-on-inverse: hsl(var(--primary-foreground)); --crepe-color-hover: hsl(var(--accent)); --crepe-color-selected: hsl(var(--accent)); --crepe-color-inline-area: hsl(var(--muted));
+  --crepe-color-error: hsl(var(--destructive)); --crepe-color-inline-code: hsl(var(--destructive));
+  --crepe-font-title: inherit; --crepe-font-default: inherit; --crepe-base-font-size: 15px;
+  --crepe-shadow-1: 0 1px 2px 0 rgb(0 0 0 / 0.05); --crepe-shadow-2: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+}
+.milkdown.milkdown .ProseMirror { padding: 0.5rem 0.25rem; min-height: 16rem; }
+.milkdown.milkdown .ProseMirror h1, .milkdown.milkdown .ProseMirror h2, .milkdown.milkdown .ProseMirror h3 { font-family: inherit; }

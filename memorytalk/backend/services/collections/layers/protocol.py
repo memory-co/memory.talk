@@ -308,7 +308,7 @@ class Layer:
             if prefix and not kind.example.startswith(prefix):
                 continue
             hits = [p for p in existing if kind.match(p)]
-            item = kind.to_dict() | {"existing": hits}
+            item = {"layer": self.name} | kind.to_dict() | {"existing": hits}
             if kind.fixed and hits:
                 item |= {"can": False, "reason": "固定文件,已存在"}
             else:
