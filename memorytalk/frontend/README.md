@@ -42,7 +42,8 @@ npm run build
 
 ## 与后端的边界
 
-- `api.ts` 统一处理响应信封、错误和 `X-Memory-Talk-User` / `X-Memory-Talk-Work` 请求头；服务端数据由 TanStack Query 管理。
+- 进门先过 `auth/Gate.tsx`：问 `GET /api/auth/status`——还没有 admin 就只显示 setup 页（给 admin 设密码，设完自动登录）；没登录显示登录页；登录了才是壳。token 和语言、侧栏折叠一起存在浏览器里（`lib/store.ts`），`api.ts` 每个请求带 `Authorization: Bearer`；任何请求 401 就清掉登录态回登录页，409 `setup_required` 回 setup 页。设置页：改自己的资料 / 密码、退出；admin 多一块团队成员（建账号、给人设密码）。
+- `api.ts` 统一处理响应信封、错误和 `Authorization` / `X-Memory-Talk-Work` 请求头；服务端数据由 TanStack Query 管理。
 - 元认知页的单位是**一个文件**，像 Notion 的一页：标题、属性行、正文。文件目录视图就是文件系统（`.issue/` 目录照常进去看 `readme.md`、`positions/…`），最近修改视图一行一个文件。浏览、修改、新建都在同一页上，没有弹层。
 - 一个文件长什么样由后端 `GET /api/collections/layers` 里的协议决定：按 `files[].pattern` 找到这个文件的种类，`format.fields` 画属性表单，正文按 `format.body` 用 Markdown 编辑器或纯文本。新建时用 `GET /api/collections/tree` 的 `can_create` 决定「这里能建什么」（普通目录：某层的对象或 origin 文件；对象目录里：这一层的某种文件），只写一个文件（新对象 `POST` 主文件；对象里的文件 `PUT {files: {rel: …}}`），输入时用 `?dry_run=1` 预校验。
 - 前端不认识具体哪一层，也不做校验；校验由后端按协议负责。
