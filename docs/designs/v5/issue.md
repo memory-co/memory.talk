@@ -14,7 +14,7 @@
 
 一个**问题**,底下挂几个**立场**(候选答案),每个立场底下是围绕它的**论证**(一行一条的讨论)。work 是做,card 是记,issue 是**议**:还没定的事待在这里。
 
-哪个立场当下占优,**不靠计数**,靠管这个 issue 的 work 看过论证之后做判断,写进每个立场自己的 `rank` / `verdict` 字段,整体的一句总结写进 `readme.md` 的 `summary`;判断可以随时改,历史在 git。
+哪个立场当下占优,**不靠计数**,靠管这个 issue 的 work 看过论证之后做判断,写进每个立场自己的 `rank` / `verdict` 字段;整体的判断就体现在排序里,不另设总结字段。判断可以随时改,历史在 git。
 
 ---
 
@@ -47,7 +47,6 @@ memory.talk/配置/该走文件还是环境变量.issue/
 links:
   - {type: specializes, target: memory.talk/配置/配置怎么管}
   - {type: suggested_by, target: memory.talk/架构/该不该拆服务#先拆成两个服务}
-summary: 目前倾向只走环境变量;等 work_try 把 .env 那条路验完再定。
 ---
 
 背景:v5 起服务时要读 home、store 类型、tmux socket 这几样……
@@ -60,7 +59,7 @@ summary: 目前倾向只走环境变量;等 work_try 把 .env 那条路验完再
 | `links[]` | 只增 | 和别的 issue 的边,`{type, target}`;`type` ∈ `specializes`(本 issue 是 target 的子问题)/ `suggested_by`(被 target 引出)/ `questions`(质疑 target 的前提)/ `replaces`(重述并取代 target)/ `related`;`target` 是对端 issue 的 path(可带 `#<主张>` 指到对端的某个立场) |
 | 正文 | 可改 | 问题的展开——背景、为什么冒出来、边界。可以为空(只有目录名的 issue 也合法) |
 
-`summary` 和各立场的 `rank` / `verdict` 是**判断**,不是计算:由 manager work 里的人或 agent 读完论证之后写下来。改了就是一次 `[issue]` 提交(一次可以改几个立场的 `rank`,一个提交)。
+各立场的 `rank` / `verdict` 是**判断**,不是计算:由 manager work 里的人或 agent 读完论证之后写下来。改了就是一次 `[issue]` 提交(一次可以改几个立场的 `rank`,一个提交)。
 
 ### positions/<主张>.md
 
@@ -122,7 +121,6 @@ links:
 | 加论证 | 改 `positions/<主张>.md`,`## 论证` 下多一行 | `argue <path>#<主张>: <一句话>` |
 | 连边 | 改 `readme.md` 的 `links`(或某个立场的 `links`) | `link <path> <type> <target>` |
 | 排序 | 改一个或几个立场的 `rank` / `verdict`(一次 put,一个提交) | `rank <path>: <首位主张>` |
-| 总结 | 改 `readme.md` 的 `summary` | `summarize <path>` |
 
 协议只管形状(有哪些文件、哪些字段);「不改旧论证、改主意加新立场」是约定不是校验——反正历史在 git,改了看得见。层守卫兜底(`[card]` 提交碰不到 `.issue/`)。
 
