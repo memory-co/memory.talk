@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { BookOpen, ChevronsUpDown, Menu, PanelRight, Search, SquarePen, UserRound, X } from 'lucide-react';
 import { useWorks, useUsers, useSystem } from '@/lib/queries';
 import { usePreferences } from '@/lib/store';
@@ -97,6 +97,9 @@ function Crumbs() {
   const pageName = route.page === 'home' ? t('nav.home') : route.page === 'library' ? t('nav.library') : route.page === 'settings' ? t('nav.settings') : t('nav.workspace');
   const currentWork = route.work ? flattenWorks(works.data || []).find(w => w.id === route.work) : undefined;
   const home = (e: React.MouseEvent) => { e.preventDefault(); navigate({ page: 'home' }); };
+  // 元认知页:打开的文件(或停在的目录)的真实路径逐段进面包屑,这就是全局定位
+  const located = route.page === 'library' ? (route.layer && route.path ? (route.file ? `${route.path}.${route.layer}/${route.file}` : route.path) : route.dir || '') : '';
+  const segments = located ? located.split('/') : [];
   return <Breadcrumb className="min-w-0"><BreadcrumbList className="flex-nowrap">
     <BreadcrumbItem className="hidden md:block"><BreadcrumbLink href="#/" onClick={home}>memory.talk</BreadcrumbLink></BreadcrumbItem>
     <BreadcrumbSeparator className="hidden md:block" />
@@ -104,13 +107,20 @@ function Crumbs() {
       <BreadcrumbItem><BreadcrumbLink href="#/" onClick={home}>{pageName}</BreadcrumbLink></BreadcrumbItem>
       <BreadcrumbSeparator />
       <BreadcrumbItem className="min-w-0"><BreadcrumbPage className="block max-w-[45vw] truncate">{currentWork.goal}</BreadcrumbPage></BreadcrumbItem>
+    </> : segments.length ? <>
+      <BreadcrumbItem><BreadcrumbLink href="#/library" onClick={e => { e.preventDefault(); navigate({ page: 'library', filter: route.filter, dir: '' }); }}>{pageName}</BreadcrumbLink></BreadcrumbItem>
+      {segments.map((seg, i) => { const last = i === segments.length - 1; return <Fragment key={i}>
+        <BreadcrumbSeparator className={last ? undefined : 'hidden md:block'} />
+        <BreadcrumbItem className={cn('min-w-0', !last && 'hidden md:block')}>{last ? <BreadcrumbPage className="block max-w-[40vw] truncate font-mono text-xs">{seg}</BreadcrumbPage>
+          : <BreadcrumbLink href="#/library" className="font-mono text-xs" onClick={e => { e.preventDefault(); navigate({ page: 'library', filter: route.filter, dir: segments.slice(0, i + 1).join('/') }); }}>{seg}</BreadcrumbLink>}</BreadcrumbItem>
+      </Fragment>; })}
     </> : <BreadcrumbItem><BreadcrumbPage>{pageName}</BreadcrumbPage></BreadcrumbItem>}
   </BreadcrumbList></Breadcrumb>;
 }
 
 function Page({ onLibrary, selection }: { onLibrary: () => void; selection: (s: { filter: string; layer?: string; path?: string; file?: string }) => void }) {
   const route = useRoute();
-  return <Suspense fallback={<Loading />}>{route.page === 'home' ? <Home /> : route.page === 'work' && route.work ? <Workspace key={route.work} id={route.work} onLibrary={onLibrary} /> : route.page === 'library' ? <Library filter={route.filter || 'all'} layer={route.layer} path={route.path} file={route.file} onSelect={selection} /> : <Settings />}</Suspense>;
+  return <Suspense fallback={<Loading />}>{route.page === 'home' ? <Home /> : route.page === 'work' && route.work ? <Workspace key={route.work} id={route.work} onLibrary={onLibrary} /> : route.page === 'library' ? <Library filter={route.filter || 'all'} layer={route.layer} path={route.path} file={route.file} dir={route.dir} onSelect={selection} /> : <Settings />}</Suspense>;
 }
 
 function ShellContent() {

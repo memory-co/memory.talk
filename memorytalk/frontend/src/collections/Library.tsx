@@ -25,7 +25,7 @@ const MarkdownEditor = lazy(loadEditor);
 
 /** filter = 左边列表在看哪层(all | 某层),只由 Tab 改;layer + path (+ file) = 右边打开的文件,由点列表项决定。两者互不影响。
  *  单位是文件:origin 一个文件就是 path;有对象的层,path 是对象、file 是目录里的相对路径(readme.md / positions/x.md)。 */
-type Selection = { filter: string; layer?: string; path?: string; file?: string };
+type Selection = { filter: string; layer?: string; path?: string; file?: string; dir?: string };
 type FileRef = { layer: string; path: string; file?: string };
 /** 要在哪里建什么:object 为空 = 在 dir 下建一个新对象(或 origin 文件);否则在这个对象里建一个 kind 文件。 */
 type NewFile = { layer: string; dir: string; object?: string; kind?: FileKind };
@@ -38,17 +38,19 @@ const base = (p: string) => p.split('/').pop() || '';
 /** 一个对象的「主文件」:第一种 required 且固定的文件(readme.md)。 */
 const mainFile = (protocol?: Protocol) => protocol?.files.find(k => k.required && k.fixed)?.example;
 
-export function Library({ filter = ALL, layer, path, file, onSelect, compact = false, work }: Selection & {
+export function Library({ filter = ALL, layer, path, file, dir: dirProp, onSelect, compact = false, work }: Selection & {
   onSelect: (selection: Selection) => void; compact?: boolean; work?: string;
 }) {
   const open: FileRef | null = layer && path ? { layer, path, file } : null;
-  const select = (ref: FileRef | null) => onSelect(ref ? { filter, ...ref } : { filter });
+  const select = (ref: FileRef | null) => onSelect(ref ? { filter, ...ref } : { filter, dir: dirProp });
   const t = useT();
   const layers = useLayers();
   const [creating, setCreating] = useState<NewFile | null>(null);
   const [view, setView] = useState<'recent' | 'tree'>('recent');
-  const [dir, setDir] = useState('');
-  useEffect(() => { setDir(''); setCreating(null); }, [filter]);
+  const [dir, setDirState] = useState(dirProp || '');
+  const setDir = (d: string) => { setDirState(d); if (!compact && !open) onSelect({ filter, dir: d }); };   // 目录进 URL,面包屑就能定位到目录
+  useEffect(() => { setDirState(''); setCreating(null); }, [filter]);
+  useEffect(() => { if (dirProp !== undefined) { setDirState(dirProp); setView('tree'); } }, [dirProp]);   // 面包屑点了某一段:切到文件目录视图、停在那里
   useEffect(() => { void loadEditor().catch(() => { /* 点开文件时再加载 */ }); }, []);   // 预取编辑器 chunk(最大的一块),点文件之前就缓存好
   const definition = layers.data?.find(l => l.name === filter);
   const here = view === 'tree' ? dir : open ? parent(fullPath(open)) : '';   // 「这里」= 文件目录视图的当前目录;最近修改视图里就是打开的文件所在目录
@@ -84,8 +86,8 @@ export function Library({ filter = ALL, layer, path, file, onSelect, compact = f
       : <TreeList dir={dir} setDir={setDir} tree={tree} selected={open} onOpen={select} />}
     {definition && !compact && <p className="flex items-start gap-1.5 border-t px-3 py-2 text-xs text-muted-foreground"><Layers className="mt-0.5 size-3.5 shrink-0" />{definition.description}</p>}
   </div>;
-  const page = creating ? <FilePage key={`new/${creating.layer}/${creating.dir}/${creating.kind?.pattern || ''}`} layer={creating.layer} creating={creating} work={work} onOpen={ref => { setCreating(null); select(ref); }} onClose={() => setCreating(null)} onDir={d => { setView('tree'); setDir(d); }} />
-    : open && <FilePage key={`${open.layer}/${open.path}/${open.file || ''}`} layer={open.layer} path={open.path} file={open.file} work={work} onOpen={select} onClose={() => select(null)} onDir={d => { setView('tree'); setDir(d); }} />;
+  const page = creating ? <FilePage key={`new/${creating.layer}/${creating.dir}/${creating.kind?.pattern || ''}`} layer={creating.layer} creating={creating} work={work} onOpen={ref => { setCreating(null); select(ref); }} onClose={() => setCreating(null)} />
+    : open && <FilePage key={`${open.layer}/${open.path}/${open.file || ''}`} layer={open.layer} path={open.path} file={open.file} work={work} onOpen={select} onClose={() => select(null)} />;
   return <div className={cn('flex min-h-0 flex-1', compact ? 'flex-col' : 'flex-col md:flex-row')}>
     {compact ? (page || list) : <>
       <div className={cn('flex min-h-0 flex-col md:w-80 md:shrink-0 md:border-r', page ? 'hidden md:flex' : 'flex-1 md:flex-none')}>{list}</div>
@@ -184,8 +186,8 @@ function Properties({ fields, protocol, onOpen }: { fields: Record<string, unkno
 
 /** 一个文件一页(像 Notion 的一页):标题、属性、正文。浏览、修改、新建都在这一页上,没有弹层。
  *  creating:在 dir 下新建(对象 / origin 文件),或在 object 里新建一个 kind 文件;否则打开 path(+file),点「编辑」就地改。 */
-export function FilePage({ layer, path, file, creating, onClose, onOpen, onDir, work }: {
-  layer: string; path?: string; file?: string; creating?: NewFile; work?: string; onClose: () => void; onOpen: (ref: FileRef) => void; onDir: (dir: string) => void;
+export function FilePage({ layer, path, file, creating, onClose, onOpen, work }: {
+  layer: string; path?: string; file?: string; creating?: NewFile; work?: string; onClose: () => void; onOpen: (ref: FileRef) => void;
 }) {
   const t = useT();
   const locale = usePreferences(s => s.locale);
@@ -272,7 +274,7 @@ export function FilePage({ layer, path, file, creating, onClose, onOpen, onDir, 
       {save.isError && <ErrorState error={save.error} />}
     </div>
     : !objectPath ? null : object.isPending ? <Loading /> : object.isError ? <div className="p-4"><ErrorState error={object.error} retry={() => { void object.refetch(); }} /></div> : <div className="mx-auto flex max-w-3xl flex-col gap-5 p-4 md:p-6">
-      <div className="space-y-1"><button type="button" className="block max-w-full truncate font-mono text-xs text-muted-foreground hover:text-foreground" onClick={() => onDir(parent(fullPath(ref)))}>{fullPath(ref)}</button><h2 className="text-2xl font-semibold tracking-tight">{title}</h2></div>
+      <h2 className="text-2xl font-semibold tracking-tight">{title}</h2>
       {revision && <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-xs"><Clock3 className="size-3.5" /><span>{t('library.revision', { rev: revision.slice(0, 7) })}</span><Button variant="link" size="sm" className="ml-auto h-auto p-0 text-xs" onClick={() => setRevision('')}>{t('library.backToCurrent')}</Button></div>}
       {tab === 'history' ? history.isPending ? <Loading /> : history.isError ? <ErrorState error={history.error} /> : <ol className="ml-1.5 space-y-4 border-l pl-5">{history.data?.map(item => <li key={item.sha} className="relative"><span className="absolute -left-[26px] top-1.5 size-2.5 rounded-full border-2 border-background bg-muted-foreground" /><button type="button" className="block w-full text-left" onClick={() => { setRevision(item.sha); setTab('content'); }}><span className="block text-sm font-medium break-all">{item.subject}</span><span className="mt-1 block text-xs text-muted-foreground">{item.author} · {dateLabel(item.date, locale)} · <span className="font-mono">{item.sha.slice(0, 7)}</span></span></button></li>)}</ol>
         : parsed === null ? <Empty icon={<FileText className="size-5" />} title={t('library.noSuchFile')} />
