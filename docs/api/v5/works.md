@@ -136,27 +136,23 @@ user:谁当前正在操作、谁历史操作过。只做可见性,不做权限�
 ## GET /api/works/{work_id}/canvas
 
 ```json
-{"cols": 24, "rows": 16, "version": 0, "panels": []}
+{"version": 3,
+ "columns": [{"id": "c1", "panels": [{"session": "work_…-s1", "collapsed": false}, {"session": "work_…-s2", "collapsed": true}]},
+             {"id": "c2", "panels": [{"session": "work_…-s3", "collapsed": false}]}]}
 ```
 
-从未写过 = `version 0`、空 `panels`。
+布局 = 几列,每列从上到下摆会话,每个可收起。从未写过 = `version 0`、空 `columns`(前端当一列画)。
 
 ## PUT /api/works/{work_id}/canvas
 
-全量覆盖。
-
-```json
-{"version": 0,
- "panels": [{"id": "p1", "uri": "file:///w", "session": null, "x": 0, "y": 0, "w": 6, "h": 16},
-            {"id": "p2", "uri": "codex:///w", "session": "work_…-s1", "x": 6, "y": 0, "w": 18, "h": 16}]}
-```
+全量覆盖:`{"version": 3, "columns": [...]}`。
 
 | 错误 | 状态 |
 |---|---|
 | `version` ≠ 当前 | 409 `conflict` `canvas version 0 != 1` |
-| 某块越界(`x+w > 24`、`y+h > 16`、`w/h < 1`、负坐标) | 409 `conflict` `panel p1 越界` |
+| 列 id 重复 / 一个会话出现在两个格子里 | 409 `conflict` |
 
-成功返回新画布,`version + 1`。**画布是视图**——它不建、不删会话;会话走下面的端点。
+成功返回新画布,`version + 1`。**画布是视图**——它不建、不删会话;会话走下面的端点。但它跟着会话走:`POST …/sessions` 开出来的会话自动进第一列末尾(没有列就建 `c1`),`DELETE` 掉的会话自动从格子里拿掉,这两处也会让 `version + 1`。
 
 ---
 

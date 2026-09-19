@@ -22,7 +22,7 @@ memorytalk/backend/           # 服务本体;memorytalk/cli/ 是它的命令行�
 │   ├── work/                 #   做事层 —— docs/designs/v5/work.md
 │   │   ├── __init__.py       #     入口:导出 WorkService(对外唯一门面)
 │   │   ├── tree.py           #     work 树:建节点、父子、状态、完成收拢
-│   │   ├── canvas.py         #     画布(24×16 网格剖分)—— work 的视图,可随时重排
+│   │   ├── canvas.py         #     画布(列 × 会话,可收起)—— work 的视图,可随时重排;会话开 / 关时跟着记
 │   │   ├── sessions.py       #     会话(现场)登记:会话 id ↔ URI ↔ server ↔ 活着(唯一权威,脱离布局)
 │   │   ├── users.py          #     user:谁动过这个 work,只做可见性不做权限(身份来自登录态)
 │   │   ├── repo.py           #     WorkRepo:业务仓储接口 + fs 版 / db 版两份实现(业务概念在这,provider 只见字节 / 表)

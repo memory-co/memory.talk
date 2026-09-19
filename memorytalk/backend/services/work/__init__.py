@@ -141,6 +141,7 @@ class WorkService:
             raise
         if live.cwd:
             m = self._set_cwd(work_id, m, live.cwd)
+        self.canvas.place(work_id, m.id)                                # 视图跟着记:进第一列末尾
         self.events.emit(work_id, "session.attached", session=m.id, uri=raw_uri, server=server.name)
         return SessionView(**m.model_dump(), alive=True, window=live.window, handle=live.handle)
 
@@ -167,6 +168,7 @@ class WorkService:
         m = self.sessions.get(work_id, session_id)
         self.work_servers.destroy(m.server, m.id)
         self.sessions.remove(work_id, session_id)
+        self.canvas.remove(work_id, session_id)
         self.events.emit(work_id, "session.detached", session=session_id)
 
     # ---- 痕迹 ----

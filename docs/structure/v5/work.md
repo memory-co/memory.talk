@@ -37,27 +37,27 @@
 
 ## Canvas
 
-work 的画布:24×16 网格上的矩形剖分。**只是视图**——重排不改变 work 的会话和目的。
+work 的画布:**几列,每列从上到下摆会话**,每个会话可收起。默认一列。**只是视图**——重排不改变 work 的会话和目的。
 
 ```json
 {
-  "cols": 24, "rows": 16, "version": 3,
-  "panels": [
-    {"id": "p1", "uri": "file:///home/me/memory.talk", "session": null, "x": 0, "y": 0, "w": 6, "h": 16},
-    {"id": "p2", "uri": "codex:///home/me/memory.talk", "session": "work_2026…2f2f-s1", "x": 6, "y": 0, "w": 18, "h": 16}
+  "version": 3,
+  "columns": [
+    {"id": "c1", "panels": [{"session": "work_2026…2f2f-s1", "collapsed": false}, {"session": "work_2026…2f2f-s2", "collapsed": true}]},
+    {"id": "c2", "panels": [{"session": "work_2026…2f2f-s3", "collapsed": false}]}
   ]
 }
 ```
 
 | 字段 | 说明 |
 |---|---|
-| `version` | 乐观锁;`PUT` 必须带当前值,成功后 +1 |
-| `panels[].id` | 前端自定,画布内唯一 |
-| `panels[].uri` | 这个块装什么(构造形态 URI,不含身份参数) |
-| `panels[].session` | 装的是哪个会话;终端类块必有,浏览器 / 文件类可无 |
-| `x y w h` | 网格坐标;`x+w ≤ cols`、`y+h ≤ rows`、`w,h ≥ 1`,越界 `409` |
+| `version` | 乐观锁;`PUT` 必须带当前值,成功后 +1;会话开 / 关时服务端自己改画布也 +1 |
+| `columns[].id` | 前端自定,画布内唯一 |
+| `columns[].panels[]` | 这一列从上到下的格子 |
+| `panels[].session` | 装的是哪个会话;一个会话最多出现在一个格子里 |
+| `panels[].collapsed` | 收起 = 只剩标题行 |
 
-**跟 shellbase 唯一有意不同的地方**:块的身份不在 `(window, block)` 位置参数里,而在 `session`——把块拖到别的格子,会话不变。
+**跟 shellbase 唯一有意不同的地方**:格子的身份不在 `(window, block)` 位置参数里,而在 `session`——把会话挪到别的列,会话不变。开出来的会话自动进第一列末尾,关掉的自动从格子里拿掉;画布里没提到的会话前端补在第一列。
 
 ## Session
 

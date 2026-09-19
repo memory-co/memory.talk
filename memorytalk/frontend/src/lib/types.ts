@@ -12,6 +12,9 @@ export interface Session {
   window?: { url: string | null; embed: string | null } | null;
   handle?: { kind: string; capabilities: string[] } | null;
 }
+export interface Panel { session: string; collapsed: boolean }
+export interface Column { id: string; panels: Panel[] }
+export interface Canvas { version: number; columns: Column[] }
 export interface Round { id: string; timestamp: string | null; role: string; text: string }
 export interface User {
   name: string; display_name: string; email: string; created_at: string; role: 'admin' | 'member';

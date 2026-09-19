@@ -52,9 +52,8 @@ export function PanelView({ work, session }: { work: Work; session: Session }) {
   };
   const showRounds = (mode === 'rounds' || ended) && agent;
   return <Tabs value={ended && agent ? 'rounds' : mode} onValueChange={value => setMode(value as 'terminal' | 'rounds')} className="flex min-h-0 flex-1 flex-col" aria-label={t('session.current')}>
-    <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
-      <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate font-mono text-xs text-muted-foreground" title={session.uri}>{web ? <ExternalLink className="size-3.5" /> : <Terminal className="size-3.5" />}{session.cwd || session.uri}</span>
-      <div className="flex items-center gap-1">
+    <div className="flex flex-wrap items-center gap-2 border-b px-2 py-1">
+      <div className="ml-auto flex items-center gap-1">
         {agent && !ended && <TabsList className="h-8" aria-label={t('session.view')}><TabsTrigger value="terminal" className="text-xs">{t('session.terminal')}</TabsTrigger><TabsTrigger value="rounds" className="text-xs">{t('session.transcript')}</TabsTrigger></TabsList>}
         <Button variant="ghost" size="icon" className="size-8" onClick={() => { void copy(); }} aria-label={t('session.copy')}>{copied ? <Check /> : <Copy />}</Button>
         {url && !ended && <Button asChild variant="ghost" size="icon" className="size-8"><a href={url} target="_blank" rel="noopener noreferrer" aria-label={t('session.openWindow')}><ExternalLink /></a></Button>}

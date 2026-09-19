@@ -18,7 +18,7 @@
 | `GET` | `/api/works/servers` | 有哪些 work server(bash / claude / codex / kimi / http / default)及各自响应的协议;attach 时按协议去找它们 |
 | `GET` | `/api/works/{work_id}` | 读一个 work(带身份 = 打开它,记一笔在操作) |
 | `PATCH` | `/api/works/{work_id}` | 改目标 / 状态;done 要求子 work 全完;结束后会话冻结 |
-| `GET` | `/api/works/{work_id}/canvas` | 画布(视图,随时可重排) |
+| `GET` | `/api/works/{work_id}/canvas` | 画布:几列、每列从上到下摆哪些会话、哪些收起(视图,随时可重排) |
 | `PUT` | `/api/works/{work_id}/canvas` | 全量写画布(version 乐观锁) |
 | `GET` | `/api/works/{work_id}/events` | work 自己的时间线 |
 | `GET` | `/api/works/{work_id}/inbox` | 收件箱:被 manager.json 路由过来的变动(Collections 的对象、子 work 的状态) |

@@ -37,25 +37,24 @@ class WorkNode(Work):
 # ---- 画布:work 的视图,可随时重排 ----
 
 class Panel(BaseModel):
-    id: str
-    uri: str
-    session: str | None = Field(None, description="装的是哪个会话(终端类块必有;浏览器 / 文件类可无)")
-    x: int
-    y: int
-    w: int
-    h: int
+    session: str = Field(description="装的是哪个会话;一个会话最多出现在一个格子里")
+    collapsed: bool = Field(False, description="收起 = 只剩标题行")
+
+
+class Column(BaseModel):
+    id: str = Field(description="前端自定,画布内唯一")
+    panels: list[Panel] = Field(default_factory=list, description="从上到下")
 
 
 class Canvas(BaseModel):
-    cols: int = 24
-    rows: int = 16
+    """布局 = 几列,每列从上到下摆会话。默认一列;会话开了就进第一列的末尾,关了就从格子里拿掉。"""
     version: int = 0
-    panels: list[Panel] = Field(default_factory=list)
+    columns: list[Column] = Field(default_factory=list)
 
 
 class CanvasPut(BaseModel):
     version: int = Field(description="乐观锁:必须等于当前 version")
-    panels: list[Panel]
+    columns: list[Column]
 
 
 # ---- 会话:现场,身份脱离布局 ----
