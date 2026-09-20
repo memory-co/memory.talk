@@ -34,66 +34,103 @@ _MISSING = object()
 # ================================================================ fs 版
 
 class FsWorkRepo:
-    """works/<id>/<kind>.json、works/<id>/<stream>.jsonl、works/<id>/worklets/<wid>/rounds.jsonl、unmanaged.jsonl。"""
+    """目录就是树:works/<id>/…,子 work 在父目录的 subs/ 下——works/<父>/subs/<子>/…。每个 work 目录里:<kind>.json、<stream>.jsonl、worklets/<wid>/rounds.jsonl;根上 unmanaged.jsonl。"""
 
     def __init__(self, fs: FileSystemProvider) -> None:
         self.fs = fs
+        self._dirs: dict[str, str] = {}                 # id → 目录;懒扫,建 work 时登记
 
-    @staticmethod
-    def _doc(work_id: str, kind: str) -> str:
-        return f"works/{work_id}/{kind}.json"
+    # ---- 目录 ----
 
-    @staticmethod
-    def _log(work_id: str, stream: str, sub: str | None) -> str:
-        return f"works/{work_id}/worklets/{sub}/{stream}.jsonl" if sub else f"works/{work_id}/{stream}.jsonl"
+    def _scan(self) -> None:
+        self._dirs = {}
+        for path in self.fs.list("works"):
+            if path.endswith("/work.json"):
+                d = path[: -len("/work.json")]
+                self._dirs[d.rsplit("/", 1)[-1]] = d
 
-    def _read_json(self, path: str) -> Any:
-        data = self.fs.read(path)
+    def _dir(self, work_id: str) -> str | None:
+        if work_id not in self._dirs:
+            self._scan()
+        return self._dirs.get(work_id)
+
+    def _doc(self, work_id: str, kind: str) -> str | None:
+        d = self._dir(work_id)
+        return None if d is None else f"{d}/{kind}.json"
+
+    def _log(self, work_id: str, stream: str, sub: str | None) -> str | None:
+        d = self._dir(work_id)
+        if d is None:
+            return None
+        return f"{d}/worklets/{sub}/{stream}.jsonl" if sub else f"{d}/{stream}.jsonl"
+
+    def _read_json(self, path: str | None) -> Any:
+        data = None if path is None else self.fs.read(path)
         return None if data is None else json.loads(data)
 
     def _write_json(self, path: str, data: Any) -> None:
         self.fs.write(path, (json.dumps(data, ensure_ascii=False, indent=2) + "\n").encode())
 
+    # ---- work ----
+
     def get_work(self, work_id: str) -> dict | None:
         return self._read_json(self._doc(work_id, "work"))
 
     def put_work(self, work_id: str, data: dict) -> None:
-        self._write_json(self._doc(work_id, "work"), data)
+        d = self._dir(work_id)
+        if d is None:                                    # 新建:挂在父目录的 subs/ 下,没父就在根上
+            parent = data.get("parent")
+            pd = self._dir(parent) if parent else None
+            d = f"{pd}/subs/{work_id}" if pd else f"works/{work_id}"
+            self._dirs[work_id] = d
+        self._write_json(f"{d}/work.json", data)
 
     def list_works(self, *, parent=_MISSING, created_by: str | None = None) -> list[dict]:
+        self._scan()
         out = []
-        for path in self.fs.list("works"):
-            if path.count("/") == 2 and path.endswith("/work.json"):
-                w = self._read_json(path)
-                if w is None:
-                    continue
-                if parent is not _MISSING and w.get("parent") != parent:
-                    continue
-                if created_by is not None and w.get("created_by") != created_by:
-                    continue
-                out.append(w)
+        for d in self._dirs.values():
+            w = self._read_json(f"{d}/work.json")
+            if w is None:
+                continue
+            if parent is not _MISSING and w.get("parent") != parent:
+                continue
+            if created_by is not None and w.get("created_by") != created_by:
+                continue
+            out.append(w)
         return sorted(out, key=lambda w: w["id"])
+
+    # ---- work 下的小记录 / 流 ----
 
     def get_doc(self, work_id: str, kind: str) -> Any:
         return self._read_json(self._doc(work_id, kind))
 
     def put_doc(self, work_id: str, kind: str, data: Any) -> None:
-        self._write_json(self._doc(work_id, kind), data)
+        path = self._doc(work_id, kind)
+        if path is None:
+            raise KeyError(work_id)
+        self._write_json(path, data)
 
     def del_doc(self, work_id: str, kind: str) -> None:
-        self.fs.delete(self._doc(work_id, kind))
+        path = self._doc(work_id, kind)
+        if path is not None:
+            self.fs.delete(path)
 
     def append(self, work_id: str, stream: str, line: dict, sub: str | None = None) -> None:
-        self.fs.append(self._log(work_id, stream, sub), (json.dumps(line, ensure_ascii=False) + "\n").encode())
+        path = self._log(work_id, stream, sub)
+        if path is None:
+            raise KeyError(work_id)
+        self.fs.append(path, (json.dumps(line, ensure_ascii=False) + "\n").encode())
 
     def read(self, work_id: str, stream: str, sub: str | None = None) -> list[dict]:
-        data = self.fs.read(self._log(work_id, stream, sub))
+        path = self._log(work_id, stream, sub)
+        data = None if path is None else self.fs.read(path)
         if not data:
             return []
         return [json.loads(l) for l in data.decode().splitlines() if l.strip()]
 
     def append_unmanaged(self, line: dict) -> None:
         self.fs.append("unmanaged.jsonl", (json.dumps(line, ensure_ascii=False) + "\n").encode())
+
 
 # ================================================================ db 版
 

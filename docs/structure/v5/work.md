@@ -1,6 +1,6 @@
 # Work + Canvas + Worklet + WorkUser + Round + Event
 
-做事层的六个对象,全部住在 `works/<work_id>/` 目录下,裸文件。机制见 [`../../designs/v5/work.md`](../../designs/v5/work.md)。
+做事层的六个对象,全部住在 work 自己的目录下(根 work 在 `works/<work_id>/`,子 work 在父目录的 `subs/<child_id>/`),裸文件。机制见 [`../../designs/v5/work.md`](../../designs/v5/work.md)。
 
 ## Work
 
@@ -146,13 +146,14 @@ work 自己的时间线,append-only。v3 `events.jsonl` 在 v5 唯一保留的�
 ## 存储
 
 ```
-works/<work_id>/
+works/<work_id>/                      根 work 一个目录
 ├── work.json         原子写(临时文件 + rename)
 ├── canvas.json       原子写;不存在 = 空画布 version 0
 ├── worklets.json     原子写;数组(现场)
 ├── users.json        原子写;数组(人)
 ├── events.jsonl      只追加
-└── worklets/<worklet_id>/rounds.jsonl   只追加
+├── worklets/<worklet_id>/rounds.jsonl   只追加
+└── subs/<child_id>/  子 work 就在父目录下,同样的结构,再往下还是 subs/——目录就是树
 ```
 
 以上是 `MEMORY_TALK_STORE=fs` 时的形态;`sqlite` 时同样的记录在 `works` / `work_docs` / `work_logs` 三张表里,业务层不感知(见 [designs provider.md](../../designs/v5/provider.md))。读写纪律照 shellbase:单写者(服务进程)、无缓存直读、任何时刻磁盘上都是完整 JSON。**不进 git**——work 记的是过程,git 记的是决定(见 [`../../designs/v5/metas/store.md`](../../designs/v5/metas/store.md) §4)。

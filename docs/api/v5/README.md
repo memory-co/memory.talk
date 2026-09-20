@@ -88,7 +88,7 @@
 
 ```
 ~/.memory.talk/metas/   分层 git 仓库(Metas):layer/origin、layer/issue、layer/card(+ 用户层)、stack;工作树跟着 stack
-~/.memory.talk/works/    work / user 的记录(MEMORY_TALK_STORE=fs 时):<work_id>/{work,canvas,worklets,users,manager}.json + events/inbox.jsonl + worklets/<wid>/rounds.jsonl
+~/.memory.talk/works/    work 的记录(MEMORY_TALK_STORE=fs 时):<work_id>/{work,canvas,worklets,users,manager}.json,子 work 在 <work_id>/subs/<child_id>/ 下 + events/inbox.jsonl + worklets/<wid>/rounds.jsonl
 ~/.memory.talk/unmanaged.jsonl   没人管的变动
 ~/.memory.talk/memory.sqlite     MEMORY_TALK_STORE=sqlite 时,上面两样都在这里(works / work_docs / work_logs 三张表)
 ```

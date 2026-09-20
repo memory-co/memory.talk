@@ -95,7 +95,10 @@ function Crumbs() {
   const route = useRoute();
   const works = useWorks();
   const pageName = route.page === 'home' ? t('nav.home') : route.page === 'meta' ? t('nav.meta') : route.page === 'settings' ? t('nav.settings') : t('nav.workspace');
-  const currentWork = route.work ? flattenWorks(works.data || []).find(w => w.id === route.work) : undefined;
+  const all = flattenWorks(works.data || []);
+  const currentWork = route.work ? all.find(w => w.id === route.work) : undefined;
+  const ancestors: typeof all = [];                                             // 父 → 子:work 树在面包屑里逐级体现
+  for (let p = currentWork?.parent; p;) { const w = all.find(x => x.id === p); if (!w) break; ancestors.unshift(w); p = w.parent; }
   const home = (e: React.MouseEvent) => { e.preventDefault(); navigate({ page: 'home' }); };
   // 元认知页:打开的文件(或停在的目录)的真实路径逐段进面包屑,这就是全局定位
   const located = route.page === 'meta' ? (route.layer && route.path ? (route.file ? `${route.path}.${route.layer}/${route.file}` : route.path) : route.dir || '') : '';
@@ -106,6 +109,7 @@ function Crumbs() {
     {currentWork ? <>
       <BreadcrumbItem><BreadcrumbLink href="#/" onClick={home}>{pageName}</BreadcrumbLink></BreadcrumbItem>
       <BreadcrumbSeparator />
+      {ancestors.map(w => <Fragment key={w.id}><BreadcrumbItem className="hidden min-w-0 md:block"><BreadcrumbLink href={`#/work/${encodeURIComponent(w.id)}`} className="block max-w-[20vw] truncate" onClick={e => { e.preventDefault(); navigate({ page: 'work', work: w.id }); }}>{w.goal}</BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator className="hidden md:block" /></Fragment>)}
       <BreadcrumbItem className="min-w-0"><BreadcrumbPage className="block max-w-[45vw] truncate">{currentWork.goal}</BreadcrumbPage></BreadcrumbItem>
     </> : segments.length ? <>
       <BreadcrumbItem><BreadcrumbLink href="#/meta" onClick={e => { e.preventDefault(); navigate({ page: 'meta', filter: route.filter, dir: '' }); }}>{pageName}</BreadcrumbLink></BreadcrumbItem>

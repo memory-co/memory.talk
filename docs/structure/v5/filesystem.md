@@ -48,6 +48,7 @@
 - **原子写**:`work.json` / `canvas.json` / `worklets.json` / `members.json` / `manager.json` 写临时文件后 `os.replace`。
 - **只追加**:`events.jsonl` / `inbox.jsonl` / `rounds.jsonl`,从不改既有行。
 - **单写者、无缓存直读**:服务进程是唯一写者;每次请求直接读盘。
+- **目录就是树**:子 work 住在父目录的 `subs/<child_id>/` 下,结构和父一样;`works/` 一层只有根 work。
 - **work 结束不删目录**:现场(tmux 会话)销毁,文件留着,可回去看痕迹。
 
 ## 运行时(不落盘)

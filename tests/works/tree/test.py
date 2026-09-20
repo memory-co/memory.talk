@@ -31,3 +31,22 @@ def test_get_and_patch_goal(client):
     assert client.patch(f"/api/works/{w['id']}", json={"goal": "新"}).json()["goal"] == "新"
     assert client.get(f"/api/works/{w['id']}").json()["goal"] == "新"
     assert client.get("/api/works/work_nope").status_code == 404
+
+
+def test_fs_layout_mirrors_the_tree(client, home):
+    """MEMORY_TALK_STORE=fs 时,子 work 住在父目录的 subs/ 下;sqlite 时不看磁盘。"""
+    import os
+    from pathlib import Path
+    if os.environ["MEMORY_TALK_STORE"] != "fs":
+        return
+    root = client.post("/api/works", json={"goal": "根"}).json()
+    child = client.post("/api/works", json={"goal": "子", "parent": root["id"]}).json()
+    grand = client.post("/api/works", json={"goal": "孙", "parent": child["id"]}).json()
+    base = Path(os.environ["MEMORY_TALK_HOME"]) / "works"
+    assert (base / root["id"] / "work.json").is_file()
+    assert (base / root["id"] / "subs" / child["id"] / "work.json").is_file()
+    assert (base / root["id"] / "subs" / child["id"] / "subs" / grand["id"] / "work.json").is_file()
+    assert not (base / child["id"]).exists()
+    client.post(f"/api/works/{grand['id']}/worklets", json={"uri": "https://example.com"})
+    assert (base / root["id"] / "subs" / child["id"] / "subs" / grand["id"] / "worklets.json").is_file()
+    assert [w["goal"] for w in client.get("/api/works", params={"root": root["id"]}).json()[0]["children"]] == ["子"]

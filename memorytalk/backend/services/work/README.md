@@ -12,4 +12,4 @@ work 树、画布、工作单元(现场)、谁动过、round、事件、收件�
 | `rounds.py` | `Rounds`:`read` / `sync(fresh)`(只追加没见过的 round) |
 | `events.py` | `Events`:`emit(work_id, type, **data)` / `read` —— work 自己的 append-only 时间线 |
 | `inbox.py` | `Inbox`:`read` / `put` / `put_unmanaged` —— manager.json 路由过来的变动 |
-| `repo.py` | `WorkRepo` 接口:`get_work` / `put_work` / `list_works`;每个 work 下的小文档 `get_doc` / `put_doc` / `del_doc`(canvas / worklets / users / manager);流 `append` / `read`(events / inbox / rounds);`append_unmanaged`。`FsWorkRepo`(`works/<id>/…`)+ `DbWorkRepo`(`works` / `work_docs` / `work_logs` 表);`make_work_repo(store)` |
+| `repo.py` | `WorkRepo` 接口:`get_work` / `put_work` / `list_works`;每个 work 下的小文档 `get_doc` / `put_doc` / `del_doc`(canvas / worklets / users / manager);流 `append` / `read`(events / inbox / rounds);`append_unmanaged`。`FsWorkRepo`(`works/<id>/…`,子 work 在父目录的 `subs/<id>/` 下,目录就是树;id → 目录懒扫索引)+ `DbWorkRepo`(`works` / `work_docs` / `work_logs` 表);`make_work_repo(store)` |
