@@ -1,6 +1,6 @@
 # Server + Window + Handle + Live
 
-把块变成现场的那一层。**运行时对象,不落盘**——落盘的是 work 的会话登记([work.md](work.md#session))。机制见 [`../../designs/v5/work-server.md`](../../designs/v5/work-server.md)。
+把块变成现场的那一层。**运行时对象,不落盘**——落盘的是 work 的工作单元登记([work.md](work.md#worklet))。机制见 [`../../designs/v5/work-server.md`](../../designs/v5/work-server.md)。
 
 ## ParsedUri
 
@@ -12,7 +12,7 @@
 | `scheme` | 小写协议名;拿它去 server 那里寻址;default server 把它当命令名 |
 | `path` | 终端类:工作目录(是文件则 cwd = 父目录、文件名作参数);`/` 或空 = 默认工作区 |
 | `host` / `port` | http 类:`localhost` / `127.0.0.1` + 端口 → 本地服务 |
-| `query` | 参数字典(v5 没有身份参数——身份在会话 id 上) |
+| `query` | 参数字典(v5 没有身份参数——身份在工作单元 id 上) |
 
 ## WorkServerInfo
 
@@ -39,7 +39,7 @@
 ## Window
 
 ```json
-{"url": "http://127.0.0.1:7681/?arg=work_…-s1", "embed": "http://127.0.0.1:7681/?arg=work_…-s1"}
+{"url": "http://127.0.0.1:7681/?arg=work_…-w1", "embed": "http://127.0.0.1:7681/?arg=work_…-w1"}
 ```
 
 | 字段 | 说明 |
@@ -67,14 +67,14 @@
 
 ```json
 {
-  "session_id": "work_…-s1", "server": "codex",   // server 只在内部流转,API 视图不带
+  "worklet_id": "work_…-w1", "server": "codex",   // server 只在内部流转,API 视图不带
   "window": {"url": null, "embed": null},
   "handle": {"kind": "tmux+transcript", "capabilities": ["capture", "send", "rounds"]},
   "cwd": "/home/me/memory.talk", "command": ["codex"]
 }
 ```
 
-`POST /api/works/{id}/sessions` 把它并进 `SessionView` 返回(`window` / `handle` 两个字段)。
+`POST /api/works/{id}/worklets` 把它并进 `WorkletView` 返回(`window` / `handle` 两个字段)。
 
 ## WorkServerError
 

@@ -1,4 +1,4 @@
-# work_servers / http_session — 最薄的 server:窗是 URL,把手为空
+# work_servers / http_worklet — 最薄的 server:窗是 URL,把手为空
 
 ## 这个场景在测什么
 `https://` 由 http server 接:本地服务(localhost:port)的 `embed` 走 `/proxy/<port>/…`,外链原样;把手为空,

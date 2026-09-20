@@ -1,6 +1,6 @@
 # work
 
-work 树、会话(现场)、收件箱、manager、user、召回。对应 [`/api/works`](../../api/v5/works.md)。机制见 [`../../designs/v5/work.md`](../../designs/v5/work.md)。
+work 树、工作单元(现场)、收件箱、manager、user、召回。对应 [`/api/works`](../../api/v5/works.md)。机制见 [`../../designs/v5/work.md`](../../designs/v5/work.md)。
 
 ```
 memory.talk work
@@ -10,10 +10,10 @@ memory.talk work
 ├── set     <work_id> [--goal '<…>'] [--status todo|doing|done|abandoned]
 │
 ├── attach   <work_id> <uri>                      # 打开一个块:协议 → server 建现场
-├── sessions <work_id>
-├── detach   <work_id> <session_id>
-├── capture  <work_id> <session_id> [--lines 200]
-├── rounds   <work_id> <session_id>
+├── worklets <work_id>
+├── detach   <work_id> <worklet_id>
+├── capture  <work_id> <worklet_id> [--lines 200]
+├── rounds   <work_id> <worklet_id>
 │
 ├── inbox    <work_id>
 ├── manager  <work_id> [--set <work_id> | --unset]
@@ -48,11 +48,11 @@ work_…2f2f  doing  alice  把 v5 做出来
 
 ## work show
 
-一个 work 的全貌:目标 / 状态 / 父 / 建者;会话(活没活着、窗地址);users(current / history);收件箱最近几条;manager。`--json` 时是各端点的合集。
+一个 work 的全貌:目标 / 状态 / 父 / 建者;工作单元(活没活着、窗地址);users(current / history);收件箱最近几条;manager。`--json` 时是各端点的合集。
 
 ## work set
 
-改目标 / 状态。`--status done` 要求子 work 全完,否则 exit 1 并列出未完的子 work;结束后会话冻结(现场销毁、登记留着)。
+改目标 / 状态。`--status done` 要求子 work 全完,否则 exit 1 并列出未完的子 work;结束后工作单元冻结(现场销毁、登记留着)。
 
 ## work attach
 
@@ -64,18 +64,18 @@ memory.talk work attach work_…2f2f bash://
 memory.talk work attach work_…2f2f https://localhost:5173/
 ```
 
-输出:会话 id、窗地址(没配 ttyd 时老实打 `窗:无(只有把手)`)、把手能力。已结束的 work → exit 1;命令不在 PATH → exit 1 `cmd_not_found`。
+输出:工作单元 id、窗地址(没配 ttyd 时老实打 `窗:无(只有把手)`)、把手能力。已结束的 work → exit 1;命令不在 PATH → exit 1 `cmd_not_found`。
 
-**agent 会话的环境里自动带 `MEMORY_TALK_WORK=<work_id>` 和 `MEMORY_TALK_USER=<当前 user>`**——agent 在里面再调 `memory.talk meta …`,提交就挂在这个 user 名下、变动不投回自己。
+**agent 工作单元的环境里自动带 `MEMORY_TALK_WORK=<work_id>` 和 `MEMORY_TALK_USER=<当前 user>`**——agent 在里面再调 `memory.talk meta …`,提交就挂在这个 user 名下、变动不投回自己。
 
-## work sessions / detach / capture / rounds
+## work worklets / detach / capture / rounds
 
 | 命令 | 说明 |
 |---|---|
-| `sessions <id>` | 会话清单:id、URI、活没活着、最近重入 |
-| `detach <id> <sid>` | 关闭即回收:销毁现场 + 删登记 |
-| `capture <id> <sid> [--lines N]` | 抓终端屏幕(`text/plain`);http 会话没把手 → exit 1 |
-| `rounds <id> <sid>` | agent 会话的 round(先从记录文件同步再读);`--json` 给逐 round 标注用 |
+| `worklets <id>` | 工作单元清单:id、URI、活没活着、最近重入 |
+| `detach <id> <wid>` | 关闭即回收:销毁现场 + 删登记 |
+| `capture <id> <wid> [--lines N]` | 抓终端屏幕(`text/plain`);http 工作单元没把手 → exit 1 |
+| `rounds <id> <wid>` | agent 工作单元的 round(先从记录文件同步再读);`--json` 给逐 round 标注用 |
 
 ## work inbox
 

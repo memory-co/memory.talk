@@ -6,13 +6,13 @@ export interface Work {
   id: string; goal: string; parent: string | null; status: WorkStatus;
   created_by: string | null; created_at: string; done_at: string | null; children?: Work[];
 }
-export interface Session {
+export interface Worklet {
   id: string; uri: string; scheme: string; cwd: string | null; alive: boolean;
   created_at: string; last_attached: string;
   window?: { url: string | null; embed: string | null } | null;
   handle?: { kind: string; capabilities: string[] } | null;
 }
-export interface Panel { session: string; collapsed: boolean }
+export interface Panel { worklet: string; collapsed: boolean }
 export interface Column { id: string; panels: Panel[]; collapsed: boolean }
 export interface Canvas { version: number; columns: Column[] }
 export interface Round { id: string; timestamp: string | null; role: string; text: string }
@@ -50,7 +50,7 @@ export const workStatuses: WorkStatus[] = ['todo', 'doing', 'done', 'abandoned']
 export const statusLabel = (t: T, status: WorkStatus) => t(`status.${status}`);
 export const layerLabel = (t: T, layer: string) => (['origin', 'issue', 'card', 'all'].includes(layer) ? t(`layer.${layer}` as Key) : layer);
 const schemeNames: Record<string, string> = { codex: 'Codex', claude: 'Claude Code', kimi: 'Kimi' };
-export const sessionLabel = (t: T, scheme: string) => schemeNames[scheme] || (['bash', 'http', 'https'].includes(scheme) ? t(`scheme.${scheme}` as Key) : scheme);
+export const workletLabel = (t: T, scheme: string) => schemeNames[scheme] || (['bash', 'http', 'https'].includes(scheme) ? t(`scheme.${scheme}` as Key) : scheme);
 export function flattenWorks(works: Work[]): Work[] {
   return works.flatMap(w => [w, ...flattenWorks(w.children || [])]);
 }

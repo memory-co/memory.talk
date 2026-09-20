@@ -6,7 +6,7 @@
 controllers ──▶ services ──▶ providers(介质原语)
                   │
                   ├── metas/    认知层:分层 git 仓库              → metas/README.md
-                  ├── work/           做事层:work 树、画布、会话、痕迹   → work/README.md
+                  ├── work/           做事层:work 树、画布、工作单元、痕迹   → work/README.md
                   ├── work_servers/   现场怎么建:基类、注册表、adapter   → work_servers/README.md
                   ├── users/          人:注册的实体,活动统计现算         → users/README.md
                   ├── auth/           门:setup、登录换 token             → auth/README.md
@@ -18,7 +18,7 @@ controllers ──▶ services ──▶ providers(介质原语)
 
 **1. 认知层是 git,不是数据库。** `metas/` 把一个 git 仓库做成分层记录:每层一条 `layer/<名>` 分支只放自己的文件,`stack` 是各层的并集视图。一个动作就是一个 `[层] …` 提交,先落到层分支、再在 stack 上打一个 merge 节点。跨层的决定(争出结果写卡、对卡开讨论页)是两个相邻提交带同一个 trailer。守卫在写入时:路径按后缀 / 机制规则该归哪层、是否已被别的层占——不符即拒。历史、检索、旧版本都直接问 git(`log` / `grep` / `show`)。根上的 `metas.json` 是唯一锚定:有哪些层、什么顺序、用户层的 schema,它的提交历史就是层的变化史。`git.py` 和 `repo.py` 分开:前者是原语,换一种拓扑不用动它;后者是拓扑,不关心怎么调 git。
 
-**2. 现场层是记录,介质可换。** `work/` 和 `users/` 的记录(work 节点、画布、会话登记、谁动过、round、事件、收件箱、user 档案)是业务对象,不进 git。业务层只认仓储接口(`WorkRepo` / `UserRepo`);仓储按 provider 的**族**各实现一份——文件系统版整文件读写,数据库版走链式查询——同一族之内换介质(LocalFS → S3、SQLite → MySQL)仓储不动。`store/` 负责装配。
+**2. 现场层是记录,介质可换。** `work/` 和 `users/` 的记录(work 节点、画布、工作单元登记、谁动过、round、事件、收件箱、user 档案)是业务对象,不进 git。业务层只认仓储接口(`WorkRepo` / `UserRepo`);仓储按 provider 的**族**各实现一份——文件系统版整文件读写,数据库版走链式查询——同一族之内换介质(LocalFS → S3、SQLite → MySQL)仓储不动。`store/` 负责装配。
 
 **3. 现场怎么建,协议自己说。** `work_servers/` 里每个 work server 声明自己响应哪些协议,没人声明的协议去 default(协议名当命令名在 tmux 里跑);寻址在 attach 时内部发生,调用方只看到窗和把手。agent 类 server 比终端多一项把手能力:从平台自己的会话记录里读 round,追加进 work 的 rounds 流——这是 work 留给认知层的原料。
 

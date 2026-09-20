@@ -48,7 +48,7 @@ memory.talk 运行中(pid 12345)
   地址     http://127.0.0.1:8000
   存储     fs  ~/.memory.talk       ← 或 sqlite ~/.memory.talk/memory.sqlite
   work     3 在做 / 12 总计
-  会话     2 活着
+  工作单元     2 活着
   已运行   1小时2分
   健康     ok
 ```

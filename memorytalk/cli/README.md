@@ -9,6 +9,6 @@
 | `server.py` | `server start / stop / restart / status / daemon` | 后台守护:`instance.json` 记 pid / url,`_alive` / `_health` 判活;`daemon` 就是 uvicorn |
 | `auth.py` | `setup / login [name] / logout` | token 存 `<home>/credentials.json`,按服务地址分开、一个地址可存几个人(`saved_token` / `_remember`);密码从 `--password` / `MEMORY_TALK_PASSWORD` / getpass 来 |
 | `user.py` | `user add / list / show / set / whoami / passwd` | `add` 只有 admin 能用;`passwd` 自己的要旧密码,admin 给别人设不用 |
-| `work.py` | `work create / list / show / set / attach / sessions / detach / capture / rounds / inbox / manager / users / touch / servers` | `w_list` 递归打树 |
+| `work.py` | `work create / list / show / set / attach / worklets / detach / capture / rounds / inbox / manager / users / touch / servers` | `w_list` 递归打树 |
 | `meta.py` | `meta(metas) layers / tree / recent / read / write / edit / rm / log / manager / managed` | `_body()` 把 `--put 文件=内容`(或 origin 的 `--content`)+ `--subject` / `--reason` 拼成请求体 |
 | `search.py` | `search <q>` | 按 kind 分组打印 |

@@ -5,7 +5,7 @@
 相关:
 - v5 work(user 归属挂在 work 上): [work.md](work.md)
 - v5 metas(每个提交的 author 就是 user): [metas/README.md](metas/README.md)
-- v5 session(现场——和 user 是两个词:session 是在哪干活,user 是谁在干活): [session.md](session.md)
+- v5 worklet(现场——和 user 是两个词:worklet 是在哪干活,user 是谁在干活): [worklet.md](worklet.md)
 - v5 manager(manager 是 work,不是 user;收件箱里每条变动记着是哪个 user 造成的): [manager.md](metas/manager.md)
 
 ---
@@ -40,10 +40,10 @@
 
 work 上还记一份名单:**谁动过这个 work、第一次和最近一次什么时候、动了几次**。「当前正在动」不是一个状态位,是「最近一小段时间内动过」现算出来的。这是原来 member 机制的全部内容,只是名字改叫 user:
 
-- **什么算动**:任何带身份的、会动这个 work 的请求——建、改目标 / 状态、重排画布、开 / 重入 / 关一个 session、打开 work 本身。外加一个显式心跳,给前端「我还开着这个页面」用。
-- **粒度是 work**,不细到 session:同一个 tmux 会话多人 attach 本来就是镜像,谁在敲由 tmux 自己解决。
+- **什么算动**:任何带身份的、会动这个 work 的请求——建、改目标 / 状态、重排画布、开 / 重入 / 关一个 worklet、打开 work 本身。外加一个显式心跳,给前端「我还开着这个页面」用。
+- **粒度是 work**,不细到 worklet:同一个 tmux 会话多人 attach 本来就是镜像,谁在敲由 tmux 自己解决。
 - **两个视图**:`current` = 最近 N 秒内动过的人(先定 2 分钟);`history` = 动过的所有人,按最近活动倒序。人不需要登出,不动就自然掉出 current。
-- **用处**:防止两个人同时往一个 agent 会话里敲字;知道该去问谁。
+- **用处**:防止两个人同时往一个 agent 工作单元里敲字;知道该去问谁。
 
 `created_by` 和 `users` 的关系:建 work 的人自动是 `users` 里的第一个;之后谁动谁进名单。`created_by` 永远不变,`users` 一直长。
 
@@ -75,9 +75,9 @@ metas 的每个动作是一个 commit;做这个动作的 user 就是 commit 的 
 
 ## 6. 边界:user 不是什么
 
-- **不是 session。** session 是现场(在哪干活),user 是人(谁干活)。一个 user 可以开很多 session,一个 session 只被一个 work 拥有、但可以被多个 user attach。
+- **不是 worklet。** worklet 是现场(在哪干活),user 是人(谁干活)。一个 user 可以开很多 worklet,一个 worklet 只被一个 work 拥有、但可以被多个 user attach。
 - **不是 manager。** manager 是 work,不是人——变动打给一个 work 的收件箱,由那个 work 里的 agent 或人去推。要知道「那个 work 里是谁」,看它的 `users`。
-- **不是 agent。** agent 是在 session 里跑的程序,它的产出记在它所在 work 的名下;agent 做的 metas 提交,author 是**驱动它的 user**(请求头里那个),不是 agent 的名字。要区分「人写的还是 agent 写的」,看提交 body 里的 `Work:`(在哪个 work 的会话里做的)——本篇不给 agent 单独立身份,列在 §7。
+- **不是 agent。** agent 是在 worklet 里跑的程序,它的产出记在它所在 work 的名下;agent 做的 metas 提交,author 是**驱动它的 user**(请求头里那个),不是 agent 的名字。要区分「人写的还是 agent 写的」,看提交 body 里的 `Work:`(在哪个 work 的工作单元里做的)——本篇不给 agent 单独立身份,列在 §7。
 
 ---
 

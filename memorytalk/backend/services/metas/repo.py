@@ -21,7 +21,6 @@ from memorytalk.backend.models.metas import Revision
 from .git import Entry, Git, GrepHit
 
 ANCHOR = "metas.json"
-LEGACY_ANCHOR = "collections.json"          # 2026-09-20 改名前的锚定文件名;启动时搬一次
 
 
 def _dump(cfg: dict) -> bytes:
@@ -57,7 +56,7 @@ class Repo:
         """metas.json(从 stack 树里读,不读工作区)。"""
         if self.git.resolve(self.stack) is None:
             return None
-        data = self.read(ANCHOR) or self.read(LEGACY_ANCHOR)
+        data = self.read(ANCHOR)
         return json.loads(data) if data else None
 
     def layers(self) -> list[str] | None:
@@ -77,9 +76,6 @@ class Repo:
             self.git.set_head(self.stack)
             self.git.sync_worktree(self.stack)
             return
-        if self.exists(LEGACY_ANCHOR) and not self.exists(ANCHOR):          # 老仓库:锚定文件改名,一次最底层提交
-            self.commit(cur[0], f"[{cur[0]}] metas: rename {LEGACY_ANCHOR} to {ANCHOR}", {ANCHOR: _dump(self.config())}, [LEGACY_ANCHOR],
-                        layer_of=lambda p: cur[0])
         missing = [n for n in names if n not in cur]
         if not missing:
             return

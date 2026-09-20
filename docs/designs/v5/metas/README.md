@@ -15,7 +15,7 @@
 
 这一层最初叫 Collect(动词,「收拢」),2026-09-10 改名 collections,2026-09-20 再改名 **metas**——它装的是元认知(meta cognition):关于工作的认知,不是工作本身;界面上这一页就叫「元认知」。当初从动词改名词的理由和 [work.md §0](../work.md) 一样,名字要和别的层对齐:
 
-- **名词,不是动词。** works、sessions、users、layers 都是名词;认知层的容器也该是一个名词——它是「收拢起来的那些东西」,不是「收拢」这个动作。
+- **名词,不是动词。** works、worklets、users、layers 都是名词;认知层的容器也该是一个名词——它是「收拢起来的那些东西」,不是「收拢」这个动作。
 - **有复数形态。** 它装的是很多份材料、很多个问题、很多张卡,而且还能分出很多个 layer;复数说的就是这个。磁盘上、API 上也一律用复数:`~/.memory.talk/metas/`、`/api/metas/`,和 `works/`、`/api/works/` 一个样。
 - **和 collectbase 分开。** collectbase 是被参考的那个工具(v5 不依赖它,自己实现了同样语义的分层 git);metas 是 memory.talk 自己的对象。
 

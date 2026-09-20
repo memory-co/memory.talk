@@ -16,7 +16,7 @@ from memorytalk.backend.services.search import SearchService
 from memorytalk.backend.services.work_servers import WorkServerService
 from memorytalk.backend.services.store import StoreService
 from memorytalk.backend.services.users import UserExists, UserNotFound, UserService
-from memorytalk.backend.services.work import SessionNotFound, WorkConflict, WorkNotFound, WorkService
+from memorytalk.backend.services.work import WorkletNotFound, WorkConflict, WorkNotFound, WorkService
 
 
 def create_app(config: Config | None = None, runtime: RuntimeConfig | None = None) -> FastAPI:
@@ -62,7 +62,7 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
             return JSONResponse(fail(code, str(exc)), status_code=status)
         return handler
 
-    for exc_type in (WorkNotFound, SessionNotFound, UserNotFound):
+    for exc_type in (WorkNotFound, WorkletNotFound, UserNotFound):
         app.add_exception_handler(exc_type, _err(404, "not_found"))
     app.add_exception_handler(WorkConflict, _err(409, "conflict"))
     app.add_exception_handler(UserExists, _err(409, "exists"))

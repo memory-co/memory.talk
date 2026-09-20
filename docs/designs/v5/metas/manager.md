@@ -72,13 +72,13 @@ memory.talk/配置/旧的 settings 方案.md             ← origin 变了(新�
 | 在哪 | 变动 = | 谁产生 |
 |---|---|---|
 | Metas(git) | 一个 commit 触碰了这个目录下的路径 | collectbase 的 post-commit 就是天然的信号源;一个 commit 一条变动,带 `[层名]`、动词、路径、trailer |
-| work 目录(裸文件) | work 的事件:状态变了、新 session、新 round、做完 | work 层的 events.jsonl 就是信号源 |
+| work 目录(裸文件) | work 的事件:状态变了、新 worklet、新 round、做完 | work 层的 events.jsonl 就是信号源 |
 
 **打过去**:变动**投递**到 manager work 的**收件箱**——work 目录下一个 append-only 的 `inbox.jsonl`。每条:什么时候、哪个路径、什么变动、谁干的、以及**它是被哪个 `manager.json` 路由过来的**(便于回答「为什么这事到我这」)。
 
 - 收件箱是 work 的痕迹的一部分,跟 rounds / events 一样只追加、不进 git。
-- work 里的 agent 怎么消费收件箱——开工时读一遍、干活中轮询、还是直接推进会话——是 [work-server.md §7](../work-server.md) 那条「把手要不要开驱动」的问题,本篇不定;**最小形态是收件箱 + agent 自己去读**。
-- **manager work 自己造成的变动不投递给自己**:它写了一张卡,这张卡的变动路由回它自己——跳过,否则自激。变动记「谁干的」(git author / work 的 session)就能判。
+- work 里的 agent 怎么消费收件箱——开工时读一遍、干活中轮询、还是直接推进工作单元——是 [work-server.md §7](../work-server.md) 那条「把手要不要开驱动」的问题,本篇不定;**最小形态是收件箱 + agent 自己去读**。
+- **manager work 自己造成的变动不投递给自己**:它写了一张卡,这张卡的变动路由回它自己——跳过,否则自激。变动记「谁干的」(git author / work 的 worklet)就能判。
 
 ---
 
@@ -114,7 +114,7 @@ manager 机制不规定动作。但把它接到 v5 已有的几条线上,会自�
 ## 7. 这篇有意不定的事
 
 - ~~单文件对象要不要变目录~~:已定——issue、card 都是带后缀的目录([metas.md §1](README.md)),自己身上就能放 `manager.json`;origin 文件或目录都行,管它就管它所在的文件夹。
-- **投递形式**:收件箱(拉)还是推进会话(推)。§4 按收件箱写;推的那半等把手开驱动再说。
+- **投递形式**:收件箱(拉)还是推进工作单元(推)。§4 按收件箱写;推的那半等把手开驱动再说。
 - **变动粒度**:一个 commit 一条,还是一个「决定」(两个相邻提交)合成一条。倾向按 commit,由消费方自己合并——投递侧不做聪明事。
 - **`manager.json` 里还要不要别的**:现在只有 `work`。要不要 `only: ["argue", "write"]` 这类过滤、要不要 `until`(临时代管)——先不要,一个字段起步。
 - **无人管的变动放哪**:一份全局的 `unmanaged.jsonl`,还是根 `manager.json` 缺省指向一个「收容 work」。倾向前者——「没人管」应该显眼,不该被一个默认 work 吞掉。

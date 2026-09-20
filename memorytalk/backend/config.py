@@ -13,11 +13,8 @@ class Config:
     git_author_email: str
 
     @property
-    def metas_dir(self) -> Path:   # 分层 git 仓库(metas);2026-09-20 之前叫 collections/,第一次起服务时搬过来
-        new, old = self.home / "metas", self.home / "collections"
-        if old.is_dir() and not new.exists():
-            old.rename(new)
-        return new
+    def metas_dir(self) -> Path:   # 分层 git 仓库(metas)
+        return self.home / "metas"
 
     @property
     def layers_dir(self) -> Path:        # 用户自定义层:每个 .py 一个 Layer 子类,启动时载入

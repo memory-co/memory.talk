@@ -37,7 +37,7 @@ class WorkNode(Work):
 # ---- 画布:work 的视图,可随时重排 ----
 
 class Panel(BaseModel):
-    session: str = Field(description="装的是哪个会话;一个会话最多出现在一个格子里")
+    worklet: str = Field(description="装的是哪个工作单元;一个工作单元最多出现在一个格子里")
     collapsed: bool = Field(False, description="收起 = 只剩标题行")
 
 
@@ -48,7 +48,7 @@ class Column(BaseModel):
 
 
 class Canvas(BaseModel):
-    """布局 = 几列,每列从上到下摆会话。默认一列;会话开了就进第一列的末尾,关了就从格子里拿掉。"""
+    """布局 = 几列,每列从上到下摆工作单元。默认一列;工作单元开了就进第一列的末尾,关了就从格子里拿掉。"""
     version: int = 0
     columns: list[Column] = Field(default_factory=list)
 
@@ -58,9 +58,9 @@ class CanvasPut(BaseModel):
     columns: list[Column]
 
 
-# ---- 会话:现场,身份脱离布局 ----
+# ---- 工作单元:现场,身份脱离布局 ----
 
-class Session(BaseModel):
+class Worklet(BaseModel):
     id: str
     uri: str
     scheme: str
@@ -70,11 +70,11 @@ class Session(BaseModel):
     last_attached: str
 
 
-class SessionCreate(BaseModel):
+class WorkletCreate(BaseModel):
     uri: str
 
 
-class SessionView(Session):
+class WorkletView(Worklet):
     server: str = Field("", exclude=True)          # 内部寻址用,不对外
     alive: bool = False
     window: Window | None = None

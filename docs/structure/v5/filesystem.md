@@ -4,7 +4,7 @@
 
 ```
 ~/.memory.talk/                       ← MEMORY_TALK_HOME
-├── metas/                      ← 分层 git 仓库(认知层),见 metas.md。2026-09-20 之前叫 collections/(锚定文件叫 collections.json):第一次起新版服务时目录搬过来、锚定文件在最底层提一次改名,别的不动
+├── metas/                      ← 分层 git 仓库(认知层),见 metas.md
 │   ├── .git/                         ←   refs/heads/layer/{origin,issue,card,…}、refs/heads/stack;HEAD → stack
 │   ├── metas.json              ←   锚定:整个 metas 的配置 + layers[](最底在前,只有名字和 builtin);始祖提交只有它;git 历史 = 层的变化史
 │   ├── manager.json                  ←   根:管一切(可选)
@@ -22,12 +22,12 @@
 │   └── <work_id>/
 │       ├── work.json                 ←   目标 / 父 / 状态
 │       ├── canvas.json               ←   画布(视图);不存在 = 空画布
-│       ├── sessions.json             ←   会话登记(数组,现场)
+│       ├── worklets.json             ←   工作单元登记(数组,现场)
 │       ├── users.json                ←   user:谁动过,只做可见性
 │       ├── manager.json              ←   这棵子树的变动打给谁(可选;没有 → 父 work)
 │       ├── events.jsonl              ←   work 时间线,只追加
 │       ├── inbox.jsonl               ←   收件箱:manager.json 路由过来的变动,只追加
-│       └── sessions/<session_id>/rounds.jsonl   ← agent 会话痕迹,只追加
+│       └── worklets/<worklet_id>/rounds.jsonl   ← agent 工作单元痕迹,只追加
 └── unmanaged.jsonl                   ← 没人管的变动
 ```
 
@@ -45,7 +45,7 @@
 
 介质可换:`MEMORY_TALK_STORE=sqlite` 时这一半(连同 users/、auth/)全在 `memory.sqlite`(`MEMORY_TALK_SQLITE` 可改路径)的五张表里(`users` / `auth_tokens` / `works` / `work_docs` / `work_logs`),业务层不感知(见 [designs provider.md](../../designs/v5/provider.md))。
 
-- **原子写**:`work.json` / `canvas.json` / `sessions.json` / `members.json` / `manager.json` 写临时文件后 `os.replace`。
+- **原子写**:`work.json` / `canvas.json` / `worklets.json` / `members.json` / `manager.json` 写临时文件后 `os.replace`。
 - **只追加**:`events.jsonl` / `inbox.jsonl` / `rounds.jsonl`,从不改既有行。
 - **单写者、无缓存直读**:服务进程是唯一写者;每次请求直接读盘。
 - **work 结束不删目录**:现场(tmux 会话)销毁,文件留着,可回去看痕迹。
@@ -54,8 +54,8 @@
 
 | 东西 | 在哪 | 谁管 |
 |---|---|---|
-| tmux 会话(终端 / agent 现场) | tmux server,socket `-L <MEMORY_TALK_TMUX_SOCKET>`(默认 `memorytalk`) | server 层建 / 杀;会话名 = 会话 id |
-| 各平台的会话记录(agent 把手读的原文) | `~/.claude/projects/` `~/.codex/sessions/` `~/.kimi-code/sessions/` | 各平台自己写;memory.talk 只读,按 cwd + 会话创建时间定位 |
+| tmux 会话(终端 / agent 现场) | tmux server,socket `-L <MEMORY_TALK_TMUX_SOCKET>`(默认 `memorytalk`) | server 层建 / 杀;工作单元名 = 工作单元 id |
+| 各平台的会话记录(agent 把手读的原文) | `~/.claude/projects/` `~/.codex/sessions/` `~/.kimi-code/sessions/` | 各平台自己写;memory.talk 只读,按 cwd + 工作单元创建时间定位 |
 
 ## 环境变量
 

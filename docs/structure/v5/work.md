@@ -1,4 +1,4 @@
-# Work + Canvas + Session + WorkUser + Round + Event
+# Work + Canvas + Worklet + WorkUser + Round + Event
 
 做事层的六个对象,全部住在 `works/<work_id>/` 目录下,裸文件。机制见 [`../../designs/v5/work.md`](../../designs/v5/work.md)。
 
@@ -30,43 +30,43 @@
 
 **状态规则**:
 - `done` 要求所有子 work 都是 `done` 或 `abandoned`,否则 `409`(完成从叶子往上收拢)。
-- 进入 `done` / `abandoned` 即**冻结**:所有会话的现场销毁、登记留着、不能再 attach;`rounds` 不再从把手同步,只读已记的。
+- 进入 `done` / `abandoned` 即**冻结**:所有工作单元的现场销毁、登记留着、不能再 attach;`rounds` 不再从把手同步,只读已记的。
 - 没有 `doing` 的自动推断——开工 / 在做 / 待做由人或 agent 标。
 
 **读视图 `WorkNode`** = Work + `children: WorkNode[]`(读时拼出来,不存)。
 
 ## Canvas
 
-work 的画布:**几列,每列从上到下摆会话**,每个会话可收起。默认一列。**只是视图**——重排不改变 work 的会话和目的。
+work 的画布:**几列,每列从上到下摆工作单元**,每个工作单元可收起。默认一列。**只是视图**——重排不改变 work 的工作单元和目的。
 
 ```json
 {
   "version": 3,
   "columns": [
-    {"id": "c1", "panels": [{"session": "work_2026…2f2f-s1", "collapsed": false}, {"session": "work_2026…2f2f-s2", "collapsed": true}]},
-    {"id": "c2", "panels": [{"session": "work_2026…2f2f-s3", "collapsed": false}], "collapsed": true}
+    {"id": "c1", "panels": [{"worklet": "work_2026…2f2f-w1", "collapsed": false}, {"worklet": "work_2026…2f2f-w2", "collapsed": true}]},
+    {"id": "c2", "panels": [{"worklet": "work_2026…2f2f-w3", "collapsed": false}], "collapsed": true}
   ]
 }
 ```
 
 | 字段 | 说明 |
 |---|---|
-| `version` | 乐观锁;`PUT` 必须带当前值,成功后 +1;会话开 / 关时服务端自己改画布也 +1 |
+| `version` | 乐观锁;`PUT` 必须带当前值,成功后 +1;工作单元开 / 关时服务端自己改画布也 +1 |
 | `columns[].id` | 前端自定,画布内唯一 |
 | `columns[].panels[]` | 这一列从上到下的格子 |
 | `columns[].collapsed` | 整列收起 = 缩成一条窄边;列只有空了才能删 |
-| `panels[].session` | 装的是哪个会话;一个会话最多出现在一个格子里 |
+| `panels[].worklet` | 装的是哪个工作单元;一个工作单元最多出现在一个格子里 |
 | `panels[].collapsed` | 收起 = 只剩标题行 |
 
-**跟 shellbase 唯一有意不同的地方**:格子的身份不在 `(window, block)` 位置参数里,而在 `session`——把会话挪到别的列,会话不变。开出来的会话自动进第一列末尾,关掉的自动从格子里拿掉;画布里没提到的会话前端补在第一列。
+**跟 shellbase 唯一有意不同的地方**:格子的身份不在 `(window, block)` 位置参数里,而在 `worklet`——把工作单元挪到别的列,工作单元不变。开出来的工作单元自动进第一列末尾,关掉的自动从格子里拿掉;画布里没提到的工作单元前端补在第一列。
 
-## Session
+## Worklet
 
-work 的一个会话 = 一个现场。**在 work 里打开就是它的**,归属原生,不靠 cwd 推断。
+work 的一个工作单元 = 一个现场。**在 work 里打开就是它的**,归属原生,不靠 cwd 推断。
 
 ```json
 {
-  "id": "work_202609052302072f2f-s1",
+  "id": "work_202609052302072f2f-w1",
   "uri": "codex:///home/me/memory.talk",
   "scheme": "codex",
   "cwd": "/home/me/memory.talk",
@@ -77,17 +77,17 @@ work 的一个会话 = 一个现场。**在 work 里打开就是它的**,归属�
 
 | 字段 | 说明 |
 |---|---|
-| `id` | `<work_id>-s<n>`,work 内顺序编号;**就是 tmux 会话名**(终端类) |
+| `id` | `<work_id>-w<n>`,work 内顺序编号;**就是 tmux 会话名**(终端类) |
 | `uri` | 打开它用的 URI(原样) |
 | `scheme` | URI 的协议 |
 | (`server`) | 建它的 server 名,**只在登记文件里、不对外**——销毁 / 取把手时内部用(`https` → `http`,`vim` → `default`,调用方不感知) |
 | `cwd` | server 解析出的工作目录(终端类);浏览器类为 `null` |
-| `created_at` | 会话诞生时刻;agent 类 server 用它找「之后新出现的那份会话记录」 |
+| `created_at` | 工作单元诞生时刻;agent 类 server 用它找「之后新出现的那份会话记录」 |
 | `last_attached` | 最近一次重入 |
 
-**读视图 `SessionView`** = Session + `alive`(问 server 现算)+ `window` / `handle`(attach / reattach 时返回,list 时不带)。
+**读视图 `WorkletView`** = Worklet + `alive`(问 server 现算)+ `window` / `handle`(attach / reattach 时返回,list 时不带)。
 
-一个会话只属于一个 work、一个确定节点。要在别的事里用它的结论,走 issue / card,不搬会话。
+一个工作单元只属于一个 work、一个确定节点。要在别的事里用它的结论,走 issue / card,不搬工作单元。
 
 ## WorkUser(users)
 
@@ -109,7 +109,7 @@ work 的一个会话 = 一个现场。**在 work 里打开就是它的**,归属�
 
 ## Round
 
-agent 会话的会话痕迹:从各平台的记录文件读出来、append-only 追加进 `rounds.jsonl`。
+agent 工作单元的工作单元痕迹:从各平台的记录文件读出来、append-only 追加进 `rounds.jsonl`。
 
 ```json
 {"id": "8b1e…", "timestamp": "2026-09-05T23:05:12Z", "role": "human", "text": "把配置改成环境变量"}
@@ -130,7 +130,7 @@ work 自己的时间线,append-only。v3 `events.jsonl` 在 v5 唯一保留的�
 
 ```json
 {"ts": "2026-09-05T23:02:07Z", "type": "created", "data": {"goal": "把 v5 做出来", "parent": null}}
-{"ts": "2026-09-05T23:02:10Z", "type": "session.attached", "data": {"session": "…-s1", "uri": "codex:///…", "server": "codex"}}
+{"ts": "2026-09-05T23:02:10Z", "type": "worklet.attached", "data": {"worklet": "…-w1", "uri": "codex:///…", "server": "codex"}}
 {"ts": "2026-09-06T01:00:00Z", "type": "status", "data": {"from": "doing", "to": "done"}}
 {"ts": "2026-09-06T01:00:00Z", "type": "frozen", "data": {}}
 ```
@@ -140,8 +140,8 @@ work 自己的时间线,append-only。v3 `events.jsonl` 在 v5 唯一保留的�
 | `created` | `goal`, `parent` |
 | `status` | `from`, `to` |
 | `frozen` | — (结束时现场已销毁) |
-| `session.attached` | `session`, `uri`, `server` |
-| `session.detached` | `session` |
+| `worklet.attached` | `worklet`, `uri`, `server` |
+| `worklet.detached` | `worklet` |
 
 ## 存储
 
@@ -149,10 +149,10 @@ work 自己的时间线,append-only。v3 `events.jsonl` 在 v5 唯一保留的�
 works/<work_id>/
 ├── work.json         原子写(临时文件 + rename)
 ├── canvas.json       原子写;不存在 = 空画布 version 0
-├── sessions.json     原子写;数组(现场)
+├── worklets.json     原子写;数组(现场)
 ├── users.json        原子写;数组(人)
 ├── events.jsonl      只追加
-└── sessions/<session_id>/rounds.jsonl   只追加
+└── worklets/<worklet_id>/rounds.jsonl   只追加
 ```
 
 以上是 `MEMORY_TALK_STORE=fs` 时的形态;`sqlite` 时同样的记录在 `works` / `work_docs` / `work_logs` 三张表里,业务层不感知(见 [designs provider.md](../../designs/v5/provider.md))。读写纪律照 shellbase:单写者(服务进程)、无缓存直读、任何时刻磁盘上都是完整 JSON。**不进 git**——work 记的是过程,git 记的是决定(见 [`../../designs/v5/metas/store.md`](../../designs/v5/metas/store.md) §4)。

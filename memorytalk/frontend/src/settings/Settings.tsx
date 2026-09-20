@@ -73,7 +73,7 @@ export function Settings() {
       <CardContent><Alert><CircleHelp className="size-4" /><AlertTitle>{t('settings.ttydTitle')}</AlertTitle><AlertDescription className="space-y-2">
         <p>{t('settings.ttydHow')}</p>
         <pre className="overflow-auto rounded-md bg-muted p-2 font-mono text-xs">MEMORY_TALK_TTYD_URL={t('settings.ttydExample')}</pre>
-        <p>{t('settings.ttydArg')} <code className="rounded bg-muted px-1 font-mono text-xs">?arg=&lt;session_id&gt;</code>{t('settings.ttydSocket')}<code className="rounded bg-muted px-1 font-mono text-xs">{system.data?.tmux_socket || 'memorytalk'}</code>{t('settings.ttydRestart')}</p>
+        <p>{t('settings.ttydArg')} <code className="rounded bg-muted px-1 font-mono text-xs">?arg=&lt;worklet_id&gt;</code>{t('settings.ttydSocket')}<code className="rounded bg-muted px-1 font-mono text-xs">{system.data?.tmux_socket || 'memorytalk'}</code>{t('settings.ttydRestart')}</p>
       </AlertDescription></Alert></CardContent>
     </Card>
     <RegisterUser open={register} onClose={() => setRegister(false)} />

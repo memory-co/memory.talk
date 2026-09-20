@@ -2,7 +2,7 @@
 
 本目录采用 shadcn/ui 官方 New York 组件源码，使用 Radix primitives，兼容项目现有的 React 18 与 Tailwind CSS 3。源码来自 `https://ui.shadcn.com/r/styles/new-york/<组件名>.json`，许可证见 [LICENSE.md](LICENSE.md)。
 
-业务页面统一从 `@/components/ui/*` 引用通用控件。工作树、认知对象和会话仍由业务组件组织；Markdown 与 ttyd 分别负责正文、终端渲染。
+业务页面统一从 `@/components/ui/*` 引用通用控件。工作树、认知对象和工作单元仍由业务组件组织；Markdown 与 ttyd 分别负责正文、终端渲染。
 
 - `components.json` 声明组件风格、路径别名和 Tailwind 配置。
 - `src/index.css` 的主题变量定义颜色与圆角；业务布局放在 `@layer components`，不覆盖全局按钮、输入框等原生元素。

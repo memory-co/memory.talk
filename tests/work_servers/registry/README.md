@@ -5,7 +5,7 @@
 寻址在服务层:协议在谁的 protocols 里就是谁(`https` → http),没人声明 → default。没有单独的 resolve 端点。
 
 ## 不在这测什么
-- 建现场 → `bash_session` / `http_session` / `default_session`
+- 建现场 → `bash_worklet` / `http_worklet` / `default_worklet`
 
 ## fixture 来源
 `client`、`svc`。

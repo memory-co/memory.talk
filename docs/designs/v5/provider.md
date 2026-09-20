@@ -93,14 +93,14 @@ db.update(works).where(works.c.id == wid, works.c.version == expect).set(status=
 
 ## 4. 仓储层:业务概念住在这里,按族各写一份
 
-work / user 的记录(work 节点、画布、会话登记、谁动过、事件、收件箱、round;user 的档案)是**业务**。业务层需要的操作定成一个接口——它长什么样是业务层的事,provider 不管;然后**按族各实现一份**:
+work / user 的记录(work 节点、画布、工作单元登记、谁动过、事件、收件箱、round;user 的档案)是**业务**。业务层需要的操作定成一个接口——它长什么样是业务层的事,provider 不管;然后**按族各实现一份**:
 
 | | fs 版仓储(用 `FileSystemProvider`) | db 版仓储(用 `DatabaseProvider`) |
 |---|---|---|
 | work 节点 | `works/<id>/work.json`,`read` / `write` | `works` 表,一行 |
 | user 档案 | `users/<name>.json` | `users` 表,一行 |
 | 画布 | `works/<id>/canvas.json`,版本号在文件里 | `canvases` 表,版本列 |
-| 会话登记 / 谁动过 / manager | 各一个 JSON | 各一张表 |
+| 工作单元登记 / 谁动过 / manager | 各一个 JSON | 各一张表 |
 | 事件 / 收件箱 / round | JSONL,`append` / `read` | `events` / `inbox` / `rounds` 表,自增 `seq` |
 | 「按父列子」「按 created_by 列」 | `list` 前缀 + 读每个 `work.json` 在内存里过滤 | `select(works).where(works.c.parent == pid)`,走索引 |
 | 把路径交给外部进程(agent 读 rounds) | `local_path`(LocalFS 有;S3 没有 → 退回 `read`) | 没有路径;把手改成通过仓储读 |

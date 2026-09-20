@@ -1,4 +1,4 @@
-"""work 自己的 append-only 事件:开工 / 状态 / 会话 / 做完。"""
+"""work 自己的 append-only 事件:开工 / 状态 / 工作单元 / 做完。"""
 from __future__ import annotations
 
 from memorytalk.backend.models.work import Event

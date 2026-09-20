@@ -1,10 +1,10 @@
-"""WorkService:树、画布、会话(经 server 建现场)、痕迹、事件(docs/designs/v5/work.md)。"""
+"""WorkService:树、画布、工作单元(经 server 建现场)、痕迹、事件(docs/designs/v5/work.md)。"""
 from __future__ import annotations
 
 from memorytalk.backend.models.search import SearchHit
 
 from datetime import datetime
-from memorytalk.backend.models.work import (Canvas, CanvasPut, Event, Round, Session, SessionView, Work, WorkCreate, WorkUsers,
+from memorytalk.backend.models.work import (Canvas, CanvasPut, Event, Round, Worklet, WorkletView, Work, WorkCreate, WorkUsers,
                          WorkNode, WorkUpdate)
 from memorytalk.backend.services.work_servers import WorkServerService
 from memorytalk.backend.services.store import StoreService
@@ -15,7 +15,7 @@ from .canvas import CanvasStore
 from .events import Events
 from .inbox import Inbox
 from .users import WorkUserRegistry
-from .sessions import SessionNotFound, SessionRegistry
+from .worklets import WorkletNotFound, WorkletRegistry
 from .rounds import Rounds
 from .tree import WorkConflict, WorkNotFound, WorkTree
 
@@ -26,7 +26,7 @@ class WorkService:
         self.repo: WorkRepo = store.work_repo
         self.tree = WorkTree(self.repo)
         self.canvas = CanvasStore(self.repo)
-        self.sessions = SessionRegistry(self.repo)
+        self.worklets = WorkletRegistry(self.repo)
         self.round_log = Rounds(self.repo)
         self.events = Events(self.repo)
         self.users = WorkUserRegistry(self.repo)
@@ -108,8 +108,8 @@ class WorkService:
         return work
 
     def _freeze(self, work_id: str) -> None:
-        """做完:会话冻结——现场销毁,登记留着(可回去看痕迹,不再是干活的地方)。"""
-        for m in self.sessions.list(work_id):
+        """做完:工作单元冻结——现场销毁,登记留着(可回去看痕迹,不再是干活的地方)。"""
+        for m in self.worklets.list(work_id):
             try:
                 self.work_servers.destroy(m.server, m.id)
             except Exception:
@@ -126,70 +126,70 @@ class WorkService:
         self.tree.get(work_id)
         return self.canvas.put(work_id, req)
 
-    # ---- 会话:在 work 里打开,就是它的 ----
+    # ---- 工作单元:在 work 里打开,就是它的 ----
 
-    def attach(self, work_id: str, raw_uri: str) -> SessionView:
+    def attach(self, work_id: str, raw_uri: str) -> WorkletView:
         work = self.tree.get(work_id)
         if work.status in ("done", "abandoned"):
             raise WorkConflict(f"{work_id} 已结束,不再是干活的地方")
         uri, server = self.work_servers.resolve(raw_uri)
-        m = self.sessions.add(work_id, raw_uri, uri.scheme, server.name, None)
+        m = self.worklets.add(work_id, raw_uri, uri.scheme, server.name, None)
         try:
             live, _ = self.work_servers.open(m.id, raw_uri, since_mtime=_epoch(m.created_at))
         except Exception:
-            self.sessions.remove(work_id, m.id)      # 现场没建起来,登记不能留
+            self.worklets.remove(work_id, m.id)      # 现场没建起来,登记不能留
             raise
         if live.cwd:
             m = self._set_cwd(work_id, m, live.cwd)
         self.canvas.place(work_id, m.id)                                # 视图跟着记:进第一列末尾
-        self.events.emit(work_id, "session.attached", session=m.id, uri=raw_uri, server=server.name)
-        return SessionView(**m.model_dump(), alive=True, window=live.window, handle=live.handle)
+        self.events.emit(work_id, "worklet.attached", worklet=m.id, uri=raw_uri, server=server.name)
+        return WorkletView(**m.model_dump(), alive=True, window=live.window, handle=live.handle)
 
-    def reattach(self, work_id: str, session_id: str) -> SessionView:
-        """重入:同一会话再次打开,幂等地取回同一个现场。"""
-        m = self.sessions.get(work_id, session_id)
+    def reattach(self, work_id: str, worklet_id: str) -> WorkletView:
+        """重入:同一工作单元再次打开,幂等地取回同一个现场。"""
+        m = self.worklets.get(work_id, worklet_id)
         live, _ = self.work_servers.open(m.id, m.uri, since_mtime=_epoch(m.created_at))
-        m = self.sessions.touch(work_id, session_id)
-        return SessionView(**m.model_dump(), alive=True, window=live.window, handle=live.handle)
+        m = self.worklets.touch(work_id, worklet_id)
+        return WorkletView(**m.model_dump(), alive=True, window=live.window, handle=live.handle)
 
-    def _set_cwd(self, work_id: str, m: Session, cwd: str) -> Session:
-        return self.sessions.replace(work_id, m.model_copy(update={"cwd": cwd}))
+    def _set_cwd(self, work_id: str, m: Worklet, cwd: str) -> Worklet:
+        return self.worklets.replace(work_id, m.model_copy(update={"cwd": cwd}))
 
-    def list_sessions(self, work_id: str) -> list[SessionView]:
+    def list_worklets(self, work_id: str) -> list[WorkletView]:
         self.tree.get(work_id)
         out = []
-        for m in self.sessions.list(work_id):
+        for m in self.worklets.list(work_id):
             alive = self.work_servers.alive(m.server, m.id)
-            out.append(SessionView(**m.model_dump(), alive=alive))
+            out.append(WorkletView(**m.model_dump(), alive=alive))
         return out
 
-    def detach(self, work_id: str, session_id: str) -> None:
+    def detach(self, work_id: str, worklet_id: str) -> None:
         """关闭即回收:销毁现场 + 删登记。"""
-        m = self.sessions.get(work_id, session_id)
+        m = self.worklets.get(work_id, worklet_id)
         self.work_servers.destroy(m.server, m.id)
-        self.sessions.remove(work_id, session_id)
-        self.canvas.remove(work_id, session_id)
-        self.events.emit(work_id, "session.detached", session=session_id)
+        self.worklets.remove(work_id, worklet_id)
+        self.canvas.remove(work_id, worklet_id)
+        self.events.emit(work_id, "worklet.detached", worklet=worklet_id)
 
     # ---- 痕迹 ----
 
-    def capture(self, work_id: str, session_id: str, lines: int = 200) -> str:
-        m = self.sessions.get(work_id, session_id)
+    def capture(self, work_id: str, worklet_id: str, lines: int = 200) -> str:
+        m = self.worklets.get(work_id, worklet_id)
         h = self._handle(m)
         if not hasattr(h, "capture"):
-            raise WorkConflict(f"{session_id} 的把手没有 capture")
+            raise WorkConflict(f"{worklet_id} 的把手没有 capture")
         return h.capture(lines)
 
-    def rounds(self, work_id: str, session_id: str) -> list[Round]:
-        m = self.sessions.get(work_id, session_id)
+    def rounds(self, work_id: str, worklet_id: str) -> list[Round]:
+        m = self.worklets.get(work_id, worklet_id)
         work = self.tree.get(work_id)
         if work.status not in ("done", "abandoned"):
             h = self._handle(m)
             if hasattr(h, "rounds"):
-                self.round_log.sync(work_id, session_id, h.rounds())
-        return self.round_log.read(work_id, session_id)
+                self.round_log.sync(work_id, worklet_id, h.rounds())
+        return self.round_log.read(work_id, worklet_id)
 
-    def _handle(self, m: Session):
+    def _handle(self, m: Worklet):
         return self.work_servers.handle(m.server, m.id, m.uri, m.cwd, _epoch(m.created_at))
 
     def history(self, work_id: str) -> list[Event]:
@@ -201,4 +201,4 @@ def _epoch(iso: str) -> float:
     return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
 
 
-__all__ = ["WorkService", "WorkNotFound", "WorkConflict", "SessionNotFound", "WorkRepo"]
+__all__ = ["WorkService", "WorkNotFound", "WorkConflict", "WorkletNotFound", "WorkRepo"]

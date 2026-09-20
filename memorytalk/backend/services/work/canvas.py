@@ -1,4 +1,4 @@
-"""画布:work 的视图,可随时重排;version 乐观锁。形状是列 × 会话:默认一列,会话从上到下摆,可收起。"""
+"""画布:work 的视图,可随时重排;version 乐观锁。形状是列 × 工作单元:默认一列,工作单元从上到下摆,可收起。"""
 from __future__ import annotations
 
 from memorytalk.backend.models.work import Canvas, CanvasPut, Column, Panel
@@ -27,9 +27,9 @@ class CanvasStore:
         seen: set[str] = set()
         for c in req.columns:
             for p in c.panels:
-                if p.session in seen:
-                    raise WorkConflict(f"会话 {p.session} 出现了两次")
-                seen.add(p.session)
+                if p.worklet in seen:
+                    raise WorkConflict(f"工作单元 {p.worklet} 出现了两次")
+                seen.add(p.worklet)
         return self._save(work_id, cur, req.columns)
 
     def _save(self, work_id: str, cur: Canvas, columns: list[Column]) -> Canvas:
@@ -37,19 +37,19 @@ class CanvasStore:
         self.repo.put_doc(work_id, "canvas", new.model_dump())
         return new
 
-    # ---- 跟会话同步:开了进第一列末尾,关了拿掉(画布不建、不删会话,只是跟着记) ----
+    # ---- 跟工作单元同步:开了进第一列末尾,关了拿掉(画布不建、不删工作单元,只是跟着记) ----
 
-    def place(self, work_id: str, session_id: str) -> None:
+    def place(self, work_id: str, worklet_id: str) -> None:
         cur = self.get(work_id)
-        if any(p.session == session_id for c in cur.columns for p in c.panels):
+        if any(p.worklet == worklet_id for c in cur.columns for p in c.panels):
             return
         columns = [c.model_copy(deep=True) for c in cur.columns] or [Column(id=DEFAULT_COLUMN)]
-        columns[0].panels.append(Panel(session=session_id))
+        columns[0].panels.append(Panel(worklet=worklet_id))
         self._save(work_id, cur, columns)
 
-    def remove(self, work_id: str, session_id: str) -> None:
+    def remove(self, work_id: str, worklet_id: str) -> None:
         cur = self.get(work_id)
-        if not any(p.session == session_id for c in cur.columns for p in c.panels):
+        if not any(p.worklet == worklet_id for c in cur.columns for p in c.panels):
             return
-        columns = [Column(id=c.id, collapsed=c.collapsed, panels=[p for p in c.panels if p.session != session_id]) for c in cur.columns]
+        columns = [Column(id=c.id, collapsed=c.collapsed, panels=[p for p in c.panels if p.worklet != worklet_id]) for c in cur.columns]
         self._save(work_id, cur, columns)

@@ -1,6 +1,6 @@
 # Works API
 
-work 树、画布、会话(现场)、user、痕迹、事件、召回。登录后的请求(身份来自 token,见 [auth.md](auth.md)),凡会动某个 work 的(建、改、重排画布、开 / 重入 / 关会话、打开 work 本身),都会把这个人记进该 work 的users 名单。字段语义见 [`../../structure/v5/work.md`](../../structure/v5/work.md)。
+work 树、画布、工作单元(现场)、user、痕迹、事件、召回。登录后的请求(身份来自 token,见 [auth.md](auth.md)),凡会动某个 work 的(建、改、重排画布、开 / 重入 / 关工作单元、打开 work 本身),都会把这个人记进该 work 的users 名单。字段语义见 [`../../structure/v5/work.md`](../../structure/v5/work.md)。
 
 ---
 
@@ -52,7 +52,7 @@ work 树(森林)。
  {"name": "default", "protocols": [], "description": "兜底:没有专门 server 的协议,把协议名当命令名在 tmux 里跑"}]
 ```
 
-一项 = `memorytalk/backend/work_servers/` 下一个文件。`protocols` 是它自己声明的;`default` 不声明、永远排最后。**寻址在 `POST /api/works/{id}/sessions` 时自动发生**,没有单独的 resolve 端点。
+一项 = `memorytalk/backend/work_servers/` 下一个文件。`protocols` 是它自己声明的;`default` 不声明、永远排最后。**寻址在 `POST /api/works/{id}/worklets` 时自动发生**,没有单独的 resolve 端点。
 
 ## GET /api/works/{work_id}
 
@@ -69,17 +69,17 @@ work 树(森林)。
 | 目标 | 规则 | 副作用 |
 |---|---|---|
 | `todo` / `doing` | 无 | `done_at` 清空 |
-| `done` | 所有子 work 须为 `done` / `abandoned`,否则 **409** `conflict`(message 列出未完的子 work) | `done_at`;**冻结**:会话现场全部销毁(登记留着),事件 `status` + `frozen` |
+| `done` | 所有子 work 须为 `done` / `abandoned`,否则 **409** `conflict`(message 列出未完的子 work) | `done_at`;**冻结**:工作单元现场全部销毁(登记留着),事件 `status` + `frozen` |
 | `abandoned` | 无 | 同上 |
 
-结束后:`POST …/sessions` → 409;`rounds` 不再从把手同步。
+结束后:`POST …/worklets` → 409;`rounds` 不再从把手同步。
 
 ## GET /api/works/{work_id}/events
 
 ```json
 [
   {"ts": "…", "type": "created", "data": {"goal": "…", "parent": null}},
-  {"ts": "…", "type": "session.attached", "data": {"session": "…-s1", "uri": "codex:///w", "server": "codex"}},
+  {"ts": "…", "type": "worklet.attached", "data": {"worklet": "…-w1", "uri": "codex:///w", "server": "codex"}},
   {"ts": "…", "type": "status", "data": {"from": "doing", "to": "done"}},
   {"ts": "…", "type": "frozen", "data": {}}
 ]
@@ -137,11 +137,11 @@ user:谁当前正在操作、谁历史操作过。只做可见性,不做权限�
 
 ```json
 {"version": 3,
- "columns": [{"id": "c1", "panels": [{"session": "work_…-s1", "collapsed": false}, {"session": "work_…-s2", "collapsed": true}]},
-             {"id": "c2", "panels": [{"session": "work_…-s3", "collapsed": false}], "collapsed": true}]}
+ "columns": [{"id": "c1", "panels": [{"worklet": "work_…-w1", "collapsed": false}, {"worklet": "work_…-w2", "collapsed": true}]},
+             {"id": "c2", "panels": [{"worklet": "work_…-w3", "collapsed": false}], "collapsed": true}]}
 ```
 
-布局 = 几列,每列从上到下摆会话;会话可收起(只剩标题行),整列也可收起(缩成一条窄边)。从未写过 = `version 0`、空 `columns`(前端当一列画)。
+布局 = 几列,每列从上到下摆工作单元;工作单元可收起(只剩标题行),整列也可收起(缩成一条窄边)。从未写过 = `version 0`、空 `columns`(前端当一列画)。
 
 ## PUT /api/works/{work_id}/canvas
 
@@ -150,24 +150,24 @@ user:谁当前正在操作、谁历史操作过。只做可见性,不做权限�
 | 错误 | 状态 |
 |---|---|
 | `version` ≠ 当前 | 409 `conflict` `canvas version 0 != 1` |
-| 列 id 重复 / 一个会话出现在两个格子里 | 409 `conflict` |
+| 列 id 重复 / 一个工作单元出现在两个格子里 | 409 `conflict` |
 
-成功返回新画布,`version + 1`。**画布是视图**——它不建、不删会话;会话走下面的端点。但它跟着会话走:`POST …/sessions` 开出来的会话自动进第一列末尾(没有列就建 `c1`),`DELETE` 掉的会话自动从格子里拿掉,这两处也会让 `version + 1`。
+成功返回新画布,`version + 1`。**画布是视图**——它不建、不删工作单元;工作单元走下面的端点。但它跟着工作单元走:`POST …/worklets` 开出来的工作单元自动进第一列末尾(没有列就建 `c1`),`DELETE` 掉的工作单元自动从格子里拿掉,这两处也会让 `version + 1`。
 
 ---
 
-## GET /api/works/{work_id}/sessions
+## GET /api/works/{work_id}/worklets
 
 ```json
-[{"id": "work_…-s1", "uri": "codex:///w", "scheme": "codex", "cwd": "/w",
+[{"id": "work_…-w1", "uri": "codex:///w", "scheme": "codex", "cwd": "/w",
   "created_at": "…", "last_attached": "…", "alive": true, "window": null, "handle": null}]
 ```
 
 `alive` 现算(问 server);列表不带 `window` / `handle`(attach 时才给)。
 
-## POST /api/works/{work_id}/sessions
+## POST /api/works/{work_id}/worklets
 
-在 work 里打开一个块:拿协议去 server 那里寻址(声明了的 server,否则 default)→ 幂等建现场 → 登记会话 → 交回窗 + 把手。建现场失败则不留登记。
+在 work 里打开一个块:拿协议去 server 那里寻址(声明了的 server,否则 default)→ 幂等建现场 → 登记工作单元 → 交回窗 + 把手。建现场失败则不留登记。
 
 ```json
 {"uri": "codex:///w/memory.talk"}
@@ -176,7 +176,7 @@ user:谁当前正在操作、谁历史操作过。只做可见性,不做权限�
 **201**:
 
 ```json
-{"id": "work_…-s1", "uri": "codex:///w/memory.talk", "scheme": "codex",
+{"id": "work_…-w1", "uri": "codex:///w/memory.talk", "scheme": "codex",
  "cwd": "/w/memory.talk", "created_at": "…", "last_attached": "…",
  "alive": true,
  "window": {"url": null, "embed": null},
@@ -185,7 +185,7 @@ user:谁当前正在操作、谁历史操作过。只做可见性,不做权限�
 
 - 由哪个 server 建的不对外——`https://` 走 http server、`vim://` 走 default,调用方不感知。
 - `window.url` 为 `null` = 没配 ttyd,只有把手没有画面。
-- 副作用:`sessions.json` 追加一条;终端类起一个 tmux 会话(名 = 会话 id);事件 `session.attached`。
+- 副作用:`worklets.json` 追加一条;终端类起一个 tmux 会话(名 = 工作单元 id);事件 `worklet.attached`。
 
 | 错误 | 状态 |
 |---|---|
@@ -194,15 +194,15 @@ user:谁当前正在操作、谁历史操作过。只做可见性,不做权限�
 | 要跑的命令不在 PATH(如 `vim://` 走 default 但没装 vim) | 400 `cmd_not_found` |
 | tmux 起不来 | 502 `platform` |
 
-## POST /api/works/{work_id}/sessions/{session_id}/attach
+## POST /api/works/{work_id}/worklets/{worklet_id}/attach
 
-重入:同一会话再次打开,幂等取回同一现场(tmux 会话还在就直接 attach,没了就按原 URI 重建)。返回同上,`last_attached` 更新。
+重入:同一工作单元再次打开,幂等取回同一现场(tmux 会话还在就直接 attach,没了就按原 URI 重建)。返回同上,`last_attached` 更新。
 
-## DELETE /api/works/{work_id}/sessions/{session_id}
+## DELETE /api/works/{work_id}/worklets/{worklet_id}
 
-关闭即回收:销毁现场(`tmux kill-session`)+ 删登记 + 事件 `session.detached`。**200**,`data: null`。
+关闭即回收:销毁现场(`tmux kill-session`)+ 删登记 + 事件 `worklet.detached`。**200**,`data: null`。
 
-## GET /api/works/{work_id}/sessions/{session_id}/capture
+## GET /api/works/{work_id}/worklets/{worklet_id}/capture
 
 把手 `capture`:抓终端屏幕,`data` 是那段文本。
 
@@ -210,15 +210,15 @@ user:谁当前正在操作、谁历史操作过。只做可见性,不做权限�
 |---|---|
 | `lines` | 回看多少行,默认 200,`[1, 5000]` |
 
-把手没有 `capture`(http 会话)→ 409 `conflict`。
+把手没有 `capture`(http 工作单元)→ 409 `conflict`。
 
-## GET /api/works/{work_id}/sessions/{session_id}/rounds
+## GET /api/works/{work_id}/worklets/{worklet_id}/rounds
 
-agent 会话的会话痕迹。work 未结束时先从把手同步:按 cwd + 会话创建时间定位平台记录文件,新 round 追加进 `rounds.jsonl`(按 `id` 去重);然后返回全部。
+agent 工作单元的工作单元痕迹。work 未结束时先从把手同步:按 cwd + 工作单元创建时间定位平台记录文件,新 round 追加进 `rounds.jsonl`(按 `id` 去重);然后返回全部。
 
 ```json
 [{"id": "u1", "timestamp": "2026-09-05T10:00:00Z", "role": "human", "text": "把配置改成环境变量"},
  {"id": "a1", "timestamp": "…", "role": "assistant", "text": "好\n[Edit] {\"f\": \"config.py\"}"}]
 ```
 
-没有 `rounds` 能力的会话(bash / http)返回 `[]`(bash)或 `[]`(http)——不报错,因为「没有痕迹」是合法状态。
+没有 `rounds` 能力的工作单元(bash / http)返回 `[]`(bash)或 `[]`(http)——不报错,因为「没有痕迹」是合法状态。

@@ -17,7 +17,7 @@ def agent(client, home, monkeypatch):
     monkeypatch.setenv("PATH", f"{bindir}:{os.environ['PATH']}")
     w = client.post("/api/works", json={"goal": "让 agent 干活"}).json()
     proj = home / "ws" / "proj"; proj.mkdir(parents=True)
-    s = client.post(f"/api/works/{w['id']}/sessions", json={"uri": f"claude://{proj}"}).json()
+    s = client.post(f"/api/works/{w['id']}/worklets", json={"uri": f"claude://{proj}"}).json()
     time.sleep(0.05)
     d = home / "claude" / str(proj).replace("/", "-"); d.mkdir(parents=True)
     return w, s, proj, d / "sess.jsonl"
@@ -44,13 +44,13 @@ def test_agent_session_has_rounds_capability(agent):
 
 def test_no_transcript_yet_means_no_rounds(client, agent):
     w, s, _, _ = agent
-    assert client.get(f"/api/works/{w['id']}/sessions/{s['id']}/rounds").json() == []
+    assert client.get(f"/api/works/{w['id']}/worklets/{s['id']}/rounds").json() == []
 
 
 def test_roles_are_classified_and_sidechain_skipped(client, agent):
     w, s, _, path = agent
     _write(path, ROWS)
-    rounds = client.get(f"/api/works/{w['id']}/sessions/{s['id']}/rounds").json()
+    rounds = client.get(f"/api/works/{w['id']}/worklets/{s['id']}/rounds").json()
     assert [(r["id"], r["role"]) for r in rounds] == [("u1", "human"), ("a1", "assistant"), ("u2", "tool"), ("u3", "system")]
     assert "[Edit]" in rounds[1]["text"]
 
@@ -58,8 +58,8 @@ def test_roles_are_classified_and_sidechain_skipped(client, agent):
 def test_rounds_are_deduplicated_and_appended(client, agent, svc):
     w, s, _, path = agent
     _write(path, ROWS)
-    client.get(f"/api/works/{w['id']}/sessions/{s['id']}/rounds")
-    assert len(client.get(f"/api/works/{w['id']}/sessions/{s['id']}/rounds").json()) == 4       # 再读不重复
+    client.get(f"/api/works/{w['id']}/worklets/{s['id']}/rounds")
+    assert len(client.get(f"/api/works/{w['id']}/worklets/{s['id']}/rounds").json()) == 4       # 再读不重复
     _write(path, [{"type": "assistant", "uuid": "a2", "message": {"content": [{"type": "text", "text": "改完了"}]}}], "a")
-    assert client.get(f"/api/works/{w['id']}/sessions/{s['id']}/rounds").json()[-1]["id"] == "a2"
+    assert client.get(f"/api/works/{w['id']}/worklets/{s['id']}/rounds").json()[-1]["id"] == "a2"
     assert len(svc.works.repo.read(w["id"], "rounds", sub=s["id"])) == 5                         # append-only 的流

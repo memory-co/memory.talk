@@ -208,10 +208,10 @@ export function FilePage({ layer, path, file, creating, onClose, onOpen, work }:
   const [name, setName] = useState('');
   const [fields, setFields] = useState<Record<string, unknown>>({});
   const [body, setBody] = useState(() => creating?.kind?.template || '');
-  const [session, setSession] = useState(0);                                  // 每次进入编辑态 +1:正文编辑器非受控,靠 key 重新挂载拿到新内容
+  const [editRun, setEditRun] = useState(0);                                  // 每次进入编辑态 +1:正文编辑器非受控,靠 key 重新挂载拿到新内容
   const [subject, setSubject] = useState('');
   const [reason, setReason] = useState('');
-  const beginEdit = () => { setFields(parsed?.fields || {}); setBody(creating ? kind?.template || '' : parsed?.body || ''); setSubject(''); setReason(''); setSession(n => n + 1); setEditing(true); };
+  const beginEdit = () => { setFields(parsed?.fields || {}); setBody(creating ? kind?.template || '' : parsed?.body || ''); setSubject(''); setReason(''); setEditRun(n => n + 1); setEditing(true); };
   useEffect(() => { if (creating && protocol) beginEdit(); }, [creating, protocol]);   // eslint-disable-line react-hooks/exhaustive-deps
   // 新建时目标是什么:对象 = dir/name;对象里的文件 = instantiate(kind, name)(固定文件不用起名)
   const needName = !!creating && !(creating.object && kind?.fixed);
@@ -267,7 +267,7 @@ export function FilePage({ layer, path, file, creating, onClose, onOpen, work }:
       </div>
       {kind?.format.fields && <div className="border-y py-3"><FieldsForm fields={kind.format.fields} value={fields} onChange={setFields} idPrefix="file" /></div>}
       {(kind?.format.body ?? 'markdown') === 'markdown'
-        ? <Suspense fallback={<Skeleton className="h-64" />}><MarkdownEditor key={session} value={body} onChange={setBody} placeholder={t('meta.markdown')} className="min-h-64 rounded-md border px-3 py-1" /></Suspense>
+        ? <Suspense fallback={<Skeleton className="h-64" />}><MarkdownEditor key={editRun} value={body} onChange={setBody} placeholder={t('meta.markdown')} className="min-h-64 rounded-md border px-3 py-1" /></Suspense>
         : <div className="grid gap-1.5"><Label htmlFor="file-body" className="sr-only">{t('editor.body')}</Label><Textarea id="file-body" className="min-h-60 resize-y font-mono text-sm" value={body} onChange={e => setBody(e.target.value)} /></div>}
       <div className="grid gap-2 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor="file-subject">{t('editor.subject')}</Label><Input id="file-subject" value={subject} onChange={e => setSubject(e.target.value)} placeholder={t('editor.subjectPlaceholder')} /></div><div className="grid gap-2"><Label htmlFor="file-reason">{t('meta.reason')}</Label><Input id="file-reason" value={reason} onChange={e => setReason(e.target.value)} placeholder={t('meta.reasonPlaceholder')} /></div></div>
       {check && check !== 'pending' && !check.ok && <ErrorState error={new Error(check.reason || '')} />}

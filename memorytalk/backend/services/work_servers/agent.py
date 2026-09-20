@@ -1,4 +1,4 @@
-"""agent 类 server 的基类:现场同终端(tmux),把手多一项「读会话 round」。"""
+"""agent 类 server 的基类:现场同终端(tmux),把手多一项「读工作单元 round」。"""
 from __future__ import annotations
 
 from pathlib import Path
@@ -34,5 +34,5 @@ class AgentBase(TerminalBase):
         super().__init__(tmux, workspace, ttyd_url)
         self.adapter = adapter
 
-    def handle(self, session_id: str, uri: ParsedUri, cwd: Path, since_mtime: float) -> AgentHandle:
-        return AgentHandle(self.tmux, session_id, self.adapter, cwd, since_mtime)
+    def handle(self, worklet_id: str, uri: ParsedUri, cwd: Path, since_mtime: float) -> AgentHandle:
+        return AgentHandle(self.tmux, worklet_id, self.adapter, cwd, since_mtime)

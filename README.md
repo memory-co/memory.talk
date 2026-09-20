@@ -4,7 +4,7 @@
 
 memory.talk v5 有三个顶层对象:
 
-- **work** —— 做事。一件事是一个 work,复杂的事是一棵 work 树;每个 work 里盛放若干个现场(session):Claude Code / Codex / Kimi 会话、终端、网页,按 URI 打开,由对应的 work server 建出来,活得比连接久。
+- **work** —— 做事。一件事是一个 work,复杂的事是一棵 work 树;每个 work 里盛放若干个现场(worklet):Claude Code / Codex / Kimi 工作单元、终端、网页,按 URI 打开,由对应的 work server 建出来,活得比连接久。
 - **metas** —— 认知。一个分层的 git 仓库:`origin`(外部来的原文,只读)/ `issue`(问题 + 立场 + 论证,IBIS)/ `card`(争完的事实,维基式词条),还可以用一份 YAML schema 加自己的层。每个动作一个 `[层]` 提交,跨层被守卫拒绝;目录下的 `manager.json` 把变动打给某个 work 的收件箱。
 - **user** —— 人。注册的实体,和 work 平级;work 谁建的、谁在动,metas 的提交谁做的。**不做权限**:一个实例给一个团队用。
 
@@ -28,7 +28,7 @@ memory.talk user add alice                                    # 注册(一次)
 export MEMORY_TALK_USER=alice
 
 W=$(memory.talk work create --goal '把配置改成环境变量' --json | jq -r .id)
-memory.talk work attach $W codex:///home/alice/memory.talk    # 在 work 里开一个 Codex 会话
+memory.talk work attach $W codex:///home/alice/memory.talk    # 在 work 里开一个 Codex 工作单元
 memory.talk work recall $W                                    # 开工注入:card 目录
 
 memory.talk meta write issue memory.talk/配置/该走文件还是环境变量 --field question='配置该走文件还是环境变量?'
@@ -43,7 +43,7 @@ memory.talk work set $W --status done
 ```
 ~/.memory.talk/
 ├── metas/     分层 git 仓库:layer/origin、layer/issue、layer/card(+ 用户层)、stack
-├── works/           work 树、画布、会话、收件箱、round(MEMORY_TALK_STORE=fs 时)
+├── works/           work 树、画布、工作单元、收件箱、round(MEMORY_TALK_STORE=fs 时)
 └── users/           user 档案
 ```
 
@@ -54,7 +54,7 @@ memory.talk work set $W --status done
 ```bash
 pip install -e ".[dev]"
 pytest                       # 每个场景在 fs 和 sqlite 两种 store 下各跑一遍
-cd memorytalk/frontend && npm ci && npm run dev          # 前端(Vite + React;工作台 / 会话 / 认知库)
+cd memorytalk/frontend && npm ci && npm run dev          # 前端(Vite + React;工作台 / 工作单元 / 认知库)
 ```
 
 发布前先 `cd memorytalk/frontend && npm run build`(产物 `dist/` 随 wheel 分发),再 `python -m build && twine upload dist/*`。
@@ -69,7 +69,7 @@ memorytalk/              ← Python 包(pip: memorytalk;命令 memory.talk)
 │   ├── providers/       ← 存储介质:FileSystemProvider(LocalFS)/ DatabaseProvider(SQLite)
 │   ├── layers/          ← 内置 layer:origin / issue / card
 │   └── work_servers/    ← 每个协议一个 work server:bash / claude / codex / kimi / http / default
-└── frontend/            ← Vite + React 工作台(工作导航、会话、认知库、设置)
+└── frontend/            ← Vite + React 工作台(工作导航、工作单元、认知库、设置)
 tests/                   ← 按场景组织
 docs/                    ← designs / structure / api / cli
 ```

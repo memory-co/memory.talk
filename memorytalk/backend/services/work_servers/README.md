@@ -4,7 +4,7 @@
 
 | 文件 | 重点 |
 |---|---|
-| `__init__.py` | `WorkServerService(runtime)`:装载所有 server;`resolve(uri)` 找谁响应;`open(session_id, uri, since_mtime)` 建(或取回)现场,交回 `(Live, handle)`;`handle` / `alive` / `destroy` 按 server 名转发;`list()` 给 `/api/works/servers` |
+| `__init__.py` | `WorkServerService(runtime)`:装载所有 server;`resolve(uri)` 找谁响应;`open(worklet_id, uri, since_mtime)` 建(或取回)现场,交回 `(Live, handle)`;`handle` / `alive` / `destroy` 按 server 名转发;`list()` 给 `/api/works/servers` |
 | `registry.py` | `Registry`:先查各 server 自己声明的 `protocols`,没人声明的协议去 `default`;`by_name` / `infos` |
 | `uri.py` | `parse_uri(raw)` → `ParsedUri`:`scheme:///path?query`,终端类 path 是工作目录,http 类看 host |
 | `terminal.py` | `Tmux(socket)`:`has` / `new` / `kill` / `send` / `capture`(都是 `tmux -L <socket> …`);`TmuxHandle`:把手 = `alive` / `capture` / `send`;`TerminalBase`:终端类 server 的基类——`command(uri)` 决定跑什么,`resolve(uri)` 算 cwd 和命令,`open()` 幂等建 tmux 会话并交回窗(配了 ttyd 才有)+ 把手,`alive` / `destroy` |

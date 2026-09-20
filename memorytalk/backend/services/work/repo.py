@@ -1,6 +1,6 @@
 """work / user 记录的仓储:业务接口一份,按 provider 的族各实现一份(docs/designs/v5/provider.md §4)。
 
-业务概念(work 节点、画布、会话登记、谁动过、manager、事件、收件箱、round、没人管的变动)住在这里;
+业务概念(work 节点、画布、工作单元登记、谁动过、manager、事件、收件箱、round、没人管的变动)住在这里;
 provider 只见字节 / 表。
 """
 from __future__ import annotations
@@ -17,11 +17,11 @@ class WorkRepo(Protocol):
     def get_work(self, work_id: str) -> dict | None: ...
     def put_work(self, work_id: str, data: dict) -> None: ...
     def list_works(self, *, parent: str | None = ..., created_by: str | None = None) -> list[dict]: ...
-    # 每个 work 下的一份份小记录:canvas / sessions / users / manager
+    # 每个 work 下的一份份小记录:canvas / worklets / users / manager
     def get_doc(self, work_id: str, kind: str) -> Any: ...
     def put_doc(self, work_id: str, kind: str, data: Any) -> None: ...
     def del_doc(self, work_id: str, kind: str) -> None: ...
-    # 只追加的流:events / inbox;rounds 带 sub = session_id
+    # 只追加的流:events / inbox;rounds 带 sub = worklet_id
     def append(self, work_id: str, stream: str, line: dict, sub: str | None = None) -> None: ...
     def read(self, work_id: str, stream: str, sub: str | None = None) -> list[dict]: ...
     # 没人管的变动
@@ -34,7 +34,7 @@ _MISSING = object()
 # ================================================================ fs 版
 
 class FsWorkRepo:
-    """works/<id>/<kind>.json、works/<id>/<stream>.jsonl、works/<id>/sessions/<sid>/rounds.jsonl、unmanaged.jsonl。"""
+    """works/<id>/<kind>.json、works/<id>/<stream>.jsonl、works/<id>/worklets/<wid>/rounds.jsonl、unmanaged.jsonl。"""
 
     def __init__(self, fs: FileSystemProvider) -> None:
         self.fs = fs
@@ -45,7 +45,7 @@ class FsWorkRepo:
 
     @staticmethod
     def _log(work_id: str, stream: str, sub: str | None) -> str:
-        return f"works/{work_id}/sessions/{sub}/{stream}.jsonl" if sub else f"works/{work_id}/{stream}.jsonl"
+        return f"works/{work_id}/worklets/{sub}/{stream}.jsonl" if sub else f"works/{work_id}/{stream}.jsonl"
 
     def _read_json(self, path: str) -> Any:
         data = self.fs.read(path)
@@ -94,7 +94,6 @@ class FsWorkRepo:
 
     def append_unmanaged(self, line: dict) -> None:
         self.fs.append("unmanaged.jsonl", (json.dumps(line, ensure_ascii=False) + "\n").encode())
-
 
 # ================================================================ db 版
 
@@ -152,7 +151,6 @@ class DbWorkRepo:
 
     def append_unmanaged(self, line: dict) -> None:
         self.db.insert(self.logs).values(key="unmanaged", line=line).run()
-
 
 def make_work_repo(store) -> WorkRepo:
     """按 provider 的族选仓储。"""

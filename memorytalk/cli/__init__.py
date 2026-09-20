@@ -24,7 +24,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="memory.talk", description="memory.talk v5 —— 跑 code agent 的工作台,记忆是它的副产物")
     ap.add_argument("--server", default=os.environ.get("MEMORY_TALK_SERVER", DEFAULT_SERVER), help="API 在哪")
     ap.add_argument("--user", default=os.environ.get("MEMORY_TALK_USER"), help="用谁的登录态(credentials.json 里存的;默认最近登录的)")
-    ap.add_argument("--token", default=os.environ.get("MEMORY_TALK_TOKEN"), help="直接给 token(agent 会话里用),不走 credentials.json")
+    ap.add_argument("--token", default=os.environ.get("MEMORY_TALK_TOKEN"), help="直接给 token(agent 工作单元里用),不走 credentials.json")
     ap.add_argument("--work", default=os.environ.get("MEMORY_TALK_WORK"), help="在哪个 work 里操作")
     ap.add_argument("--json", action="store_true", help="结构化输出")
     ap.add_argument("-V", "--version", action="version", version=f"memory.talk {__version__}")

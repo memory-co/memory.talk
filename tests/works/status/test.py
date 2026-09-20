@@ -27,7 +27,7 @@ def test_done_at_is_set_and_cleared(client):
     assert client.patch(f"/api/works/{w['id']}", json={"status": "doing"}).json()["done_at"] is None
 
 
-def test_finished_work_rejects_new_sessions(client):
+def test_finished_work_rejects_new_worklets(client):
     w = client.post("/api/works", json={"goal": "x"}).json()
     client.patch(f"/api/works/{w['id']}", json={"status": "done"})
-    assert client.post(f"/api/works/{w['id']}/sessions", json={"uri": "bash://"}).status_code == 409
+    assert client.post(f"/api/works/{w['id']}/worklets", json={"uri": "bash://"}).status_code == 409

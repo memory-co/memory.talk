@@ -39,7 +39,7 @@ admin 能做而 member 不能做的,只有三件:**建账号**(`POST /api/users`
 
 - **网页**:进来先问 `GET /api/auth/status` → `{setup_required, authenticated, user}`。`setup_required` → setup 页;没登录 → 登录页;登录了 → 正常的壳。token 存浏览器本地(和语言、侧栏折叠放一起),每个请求带上;任何一个请求 401 就回登录页。设置页里:改自己的显示名 / 邮箱 / 密码、退出登录;admin 多一块「团队成员」——建账号、给人设密码。原来那个「选一个身份」的单选没有了,身份就是登录的人。
 - **CLI**:`memory.talk setup`(首次,设 admin 密码)、`memory.talk login [--user <名字>]`(问密码,token 存到 `~/.memory.talk/credentials.json`,按服务地址分开记)、`memory.talk logout`。之后所有命令自动带 token;也可以 `MEMORY_TALK_TOKEN` 环境变量直接给。`--user` / `MEMORY_TALK_USER` 只用来挑存的是哪个人的凭据,不再自报身份。
-- **agent 会话里**:tmux 里跑的 agent 要调 API,得有 token——给它 `MEMORY_TALK_TOKEN`(比如 admin 专门 login 一次,把 token 放进 workspace 的环境)。服务端**不**自动把开会话那个人的 token 塞进会话环境;这是有意的:浏览器的登录态不该出现在一个 shell 里。
+- **agent 工作单元里**:tmux 里跑的 agent 要调 API,得有 token——给它 `MEMORY_TALK_TOKEN`(比如 admin 专门 login 一次,把 token 放进 workspace 的环境)。服务端**不**自动把开工作单元那个人的 token 塞进工作单元环境;这是有意的:浏览器的登录态不该出现在一个 shell 里。
 
 ## 5. 不做什么
 

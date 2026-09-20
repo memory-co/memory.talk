@@ -1,4 +1,4 @@
-"""/api/works —— 树、画布、会话(attach = 经 server 建现场)、痕迹、事件、召回。"""
+"""/api/works —— 树、画布、工作单元(attach = 经 server 建现场)、痕迹、事件、召回。"""
 from __future__ import annotations
 
 from memorytalk.backend.models.result import Result, ok
@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, Request
 
 from memorytalk.backend.models.metas import InboxItem
 from memorytalk.backend.models.work_server import WorkServerInfo
-from memorytalk.backend.models.work import (Canvas, CanvasPut, Event, Round, Session, SessionCreate, SessionView, Work,
+from memorytalk.backend.models.work import (Canvas, CanvasPut, Event, Round, Worklet, WorkletCreate, WorkletView, Work,
                          WorkCreate, WorkNode, WorkUpdate, WorkUsers)
 from memorytalk.backend.services.metas import MetasService
 from memorytalk.backend.services.work import WorkService
@@ -50,7 +50,7 @@ def get(work_id: str, svc: WorkService = Depends(works), who: str | None = Depen
 
 
 @router.patch("/{work_id}", response_model=Result[Work],
-              summary="改目标 / 状态;done 要求子 work 全完;结束后会话冻结")
+              summary="改目标 / 状态;done 要求子 work 全完;结束后工作单元冻结")
 def update(work_id: str, req: WorkUpdate, svc: WorkService = Depends(works), who: str | None = Depends(user)):
     svc.touch(work_id, who)
     return ok(svc.update(work_id, req))
@@ -100,40 +100,40 @@ def put_canvas(work_id: str, req: CanvasPut, svc: WorkService = Depends(works), 
     return ok(svc.put_canvas(work_id, req))
 
 
-@router.get("/{work_id}/sessions", response_model=Result[list[SessionView]], summary="会话清单(含活没活着)")
-def sessions(work_id: str, svc: WorkService = Depends(works)):
-    return ok(svc.list_sessions(work_id))
+@router.get("/{work_id}/worklets", response_model=Result[list[WorkletView]], summary="工作单元清单(含活没活着)")
+def worklets(work_id: str, svc: WorkService = Depends(works)):
+    return ok(svc.list_worklets(work_id))
 
 
-@router.post("/{work_id}/sessions", response_model=Result[SessionView], status_code=201,
-             summary="在 work 里打开一个块:协议 → server 建现场,登记会话,交回窗 + 把手")
-def attach(work_id: str, req: SessionCreate, svc: WorkService = Depends(works), who: str | None = Depends(user)):
+@router.post("/{work_id}/worklets", response_model=Result[WorkletView], status_code=201,
+             summary="在 work 里打开一个块:协议 → server 建现场,登记工作单元,交回窗 + 把手")
+def attach(work_id: str, req: WorkletCreate, svc: WorkService = Depends(works), who: str | None = Depends(user)):
     svc.touch(work_id, who)
     return ok(svc.attach(work_id, req.uri))
 
 
-@router.post("/{work_id}/sessions/{session_id}/attach", response_model=Result[SessionView],
+@router.post("/{work_id}/worklets/{worklet_id}/attach", response_model=Result[WorkletView],
              summary="重入:幂等取回同一个现场")
-def reattach(work_id: str, session_id: str, svc: WorkService = Depends(works), who: str | None = Depends(user)):
+def reattach(work_id: str, worklet_id: str, svc: WorkService = Depends(works), who: str | None = Depends(user)):
     svc.touch(work_id, who)
-    return ok(svc.reattach(work_id, session_id))
+    return ok(svc.reattach(work_id, worklet_id))
 
 
-@router.delete("/{work_id}/sessions/{session_id}", summary="关闭即回收:销毁现场 + 删登记")
-def detach(work_id: str, session_id: str, svc: WorkService = Depends(works), who: str | None = Depends(user)):
+@router.delete("/{work_id}/worklets/{worklet_id}", summary="关闭即回收:销毁现场 + 删登记")
+def detach(work_id: str, worklet_id: str, svc: WorkService = Depends(works), who: str | None = Depends(user)):
     svc.touch(work_id, who)
-    svc.detach(work_id, session_id)
+    svc.detach(work_id, worklet_id)
     return ok()
 
 
-@router.get("/{work_id}/sessions/{session_id}/capture",
+@router.get("/{work_id}/worklets/{worklet_id}/capture",
             summary="观测:抓终端屏幕(把手 capture)")
-def capture(work_id: str, session_id: str, lines: int = Query(200, ge=1, le=5000),
+def capture(work_id: str, worklet_id: str, lines: int = Query(200, ge=1, le=5000),
             svc: WorkService = Depends(works)):
-    return ok(svc.capture(work_id, session_id, lines))
+    return ok(svc.capture(work_id, worklet_id, lines))
 
 
-@router.get("/{work_id}/sessions/{session_id}/rounds", response_model=Result[list[Round]],
-            summary="痕迹:agent 会话的 round(先从把手同步新 round,再读 rounds.jsonl)")
-def rounds(work_id: str, session_id: str, svc: WorkService = Depends(works)):
-    return ok(svc.rounds(work_id, session_id))
+@router.get("/{work_id}/worklets/{worklet_id}/rounds", response_model=Result[list[Round]],
+            summary="痕迹:agent 工作单元的 round(先从把手同步新 round,再读 rounds.jsonl)")
+def rounds(work_id: str, worklet_id: str, svc: WorkService = Depends(works)):
+    return ok(svc.rounds(work_id, worklet_id))
