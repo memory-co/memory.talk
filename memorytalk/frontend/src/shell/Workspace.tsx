@@ -113,8 +113,8 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
 
 const DESCRIBED = ['bash', 'codex', 'claude', 'kimi', 'https'];
 
-/** 弹层里的新建工作单元:像浏览器的新标签页——上面一条能输入的地址栏(块即 URI),下面几块应用。点应用直接开(终端类用默认工作目录);
- *  想换目录或开网页就在地址栏里写完整 URI 回车。 */
+/** 弹层里的新建工作单元:像浏览器的新标签页——上面一条能输入的地址栏(块即 URI),下面几块应用。点应用只是把 URI 填进地址栏
+ *  (终端类带上默认工作目录,网页是 https://),改不改都行,回车或点「打开」才建。 */
 function NewWorklet({ id, onCreated }: { id: string; onCreated: (worklet: Worklet) => void }) {
   const t = useT();
   const servers = useServers();
@@ -140,7 +140,7 @@ function NewWorklet({ id, onCreated }: { id: string; onCreated: (worklet: Workle
     </form>
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
       {apps.map(({ scheme, web, icon: Icon }) => <button key={scheme} type="button" disabled={mutation.isPending} className="flex flex-col items-start gap-1.5 rounded-lg border p-3 text-left transition-colors hover:bg-accent disabled:opacity-50"
-        onClick={() => (web ? fill('https://') : open(`${scheme}://${workspace}`))}>
+        onClick={() => fill(web ? 'https://' : `${scheme}://${workspace}`)}>
         <span className="flex items-center gap-2 text-sm font-medium"><Icon className="size-4" />{workletLabel(t, scheme)}</span>
         <span className="text-xs text-muted-foreground">{DESCRIBED.includes(scheme) ? t(`app.${scheme}` as 'app.bash') : t('app.other', { scheme })}</span>
       </button>)}
