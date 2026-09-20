@@ -53,7 +53,7 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
     else cols[ci].panels.splice(Math.max(0, Math.min(cols[ci].panels.length, pi + (dir === 'up' ? -1 : 1))), 0, panel);
     return cols;
   });
-  const addColumn = () => edit(cols => { let n = cols.length + 1; while (cols.some(c => c.id === `c${n}`)) n++; return [...cols, { id: `c${n}`, panels: [], collapsed: false }]; });
+  const addColumn = (beside: string, side: 'left' | 'right') => edit(cols => { let n = cols.length + 1; while (cols.some(c => c.id === `c${n}`)) n++; const i = cols.findIndex(c => c.id === beside); cols.splice(i < 0 ? cols.length : i + (side === 'right' ? 1 : 0), 0, { id: `c${n}`, panels: [], collapsed: false }); return cols; });
   const removeColumn = (colId: string) => edit(cols => cols.length > 1 ? cols.filter(c => c.id !== colId || c.panels.length > 0) : cols);   // 只有空列能删
   const toggleColumn = (colId: string) => edit(cols => cols.map(c => (c.id === colId ? { ...c, collapsed: !c.collapsed } : c)));
   const placeNew = (worklet: Worklet, colId: string) => { if (columns[0]?.id !== colId) edit(cols => { const at = find(cols, worklet.id); const panel = at ? cols[at[0]].panels.splice(at[1], 1)[0] : { worklet: worklet.id, collapsed: false }; (cols.find(c => c.id === colId) || cols[0]).panels.push(panel); return cols; }); };
@@ -66,7 +66,6 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
       <h1 className="min-w-0 flex-1 truncate text-base font-semibold" title={work.data.goal}>{work.data.goal}</h1>
       <Select value={work.data.status} disabled={update.isPending} onValueChange={value => update.mutate(value as WorkStatus)}><SelectTrigger aria-label={t('work.statusLabel')} className="h-8 w-32"><SelectValue /></SelectTrigger><SelectContent>{workStatuses.map(value => <SelectItem key={value} value={value}>{statusLabel(t, value)}</SelectItem>)}</SelectContent></Select>
       <Button variant="outline" size="sm" onClick={() => setSubwork(true)} disabled={ended}><GitBranch />{t('work.split')}</Button>
-      <Button variant="outline" size="sm" onClick={addColumn} disabled={save.isPending}><Columns3 />{t('work.addColumn')}</Button>
     </div>
     {worklets.isPending || canvas.isPending ? <Loading /> : worklets.isError ? <div className="p-4"><ErrorState error={worklets.error} retry={() => { void worklets.refetch(); }} /></div>
       : total === 0 && columns.length === 1 ? <div className="flex flex-1 p-4"><Empty icon={<Terminal className="size-5" />} title={ended ? t('work.endedTitle') : t('work.readyTitle')}>
@@ -101,7 +100,11 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
             {!panel.collapsed && <div className="flex h-[60vh] min-h-64 resize-y flex-col overflow-hidden"><PanelView work={work.data} worklet={worklet} /></div>}
           </div>; })}
           {!column.panels.length && <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">{t('work.emptyColumn')}</p>}
-          {!ended && <Button variant="ghost" size="sm" className="justify-start text-muted-foreground" onClick={() => setAdding(column.id)}><Plus />{t('work.addSession')}</Button>}
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" className="text-muted-foreground" disabled={save.isPending} onClick={() => addColumn(column.id, 'left')} title={t('work.addColumnLeft')}><ChevronsLeft />{t('work.addColumnLeft')}</Button>
+            {!ended && <Button variant="ghost" size="sm" className="flex-1 text-muted-foreground" onClick={() => setAdding(column.id)}><Plus />{t('work.addSession')}</Button>}
+            <Button variant="ghost" size="sm" className="ml-auto text-muted-foreground" disabled={save.isPending} onClick={() => addColumn(column.id, 'right')} title={t('work.addColumnRight')}>{t('work.addColumnRight')}<ChevronsRight /></Button>
+          </div>
         </section>)}
       </div>}
     <Modal open={adding !== null} onClose={() => setAdding(null)} title={t('attach.title')} description={t('attach.description')}>
