@@ -11,7 +11,7 @@ import { useServers, useSystem, useWork } from '@/lib/queries';
 import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { workletLabel, statusLabel, workStatuses, type Canvas, type Column, type Worklet, type Work, type WorkStatus } from '@/lib/types';
-import { Empty, ErrorState, Loading } from '@/components/Shared';
+import { Empty, ErrorState, Loading, Modal } from '@/components/Shared';
 import { NewSubwork } from './Home';
 import { PanelView } from './PanelView';
 
@@ -69,8 +69,10 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
       <Button variant="outline" size="sm" onClick={addColumn} disabled={save.isPending}><Columns3 />{t('work.addColumn')}</Button>
     </div>
     {worklets.isPending || canvas.isPending ? <Loading /> : worklets.isError ? <div className="p-4"><ErrorState error={worklets.error} retry={() => { void worklets.refetch(); }} /></div>
-      : total === 0 && columns.length === 1 ? (ended ? <div className="flex flex-1 p-4"><Empty icon={<Terminal className="size-5" />} title={t('work.endedTitle')}><p>{t('work.endedText')}</p><Button variant="outline" onClick={onMeta}><BookOpen />{t('work.viewMeta')}</Button></Empty></div>
-        : <div className="flex flex-1 items-start justify-center overflow-auto p-4 md:pt-12"><div className="w-full max-w-2xl"><NewWorklet id={id} onCreated={() => undefined} /></div></div>)
+      : total === 0 && columns.length === 1 ? <div className="flex flex-1 p-4"><Empty icon={<Terminal className="size-5" />} title={ended ? t('work.endedTitle') : t('work.readyTitle')}>
+        <p>{ended ? t('work.endedText') : t('work.readyText')}</p>
+        <div className="flex flex-wrap justify-center gap-2">{!ended && <Button onClick={() => setAdding(columns[0].id)}><Plus />{t('work.addSession')}</Button>}<Button variant="outline" onClick={onMeta}><BookOpen />{t('work.viewMeta')}</Button></div>
+      </Empty></div>
       : <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:flex-row md:items-start md:overflow-x-auto md:overflow-y-hidden" aria-label={t('work.worklets')}>
         {columns.map((column, ci) => column.collapsed
           ? <button key={column.id} type="button" className="flex shrink-0 items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground hover:bg-accent md:h-full md:w-10 md:flex-col md:justify-start md:px-0 md:py-3" aria-label={t('work.expandColumn')} title={t('work.expandColumn')} aria-expanded={false} onClick={() => toggleColumn(column.id)}>
@@ -99,20 +101,21 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
             {!panel.collapsed && <div className="flex h-[60vh] min-h-64 resize-y flex-col overflow-hidden"><PanelView work={work.data} worklet={worklet} /></div>}
           </div>; })}
           {!column.panels.length && <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">{t('work.emptyColumn')}</p>}
-          {!ended && (adding === column.id
-            ? <NewWorklet id={id} onClose={() => setAdding(null)} onCreated={worklet => { placeNew(worklet, column.id); setAdding(null); }} />
-            : <Button variant="ghost" size="sm" className="justify-start text-muted-foreground" onClick={() => setAdding(column.id)}><Plus />{t('work.addSession')}</Button>)}
+          {!ended && <Button variant="ghost" size="sm" className="justify-start text-muted-foreground" onClick={() => setAdding(column.id)}><Plus />{t('work.addSession')}</Button>}
         </section>)}
       </div>}
+    <Modal open={adding !== null} onClose={() => setAdding(null)} title={t('attach.title')} description={t('attach.description')}>
+      {adding && <NewWorklet id={id} onCreated={worklet => { placeNew(worklet, adding); setAdding(null); }} />}
+    </Modal>
     <NewSubwork parent={id} open={subwork} onClose={() => setSubwork(false)} />
   </div>;
 }
 
 const DESCRIBED = ['bash', 'codex', 'claude', 'kimi', 'https'];
 
-/** 新建工作单元:像浏览器的新标签页——上面一条能输入的地址栏(块即 URI),下面几块应用。点应用直接开(终端类用默认工作目录);
+/** 弹层里的新建工作单元:像浏览器的新标签页——上面一条能输入的地址栏(块即 URI),下面几块应用。点应用直接开(终端类用默认工作目录);
  *  想换目录或开网页就在地址栏里写完整 URI 回车。 */
-function NewWorklet({ id, onClose, onCreated }: { id: string; onClose?: () => void; onCreated: (worklet: Worklet) => void }) {
+function NewWorklet({ id, onCreated }: { id: string; onCreated: (worklet: Worklet) => void }) {
   const t = useT();
   const servers = useServers();
   const system = useSystem();
@@ -130,11 +133,10 @@ function NewWorklet({ id, onClose, onCreated }: { id: string; onClose?: () => vo
   const protocols = [...new Set(servers.data?.flatMap(s => s.protocols) || [])].filter(p => p !== 'http');
   const apps = (protocols.length ? protocols : ['bash', 'codex', 'claude', 'kimi', 'https']).map(scheme => ({ scheme, web: scheme === 'https', icon: scheme === 'bash' ? Terminal : scheme === 'https' ? Globe : scheme === 'claude' ? Sparkles : Bot }));
   const fill = (value: string) => { setUri(value); requestAnimationFrame(() => { const el = input.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }); };
-  return <div className="flex flex-col gap-4 rounded-lg border bg-card p-4" role="form" aria-label={t('attach.title')}>
+  return <div className="flex flex-col gap-4">
     <form className="flex items-center gap-2" onSubmit={e => { e.preventDefault(); if (valid) open(uri); }}>
       <Input ref={input} autoFocus value={uri} onChange={e => setUri(e.target.value)} placeholder={t('attach.urlPlaceholder')} aria-label={t('attach.url')} className="h-10 font-mono text-sm" spellCheck={false} />
       <Button type="submit" className="h-10 shrink-0" disabled={!valid || mutation.isPending}>{mutation.isPending ? <LoaderCircle className="animate-spin" /> : <ArrowRight />}{t('attach.open')}</Button>
-      {onClose && <Button type="button" variant="ghost" size="icon" className="size-10 shrink-0" aria-label={t('common.cancel')} onClick={onClose}><X /></Button>}
     </form>
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
       {apps.map(({ scheme, web, icon: Icon }) => <button key={scheme} type="button" disabled={mutation.isPending} className="flex flex-col items-start gap-1.5 rounded-lg border p-3 text-left transition-colors hover:bg-accent disabled:opacity-50"
