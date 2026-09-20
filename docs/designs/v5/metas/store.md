@@ -1,22 +1,22 @@
-# collections store —— 认知层存在 git 里:时间线里有因果(v5 设计)
+# metas store —— 认知层存在 git 里:时间线里有因果(v5 设计)
 
-> **状态:框架稿,已有实现。** 本篇讲 **collections 的存储**:认知层(origin / issue / card / 用户层)放进一个 git 仓库,为什么是 git、什么算一个 commit、为什么不要数据库和索引。**它不是整个 memory.talk 的存储**——现场层(work / user 的记录)的介质在 [provider.md](provider.md),本篇只带一笔。总定位见 [README.md](README.md)。
+> **状态:框架稿,已有实现。** 本篇讲 **metas 的存储**:认知层(origin / issue / card / 用户层)放进一个 git 仓库,为什么是 git、什么算一个 commit、为什么不要数据库和索引。**它不是整个 memory.talk 的存储**——现场层(work / user 的记录)的介质在 [provider.md](../provider.md),本篇只带一笔。总定位见 [README.md](../README.md)。
 
 相关:
-- v5 三层(存的就是这三样): [work.md](work.md) / [issue.md](issue.md) / [card.md](card.md)
-- v3 file-canonical 模式(文件是 canonical、SQLite 和向量库是派生——本篇把「派生」整个去掉): [../v3/file-canonical-pattern.md](../v3/file-canonical-pattern.md)
-- v3 searchbase(向量 + FTS 索引底座——**v5 不再用**,召回改成目录 + 链接): [../v3/searchbase-extraction.md](../v3/searchbase-extraction.md)
-- v4 存储(file 罐 + SQLite 瘦索引 + 运行态计数——v5 不再需要运行态): [../v4/card.md §8](../v4/card.md)
+- v5 三层(存的就是这三样): [work.md](../work.md) / [issue.md](issue.md) / [card.md](card.md)
+- v3 file-canonical 模式(文件是 canonical、SQLite 和向量库是派生——本篇把「派生」整个去掉): [../v3/file-canonical-pattern.md](../../v3/file-canonical-pattern.md)
+- v3 searchbase(向量 + FTS 索引底座——**v5 不再用**,召回改成目录 + 链接): [../v3/searchbase-extraction.md](../../v3/searchbase-extraction.md)
+- v4 存储(file 罐 + SQLite 瘦索引 + 运行态计数——v5 不再需要运行态): [../v4/card.md §8](../../v4/card.md)
 
 ---
 
-> **后续演进**:memory/ 这个 git 仓库在 [collections.md](collections.md) 里被做成一个 collectbase 仓库——issue / card 各是一层(layer),`[层名]` 声明、hook 守卫、每类一条权威分支。本篇说的「一个决定一个 commit」在那里变成「两个相邻提交 + 同一个 Decision trailer」(collections.md §6)。其余不变。
+> **后续演进**:memory/ 这个 git 仓库在 [README.md](README.md) 里被做成一个 collectbase 仓库——issue / card 各是一层(layer),`[层名]` 声明、hook 守卫、每类一条权威分支。本篇说的「一个决定一个 commit」在那里变成「两个相邻提交 + 同一个 Decision trailer」(metas.md §6)。其余不变。
 
 ## 1. 一句话:认知层进 git,没有别的
 
 ```
 ~/.memory.talk/
-├── memory/          ← 一个 git 仓库(Collections):按主题组织的目录树,原文 / .issue/ / .card/ 并排。认知的 canonical,连同全部历史
+├── memory/          ← 一个 git 仓库(Metas):按主题组织的目录树,原文 / .issue/ / .card/ 并排。认知的 canonical,连同全部历史
 └── works/           ← 裸文件:work 树、画布、会话 round。现场的 canonical,原子写,不进 git
 ```
 
@@ -25,7 +25,7 @@
 三条原则:
 
 - **card 和 issue 在 git 里**。它们是「认知」——会被改、会被争、要问「为什么变成这样」;git 天生就是回答这个问题的工具。
-- **work 是裸文件**。它是「现场」——画布状态、终端登记、会话 round;变化频繁、体量大、要的是原子写和唯一权威,不是历史叙事。这正是 shellbase 的状态模型([work.md §3](work.md)),原样继承。
+- **work 是裸文件**。它是「现场」——画布状态、终端登记、会话 round;变化频繁、体量大、要的是原子写和唯一权威,不是历史叙事。这正是 shellbase 的状态模型([work.md §3](../work.md)),原样继承。
 - **没有数据库,也没有索引**。v3 / v4 的 SQLite 干两件事:派生索引、可变运行态(顶踩计数、read / recall 计数);LanceDB 干一件事:向量 + FTS 检索。v5 的 card 没有计数([card.md](card.md)),issue 的论证是 append-only 的文件,work 是裸文件——**可变运行态消失了**;而检索改成查目录、顺链接、grep(§5),**派生索引也不需要了**。两样都没剩下非它不可的事。
 
 ---
@@ -68,7 +68,7 @@ work 那边的动作(开工、拆子 work、状态变化、做完)**不进 git**
 
 ## 4. 另一半:work / user 的记录不在这里
 
-work 树、画布、会话登记、谁动过、事件、收件箱、round——这些是**现场层**的记录,不进 git。它们今天是 `~/.memory.talk/works/` 下的裸文件(原子写、只追加、单写者),将来可以是数据库;介质由 [provider.md](provider.md) 抽象:文件系统型和数据库型两族基类,业务仓储按族各写一份。本篇只说一句为什么它们不进 git:**git 记的是决定,现场记的是过程**——把画布每次重排、终端每次 attach、agent 每一轮输出都提交进 git,时间线会被淹没,真正的因果反而找不到。
+work 树、画布、会话登记、谁动过、事件、收件箱、round——这些是**现场层**的记录,不进 git。它们今天是 `~/.memory.talk/works/` 下的裸文件(原子写、只追加、单写者),将来可以是数据库;介质由 [provider.md](../provider.md) 抽象:文件系统型和数据库型两族基类,业务仓储按族各写一份。本篇只说一句为什么它们不进 git:**git 记的是决定,现场记的是过程**——把画布每次重排、终端每次 attach、agent 每一轮输出都提交进 git,时间线会被淹没,真正的因果反而找不到。
 
 ---
 

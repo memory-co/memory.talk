@@ -1,7 +1,7 @@
 # layers —— 一个层 = 一份 YAML 协议
 
 一份 YAML 说清三件事:**对象目录**叫什么(正则,必须以 `.<层>` 结尾)、能放哪(`under`);目录里允许哪些**文件**(每种一个正则);每种文件的 **formatter**(frontmatter 字段 + 正文)。
-`protocol.py` 是唯一的引擎:读这份 YAML 校验写入,也把它原样交给 `GET /api/collections/layers` 让前端画表单。**没有 Python 层**:协议说不清的规则就不是层的规则。协议全文见 [docs/designs/v5/collections-layer.md](../../../../../docs/designs/v5/collections-layer.md)。
+`protocol.py` 是唯一的引擎:读这份 YAML 校验写入,也把它原样交给 `GET /api/collections/layers` 让前端画表单。**没有 Python 层**:协议说不清的规则就不是层的规则。协议全文见 [docs/designs/v5/metas/layer.md](../../../../../docs/designs/v5/metas/layer.md)。
 
 ```yaml
 layer: issue

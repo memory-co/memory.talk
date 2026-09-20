@@ -1,9 +1,9 @@
-# collections layer —— 一个层 = 一份 YAML 协议:路径 + 每种文件的 formatter(v5 设计)
+# metas layer —— 一个层 = 一份 YAML 协议:路径 + 每种文件的 formatter(v5 设计)
 
-> **状态:已实施。** 层 = 一份 YAML(`memorytalk/backend/services/collections/layers/<层>.yaml`,用户层 `~/.memory.talk/layers/<名>.yaml`),`protocol.py` 是唯一引擎:读它校验写入,也原样交给 `GET /api/collections/layers`;`GET /tree` 带 `can_create` / `candidate`,`POST` / `PUT` 带 `dry_run`;前端的对象编辑器完全由协议驱动。总定位见 [README.md](README.md)。
+> **状态:已实施。** 层 = 一份 YAML(`memorytalk/backend/services/metas/layers/<层>.yaml`,用户层 `~/.memory.talk/layers/<名>.yaml`),`protocol.py` 是唯一引擎:读它校验写入,也原样交给 `GET /api/metas/layers`;`GET /tree` 带 `can_create` / `candidate`,`POST` / `PUT` 带 `dry_run`;前端的对象编辑器完全由协议驱动。总定位见 [README.md](../README.md)。
 
 相关:
-- collections(层即分支,对象即带后缀的目录): [collections.md](collections.md)
+- metas(层即分支,对象即带后缀的目录): [README.md](README.md)
 - issue / card(两个内置层,本篇的示例就是它们的 YAML): [issue.md](issue.md) / [card.md](card.md)
 - manager(`manager.json` 是机制文件,不在协议里): [manager.md](manager.md)
 
@@ -113,7 +113,7 @@ files:
 
 每个字段都可以带 `required: true` 和 `description`。就这些;没有的类型不做,需要的层把字段留成 `text` 自己写。
 
-**协议里没有的**:`manager.json`(机制文件,系统的);层序(在 `collections.json`);行为(没有行为);**任何跨文件的约束**——每个文件只按自己的 formatter 校验,文件之间只有路径规则。
+**协议里没有的**:`manager.json`(机制文件,系统的);层序(在 `metas.json`);行为(没有行为);**任何跨文件的约束**——每个文件只按自己的 formatter 校验,文件之间只有路径规则。
 
 ---
 
@@ -135,10 +135,10 @@ files:
 
 ## 4. 「这里能不能建」:tree 接口顺带回答
 
-因为每种文件、每个对象目录都有正则,「某个目录下还能加什么」是可以算出来的,不该让前端猜。也不用新接口——浏览目录本来就走 `GET /api/collections/tree?path=`,它现在只返回「这里有什么」(`items`);多加一个字段 **`can_create`**,说「这里还能建什么」:
+因为每种文件、每个对象目录都有正则,「某个目录下还能加什么」是可以算出来的,不该让前端猜。也不用新接口——浏览目录本来就走 `GET /api/metas/tree?path=`,它现在只返回「这里有什么」(`items`);多加一个字段 **`can_create`**,说「这里还能建什么」:
 
 ```json
-GET /api/collections/tree?path=memory.talk/配置                 // 普通目录
+GET /api/metas/tree?path=memory.talk/配置                 // 普通目录
 {"path": "memory.talk/配置",
  "items": [ …现在的 dir / file / object 列表… ],
  "can_create": {
@@ -148,7 +148,7 @@ GET /api/collections/tree?path=memory.talk/配置                 // 普通目�
      {"layer": "decision", "pattern": "^(?P<name>[^/]+)\\.decision$", "name": "决定", "can": false, "reason": "decision 只允许放在 decisions/ 下(under)"}],
    "files": [{"layer": "origin", "can": true}]}}              // origin 文件总能放
 
-GET /api/collections/tree?path=memory.talk/配置/该走文件还是环境变量.issue   // 对象目录:按这一层协议逐种文件回答
+GET /api/metas/tree?path=memory.talk/配置/该走文件还是环境变量.issue   // 对象目录:按这一层协议逐种文件回答
 {"path": "…/该走文件还是环境变量.issue",
  "layer": "issue",
  "items": [ …readme.md、positions/ … ],
@@ -159,7 +159,7 @@ GET /api/collections/tree?path=memory.talk/配置/该走文件还是环境变量
      {"pattern": "^positions/(?P<name>[^/]+)\\.md$", "label": "立场", "name": "主张", "fixed": false,
       "existing": ["positions/只用环境变量.md"], "can": true, "example": "positions/<主张>.md"}]}}
 
-GET /api/collections/tree?path=….issue/positions                 // 对象里的子目录:只列正则能落到这里的那些文件种类
+GET /api/metas/tree?path=….issue/positions                 // 对象里的子目录:只列正则能落到这里的那些文件种类
 {"path": "…/positions", "layer": "issue", "items": [ … ],
  "can_create": {"objects": [], "files": [{"pattern": "^positions/(?P<name>[^/]+)\\.md$", "label": "立场", "name": "主张", "fixed": false, "existing": ["positions/只用环境变量.md"], "can": true}]}}
 ```
@@ -167,13 +167,13 @@ GET /api/collections/tree?path=….issue/positions                 // 对象里�
 再加一个可选参数 **`candidate`**,问「这个名字行不行」——在普通目录问的是对象目录名,在对象目录问的是文件路径;有它时多返回一个 `candidate` 字段:
 
 ```json
-GET /api/collections/tree?path=memory.talk/配置&candidate=要不要加配置文件.issue
+GET /api/metas/tree?path=memory.talk/配置&candidate=要不要加配置文件.issue
 "candidate": {"name": "要不要加配置文件.issue", "matches": {"layer": "issue", "name": "要不要加配置文件"}, "exists": false, "can": true}
 
-GET /api/collections/tree?path=….issue&candidate=positions/走配置文件.md
+GET /api/metas/tree?path=….issue&candidate=positions/走配置文件.md
 "candidate": {"name": "positions/走配置文件.md", "matches": {"pattern": "^positions/(?P<name>[^/]+)\\.md$", "label": "立场"}, "exists": false, "can": true}
 
-GET /api/collections/tree?path=….issue&candidate=notes.txt
+GET /api/metas/tree?path=….issue&candidate=notes.txt
 "candidate": {"name": "notes.txt", "matches": null, "can": false, "reason": "不匹配 issue 的任何一种文件"}
 ```
 
@@ -185,9 +185,9 @@ GET /api/collections/tree?path=….issue&candidate=notes.txt
 
 | 端点 | 变化 |
 |---|---|
-| `GET /api/collections/layers` | 每层带整份协议(YAML 转 JSON),前端据此画表单 |
-| `GET /api/collections/tree?path=[&candidate=]` | 返回体多一个 `can_create`(这里能建什么),带 `candidate` 时多一个 `candidate`(这个名字行不行),§4 |
-| `POST` / `PUT /api/collections/{layer}/{path}?dry_run=1` | 走完校验不提交,返回 `{"ok": true}` 或 `{"ok": false, "reason": "…"}`(200) |
+| `GET /api/metas/layers` | 每层带整份协议(YAML 转 JSON),前端据此画表单 |
+| `GET /api/metas/tree?path=[&candidate=]` | 返回体多一个 `can_create`(这里能建什么),带 `candidate` 时多一个 `candidate`(这个名字行不行),§4 |
+| `POST` / `PUT /api/metas/{layer}/{path}?dry_run=1` | 走完校验不提交,返回 `{"ok": true}` 或 `{"ok": false, "reason": "…"}`(200) |
 | 写入口 | 不变:`files` 一批文件改动,`subject` / `reason` 可选 |
 
 ---
@@ -207,7 +207,7 @@ GET /api/collections/tree?path=….issue&candidate=notes.txt
 
 ## 7. 内置层也是 YAML
 
-`memorytalk/backend/services/collections/layers/` 下放 `origin.yaml` `issue.yaml` `card.yaml`;用户层放 `~/.memory.talk/layers/<名>.yaml`,启动时一起载入,登记进 `collections.json`(只记名字和 `builtin`)。**没有 Python 子类这条路了**——协议说不清的规则就不该是层的规则。
+`memorytalk/backend/services/metas/layers/` 下放 `origin.yaml` `issue.yaml` `card.yaml`;用户层放 `~/.memory.talk/layers/<名>.yaml`,启动时一起载入,登记进 `metas.json`(只记名字和 `builtin`)。**没有 Python 子类这条路了**——协议说不清的规则就不该是层的规则。
 
 **origin** 是唯一的特例:没有对象目录、没有协议,`origin.yaml` 只有 `layer: origin` 和一句 `description`;任何不带层后缀的文件都是它,引擎对它永远放行。
 

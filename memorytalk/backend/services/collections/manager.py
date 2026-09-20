@@ -1,4 +1,4 @@
-"""manager.json:目录绑 work;变动往上找最近的一个,打到那个 work 的收件箱(docs/designs/v5/manager.md)。"""
+"""manager.json:目录绑 work;变动往上找最近的一个,打到那个 work 的收件箱(docs/designs/v5/metas/manager.md)。"""
 from __future__ import annotations
 
 import json

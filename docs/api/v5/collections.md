@@ -1,6 +1,6 @@
 # Collections API
 
-认知层。层 = 一份 YAML 协议(内置 origin / issue / card;用户层是 `~/.memory.talk/layers/*.yaml`),一个引擎按它校验;对象 = 带后缀的目录 `<path>.<层>/`,里面一组文件,放在树的任何位置,标题就是目录名;origin = 不带后缀的文件。一次写 = 对一个对象目录的一批文件改动,交给层的 check(不过 → 422 `invalid`,`message` 是理由),过了一个 `[层名]` 提交,落在 `layer/<层>` 上再 merge 进 `stack`;碰了别的层的路径被守卫拒绝(409 `guard`)。机制见 [designs collections.md](../../designs/v5/collections.md) / [collections-layer.md](../../designs/v5/collections-layer.md) / [manager.md](../../designs/v5/manager.md)。
+认知层。层 = 一份 YAML 协议(内置 origin / issue / card;用户层是 `~/.memory.talk/layers/*.yaml`),一个引擎按它校验;对象 = 带后缀的目录 `<path>.<层>/`,里面一组文件,放在树的任何位置,标题就是目录名;origin = 不带后缀的文件。一次写 = 对一个对象目录的一批文件改动,交给层的 check(不过 → 422 `invalid`,`message` 是理由),过了一个 `[层名]` 提交,落在 `layer/<层>` 上再 merge 进 `stack`;碰了别的层的路径被守卫拒绝(409 `guard`)。机制见 [designs collections.md](../../designs/v5/metas/README.md) / [collections-layer.md](../../designs/v5/metas/layer.md) / [manager.md](../../designs/v5/metas/manager.md)。
 
 `{path:path}` 直接放在 URL 里(可含 `/` 和中文)。固定子路径(`layers` `config` `tree` `search` `manager` `managed` `history`)先于 `{layer}/{path}`。
 
@@ -22,7 +22,7 @@
  {"name": "card", "order": 2, "builtin": true, "suffix": ".card", "description": "…", "protocol": {…}}]
 ```
 
-最底在前。`protocol` 就是这一层的 YAML(见 [collections-layer.md](../../designs/v5/collections-layer.md)),前端据此画表单:`object` 是对象目录的规则(名字正则、`name` 那段叫什么、能放在哪),`files` 每种文件的正则、`example`(`{name}` 是用户起的那段)、`fixed`(固定文件至多一个)、`required`、`format.fields`(frontmatter 字段:`string` `text` `number` `bool` `date` `enum` `ref` `list` `object`)、`format.body`、`template`。**没有加层的端点**:用户层是 `~/.memory.talk/layers/<名>.yaml`,重启时载入、登记进 `collections.json`(一次 `[origin]` 提交);`builtin: false`。
+最底在前。`protocol` 就是这一层的 YAML(见 [collections-layer.md](../../designs/v5/metas/layer.md)),前端据此画表单:`object` 是对象目录的规则(名字正则、`name` 那段叫什么、能放在哪),`files` 每种文件的正则、`example`(`{name}` 是用户起的那段)、`fixed`(固定文件至多一个)、`required`、`format.fields`(frontmatter 字段:`string` `text` `number` `bool` `date` `enum` `ref` `list` `object`)、`format.body`、`template`。**没有加层的端点**:用户层是 `~/.memory.talk/layers/<名>.yaml`,重启时载入、登记进 `collections.json`(一次 `[origin]` 提交);`builtin: false`。
 
 ---
 

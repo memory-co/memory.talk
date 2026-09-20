@@ -5,7 +5,7 @@
 相关:
 - v5 work 树(session 住在 work 里): [work.md](work.md)
 - v5 protocol server(session 是 server 建出来的): [work-server.md](work-server.md)
-- v5 issue(issue 的出处和证据指向 session 留下的 round): [issue.md](issue.md)
+- v5 issue(issue 的出处和证据指向 session 留下的 round): [issue.md](metas/issue.md)
 - shellbase 的会话身份(`window` + `block` 位置参数——本篇有意偏离它的那一点): [uri.md §4](https://github.com/memory-co/shellbase/blob/main/docs/v1/works/uri.md)
 
 ---

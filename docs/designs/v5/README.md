@@ -2,7 +2,7 @@
 
 > **状态:定位稿,未实施。** 这篇只回答三件事:memory.talk 是什么、它由哪几层抽象组成、这几层怎么咬合。字段、表、命令、端点一概不在这里——那些等定位敲定后再分篇立(同 [v4](../v4/README.md) 的 works / cli / api / structure 四目录分工)。
 >
-> 分篇:[work.md](work.md)(做事层:work 树)、[issue.md](issue.md)(议事层:树上节点管、派活取证)、[card.md](card.md)(记事层:维基式事实条目,issue 是它的讨论页)、[collections-store.md](collections-store.md)(存储:git 存 card / issue,裸文件存 work,没有数据库)、[work-server.md](work-server.md)(每个协议背后把现场建出来的 server)、[session.md](session.md)(work 里的一个现场:身份脱离布局)、[user.md](user.md)(人:work 谁建的、谁在动 / 动过,collections 的提交是谁做的)、[auth.md](auth.md)(门:没有 admin 先 setup,之后登录换 token,每个请求都带;权限只有 admin 管账号这一档)、[provider.md](provider.md)(存储介质的两族基类:文件系统型 LocalFS / OSS / S3、数据库型 SQLite / MySQL / PostgreSQL;业务仓储按族各一份)、[collections.md](collections.md)(认知层的容器:collectbase 仓库,issue / card 各是一层,layer 由 schema 定义、可自定义)、[collections-layer.md](collections-layer.md)(怎么设计一个自己的层:四个问题、两个文件、系统替你做什么 / 不做什么)、[origin.md](origin.md)(最底层:外部来的、未消化的原文,上层改不动的地板)、[manager.md](manager.md)(目录下的 manager.json 把变动打给绑定的 work,work 干活往下推;取代 issue 上的 manager_work 字段)。
+> 分篇:[work.md](work.md)(做事层:work 树)、**[metas/](metas/README.md)**(认知层:容器、层协议、存储、issue、card、origin、manager 全在这个目录)——[issue.md](metas/issue.md)(议事层:树上节点管、派活取证)、[card.md](metas/card.md)(记事层:维基式事实条目,issue 是它的讨论页)、[metas/store.md](metas/store.md)(存储:git 存 card / issue,裸文件存 work,没有数据库)、[work-server.md](work-server.md)(每个协议背后把现场建出来的 server)、[session.md](session.md)(work 里的一个现场:身份脱离布局)、[user.md](user.md)(人:work 谁建的、谁在动 / 动过,metas 的提交是谁做的)、[auth.md](auth.md)(门:没有 admin 先 setup,之后登录换 token,每个请求都带;权限只有 admin 管账号这一档)、[provider.md](provider.md)(存储介质的两族基类:文件系统型 LocalFS / OSS / S3、数据库型 SQLite / MySQL / PostgreSQL;业务仓储按族各一份)、[metas/README.md](metas/README.md)(认知层的容器:collectbase 仓库,issue / card 各是一层,layer 由 schema 定义、可自定义)、[metas/layer.md](metas/layer.md)(怎么设计一个自己的层:四个问题、两个文件、系统替你做什么 / 不做什么)、[origin.md](metas/origin.md)(最底层:外部来的、未消化的原文,上层改不动的地板)、[manager.md](metas/manager.md)(目录下的 manager.json 把变动打给绑定的 work,work 干活往下推;取代 issue 上的 manager_work 字段)。
 >
 > 读法:先 §1 看定位怎么变,再 §2 看三层各是什么,§3 看它们之间的循环。§4 是跟 v3 / v4 / shellbase 的继承关系,§5 是留待后续分篇敲定的问题。
 
@@ -28,7 +28,7 @@ v5 把主语换掉:**memory.talk 是一个工作台,工作在它里面发生**�
 
 > **memory.talk v5 = 一个跑 code agent 的工作台,它把「做事」「议事」「记事」三层接成一个闭环。**
 
-这三层就是 v5 的三个抽象:**work、issue、card**——issue 和 card 后来收进了 **collections**(认知层的容器,[collections.md](collections.md)),所以 memory.talk 的顶层对象是三个:**work、collections、user**。user 是「谁」:注册的实体,work 谁建的、谁在动,collections 的提交谁做的([user.md](user.md),§2.4)。
+这三层就是 v5 的三个抽象:**work、issue、card**——issue 和 card 后来收进了 **metas**(认知层的容器,[metas/README.md](metas/README.md)),所以 memory.talk 的顶层对象是三个:**work、metas、user**。user 是「谁」:注册的实体,work 谁建的、谁在动,metas 的提交谁做的([user.md](user.md),§2.4)。
 
 ---
 
@@ -79,10 +79,10 @@ card 是记事层:**一条事实,像维基百科的一个词条**。一个事实
 work、issue、card 说的都是**事**;user 说的是**人**,和它们平级,不是谁的附属。一个 memory.talk 实例给一个团队用,团队里的每个人是一个 user——**注册的实体**,有自己的存储(fs 或数据库,走 provider)和档案;请求头里的名字必须是注册过的。它出现在三处:
 
 - **work 有归属**:`created_by`,建时定下不改;另有一份 `users` 名单记谁动过、最近什么时候。
-- **collections 的每个提交以它为 author**:立场谁提的、卡谁改的,`git log` 里有,对象里不另存。
+- **metas 的每个提交以它为 author**:立场谁提的、卡谁改的,`git log` 里有,对象里不另存。
 - **收件箱里每条变动记着是谁造成的**。
 
-**不做权限**:所有 work 谁都能操作,所有 collections 谁都能写;user 只是让人看得见。详见 [user.md](user.md)。
+**不做权限**:所有 work 谁都能操作,所有 metas 谁都能写;user 只是让人看得见。详见 [user.md](user.md)。
 
 ---
 
@@ -125,7 +125,7 @@ work、issue、card 说的都是**事**;user 说的是**人**,和它们平级,�
 |---|---|---|
 | 画布 / 块即 URI / 终端 attach / window 状态 | shellbase v1 | **在 memory.talk 里原生实现,底层逻辑完全一致**;shellbase 不再作为独立项目继续,它的设计文档是 work 运行时的蓝本 |
 | session / round(append-only)、file-canonical | v3 | 沿用;file-canonical 延伸成「git 是 canonical(含历史)」;session 的上游从 sync 变成 work |
-| SQLite(派生索引 + 运行态计数)、searchbase(向量 + FTS)、events.jsonl、migration 框架 | v3 / v4 | **全部去掉**:运行态在 v5 不存在;召回改成目录 + 链接 + grep,不建索引;历史归 git(见 [collections-store.md](collections-store.md));存储只有 git 和裸文件,没有派生物 |
+| SQLite(派生索引 + 运行态计数)、searchbase(向量 + FTS)、events.jsonl、migration 框架 | v3 / v4 | **全部去掉**:运行态在 v5 不存在;召回改成目录 + 链接 + grep,不建索引;历史归 git(见 [metas/store.md](metas/store.md));存储只有 git 和裸文件,没有派生物 |
 | explore(先验 / 后验工作区) | v3 设计 | **并入 work**,不再独立 |
 | insight(v3 的陈述卡) | v3 → v4 改名 | 继续只读可搜,慢慢下掉,不变 |
 | 问题图(issue / position / argument、IBIS 边、credence 现算) | v4 card | 成为 **issue 层**;机制不变,名字归位 |
@@ -141,8 +141,8 @@ work、issue、card 说的都是**事**;user 说的是**人**,和它们平级,�
 
 这些都会各自分篇,本稿只列出来,不在这里定:
 
-- **issue 与 card 的边界**:[card.md §2](card.md) 定为词条 / 讨论页——还在争的待 issue,争完的写卡;写卡是编辑动作,不是阈值触发。
+- **issue 与 card 的边界**:[card.md §2](metas/card.md) 定为词条 / 讨论页——还在争的待 issue,争完的写卡;写卡是编辑动作,不是阈值触发。
 - **work 的边界**:一个 work = 一个 window(画布),还是一个 window 里可以有多个 work。这取决于「工作单元」和「屏幕布局」要不要绑死。
 - **work 的结束语义**:work 做完之后 session 是否冻结、标注是否还能追加、后验回流从哪一刻开始算。
 - **多平台**:work 里的 agent session 目前只考虑 tmux 里跑的 CLI agent(claude / codex);外部平台(网页版 Codex、别的机器)的会话是否还走 sync 兼容路径进 work。
-- **命名**:「本地论」这个提法在文档里怎么落——目前落成「事实陈述自带语境」([card.md §3](card.md)),不单立字段。
+- **命名**:「本地论」这个提法在文档里怎么落——目前落成「事实陈述自带语境」([card.md §3](metas/card.md)),不单立字段。

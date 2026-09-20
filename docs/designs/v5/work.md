@@ -4,7 +4,7 @@
 
 相关:
 - v5 总设计(work / issue / card 三层): [README.md](README.md)
-- v5 issue(work 树上冒出的问题、由树上节点管、可派 work 取证): [issue.md](issue.md)
+- v5 issue(work 树上冒出的问题、由树上节点管、可派 work 取证): [issue.md](metas/issue.md)
 - shellbase window 与块即 URI(work 运行时的蓝本,底层逻辑完全一致): [shellbase design.md](https://github.com/memory-co/shellbase/blob/main/docs/v1/works/design.md) / [uri.md](https://github.com/memory-co/shellbase/blob/main/docs/v1/works/uri.md)
 - v3 explore(先验 / 后验工作区,被 work 并入): [../v3/explore.md](../v3/explore.md)
 - v4 逐 round 标注(work → issue 的入口): [../v4/session-annotation.md](../v4/session-annotation.md)
@@ -36,7 +36,7 @@
 
 ## 2. 为什么是树:work 承载「定下来、正在做」的事,issue 承载「还没定」的事
 
-v5 三层里只有 work 有**状态和完成**。issue 是 IBIS,故意不关闭、不拍板(见 [issue.md §5](issue.md));card 是词条,只有内容和历史、没有进度。但做事必须能说「这步完了」,所以**执行的结构——拆分、顺序、状态、完成——全部落在 work 上**,不落在 issue 上:
+v5 三层里只有 work 有**状态和完成**。issue 是 IBIS,故意不关闭、不拍板(见 [issue.md §5](metas/issue.md));card 是词条,只有内容和历史、没有进度。但做事必须能说「这步完了」,所以**执行的结构——拆分、顺序、状态、完成——全部落在 work 上**,不落在 issue 上:
 
 - **拆分 = 子 work**。一件事怎么拆,拆出来的每一块就是一个子 work。
 - **状态 = 每个 work 自己的**:待做、在做、做完(或放弃)。父 work 的进度就是看子 work 的状态。
@@ -106,7 +106,7 @@ work 本身还有一点自己的东西,不多:**它是什么事**(一句话目�
 粗线条地看,一个 work 就四段;树上每个节点都走这四段,只是根和叶子的重心不同:
 
 1. **开工**:说清要做什么事、属于哪件更大的事;memory.talk 拿这句目标去撞 card,把相关的认知先注入进来——这是 recall 在 v5 的落点:**recall 的对象是 work,不再是零散的会话**。
-2. **干活**:往 work 里加现场,agent 跑、人看、网页翻。这段时间 work 就是一块画布,怎么排随便。事情大了就**拆**成子 work;碰到没定的事就**议**——提一个 issue,由这个 work 来管;议出「得去做 X 才知道」就**派**——为那条论证开一个 work(见 [issue.md §4](issue.md))。
+2. **干活**:往 work 里加现场,agent 跑、人看、网页翻。这段时间 work 就是一块画布,怎么排随便。事情大了就**拆**成子 work;碰到没定的事就**议**——提一个 issue,由这个 work 来管;议出「得去做 X 才知道」就**派**——为那条论证开一个 work(见 [issue.md §4](metas/issue.md))。
 3. **做完**:事成了(或者放弃了),work 结束。叶子结束以后会话冻结:会话不再追加 round,现场可以回去看,但不再是干活的地方。父 work 的「做完」由子 work 收拢而来。
 4. **留下痕迹**:work 留下的是它所有会话的记录——agent 会话的 round、看过的网页、动过的目录;树留下的是这些痕迹加上**它是怎么拆的、每步怎么定的**。这堆痕迹是 **issue 层的原料**:逐 round 标注在这上面做,`#问题` 从这里冒出来。
 
@@ -119,7 +119,7 @@ work 本身还有一点自己的东西,不多:**它是什么事**(一句话目�
 work 是三层里最「实」的一层,它跟另外两层有三个接口:
 
 - **往上:work → issue**。work 的痕迹被逐 round 标注,标注里的问题建 / 挂到 issue。一个 issue 记得它是从哪个 work 的哪些 round 冒出来的;一个 work 也能反过来列出「这件事引出了哪些问题、对哪些老问题给了新论证」。
-- **往回:issue → work**。每个 issue 由树上一个 work **管**(manager)——通常就是正卡在这个问题上的那个节点;issue 也可以为某条论证的取证**派出**一个新 work,派出去的 work 做完,结果落回 issue 当论证。派出的 work 挂在树上哪里,由派它的 manager 决定,通常就是 manager 的子节点。work 本身不因此变成另一种东西——它只是多知道一件事:「我是为哪个问题开的」。见 [issue.md §3–§4](issue.md)。
+- **往回:issue → work**。每个 issue 由树上一个 work **管**(manager)——通常就是正卡在这个问题上的那个节点;issue 也可以为某条论证的取证**派出**一个新 work,派出去的 work 做完,结果落回 issue 当论证。派出的 work 挂在树上哪里,由派它的 manager 决定,通常就是 manager 的子节点。work 本身不因此变成另一种东西——它只是多知道一件事:「我是为哪个问题开的」。见 [issue.md §3–§4](metas/issue.md)。
 - **往下:card → work**。work 开工时,recall 把命中的 card 注入到 work 里的 agent 会话中。注入的是 card,不是 issue,也不是别的 work 的会话原文。
 
 work 之间**只有父子这一种直接关系**。同一棵树之外的两个 work 有关系,是因为它们碰到了同一个 issue、被同一个 issue 派出、或者用了同一张 card——横向关系走认知层,不走任务层。这样 work 可以一直很简单:一个容器、一句目标、一堆现场、一个父亲、一个状态。

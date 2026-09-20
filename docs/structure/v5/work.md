@@ -155,4 +155,4 @@ works/<work_id>/
 └── sessions/<session_id>/rounds.jsonl   只追加
 ```
 
-以上是 `MEMORY_TALK_STORE=fs` 时的形态;`sqlite` 时同样的记录在 `works` / `work_docs` / `work_logs` 三张表里,业务层不感知(见 [designs provider.md](../../designs/v5/provider.md))。读写纪律照 shellbase:单写者(服务进程)、无缓存直读、任何时刻磁盘上都是完整 JSON。**不进 git**——work 记的是过程,git 记的是决定(见 [`../../designs/v5/collections-store.md`](../../designs/v5/collections-store.md) §4)。
+以上是 `MEMORY_TALK_STORE=fs` 时的形态;`sqlite` 时同样的记录在 `works` / `work_docs` / `work_logs` 三张表里,业务层不感知(见 [designs provider.md](../../designs/v5/provider.md))。读写纪律照 shellbase:单写者(服务进程)、无缓存直读、任何时刻磁盘上都是完整 JSON。**不进 git**——work 记的是过程,git 记的是决定(见 [`../../designs/v5/metas/store.md`](../../designs/v5/metas/store.md) §4)。

@@ -1,6 +1,6 @@
 # collection
 
-认知层:层、树、最近、对象(目录里的文件)CRUD、历史。检索是顶层的 `memory.talk search`。对应 [`/api/collections`](../../api/v5/collections.md)。机制见 [`../../designs/v5/collections.md`](../../designs/v5/collections.md)。别名 `col`。
+认知层:层、树、最近、对象(目录里的文件)CRUD、历史。检索是顶层的 `memory.talk search`。对应 [`/api/collections`](../../api/v5/collections.md)。机制见 [`../../designs/v5/metas/README.md`](../../designs/v5/metas/README.md)。别名 `col`。
 
 ```
 memory.talk collection
@@ -26,7 +26,7 @@ memory.talk collection
 memory.talk collection layers                          # 最底在前:origin / issue / card / 用户层;各自的文件种类(* = 必需)
 ```
 
-没有 `layers add`:加一层 = 往 `~/.memory.talk/layers/` 放一份 `<名>.yaml`(和内置层一模一样的协议),`server restart`。写法见 [`../../designs/v5/collections-layer.md`](../../designs/v5/collections-layer.md)。
+没有 `layers add`:加一层 = 往 `~/.memory.talk/layers/` 放一份 `<名>.yaml`(和内置层一模一样的协议),`server restart`。写法见 [`../../designs/v5/metas/layer.md`](../../designs/v5/metas/layer.md)。
 
 ## tree / recent
 
@@ -60,7 +60,7 @@ memory.talk collection write origin memory.talk/配置/旧方案.md --content @�
 memory.talk collection rm    card memory.talk/配置/配置只来自环境变量 --reason '过时'                   # 删,历史在 git
 ```
 
-每个层有哪些文件、每种文件有哪些字段,看 `collection layers` 和 [`../../designs/v5/collections-layer.md`](../../designs/v5/collections-layer.md);想知道某个目录还能建什么,`collection tree <目录>`。不合协议 → exit 1 `invalid`,理由打印出来;已存在 → exit 1 `exists`。
+每个层有哪些文件、每种文件有哪些字段,看 `collection layers` 和 [`../../designs/v5/metas/layer.md`](../../designs/v5/metas/layer.md);想知道某个目录还能建什么,`collection tree <目录>`。不合协议 → exit 1 `invalid`,理由打印出来;已存在 → exit 1 `exists`。
 
 ## log
 

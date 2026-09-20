@@ -3,7 +3,7 @@
 > **状态:框架稿,未实施。** 本篇立 **provider** 这层抽象:它是**介质原语**,和业务无关。两族、两个基类——**文件系统型**(本地文件系统、OSS、S3……)和**数据库型**(SQLite、MySQL、PostgreSQL……)。具体介质各自实现自己那一族的基类;上层业务(work / user 的记录)按族写一份仓储,用 provider 的原语落地。provider 里**没有** work、user、document 这类词——那是业务,和底层无关。总定位见 [README.md](README.md)。
 
 相关:
-- v5 collections store(认知层的介质就是 git,不在本篇范围): [collections-store.md](collections-store.md)
+- v5 metas store(认知层的介质就是 git,不在本篇范围): [metas/store.md](metas/store.md)
 - v5 user / work(用 provider 落地的两类业务记录): [user.md](user.md) / [work.md](work.md)
 
 ---
@@ -127,11 +127,11 @@ MEMORY_TALK_STORE=mysql  + DSN          → MySQL
 
 ---
 
-## 6. 和 collections 的边界
+## 6. 和 metas 的边界
 
-collections 的介质就是 git([collections-store.md](collections-store.md)),**不走 provider**。git 需要本机文件系统,这是硬要求。
+metas 的介质就是 git([metas/store.md](metas/store.md)),**不走 provider**。git 需要本机文件系统,这是硬要求。
 
-但 provider 在 collections 那边有一个天然的位置:**blob 外置**。collectbase 把二进制放到 `blob/` 目录、原地留软链;那个 `blob/` 正是一个 `FileSystemProvider` 该管的东西——本地时是 LocalFS,想把大文件放远端时换 S3,collections 仓库里的软链不变。这是将来做 blob 外置时顺手的事,本篇记一笔。
+但 provider 在 metas 那边有一个天然的位置:**blob 外置**。collectbase 把二进制放到 `blob/` 目录、原地留软链;那个 `blob/` 正是一个 `FileSystemProvider` 该管的东西——本地时是 LocalFS,想把大文件放远端时换 S3,metas 仓库里的软链不变。这是将来做 blob 外置时顺手的事,本篇记一笔。
 
 ---
 

@@ -1,4 +1,4 @@
-"""层协议:一份 YAML → 一个 Layer。同一份既是校验规则,也是前端画表单的说明(docs/designs/v5/collections-layer.md)。
+"""层协议:一份 YAML → 一个 Layer。同一份既是校验规则,也是前端画表单的说明(docs/designs/v5/metas/layer.md)。
 
     layer: issue
     object: {pattern: ^(?P<name>[^/]+)\\.issue$, name: 问题, under: .*}     # 对象目录叫什么、能放哪

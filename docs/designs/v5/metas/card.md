@@ -1,15 +1,15 @@
 # card —— 维基式的事实条目(v5 设计)
 
-> **状态:框架稿,未实施。** 本篇只立 card 这一层的大框架:card 就是一条条事实,像维基百科的词条;没有沉浮、没有分数、没有竞争。issue 是它的讨论页。字段 / 端点 / 命令后续分篇。总定位见 [README.md](README.md)。
+> **状态:框架稿,未实施。** 本篇只立 card 这一层的大框架:card 就是一条条事实,像维基百科的词条;没有沉浮、没有分数、没有竞争。issue 是它的讨论页。字段 / 端点 / 命令后续分篇。总定位见 [README.md](../README.md)。
 
 相关:
-- v5 总设计(work / issue / card 三层): [README.md](README.md)
+- v5 总设计(work / issue / card 三层): [README.md](../README.md)
 - v5 issue(card 的「讨论页」:争议在这里,不在卡上): [issue.md](issue.md)
-- v5 work 树(卡被召回进它;做事时查它): [work.md](work.md)
-- v5 collections(card 在认知层里是一个 layer:`layer/card`;对象是任意位置的 `<名>.card/` 目录,在 issue 之上): [collections.md](collections.md)
+- v5 work 树(卡被召回进它;做事时查它): [work.md](../work.md)
+- v5 metas(card 在认知层里是一个 layer:`layer/card`;对象是任意位置的 `<名>.card/` 目录,在 issue 之上): [README.md](README.md)
 - v5 manager(所在文件夹的 `manager.json` 管这一片:卡变了,变动打给绑定的 work): [manager.md](manager.md)
-- v4 card(问题 + 竞争答案 + 治理——v5 把争的部分全给了 issue,卡只留事实): [../v4/card.md](../v4/card.md)
-- v3 论坛动力学(沉浮 + 三轴 stats——**v5 的 card 彻底不用这套**): [../v3/forum-dynamics.md](../v3/forum-dynamics.md)
+- v4 card(问题 + 竞争答案 + 治理——v5 把争的部分全给了 issue,卡只留事实): [../v4/card.md](../../v4/card.md)
+- v3 论坛动力学(沉浮 + 三轴 stats——**v5 的 card 彻底不用这套**): [../v3/forum-dynamics.md](../../v3/forum-dynamics.md)
 
 ---
 
@@ -35,7 +35,7 @@ card 上**没有**:顶踩计数、可信度、沉浮、竞争的候选、状态�
 |---|---|---|
 | 正文 | 词条:陈述事实,不带立场 | **card**:一条事实 |
 | 讨论页 | 争论、举证、达成共识 | **issue**:立场 + 论证,IBIS 结构 |
-| 改正文 | 讨论页有了共识,编辑词条 | issue 里某个立场站住了,写成 / 改一张 card(两个相邻提交:`[issue] decide` + `[card] write`,见 [collections.md §6](collections.md)) |
+| 改正文 | 讨论页有了共识,编辑词条 | issue 里某个立场站住了,写成 / 改一张 card(两个相邻提交:`[issue] decide` + `[card] write`,见 [metas.md §6](README.md)) |
 | 争议未决 | 正文挂「争议」模板,或者先不写 | 事实还没定,**不写卡**,留在 issue |
 
 所以卡和 issue 的分工是干净的:**issue 装还在争的,card 装争完的**。一张卡通常来自某个 issue(那个 issue 就是它的讨论页),但卡也可以直接写——有些事实根本没什么可争(「这个仓库用 Python 3.12」),不必先开一个 issue 走一遍流程。要是后来有人不同意这张卡,那时再开 issue,issue 挂在这张卡上当它的讨论页。
@@ -56,7 +56,7 @@ card 上**没有**:顶踩计数、可信度、沉浮、竞争的候选、状态�
 
 ## 4. 卡可以改,改的历史留着
 
-这是跟 v4「只增不改」最大的不同。v4 的卡是治理对象,改一次等于一次信念变更,所以要 append-only + 分叉血缘;v5 的卡是词条,**写错了就改,改了留版本**,跟维基的编辑历史一样。有了 Collections([collections.md](collections.md))之后这一点更彻底:**卡上不需要任何不可变约束、也不需要任何状态位**——git 记录所有事实,卡本身只管当前内容。
+这是跟 v4「只增不改」最大的不同。v4 的卡是治理对象,改一次等于一次信念变更,所以要 append-only + 分叉血缘;v5 的卡是词条,**写错了就改,改了留版本**,跟维基的编辑历史一样。有了 Metas([README.md](README.md))之后这一点更彻底:**卡上不需要任何不可变约束、也不需要任何状态位**——git 记录所有事实,卡本身只管当前内容。
 
 - 事实变了(项目后来加了配置文件)→ **改卡**,旧内容进历史,不另起一张。
 - 事实说得不准 → 改措辞,同上。
@@ -65,13 +65,13 @@ card 上**没有**:顶踩计数、可信度、沉浮、竞争的候选、状态�
 
 没有沉浮,一张卡就不会「自己掉下去」。它要么在、要么改了、要么废了,都是明确的编辑动作,不是分数慢慢降的结果。这比沉浮更像维基,也更好解释:一张卡为什么长这样,翻历史就知道。
 
-在 Collections 里,改卡就是一个 `[card]` 提交,落在 `layer/card` 上;`git log layer/card` 是所有卡的编辑史,`git log -- <路径>.card/` 是这一张的。card 是 issue 之上的 layer,**改卡的提交碰不到任何 `.issue/` 目录里的东西**——想改讨论页里的记录,那是另一个 `[issue]` 提交,而且立场、论证本来就只增不改。
+在 Metas 里,改卡就是一个 `[card]` 提交,落在 `layer/card` 上;`git log layer/card` 是所有卡的编辑史,`git log -- <路径>.card/` 是这一张的。card 是 issue 之上的 layer,**改卡的提交碰不到任何 `.issue/` 目录里的东西**——想改讨论页里的记录,那是另一个 `[issue]` 提交,而且立场、论证本来就只增不改。
 
 ---
 
 ## 5. 召回:查词条
 
-card 是 v5 的召回单元。work 开工时拿目标去查,agent 干活途中主动检索也是查——查的方式就是**查词条**:看目录、搜标题、顺链接走(没有向量库、没有全文索引,见 [collections-store.md §5](collections-store.md));work 开工时注入的是目录,agent 自己挑着读。
+card 是 v5 的召回单元。work 开工时拿目标去查,agent 干活途中主动检索也是查——查的方式就是**查词条**:看目录、搜标题、顺链接走(没有向量库、没有全文索引,见 [metas-store.md §5](store.md));work 开工时注入的是目录,agent 自己挑着读。
 
 没有排序轴。v4 读路径里的「相关性选哪一侧、credence 在同侧里选验证最好的」在 v5 不存在——因为卡上没有对立的两侧,对立的两侧还在 issue 里争。争议 issue 不产卡,所以召回不会同时命中互相矛盾的两张卡;真出现了,那是两张卡该合并或该开 issue 的信号,不是排序问题。
 
@@ -104,15 +104,15 @@ card 是 v5 的召回单元。work 开工时拿目标去查,agent 干活途中�
 
 ---
 
-## 8. card 在 Collections 里:一个 layer
+## 8. card 在 Metas 里:一个 layer
 
-card 是 Collections([collections.md](collections.md))里内置的一个 **layer**:
+card 是 Metas([README.md](README.md))里内置的一个 **layer**:
 
 | | |
 |---|---|
 | layer 名 | `card`;分支 `layer/card`;提交信息以 `[card]` 开头 |
 | 形态 | **`<任意路径>/<名>.card/`**——一张卡一个带后缀的目录,放哪都行;**目录名就是标题**;里面只有一个 `readme.md`(必需):frontmatter 字段 `context` / `links[]` / `issue` + 正文;可放 `manager.json`;目录树按主题组织,原文、讨论页、词条并排 |
-| 协议 | 一个文件,字段 + 正文(`card.yaml`,见 [collections-layer.md §7](collections-layer.md));`readme.md` 不能删;字段只有 `context` / `links[]→card` / `issue→issue`,多余的键拒。**没有 title**(目录名就是)、**没有 status**——在与不在由文件在不在决定,历史由 git 记 |
+| 协议 | 一个文件,字段 + 正文(`card.yaml`,见 [metas-layer.md §7](layer.md));`readme.md` 不能删;字段只有 `context` / `links[]→card` / `issue→issue`,多余的键拒。**没有 title**(目录名就是)、**没有 status**——在与不在由文件在不在决定,历史由 git 记 |
 | 行为 | 没有。写、改、删就是提交文件;从 issue 写出来 = 建卡时 `issue` 字段指过去;对卡开讨论页 = 建一个 issue + 改卡的 `issue` 字段,两个普通提交 |
 | 层序 | 在 issue 之上:card 是争完的结论,从 issue 派生;改卡碰不到 issue |
 | 历史 | `git log layer/card` = 全部编辑史;`git log -- <路径>.card/` = 这一张的 |
@@ -122,7 +122,7 @@ card 是 Collections([collections.md](collections.md))里内置的一个 **layer
 
 ## 9. 这篇有意不定的事
 
-- **谁能改卡**:人和 agent 都能直接编辑,还是 agent 只能通过 issue 提议、人来改。维基的答案是「都能改、靠历史和回滚兜底」,本篇倾向照搬,没定。collectbase 的 hook 只守层不守人——它挡的是「改卡时顺手动了 issue」,不是「谁在改」;要限人得另加,而 [user.md](user.md) 说不做权限。
+- **谁能改卡**:人和 agent 都能直接编辑,还是 agent 只能通过 issue 提议、人来改。维基的答案是「都能改、靠历史和回滚兜底」,本篇倾向照搬,没定。collectbase 的 hook 只守层不守人——它挡的是「改卡时顺手动了 issue」,不是「谁在改」;要限人得另加,而 [user.md](../user.md) 说不做权限。
 - ~~单张卡要不要变目录~~:已定——卡就是目录 `<名>.card/`,和 issue 一样;要不要在它自己目录里放 `manager.json` 是使用者的事。
 - **卡与卡的合并 / 拆分**:两张卡说的其实是一件事、一张卡其实讲了两件事——谁判、怎么并、历史怎么接。
 - ~~废弃的卡召不召回~~:已定——没有「废弃」,只有删;删了的卡不在目录里,查历史走 `git log`。

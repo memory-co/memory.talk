@@ -27,13 +27,13 @@ user 还是 [user.md](user.md) 那个注册的实体,存的地方不变(fs `user
 | `role` | `admin` / `member`。`admin` 这个名字的账号 role 固定是 admin;别的都是 member |
 | `password` | 密码的哈希,存的 `scrypt$<salt>$<hash>`(标准库 `hashlib.scrypt`,不引依赖);**任何接口都不返回它**。空 = 这个人还不能登录,等 admin 给设 |
 
-admin 能做而 member 不能做的,只有三件:**建账号**(`POST /api/users`,带初始密码)、**给别人设密码**(`PUT /api/users/{name}/password`,不用旧密码)、**改别人的档案**。member 只能改自己的档案、改自己的密码(要旧密码)。除此之外没有权限差别:work 谁都能建能动,collections 谁都能写——那是团队内的事,不是门的事。
+admin 能做而 member 不能做的,只有三件:**建账号**(`POST /api/users`,带初始密码)、**给别人设密码**(`PUT /api/users/{name}/password`,不用旧密码)、**改别人的档案**。member 只能改自己的档案、改自己的密码(要旧密码)。除此之外没有权限差别:work 谁都能建能动,metas 谁都能写——那是团队内的事,不是门的事。
 
 ## 3. token:随机串,服务端记着,注销即失效
 
 登录 = `POST /api/auth/login {name, password}` → 返回一个 token(`secrets.token_urlsafe(32)`)。服务端只存它的 sha256(fs `auth/tokens/<sha256>.json` / db `auth_tokens` 表),记着是谁的、什么时候发的。之后每个请求 `Authorization: Bearer <token>`;`POST /api/auth/logout` 删掉它。不设过期——一个团队的实例,token 泄露了就 logout 或换密码(换密码会把这个人的 token 全部作废)。
 
-**身份从 token 来,不再从请求头 `X-Memory-Talk-User` 来。** 这个头现在被忽略:名字由中间件解析 token 得到,塞进 `request.state.user`,controller 从那里取。user.md 里三处记「谁」的地方(work 的 `created_by` / `users`、collections 的 commit author、收件箱的 `by`)一行没改,只是名字的来源换了。匿名不再存在:能进门的都有名字。
+**身份从 token 来,不再从请求头 `X-Memory-Talk-User` 来。** 这个头现在被忽略:名字由中间件解析 token 得到,塞进 `request.state.user`,controller 从那里取。user.md 里三处记「谁」的地方(work 的 `created_by` / `users`、metas 的 commit author、收件箱的 `by`)一行没改,只是名字的来源换了。匿名不再存在:能进门的都有名字。
 
 ## 4. 客户端
 

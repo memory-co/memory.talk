@@ -1,4 +1,4 @@
-"""Collections —— 认知层的容器(docs/designs/v5/collections.md)。
+"""Collections —— 认知层的容器(docs/designs/v5/metas/README.md)。
 
 对象 = 一个带后缀的目录 `<path>.<layer>/`,里面是一组文件;一次写 = 一批文件改动,交给层的 check 过 / 不过;origin 是任何不带后缀的文件。
 一个对象的 id 就是它的 path(不含后缀),标题就是末段。

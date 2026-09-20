@@ -1,6 +1,6 @@
 # Collections(层、对象、仓库)
 
-认知层的数据模型。机制见 [designs collections.md](../../designs/v5/collections.md);端点见 [api collections.md](../../api/v5/collections.md)。
+认知层的数据模型。机制见 [designs collections.md](../../designs/v5/metas/README.md);端点见 [api collections.md](../../api/v5/collections.md)。
 
 > issue 和 card 是 Collections 的两个内置 layer,它们的字段就在本篇里(§对象);不再各自单独成篇。
 
@@ -32,11 +32,11 @@
 | 标题 | 文件名 | 目录名 | 目录名 | 目录名 |
 | 层序 | 0(最底) | 1 | 2 | 之上,按 `collections.json` 的 `layers[]` 顺序 |
 
-**层是一份 YAML 协议**(`memorytalk/backend/services/collections/layers/<层>.yaml`,用户层 `~/.memory.talk/layers/<名>.yaml`;写法见 [designs collections-layer.md](../../designs/v5/collections-layer.md)):对象目录名的正则和允许的位置、目录里每种文件的正则、每种文件的字段(类型 / 枚举 / 引用 / 必填)和正文。一次写 = 对这个目录的一批文件改动,引擎按协议校验,不过整批拒(422,理由带回)。读就是目录里的文件,不解析。对象目录里还可以放 `manager.json`(谁管它,机制文件,不在协议里)。目录树按主题组织,原文、`.issue/`、`.card/` 并排。
+**层是一份 YAML 协议**(`memorytalk/backend/services/collections/layers/<层>.yaml`,用户层 `~/.memory.talk/layers/<名>.yaml`;写法见 [designs collections-layer.md](../../designs/v5/metas/layer.md)):对象目录名的正则和允许的位置、目录里每种文件的正则、每种文件的字段(类型 / 枚举 / 引用 / 必填)和正文。一次写 = 对这个目录的一批文件改动,引擎按协议校验,不过整批拒(422,理由带回)。读就是目录里的文件,不解析。对象目录里还可以放 `manager.json`(谁管它,机制文件,不在协议里)。目录树按主题组织,原文、`.issue/`、`.card/` 并排。
 
 ### issue 层(内置)
 
-`<path>.issue/` 目录,两种文件;标题就是目录名。机制见 [designs issue.md](../../designs/v5/issue.md)。
+`<path>.issue/` 目录,两种文件;标题就是目录名。机制见 [designs issue.md](../../designs/v5/metas/issue.md)。
 
 ```
 memory.talk/配置/该走文件还是环境变量.issue/
@@ -91,7 +91,7 @@ links:
 
 ### card 层(内置)
 
-`<path>.card/readme.md`,一个文件;标题就是目录名。维基式事实条目:可改、可删,历史在 git;**没有分数、没有状态位**。机制见 [designs card.md](../../designs/v5/card.md)。
+`<path>.card/readme.md`,一个文件;标题就是目录名。维基式事实条目:可改、可删,历史在 git;**没有分数、没有状态位**。机制见 [designs card.md](../../designs/v5/metas/card.md)。
 
 ```markdown
 ---

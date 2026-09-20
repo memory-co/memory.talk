@@ -1,12 +1,12 @@
 # issue —— 一个问题一个目录:readme.md 是问题,positions/ 一个立场一个文件;每个文件 = 字段 + 正文(v5 设计)
 
-> **状态:已实施。** `layers/issue.yaml` 就是这一层的协议:两种文件(`readme.md`、`positions/<主张>.md`),各自的字段和正文;引擎按它校验,前端按它出表单。没有行为,写就是写文件。API / CLI 见 [api collections.md](../../api/v5/collections.md) / [cli collection.md](../../cli/v5/collection.md),文件形态见 [structure collections.md](../../structure/v5/collections.md)。总定位见 [README.md](README.md)。
+> **状态:已实施。** `layers/issue.yaml` 就是这一层的协议:两种文件(`readme.md`、`positions/<主张>.md`),各自的字段和正文;引擎按它校验,前端按它出表单。没有行为,写就是写文件。API / CLI 见 [api metas.md](../../../api/v5/collections.md) / [cli meta.md](../../../cli/v5/collection.md),文件形态见 [structure metas.md](../../../structure/v5/collections.md)。总定位见 [README.md](../README.md)。
 
 相关:
-- collections(issue 是一个 layer;对象是任意位置的 `<名>.issue/` 目录): [collections.md](collections.md)
+- metas(issue 是一个 layer;对象是任意位置的 `<名>.issue/` 目录): [README.md](README.md)
 - manager(目录下的 `manager.json` 决定谁管它——issue 和 work 之间**唯一**的机制耦合;也是谁来判定排序): [manager.md](manager.md)
 - card(卡引用 issue;issue 不引用卡): [card.md](card.md)
-- v4 问题图(IBIS 三节点 + 边,本篇结构的来源;v4 的 credence 现算在 v5 不用了): [../v4/card.md](../v4/card.md)
+- v4 问题图(IBIS 三节点 + 边,本篇结构的来源;v4 的 credence 现算在 v5 不用了): [../v4/card.md](../../v4/card.md)
 
 ---
 
@@ -96,7 +96,7 @@ links:
 
 ### issue 层 = 一份协议
 
-规则不在代码里,在 `issue.yaml`([collections-layer.md §2](collections-layer.md)):两种文件、各自的字段和正文、哪个必需。引擎按它校验,前端按它出表单。落到规则就是:
+规则不在代码里,在 `issue.yaml`([metas-layer.md §2](layer.md)):两种文件、各自的字段和正文、哪个必需。引擎按它校验,前端按它出表单。落到规则就是:
 
 | 文件 | 规则 |
 |---|---|
