@@ -9,5 +9,5 @@ Pydantic 模型:API 的请求 / 响应体,也是存储里记录的形状(存的�
 | `users.py` | `User`(档案,含 `role`;密码哈希在记录里但不在模型里)/ `UserCreate`(带初始密码)/ `UserUpdate` / `UserView`(+ 派生统计)/ `UserProfile`(+ 建的 / 动过的 work、最近提交) |
 | `work.py` | `Work` / `WorkCreate` / `WorkUpdate` / `WorkNode`(带 children);画布 `Canvas{version, columns[]}` / `Column{id, panels[], collapsed}` / `Panel{session, collapsed}` / `CanvasPut`;会话 `Session` / `SessionCreate` / `SessionView`(+ alive / window / handle);`Round` / `Event` / `WorkUser` / `WorkUsers` |
 | `work_server.py` | server 那一侧的形状:`ParsedUri` / `Window`(窗)/ `HandleInfo`(把手)/ `Live`(open 之后交回来的东西)/ `WorkServerInfo` / `Handle` Protocol / `WorkServerError` |
-| `collections.py` | `LayerInfo`(含 `protocol` 字典)/ `TreeView` / `TreeItem` / `CheckResult` / `Obj` / `ObjWrite` / `Revision` / `RecentItem` / `RecentPage` / `Manager` / `ManagerPut` / `InboxItem` |
+| `metas.py` | `LayerInfo`(含 `protocol` 字典)/ `TreeView` / `TreeItem` / `CheckResult` / `Obj` / `ObjWrite` / `Revision` / `RecentItem` / `RecentPage` / `Manager` / `ManagerPut` / `InboxItem` |
 | `search.py` | `SearchHit{kind, id, title, snippet, …}` / `SearchResult{query, hits, counts}` |

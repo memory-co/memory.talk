@@ -33,11 +33,11 @@ user 是**注册的**顶层对象:有自己的存储(fs `users/<name>.json` / db
 | 派生字段 | 说明 |
 |---|---|
 | `works_created` / `works_touched` | 建了几个 / 动过几个 work |
-| `commits` | collections 里以它为 author 的提交数(stack 的 first-parent) |
+| `commits` | metas 里以它为 author 的提交数(stack 的 first-parent) |
 | `active_works` | 最近 120 秒内动过的 work(和 work 的 users `current` 同一口径) |
 | `last_seen` | 三处里最近的一次;从没动过 → 空 |
 
-统计不落盘,读时从 work 和 collections 现算。
+统计不落盘,读时从 work 和 metas 现算。
 
 ## GET /api/users/{name}
 
@@ -55,4 +55,4 @@ user 是**注册的**顶层对象:有自己的存储(fs `users/<name>.json` / db
 
 token 对应的档案(`UserProfile`);没登录 → 401。
 
-没有 DELETE:名字已写进 work 的 `created_by` 和 collections 的历史,删了引用就悬空。
+没有 DELETE:名字已写进 work 的 `created_by` 和 metas 的历史,删了引用就悬空。

@@ -16,10 +16,10 @@ v5 的三层:**work**(做事,裸文件)、**issue**(议事,git)、**card**(记�
 | WorkUser | 谁动过这个 work;只做可见性;work 另有 `created_by` 归属(指向一个注册的 User) | `works/<id>/users.json` | [work.md](work.md#workuserusers) |
 | Round | agent 会话的会话痕迹,append-only | `works/<id>/sessions/<session>/rounds.jsonl` | [work.md](work.md#round) |
 | Event | work 自己的时间线,append-only | `works/<id>/events.jsonl` | [work.md](work.md#event) |
-| **Collections**:层 / 对象 / 分层仓库 / manager.json | 认知层。origin / issue / card 三个内置 layer + 用户层;对象 = 带后缀的目录,放哪都行 | `memory/`(分层 git) | [collections.md](collections.md) |
-| ↳ issue 层:readme.md / positions/*.md | 问题(目录名;字段 links / summary + 正文)+ 立场(一个一文件;字段 links / rank / verdict + 正文,论证一行一条) | `<path>.issue/` 目录 | [collections.md](collections.md#issue-层内置) |
-| ↳ card 层:readme.md | 维基式事实条目:字段 context / links / issue + 正文;标题是目录名;可改可删,历史在 git | `<path>.card/` 目录 | [collections.md](collections.md#card-层内置) |
-| ↳ origin 层 | 不带后缀的一切文件,原文 | 任意路径 | [collections.md](collections.md#对象带后缀的目录) |
+| **Metas**:层 / 对象 / 分层仓库 / manager.json | 认知层。origin / issue / card 三个内置 layer + 用户层;对象 = 带后缀的目录,放哪都行 | `memory/`(分层 git) | [metas.md](metas.md) |
+| ↳ issue 层:readme.md / positions/*.md | 问题(目录名;字段 links / summary + 正文)+ 立场(一个一文件;字段 links / rank / verdict + 正文,论证一行一条) | `<path>.issue/` 目录 | [metas.md](metas.md#issue-层内置) |
+| ↳ card 层:readme.md | 维基式事实条目:字段 context / links / issue + 正文;标题是目录名;可改可删,历史在 git | `<path>.card/` 目录 | [metas.md](metas.md#card-层内置) |
+| ↳ origin 层 | 不带后缀的一切文件,原文 | 任意路径 | [metas.md](metas.md#对象带后缀的目录) |
 | Server / Window / Handle / Live | 声明响应哪些协议(没人声明的去 default);建现场、交回窗 + 把手 | 不落盘(运行时对象) | [work-server.md](work-server.md) |
 
 ## ID
@@ -53,7 +53,7 @@ Card  ──(links)──▶ Card                             ← 内链
 
 ```
 ~/.memory.talk/
-├── collections/                    ← git 仓库(认知层 canonical,含全部历史)
+├── metas/                    ← git 仓库(认知层 canonical,含全部历史)
 │   ├── cards/<dir>/<slug>.md
 │   └── issues/<issue_id>.json
 └── works/<work_id>/             ← 裸文件(现场 canonical,原子写,不进 git)

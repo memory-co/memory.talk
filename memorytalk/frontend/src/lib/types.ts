@@ -24,7 +24,7 @@ export interface AuthStatus { setup_required: boolean; authenticated: boolean; u
 export interface LoginResult { token: string; user: User }
 export interface Server { name: string; protocols: string[]; description: string }
 export interface SystemInfo {
-  home: string; collections: string; workspace: string; tmux_socket: string;
+  home: string; metas: string; workspace: string; tmux_socket: string;
   ttyd_url: string | null; store: { family: string; backend: string };
 }
 export interface Layer {
@@ -39,11 +39,11 @@ export interface TreeView {
 export interface RecentItem { layer: string; path: string; title: string; files: string[]; sha: string; subject: string; author: string; date: string }
 export interface RecentPage { items: RecentItem[]; next: string | null }
 export interface TreeItem { name: string; path: string; kind: 'dir' | 'file' | 'object'; layer: string | null; object?: string | null; rel?: string | null }
-export interface CollectionObject {
+export interface MetaObject {
   layer: string; path: string; title: string; files: Record<string, string>; content: string | null;
 }
 export interface Revision { sha: string; author: string; date: string; subject: string; body: string }
-export interface SearchHit { kind: 'work' | 'collection' | 'user'; id: string; title: string; snippet: string; layer: string | null; file: string | null; line: number | null; status: string | null }
+export interface SearchHit { kind: 'work' | 'meta' | 'user'; id: string; title: string; snippet: string; layer: string | null; file: string | null; line: number | null; status: string | null }
 export interface SearchResult { query: string; hits: SearchHit[]; counts: Record<string, number> }
 export interface InboxItem { ts: string; layer: string; path: string; subject: string; by: string | null }
 export const workStatuses: WorkStatus[] = ['todo', 'doing', 'done', 'abandoned'];

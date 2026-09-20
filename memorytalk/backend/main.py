@@ -8,10 +8,10 @@ from memorytalk.backend.models.result import fail
 from memorytalk.backend.gateway import mount_frontend
 
 from memorytalk.backend.config import Config, RuntimeConfig, load_config, load_runtime_config
-from memorytalk.backend.controllers import auth, collections, search, system, users, works
+from memorytalk.backend.controllers import auth, metas, search, system, users, works
 from memorytalk.backend.models.work_server import WorkServerError
 from memorytalk.backend.services.auth import AuthError, AuthService
-from memorytalk.backend.services.collections import CollectionsError, CollectionsService
+from memorytalk.backend.services.metas import MetasError, MetasService
 from memorytalk.backend.services.search import SearchService
 from memorytalk.backend.services.work_servers import WorkServerService
 from memorytalk.backend.services.store import StoreService
@@ -23,22 +23,22 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
     config = config or load_config()
     runtime = runtime or load_runtime_config()
     app = FastAPI(title="memory.talk v5", version="5.0.0a0",
-                  description="work 树 + Collections(origin / issue / card 三层,可加用户层)+ 协议 server。")
+                  description="work 树 + Metas(origin / issue / card 三层,可加用户层)+ 协议 server。")
 
     store = StoreService(config)
-    collect_svc = CollectionsService(config, store.work_repo)
+    collect_svc = MetasService(config, store.work_repo)
     work_server_svc = WorkServerService(runtime)
     work_svc = WorkService(store, work_server_svc)
     user_svc = UserService(store.user_repo, store.work_repo, collect_svc)
     collect_svc.author_of = user_svc.author
     app.state.config, app.state.runtime = config, runtime
-    app.state.store, app.state.collections = store, collect_svc
+    app.state.store, app.state.metas = store, collect_svc
     app.state.work_servers, app.state.works = work_server_svc, work_svc
     app.state.users = user_svc
     app.state.auth = AuthService(user_svc, store.token_repo)
     app.state.search = SearchService(work_svc, collect_svc, user_svc)
 
-    for r in (system.router, auth.router, works.router, users.router, collections.router, search.router):
+    for r in (system.router, auth.router, works.router, users.router, metas.router, search.router):
         app.include_router(r)
 
     OPEN = {"/api/auth/status", "/api/auth/setup", "/api/auth/login", "/api/system/health"}
@@ -71,8 +71,8 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
     async def _auth(_: Request, exc: AuthError):
         return JSONResponse(fail(exc.code, str(exc)), status_code=exc.status)
 
-    @app.exception_handler(CollectionsError)
-    async def _collect(_: Request, exc: CollectionsError):
+    @app.exception_handler(MetasError)
+    async def _collect(_: Request, exc: MetasError):
         return JSONResponse(fail(exc.code, str(exc)), status_code=exc.status)
 
     @app.exception_handler(WorkServerError)

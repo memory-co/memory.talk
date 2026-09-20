@@ -6,7 +6,7 @@ React 18 + TypeScript + Vite + Tailwind + shadcn/ui。入口 `shell/main.tsx`:`A
 |---|---|
 | [`auth/`](auth/README.md) | 门:setup 页、登录页、决定显示哪个的 Gate |
 | [`shell/`](shell/README.md) | 壳:侧栏、面包屑、首页、工作区(列 × 会话)、会话面板、全局搜索 |
-| [`collections/`](collections/README.md) | 元认知页:文件目录 / 最近修改、一个文件一页(属性 + 正文)、按协议画表单 |
+| [`metas/`](metas/README.md) | 元认知页:文件目录 / 最近修改、一个文件一页(属性 + 正文)、按协议画表单 |
 | [`settings/`](settings/README.md) | 设置:账号、团队成员、语言、环境 |
 | [`components/`](components/README.md) | 通用件:Markdown 阅读、Milkdown 编辑器、Loading / Empty / Modal 等;`ui/` 是 shadcn 原件 |
 | [`hooks/`](hooks/README.md) | 两个小 hook:移动断点、受控弹窗焦点恢复 |

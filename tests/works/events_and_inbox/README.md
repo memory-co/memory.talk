@@ -5,7 +5,7 @@
 `works/<id>/manager.json` 改写默认(`routed_by: <work_id>`),`null` 回到父;根没有 manager。
 
 ## 不在这测什么
-- collections 变动的投递 → `collections/inbox_delivery`
+- metas 变动的投递 → `metas/inbox_delivery`
 
 ## fixture 来源
 `client`。

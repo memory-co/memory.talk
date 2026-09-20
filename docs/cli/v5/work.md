@@ -66,7 +66,7 @@ memory.talk work attach work_…2f2f https://localhost:5173/
 
 输出:会话 id、窗地址(没配 ttyd 时老实打 `窗:无(只有把手)`)、把手能力。已结束的 work → exit 1;命令不在 PATH → exit 1 `cmd_not_found`。
 
-**agent 会话的环境里自动带 `MEMORY_TALK_WORK=<work_id>` 和 `MEMORY_TALK_USER=<当前 user>`**——agent 在里面再调 `memory.talk collection …`,提交就挂在这个 user 名下、变动不投回自己。
+**agent 会话的环境里自动带 `MEMORY_TALK_WORK=<work_id>` 和 `MEMORY_TALK_USER=<当前 user>`**——agent 在里面再调 `memory.talk meta …`,提交就挂在这个 user 名下、变动不投回自己。
 
 ## work sessions / detach / capture / rounds
 
@@ -79,7 +79,7 @@ memory.talk work attach work_…2f2f https://localhost:5173/
 
 ## work inbox
 
-收件箱:manager.json 路由过来的变动(collection 对象、子 work 状态),按时间正序,每条:时间、层、路径、动作、谁、从哪路由来。
+收件箱:manager.json 路由过来的变动(meta 对象、子 work 状态),按时间正序,每条:时间、层、路径、动作、谁、从哪路由来。
 
 ## work manager
 

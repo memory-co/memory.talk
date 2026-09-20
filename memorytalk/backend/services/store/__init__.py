@@ -1,5 +1,5 @@
 """StoreService:装配存储——按 MEMORY_TALK_STORE 选 provider(fs / sqlite),按族建 work 仓储。
-collections 的分层 git 仓库由 services.collections 自己管(它的介质就是 git)。"""
+metas 的分层 git 仓库由 services.metas 自己管(它的介质就是 git)。"""
 from __future__ import annotations
 
 from memorytalk.backend.config import Config

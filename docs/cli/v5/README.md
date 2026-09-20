@@ -17,31 +17,31 @@ memory.talk
 │            servers                                    # 有哪些 work server(bash / claude / codex / kimi / http / default)及各自响应的协议
 ├── user     add | list | show | set | whoami | passwd  # 人:注册的实体,和 work 平级;admin 建账号 / 设密码
 ├── search   <query> [--limit 20]                       # 综合搜索:工作 / 元认知 / 成员
-├── collection                                          # 认知层(API 是 /api/collections)
+├── meta                                          # 认知层(API 是 /api/metas)
 │            layers | tree | recent
 │            read | write | edit | rm | log             # 对象 CRUD + 历史
 │            manager | managed                          # manager.json
 
 ```
 
-**命令组名用单数**(`work` / `collection`),像 `docker container`;它们操作的是 API 里的复数资源(`/api/works` / `/api/collections`)。`col` 是 `collection` 的别名。
+**命令组名用单数**(`work` / `meta`),像 `docker container`;它们操作的是 API 里的复数资源(`/api/works` / `/api/metas`)。`metas` 是 `meta` 的别名。
 
-分页面:[server.md](server.md) · [work.md](work.md) · [user.md](user.md) · [collection.md](collection.md) · [search.md](search.md)
+分页面:[server.md](server.md) · [work.md](work.md) · [user.md](user.md) · [meta.md](meta.md) · [search.md](search.md)
 
 ## 二、全局约定
 
 | 全局 flag | 环境变量 | 默认 | 说明 |
 |---|---|---|---|
 | `--server <url>` | `MEMORY_TALK_SERVER` | `http://127.0.0.1:8000` | API 在哪 |
-| `--user <名字>` | `MEMORY_TALK_USER` | 最近登录的 | **用谁的登录态**:`login` 过的人的 token 存在 `<home>/credentials.json`(按服务地址分开,一个地址可存几个人),这个 flag 挑其中一个。身份从 token 来:建 work 时写进 `created_by`,动 work 时记进 users,collection 的提交以它为 author。没登录 → exit 1 并提示 `memory.talk login` |
+| `--user <名字>` | `MEMORY_TALK_USER` | 最近登录的 | **用谁的登录态**:`login` 过的人的 token 存在 `<home>/credentials.json`(按服务地址分开,一个地址可存几个人),这个 flag 挑其中一个。身份从 token 来:建 work 时写进 `created_by`,动 work 时记进 users,meta 的提交以它为 author。没登录 → exit 1 并提示 `memory.talk login` |
 | `--token <串>` | `MEMORY_TALK_TOKEN` | 无 | 直接给 token,不走 credentials.json(agent 会话里用:把某个人 login 拿到的 token 放进环境) |
 | `--work <id>` | `MEMORY_TALK_WORK` | 无 | **在哪个 work 里操作**:进 `X-Memory-Talk-Work`。自己造成的变动不投给自己的收件箱。agent 会话由 work 拉起时,这个变量已经在它的环境里 |
 | `--json` | — | 关 | 结构化输出(机器 / LLM 用);默认 Markdown,TTY 下用 rich 渲染 |
 
-- **参数风格**:主对象用位置参数(`work show <id>`、`collection read <layer> <path>`),其余一律命名 flag(`--xx`)。
+- **参数风格**:主对象用位置参数(`work show <id>`、`meta read <layer> <path>`),其余一律命名 flag(`--xx`)。
 - **文本传文件 / stdin**:所有文本类 flag(`--goal` `--reason` `--content` `--put 文件=内容` 的值)支持 `@<file>`(逐字节原样读)和 `@-`(stdin,一条命令只能出现一次),给带引号、换行、`$` 的内容用。
 - **退出码**:`0` 成功;`1` 业务错误(API 4xx,stderr 打 `**error:** <message>`,`--json` 时 stdout 打错误体);`2` 用法错误;`3` 连不上 server(提示 `memory.talk server start`)。
-- **id 与路径**:work 是 `work_…`;会话是 `<work_id>-s<n>`;collection 对象是**路径**(`memory.talk/配置/该走文件还是环境变量`),直接当位置参数,不用引号也行,有空格才引。
+- **id 与路径**:work 是 `work_…`;会话是 `<work_id>-s<n>`;meta 对象是**路径**(`memory.talk/配置/该走文件还是环境变量`),直接当位置参数,不用引号也行,有空格才引。
 
 ## 三、典型一天
 
@@ -53,8 +53,8 @@ memory.talk login alice                                      # alice 登录,toke
 export MEMORY_TALK_USER=alice                                # 之后用 alice 的登录态
 W=$(memory.talk work create --goal '把配置改成环境变量' --json | jq -r .id)
 memory.talk work attach $W codex:///home/alice/memory.talk   # 在这个 work 里开一个 Codex 会话,打印窗地址
-memory.talk collection write issue memory.talk/配置/该走文件还是环境变量 --put readme.md='起服务要读几样配置……'
-memory.talk collection edit  issue memory.talk/配置/该走文件还是环境变量 --put positions/只用环境变量.md=@立场.md --subject 'position …: 只用环境变量'   # frontmatter 里 rank / verdict
-memory.talk collection write card memory.talk/配置/配置只来自环境变量 --put readme.md=@卡.md                                     # frontmatter 里 issue: <那个 issue 的 path>
+memory.talk meta write issue memory.talk/配置/该走文件还是环境变量 --put readme.md='起服务要读几样配置……'
+memory.talk meta edit  issue memory.talk/配置/该走文件还是环境变量 --put positions/只用环境变量.md=@立场.md --subject 'position …: 只用环境变量'   # frontmatter 里 rank / verdict
+memory.talk meta write card memory.talk/配置/配置只来自环境变量 --put readme.md=@卡.md                                     # frontmatter 里 issue: <那个 issue 的 path>
 memory.talk work set $W --status done
 ```

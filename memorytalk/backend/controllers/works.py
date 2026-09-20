@@ -4,11 +4,11 @@ from __future__ import annotations
 from memorytalk.backend.models.result import Result, ok
 from fastapi import APIRouter, Depends, Query, Request
 
-from memorytalk.backend.models.collections import InboxItem
+from memorytalk.backend.models.metas import InboxItem
 from memorytalk.backend.models.work_server import WorkServerInfo
 from memorytalk.backend.models.work import (Canvas, CanvasPut, Event, Round, Session, SessionCreate, SessionView, Work,
                          WorkCreate, WorkNode, WorkUpdate, WorkUsers)
-from memorytalk.backend.services.collections import CollectionsService
+from memorytalk.backend.services.metas import MetasService
 from memorytalk.backend.services.work import WorkService
 
 router = APIRouter(prefix="/api/works", tags=["works"])
@@ -18,8 +18,8 @@ def works(request: Request) -> WorkService:
     return request.app.state.works
 
 
-def collections(request: Request) -> CollectionsService:
-    return request.app.state.collections
+def metas(request: Request) -> MetasService:
+    return request.app.state.metas
 
 
 def user(request: Request) -> str | None:
@@ -62,7 +62,7 @@ def events(work_id: str, svc: WorkService = Depends(works)):
 
 
 @router.get("/{work_id}/inbox", response_model=Result[list[InboxItem]],
-            summary="收件箱:被 manager.json 路由过来的变动(Collections 的对象、子 work 的状态)")
+            summary="收件箱:被 manager.json 路由过来的变动(Metas 的对象、子 work 的状态)")
 def inbox(work_id: str, svc: WorkService = Depends(works)):
     return ok(svc.read_inbox(work_id))
 

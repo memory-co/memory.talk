@@ -4,7 +4,7 @@
     memory.talk server      start | stop | restart | status | daemon        → cli/server.py
     memory.talk work        create | list | show | set | attach | …          → cli/work.py
     memory.talk user        add | list | show | set | whoami                 → cli/user.py
-    memory.talk collection  layers | tree | recent | read | write | edit | rm | log → cli/collection.py(别名 col)
+    memory.talk meta  layers | tree | recent | read | write | edit | rm | log → cli/meta.py(别名 col)
     memory.talk search      <query>                                          → cli/search.py(综合搜索)
 
 每个子命令组一个文件,各自 register(top) 挂到总 parser 上;公共件在 _common.py。
@@ -16,7 +16,7 @@ import os
 
 from memorytalk import __version__
 
-from . import auth, collection, search, server, user, work
+from . import auth, meta, search, server, user, work
 from ._common import DEFAULT_SERVER, Api
 
 
@@ -30,7 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("-V", "--version", action="version", version=f"memory.talk {__version__}")
     top = ap.add_subparsers(dest="cmd", required=True)
     top.add_parser("version", help="版本号").set_defaults(local=lambda a: print(f"memory.talk {__version__}"))
-    for group in (server, auth, work, user, collection, search):
+    for group in (server, auth, work, user, meta, search):
         group.register(top)
     return ap
 

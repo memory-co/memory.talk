@@ -21,7 +21,7 @@
 | `GET` | `/api/works/{work_id}/canvas` | 画布:几列、每列从上到下摆哪些会话、哪些收起(视图,随时可重排) |
 | `PUT` | `/api/works/{work_id}/canvas` | 全量写画布(version 乐观锁) |
 | `GET` | `/api/works/{work_id}/events` | work 自己的时间线 |
-| `GET` | `/api/works/{work_id}/inbox` | 收件箱:被 manager.json 路由过来的变动(Collections 的对象、子 work 的状态) |
+| `GET` | `/api/works/{work_id}/inbox` | 收件箱:被 manager.json 路由过来的变动(Metas 的对象、子 work 的状态) |
 | `GET` | `/api/works/{work_id}/manager` | 这个 work 的变动打给谁:manager.json,没有则父 work |
 | `PUT` | `/api/works/{work_id}/manager` | 改写默认:这棵子树的变动打给指定 work(null = 删掉,回到父) |
 | `GET` | `/api/works/{work_id}/sessions` | 会话清单(含活没活着) |
@@ -38,24 +38,26 @@
 | `GET` | `/api/users/{name}` | 一个 user 的档案 + 建的 / 动过的 work、最近的提交 |
 | `PUT` | `/api/users/{name}` | 改档案(display_name / email):自己的,或 admin 改谁的都行 |
 | `PUT` | `/api/users/{name}/password` | 改密码:自己的要带 old_password;admin 给别人设不用。改完这个人的 token 全部作废 |
-| `GET` | `/api/collections/config` | collections.json 本体 + 它的 git 历史(层的变化史) |
-| `GET` | `/api/collections/layers` | 有哪些层(最底在前)及各自的协议;用户层来自 <home>/layers/*.yaml |
-| `GET` | `/api/collections/managed` | (暂缓,等 work 实现后启用)某个 work 管的所有对象;不传 work = 没人管的对象 |
-| `GET` | `/api/collections/manager` | (暂缓,等 work 实现后启用)这个路径归谁管(最近的 manager.json) |
-| `PUT` | `/api/collections/manager` | (暂缓,等 work 实现后启用)在这个目录(或对象)下放 manager.json,绑到一个 work |
-| `DELETE` | `/api/collections/manager` | (暂缓,等 work 实现后启用)解绑:删这个目录的 manager.json |
+| `GET` | `/api/metas/config` | metas.json 本体 + 它的 git 历史(层的变化史) |
+| `GET` | `/api/metas/layers` | 有哪些层(最底在前)及各自的协议;用户层来自 <home>/layers/*.yaml |
+| `GET` | `/api/metas/managed` | (暂缓,等 work 实现后启用)某个 work 管的所有对象;不传 work = 没人管的对象 |
+| `GET` | `/api/metas/manager` | (暂缓,等 work 实现后启用)这个路径归谁管(最近的 manager.json) |
+| `PUT` | `/api/metas/manager` | (暂缓,等 work 实现后启用)在这个目录(或对象)下放 manager.json,绑到一个 work |
+| `DELETE` | `/api/metas/manager` | (暂缓,等 work 实现后启用)解绑:删这个目录的 manager.json |
 | `GET` | `/api/search` | 综合搜索:一个 q,工作(目标)/ 元认知(git grep 全文)/ 成员(名字 / 邮箱)各出一份命中,每种最多 limit 条 |
-| `GET` | `/api/collections/recent` | 最近改过的对象:文件折回对象、每个一次、新的在前;layer= / path= 过滤,before=<sha> 翻页 |
-| `GET` | `/api/collections/tree` | 浏览目录:有什么(items;layer= 只留一层,recursive=1 拍平到底)+ 还能建什么(can_create)+ 这个名字行不行(candidate=) |
-| `GET` | `/api/collections/{layer}/{path}` | 读一个对象(rev= 读历史版本) |
-| `POST` | `/api/collections/{layer}/{path}` | 建一个对象:目录里的文件(files);origin 用 content。整批按层的协议校验,过了一个 [layer] 提交;dry_run=1 只校验 |
-| `PUT` | `/api/collections/{layer}/{path}` | 改一个对象:files 加 / 改 / 删(null)目录里的文件,没提到的不动,整批按层的协议校验;origin 整体替换;dry_run=1 只校验 |
-| `DELETE` | `/api/collections/{layer}/{path}` | 删一个对象(历史在 git) |
-| `GET` | `/api/collections/history/{layer}/{path}` | 一个对象的 git log(这一层的分支上) |
+| `GET` | `/api/metas/recent` | 最近改过的对象:文件折回对象、每个一次、新的在前;layer= / path= 过滤,before=<sha> 翻页 |
+| `GET` | `/api/metas/tree` | 浏览目录:有什么(items;layer= 只留一层,recursive=1 拍平到底)+ 还能建什么(can_create)+ 这个名字行不行(candidate=) |
+| `GET` | `/api/metas/{layer}/{path}` | 读一个对象(rev= 读历史版本) |
+| `POST` | `/api/metas/{layer}/{path}` | 建一个对象:目录里的文件(files);origin 用 content。整批按层的协议校验,过了一个 [layer] 提交;dry_run=1 只校验 |
+| `PUT` | `/api/metas/{layer}/{path}` | 改一个对象:files 加 / 改 / 删(null)目录里的文件,没提到的不动,整批按层的协议校验;origin 整体替换;dry_run=1 只校验 |
+| `DELETE` | `/api/metas/{layer}/{path}` | 删一个对象(历史在 git) |
+| `GET` | `/api/metas/history/{layer}/{path}` | 一个对象的 git log(这一层的分支上) |
 
-分页面:[system.md](system.md) · [auth.md](auth.md) · [works.md](works.md) · [users.md](users.md) · [collections.md](collections.md) · [search.md](search.md)
+分页面:[system.md](system.md) · [auth.md](auth.md) · [works.md](works.md) · [users.md](users.md) · [metas.md](metas.md) · [search.md](search.md)
 
 ## 通用约定
+
+- **改名**:2026-09-20 起认知层叫 **metas**——`/api/metas/…`、`memory.talk meta …`、`~/.memory.talk/metas/`、`metas.json`;之前的 `collections` 路径不再响应(404)。老数据第一次起服务时自动搬。
 
 - **响应信封**:所有 `/api/*` 端点的 `response_model` 都是 **`Result[T]`** = **`{"data": T, "message": "ok"}`**(OpenAPI 里能看到 `Result_User_` 这类 schema)——分页面里写的响应体是 `data` 那一半。纯文本端点(capture)的 `data` 是那段字符串;删除类端点返回 `200`,`data` 为 `null`(不再有 204)。
 - **错误体**:`{"data": null, "error": "<机器码>", "message": "<人读>"}`。
@@ -70,8 +72,8 @@
   | 422 | `invalid` | 对象不符合层的 schema(或 FastAPI 默认校验) |
   | 502 | `platform` | tmux 起不来 |
 
-- **先立 admin,再进门;身份来自 token,权限只有一档**:没有 `admin` 账号时除 `/api/auth/{status,setup}` 外一律 409 `setup_required`;有了之后每个请求 `Authorization: Bearer <token>`(`POST /api/auth/login` 换来的),否则 401。token 对应的名字就是谁在操作——建 work 时写进 `created_by`,动 work 时记进它的 users,collections 的每个 commit 以它为 **author**(档案里的邮箱,没填则 `<名字>@memory.talk`)。admin 只多三件事:建账号、给人设密码、改别人档案;其余谁都能动。整个实例给一个团队用。见 [auth.md](auth.md)。
-- **Collections 的每个写动作一个 `[层名]` 提交**,写请求可带 `reason`(进 `Reason:`)。跨层的决定是两个相邻提交 + 同一个 `Decision:` / `Discussion:` trailer。
+- **先立 admin,再进门;身份来自 token,权限只有一档**:没有 `admin` 账号时除 `/api/auth/{status,setup}` 外一律 409 `setup_required`;有了之后每个请求 `Authorization: Bearer <token>`(`POST /api/auth/login` 换来的),否则 401。token 对应的名字就是谁在操作——建 work 时写进 `created_by`,动 work 时记进它的 users,metas 的每个 commit 以它为 **author**(档案里的邮箱,没填则 `<名字>@memory.talk`)。admin 只多三件事:建账号、给人设密码、改别人档案;其余谁都能动。整个实例给一个团队用。见 [auth.md](auth.md)。
+- **Metas 的每个写动作一个 `[层名]` 提交**,写请求可带 `reason`(进 `Reason:`)。跨层的决定是两个相邻提交 + 同一个 `Decision:` / `Discussion:` trailer。
 - **时间**:ISO 8601 UTC。**无分页**。鉴权只有上面那道门,没有网关、没有 HTTPS(挂公网自己放反代)。
 
 ## ID
@@ -79,13 +81,13 @@
 | 对象 | 形态 |
 |---|---|
 | work | `work_<时间戳><4hex>`;会话 `<work_id>-s<n>` |
-| Collections 对象 | **路径**(不含后缀):`memory.talk/配置/该走文件还是环境变量` ↔ 目录 `….issue/`;origin 就是文件路径 |
+| Metas 对象 | **路径**(不含后缀):`memory.talk/配置/该走文件还是环境变量` ↔ 目录 `….issue/`;origin 就是文件路径 |
 | position / argument | issue 内顺序编号 `p<n>` / `a<n>` |
 
 ## 磁盘
 
 ```
-~/.memory.talk/collections/   分层 git 仓库(Collections):layer/origin、layer/issue、layer/card(+ 用户层)、stack;工作树跟着 stack
+~/.memory.talk/metas/   分层 git 仓库(Metas):layer/origin、layer/issue、layer/card(+ 用户层)、stack;工作树跟着 stack
 ~/.memory.talk/works/    work / user 的记录(MEMORY_TALK_STORE=fs 时):<work_id>/{work,canvas,sessions,users,manager}.json + events/inbox.jsonl + sessions/<sid>/rounds.jsonl
 ~/.memory.talk/unmanaged.jsonl   没人管的变动
 ~/.memory.talk/memory.sqlite     MEMORY_TALK_STORE=sqlite 时,上面两样都在这里(works / work_docs / work_logs 三张表)

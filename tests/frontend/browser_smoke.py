@@ -34,8 +34,8 @@ with tempfile.TemporaryDirectory(prefix='mt-web-e2e-') as tmp:
             three = post('/works', {'goal':'为新的工作准备一些上下文'})
             post('/works', {'goal':'明确文件与认知层的边界', 'parent':two['id']})
             client.patch('/api/works/' + two['id'], json={'status':'doing'}).raise_for_status()
-            post('/collections/card/memory.talk/把工作中的结论留下来', {'files': {'readme.md':'## 从一次工作到下一次开始\n\n工作会结束，但已经验证的认知可以被反复使用。\n\n- 用 **work** 组织正在做的事\n- 用 **issue** 留下问题与论证\n- 用 **card** 保存可以带走的结论\n\n> 每一次开始，都可以站在已有认知之上。', 'meta.yaml':'context: memory.talk 的认知闭环\nissue: memory.talk/如何留下可复用的认知\n'}})
-            post('/collections/issue/memory.talk/如何留下可复用的认知', {'files': {'readme.md':'当一项工作完成时，哪些内容值得被下一项工作想起？', 'positions/把结论写成独立词条.md':'结论应当带着适用语境，能够独立读懂。\n\n## 论证\n- 下一次工作无需重新阅读全部会话。', 'meta.yaml':'summary: 优先保存经过验证且能够独立理解的结论。\npositions:\n  - claim: 把结论写成独立词条\n'}})
+            post('/metas/card/memory.talk/把工作中的结论留下来', {'files': {'readme.md':'## 从一次工作到下一次开始\n\n工作会结束，但已经验证的认知可以被反复使用。\n\n- 用 **work** 组织正在做的事\n- 用 **issue** 留下问题与论证\n- 用 **card** 保存可以带走的结论\n\n> 每一次开始，都可以站在已有认知之上。', 'meta.yaml':'context: memory.talk 的认知闭环\nissue: memory.talk/如何留下可复用的认知\n'}})
+            post('/metas/issue/memory.talk/如何留下可复用的认知', {'files': {'readme.md':'当一项工作完成时，哪些内容值得被下一项工作想起？', 'positions/把结论写成独立词条.md':'结论应当带着适用语境，能够独立读懂。\n\n## 论证\n- 下一次工作无需重新阅读全部会话。', 'meta.yaml':'summary: 优先保存经过验证且能够独立理解的结论。\npositions:\n  - claim: 把结论写成独立词条\n'}})
             errors=[]
             warnings=[]
             with sync_playwright() as p:

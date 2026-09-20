@@ -14,7 +14,7 @@ import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupConte
 import { TaskTree } from './TaskTree';
 import { Home } from './Home';
 const GlobalSearch = lazy(() => import('./GlobalSearch').then(m => ({ default: m.GlobalSearch })));
-const Library = lazy(() => import('@/collections/Library').then(m => ({ default: m.Library })));
+const Library = lazy(() => import('@/metas/Library').then(m => ({ default: m.Library })));
 const Settings = lazy(() => import('@/settings/Settings').then(m => ({ default: m.Settings })));
 const Workspace = lazy(() => import('./Workspace').then(m => ({ default: m.Workspace })));
 

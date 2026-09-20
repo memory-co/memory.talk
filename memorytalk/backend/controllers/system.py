@@ -13,6 +13,6 @@ def health():
 def info(request: Request):
     cfg, rt = request.app.state.config, request.app.state.runtime
     store = request.app.state.store.provider
-    return ok({"home": str(cfg.home), "collections": str(cfg.collections_dir),
+    return ok({"home": str(cfg.home), "metas": str(cfg.metas_dir),
                "store": {"family": store.family, "backend": type(store).__name__},
                "workspace": str(rt.workspace), "tmux_socket": rt.tmux_socket, "ttyd_url": rt.ttyd_url})

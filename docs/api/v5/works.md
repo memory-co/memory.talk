@@ -91,7 +91,7 @@ work 树(森林)。
 
 ## GET /api/works/{work_id}/inbox
 
-收件箱:被 `manager.json` 路由过来的变动——Collections 里这个 work 管的那一片的每次提交,以及子 work(或 `manager.json` 指过来的 work)的创建 / 状态变化。append-only。
+收件箱:被 `manager.json` 路由过来的变动——Metas 里这个 work 管的那一片的每次提交,以及子 work(或 `manager.json` 指过来的 work)的创建 / 状态变化。append-only。
 
 ```json
 [{"ts": "…", "layer": "issue", "path": "memory.talk/配置/该走文件还是环境变量", "subject": "position …#p2: 只用环境变量",

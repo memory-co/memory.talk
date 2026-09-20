@@ -31,7 +31,7 @@ class UserView(User):
     """档案 + 派生的活动统计(现算,不落盘)。"""
     works_created: int = 0
     works_touched: int = 0
-    commits: int = Field(0, description="collections 里以它为 author 的提交数")
+    commits: int = Field(0, description="metas 里以它为 author 的提交数")
     active_works: list[str] = Field(default_factory=list, description="最近 ACTIVE_WINDOW 内动过的 work")
     last_seen: str = ""
 

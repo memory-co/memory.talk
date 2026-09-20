@@ -85,13 +85,13 @@ def H(client):
 # ---- 各场景共用的小工具 ----
 
 def git_log(client, ref="stack", n=50) -> str:
-    """collections 仓库的提交历史;stack 用 first-parent(每个 merge 节点 = 一次层提交)。"""
-    root = client.app.state.collections.repo.root
+    """metas 仓库的提交历史;stack 用 first-parent(每个 merge 节点 = 一次层提交)。"""
+    root = client.app.state.metas.repo.root
     args = ["git", "-c", "core.quotepath=false", "log", f"-{n}", "--format=%s%n%b"] + (["--first-parent"] if ref == "stack" else []) + [ref]
     return subprocess.run(args, cwd=root, capture_output=True, text=True).stdout
 
 
 def git_authors(client, n=5) -> list[str]:
-    root = client.app.state.collections.repo.root
+    root = client.app.state.metas.repo.root
     return subprocess.run(["git", "log", f"-{n}", "--first-parent", "--format=%an <%ae>", "stack"], cwd=root,
                           capture_output=True, text=True).stdout.split()

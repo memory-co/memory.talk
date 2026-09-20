@@ -1,5 +1,5 @@
 """UserService:user 是注册的顶层对象——有自己的存储(fs / db 仓储),和 work 平级;不做权限(docs/designs/v5/user.md)。
-档案是存的;活动统计(建了几个 work、动过几个、提交数)是从 work 与 collections 现算的派生信息。"""
+档案是存的;活动统计(建了几个 work、动过几个、提交数)是从 work 与 metas 现算的派生信息。"""
 from __future__ import annotations
 
 from memorytalk.backend.models.search import SearchHit
@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING
 
 from memorytalk.backend.models.users import User, UserCreate, UserProfile, UserUpdate, UserView
 
-if TYPE_CHECKING:   # 只做类型:避免 store → users → collections → work → store 的循环导入
-    from memorytalk.backend.services.collections import CollectionsService
+if TYPE_CHECKING:   # 只做类型:避免 store → users → metas → work → store 的循环导入
+    from memorytalk.backend.services.metas import MetasService
     from memorytalk.backend.services.work.repo import WorkRepo
 
 ACTIVE_WINDOW = 120  # 秒(与 services.work.users 同一口径)
@@ -37,10 +37,10 @@ class UserExists(ValueError):
 
 
 class UserService:
-    def __init__(self, repo: UserRepo, work_repo: "WorkRepo", collections: "CollectionsService") -> None:
+    def __init__(self, repo: UserRepo, work_repo: "WorkRepo", metas: "MetasService") -> None:
         self.repo = repo
         self.works = work_repo
-        self.collections = collections
+        self.metas = metas
 
     # ---- 注册 / 档案(存的)----
 
@@ -102,7 +102,7 @@ class UserService:
                 if now - _epoch(m["last_seen"]) <= ACTIVE_WINDOW:
                     b["active_works"].append(w["id"])
         out = subprocess.run(["git", "log", "--first-parent", "--format=%an%x1f%aI", "refs/heads/stack"],
-                             cwd=self.collections.repo.root, capture_output=True, text=True).stdout
+                             cwd=self.metas.repo.root, capture_output=True, text=True).stdout
         for line in out.splitlines():
             name, date = (line.split("\x1f") + [""])[:2]
             if name in agg or self.repo.get(name):
@@ -129,7 +129,7 @@ class UserService:
         touched = [w["id"] for w in self.works.list_works()
                    if any(m["user"] == name for m in (self.works.get_doc(w["id"], "users") or []))]
         out = subprocess.run(["git", "log", "--first-parent", f"--author=^{name} <", "--format=%H%x1f%aI%x1f%s", "-20", "refs/heads/stack"],
-                             cwd=self.collections.repo.root, capture_output=True, text=True).stdout
+                             cwd=self.metas.repo.root, capture_output=True, text=True).stdout
         commits = [{"sha": a, "date": b, "subject": c} for a, b, c in (l.split("\x1f") for l in out.splitlines() if l)]
         return UserProfile(**u.model_dump(), **act, works_created_ids=created, works_touched_ids=touched, recent_commits=commits)
 

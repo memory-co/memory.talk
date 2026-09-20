@@ -1,7 +1,7 @@
 """收件箱:变动打过来的地方(manager.md §4)。append-only。"""
 from __future__ import annotations
 
-from memorytalk.backend.models.collections import InboxItem
+from memorytalk.backend.models.metas import InboxItem
 
 from .repo import WorkRepo
 

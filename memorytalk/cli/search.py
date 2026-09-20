@@ -10,7 +10,7 @@ def c_search(api, a):
     for h in r["hits"]:
         if h["kind"] == "work":
             lines.append(f"[work] {h['id']}  {h['title']}  ({h['status']})")
-        elif h["kind"] == "collection":
+        elif h["kind"] == "meta":
             lines.append(f"[{h['layer']}] {h['id']}:{h['line']}  {h['snippet'].strip()}")
         else:
             lines.append(f"[user] {h['id']}  {h['title']}" + (f"  {h['snippet']}" if h['snippet'] else ""))

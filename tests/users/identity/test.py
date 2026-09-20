@@ -3,7 +3,7 @@
 
 def test_unknown_token_is_401(client, H):
     assert client.post("/api/works", json={"goal": "x"}, headers=H("nobody")).status_code == 401
-    assert client.post("/api/collections/card/x/y", json={"files": {"readme.md": "y"}}, headers=H("nobody")).json()["error"] == "unauthorized"
+    assert client.post("/api/metas/card/x/y", json={"files": {"readme.md": "y"}}, headers=H("nobody")).json()["error"] == "unauthorized"
 
 
 def test_no_token_is_401(client):

@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 from memorytalk.backend.models.search import SearchHit, SearchResult
-from memorytalk.backend.services.collections import CollectionsService
+from memorytalk.backend.services.metas import MetasService
 from memorytalk.backend.services.users import UserService
 from memorytalk.backend.services.work import WorkService
 
 
 class SearchService:
-    def __init__(self, works: WorkService, collections: CollectionsService, users: UserService) -> None:
-        self.sources = [works, collections, users]        # 顺序 = 结果里的分组顺序
+    def __init__(self, works: WorkService, metas: MetasService, users: UserService) -> None:
+        self.sources = [works, metas, users]        # 顺序 = 结果里的分组顺序
 
     def search(self, q: str, limit: int = 20) -> SearchResult:
         q = q.strip()

@@ -4,9 +4,9 @@
 
 ```
 ~/.memory.talk/                       ← MEMORY_TALK_HOME
-├── collections/                      ← 分层 git 仓库(认知层),见 collections.md
+├── metas/                      ← 分层 git 仓库(认知层),见 metas.md。2026-09-20 之前叫 collections/(锚定文件叫 collections.json):第一次起新版服务时目录搬过来、锚定文件在最底层提一次改名,别的不动
 │   ├── .git/                         ←   refs/heads/layer/{origin,issue,card,…}、refs/heads/stack;HEAD → stack
-│   ├── collections.json              ←   锚定:整个 collections 的配置 + layers[](最底在前,只有名字和 builtin);始祖提交只有它;git 历史 = 层的变化史
+│   ├── metas.json              ←   锚定:整个 metas 的配置 + layers[](最底在前,只有名字和 builtin);始祖提交只有它;git 历史 = 层的变化史
 │   ├── manager.json                  ←   根:管一切(可选)
 │   └── <按主题组织的目录树>/          ←   原文、.issue/、.card/、.<用户层>/ 并排
 │       ├── manager.json              ←   这一片归谁管(可选,任何目录)
@@ -31,7 +31,7 @@
 └── unmanaged.jsonl                   ← 没人管的变动
 ```
 
-## collections/(分层 git)
+## metas/(分层 git)
 
 - **拓扑**:每层一条权威分支 `layer/<名>`(线性,只放这一层的文件);`stack` 是合并视图,每次层提交后一个 merge 节点。全部分支从始祖提交出发。工作树跟着 stack,只为了人能 `ls` / `cat`,服务从不读它。
 - **一个动作一个 commit**,subject 以 `[层名]` 开头,动词在后(默认 `write` / `edit` / `delete` / `manage`;调用方可自己给主题,如 `position …` / `argue …` / `rank …`),body 带 `Reason:` / `Work:`(哪个 work);谁 = commit author。
