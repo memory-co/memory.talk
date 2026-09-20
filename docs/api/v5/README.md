@@ -30,7 +30,6 @@
 | `DELETE` | `/api/works/{work_id}/worklets/{worklet_id}` | 关闭即回收:销毁现场 + 删登记 |
 | `POST` | `/api/works/{work_id}/users/touch` | 我在操作这个 work(心跳;身份来自登录态) |
 | `POST` | `/api/works/{work_id}/worklets/{worklet_id}/attach` | 重入:幂等取回同一个现场 |
-| `GET` | `/api/works/{work_id}/worklets/{worklet_id}/capture` | 观测:抓终端屏幕(把手 capture) |
 | `GET` | `/api/works/{work_id}/worklets/{worklet_id}/rounds` | 痕迹:agent 工作单元的 round(先从把手同步新 round,再读 rounds.jsonl) |
 | `GET` | `/api/users` | 所有注册的 user,带活动统计,按最近活动倒序 |
 | `POST` | `/api/users` | 建一个账号(admin;name 唯一;可带初始密码) |
@@ -59,7 +58,7 @@
 
 - **改名**:2026-09-20 起认知层叫 **metas**(`/api/metas/…`、`memory.talk meta …`、`~/.memory.talk/metas/`、`metas.json`),work 里的现场叫 **worklet**(`/api/works/{id}/worklets/…`,id `<work_id>-w<n>`)。之前的 collections / sessions 路径和数据不再兼容,老实例清掉 `~/.memory.talk` 重建。
 
-- **响应信封**:所有 `/api/*` 端点的 `response_model` 都是 **`Result[T]`** = **`{"data": T, "message": "ok"}`**(OpenAPI 里能看到 `Result_User_` 这类 schema)——分页面里写的响应体是 `data` 那一半。纯文本端点(capture)的 `data` 是那段字符串;删除类端点返回 `200`,`data` 为 `null`(不再有 204)。
+- **响应信封**:所有 `/api/*` 端点的 `response_model` 都是 **`Result[T]`** = **`{"data": T, "message": "ok"}`**(OpenAPI 里能看到 `Result_User_` 这类 schema)——分页面里写的响应体是 `data` 那一半;删除类端点返回 `200`,`data` 为 `null`(不再有 204)。
 - **错误体**:`{"data": null, "error": "<机器码>", "message": "<人读>"}`。
 
   | 状态 | `error` | 何时 |

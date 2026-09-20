@@ -12,7 +12,7 @@ memory.talk
 ├── server   start | stop | restart | status          # 本地 API 服务(后台守护)
 ├── setup | login [<name>] | logout                   # 门:首次建 admin;密码换 token 存本地;退出
 ├── work     create | list | show | set               # work 树
-│            attach | worklets | detach | capture | rounds   # 工作单元(现场)
+│            attach | worklets | detach | rounds   # 工作单元(现场)
 │            inbox | manager | users | touch           # 收件箱 / manager / user
 │            servers                                    # 有哪些 work server(bash / claude / codex / kimi / http / default)及各自响应的协议
 ├── user     add | list | show | set | whoami | passwd  # 人:注册的实体,和 work 平级;admin 建账号 / 设密码

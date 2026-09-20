@@ -26,13 +26,13 @@ work_servers/  每个协议一个 server,把现场建出来              → wor
 
 `main.py` 的 `create_app(config, runtime)`:
 
-- `config.py`:`Config`(`MEMORY_TALK_HOME`、git author 默认名)和 `RuntimeConfig`(workspace、tmux socket、ttyd 地址、各平台会话记录根)。全部来自环境变量,没有配置文件。
+- `config.py`:`Config`(`MEMORY_TALK_HOME`、git author 默认名)和 `RuntimeConfig`(workspace、tmuxd 的 socket / 端口 / bind / token / 对外 host、各平台会话记录根)。全部来自环境变量,没有配置文件。
 - `StoreService` 按 `MEMORY_TALK_STORE` 选 provider、建仓储;`MetasService` 自己开 git 仓库;`WorkServerService` 装载 `work_servers/`;`WorkService`、`UserService`、`AuthService`、`SearchService` 依次注入。全部挂在 `app.state`,测试直接 `create_app()` 起一个。
 
 ## 边界
 
 - 存储两半:work / user / token 的记录走 provider(fs 或 sqlite,测试两种都跑);metas 是一个 git 仓库,服务进程是唯一写者。
 - 现场(tmux 会话)不由这里持有状态:活没活着每次问 server。
-- 未做:ttyd / 反代托管、逐 round 标注、二进制 blob 外置、给人手工 `git commit` 用的 hook。
+- 未做:ttyd 反代托管(挂公网时窗要么 0.0.0.0 + token,要么自己反代)、逐 round 标注、二进制 blob 外置、给人手工 `git commit` 用的 hook。
 
 端点清单 [docs/api/v5](../../docs/api/v5/README.md);设计 [docs/designs/v5](../../docs/designs/v5/README.md);测试在仓库根 `pytest`。

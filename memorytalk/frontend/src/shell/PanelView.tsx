@@ -1,16 +1,13 @@
 import { useDialogFocus } from '@/hooks/use-dialog-focus';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Check, Copy, ExternalLink, FileText, LoaderCircle, Play, RefreshCw, Terminal, Trash2 } from 'lucide-react';
+import { Check, Copy, ExternalLink, FileText, LoaderCircle, Play, Terminal, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { queryClient } from '@/lib/query';
-import { useSystem } from '@/lib/queries';
-import { navigate } from '@/lib/router';
 import { usePreferences } from '@/lib/store';
 import { localeTag, useT } from '@/lib/i18n';
 import type { Round, Worklet, Work } from '@/lib/types';
@@ -23,7 +20,6 @@ export function PanelView({ work, worklet }: { work: Work; worklet: Worklet }) {
   const [mode, setMode] = useState<'terminal' | 'rounds'>('terminal');
   const [confirm, setConfirm] = useState(false);
   const [copied, setCopied] = useState(false);
-  const system = useSystem();
   const base = `/works/${encodeURIComponent(work.id)}/worklets/${encodeURIComponent(worklet.id)}`;
   const ended = ['done', 'abandoned'].includes(work.status);
   const web = ['http', 'https'].includes(worklet.scheme);
@@ -33,17 +29,12 @@ export function PanelView({ work, worklet }: { work: Work; worklet: Worklet }) {
     onSuccess: data => { queryClient.setQueryData(['live', work.id, worklet.id], data); void queryClient.invalidateQueries({ queryKey: ['worklets', work.id] }); },
     onError: (error: Error) => toast.error(error.message),
   });
-  const ttyd = system.data?.ttyd_url;
-  const terminalUrl = live.data?.window?.embed || worklet.window?.embed || (ttyd ? `${ttyd.replace(/\/$/, '')}/?arg=${encodeURIComponent(worklet.id)}` : null);
-  const url = safeWindowUrl(web ? worklet.uri : terminalUrl);
-  const capture = useQuery({ queryKey: ['capture', work.id, worklet.id], queryFn: ({ signal }) => api<string>(`${base}/capture`, { signal }),
-    enabled: !web && !ended && worklet.alive && mode === 'terminal' && !url, refetchInterval: 4_000,
-  });
+  const url = safeWindowUrl(web ? worklet.uri : live.data?.window?.embed || worklet.window?.embed || null);   // 窗:tmuxd 自带的 ttyd 地址
   const rounds = useQuery({ queryKey: ['rounds', work.id, worklet.id], queryFn: ({ signal }) => api<Round[]>(`${base}/rounds`, { signal }),
     enabled: agent && (mode === 'rounds' || ended), refetchInterval: ended ? false : 4_000,
   });
   const remove = useMutation({ mutationFn: () => api(`${base}`, { method: 'DELETE' }), onSuccess: () => {
-    for (const key of ['live', 'capture', 'rounds']) queryClient.removeQueries({ queryKey: [key, work.id, worklet.id] });
+    for (const key of ['live', 'rounds']) queryClient.removeQueries({ queryKey: [key, work.id, worklet.id] });
     void queryClient.invalidateQueries({ queryKey: ['worklets', work.id] }); setConfirm(false); toast.success(t('worklet.closed'));
   }, onError: (error: Error) => toast.error(error.message) });
   const copy = async () => {
@@ -75,11 +66,7 @@ export function PanelView({ work, worklet }: { work: Work; worklet: Worklet }) {
       : ended ? <div className="flex flex-1 p-4"><Empty icon={<Check className="size-5" />} title={t('worklet.endedTitle')}><p>{t('worklet.endedText')}</p></Empty></div>
       : !worklet.alive && !web ? <div className="flex flex-1 p-4"><Empty icon={<Terminal className="size-5" />} title={t('worklet.notRunning')}><p>{t('worklet.reconnectText')}</p><Button disabled={connect.isPending} onClick={() => connect.mutate()}>{connect.isPending ? <LoaderCircle className="animate-spin" /> : <Play />}{t('worklet.reconnect')}</Button></Empty></div>
       : url ? <div className="flex min-h-0 flex-1 flex-col">{web && <p className="border-b bg-muted/40 px-4 py-1.5 text-xs text-muted-foreground">{t('worklet.embedNote')}</p>}<iframe className="min-h-0 flex-1 border-0 bg-background" title={t('worklet.iframeTitle', { scheme: worklet.scheme })} src={url} referrerPolicy="no-referrer" allow="clipboard-read; clipboard-write" /></div>
-      : <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex items-center gap-2 border-b px-4 py-1.5 text-xs text-muted-foreground"><span className="size-1.5 rounded-full bg-emerald-500" />{t('worklet.snapshot')}<Button variant="ghost" size="icon" className="ml-auto size-7" aria-label={t('worklet.refreshSnapshot')} onClick={() => { void capture.refetch(); }}><RefreshCw className="size-3.5" /></Button></div>
-        {capture.isPending ? <Loading /> : capture.isError ? <div className="p-4"><ErrorState error={capture.error} retry={() => { void capture.refetch(); }} /></div> : <pre className="terminal-output">{capture.data || t('worklet.waiting')}</pre>}
-        <Alert className="m-4 mt-3 flex flex-wrap items-center gap-3 [&>svg]:static [&>svg~*]:pl-0"><Terminal className="size-4" /><div className="min-w-0 flex-1"><AlertTitle className="mb-0.5">{t('worklet.ttydTitle')}</AlertTitle><AlertDescription>{t('worklet.ttydText')}</AlertDescription></div><Button variant="outline" size="sm" onClick={() => navigate({ page: 'settings' })}>{t('worklet.ttydHow')}</Button></Alert>
-      </div>}
+      : <div className="flex flex-1 p-4"><Empty icon={<Terminal className="size-5" />} title={t('worklet.noWindow')}><p>{t('worklet.noWindowText')}</p></Empty></div>}
     </TabsContent>
     <AlertDialog open={confirm} onOpenChange={value => { if (!remove.isPending) setConfirm(value); }}><AlertDialogContent {...focus}>
       <AlertDialogHeader><AlertDialogTitle>{t('worklet.confirmTitle')}</AlertDialogTitle><AlertDialogDescription>{t('worklet.confirmText')}</AlertDialogDescription></AlertDialogHeader>

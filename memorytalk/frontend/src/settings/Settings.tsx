@@ -6,10 +6,9 @@ import { Label } from '@/components/ui/label';
 import { DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useEffect, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { CircleHelp, KeyRound, LoaderCircle, LogOut, Plus } from 'lucide-react';
+import { KeyRound, LoaderCircle, LogOut, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { queryClient } from '@/lib/query';
@@ -64,17 +63,9 @@ export function Settings() {
       <CardContent className="p-0 pb-2">{system.isPending ? <Loading /> : system.isError ? <div className="px-6"><ErrorState error={system.error} retry={() => { void system.refetch(); }} /></div> : <Table><TableBody>
         {[[t('settings.serviceStatus'), <span key="s" className="inline-flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-emerald-500" />{t('settings.connected')}</span>],
           [t('settings.workspace'), system.data.workspace], [t('settings.home'), system.data.home], [t('settings.store'), system.data.store.backend],
-          [t('settings.ttyd'), system.data.ttyd_url || t('settings.notConfigured')]].map(([label, value], i) =>
+          [t('settings.terminal'), `${system.data.tmuxd.url_host || system.data.tmuxd.bind}:${system.data.tmuxd.port}`], [t('settings.tmuxSocket'), system.data.tmux_socket]].map(([label, value], i) =>
           <TableRow key={i}><TableCell className="w-40 pl-6 text-muted-foreground">{label}</TableCell><TableCell className="break-all pr-6 font-mono text-xs">{value}</TableCell></TableRow>)}
       </TableBody></Table>}</CardContent>
-    </Card>
-    <Card>
-      <CardHeader><CardTitle className="text-base">{t('settings.ttyd')}</CardTitle><CardDescription>{t('settings.ttydText')}</CardDescription></CardHeader>
-      <CardContent><Alert><CircleHelp className="size-4" /><AlertTitle>{t('settings.ttydTitle')}</AlertTitle><AlertDescription className="space-y-2">
-        <p>{t('settings.ttydHow')}</p>
-        <pre className="overflow-auto rounded-md bg-muted p-2 font-mono text-xs">MEMORY_TALK_TTYD_URL={t('settings.ttydExample')}</pre>
-        <p>{t('settings.ttydArg')} <code className="rounded bg-muted px-1 font-mono text-xs">?arg=&lt;worklet_id&gt;</code>{t('settings.ttydSocket')}<code className="rounded bg-muted px-1 font-mono text-xs">{system.data?.tmux_socket || 'memorytalk'}</code>{t('settings.ttydRestart')}</p>
-      </AlertDescription></Alert></CardContent>
     </Card>
     <RegisterUser open={register} onClose={() => setRegister(false)} />
     <Modal open={!!passwordFor} onClose={() => setPasswordFor(null)} title={t('auth.setPasswordFor', { name: passwordFor || '' })} description={t('auth.setPasswordText')}>

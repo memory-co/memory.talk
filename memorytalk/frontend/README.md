@@ -48,23 +48,8 @@ npm run build
 - 一个文件长什么样由后端 `GET /api/metas/layers` 里的协议决定：按 `files[].pattern` 找到这个文件的种类，`format.fields` 画属性表单，正文按 `format.body` 用 Markdown 编辑器或纯文本。新建时用 `GET /api/metas/tree` 的 `can_create` 决定「这里能建什么」（普通目录：某层的对象或 origin 文件；对象目录里：这一层的某种文件），只写一个文件（新对象 `POST` 主文件；对象里的文件 `PUT {files: {rel: …}}`），输入时用 `?dry_run=1` 预校验。
 - 前端不认识具体哪一层，也不做校验；校验由后端按协议负责。
 - 会话记录和终端快照按需轮询，切换页面后停止相应轮询。当前没有原生 agent 消息发送或流式推送接口，因此对话记录为阅读视图，交互在终端内完成。
-- 配置 `MEMORY_TALK_TTYD_URL` 后可以嵌入浏览器终端；地址需对浏览器可访问，并支持 `?arg=<worklet_id>` 来连接同一 tmux socket。未配置时展示真实的终端快照与接入提示。
-- 网页直接使用工作单元 URL，提供独立窗口入口；外部站点可能限制 iframe 嵌入。当前没有本地服务反向代理，浏览器必须能访问目标地址。
-
-本机接入浏览器终端的示例（需要已安装 `tmux` 和 `ttyd`）：在一个终端运行以下命令，让 URL 参数作为 tmux 的目标工作单元传入。
-
-```bash
-ttyd -W -a -i 127.0.0.1 -p 7681 -- tmux -L memorytalk attach-worklet -t
-```
-
-在另一个终端设置地址并启动后端；若后端已运行，先停止旧进程再启动，使环境变量生效。
-
-```bash
-export MEMORY_TALK_TTYD_URL=http://127.0.0.1:7681
-memory.talk server start
-```
-
-这里的 `memorytalk` 是默认 tmux socket 名称；自定义了 `MEMORY_TALK_TMUX_SOCKET` 时，两边应使用同一名称。`--` 用于分隔 ttyd 选项与 tmux 命令参数。
+- 终端窗口来自后端的 tmuxd（tmux + 自带的 ttyd）：每个终端类工作单元返回一个 `?arg=<worklet_id>` 的 ttyd 地址，页面直接 iframe 嵌入；agent 类另有对话记录视图。挂到公网时 ttyd 要绑 `0.0.0.0` 并带 token（浏览器里是 basic auth，跨域 iframe 会被拦，用「新窗口打开」）或由后端反代。
+- 网页工作单元直接使用 URL，提供独立窗口入口；外部站点可能限制 iframe 嵌入。
 
 ## 代码结构
 

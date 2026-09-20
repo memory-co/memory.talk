@@ -19,7 +19,7 @@ pip install memorytalk
 memory.talk server start          # 本地 API:http://127.0.0.1:8000/docs
 ```
 
-需要 `git` 和 `tmux`(终端 / agent 现场跑在 tmux 里);要在浏览器里看终端再装 `ttyd`,并设 `MEMORY_TALK_TTYD_URL`。
+需要 `git` 和 `tmux`(终端 / agent 现场由 [tmuxd](https://github.com/memory-co/tmuxd) 建在 tmux 里;浏览器里的终端窗口是它自带的 ttyd,Linux 上 wheel 里带,不用另装)。
 
 ## 用起来
 

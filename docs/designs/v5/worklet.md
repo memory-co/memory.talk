@@ -82,7 +82,7 @@ agent 类 worklet(claude / codex / kimi)的把手多一项 `rounds`:按 cwd + �
 
 - **issue 的出处和论证的证据都指向这里**:`origin = {work_id, rounds: […]}`,rounds 是 `rounds.jsonl` 里的下标。逐 round 标注、`#问题` 建 issue,全在这份文件上做。
 - **只追加**。round 是过程,不是决定;不进 git,也从不改既有行。
-- **bash / http 类 worklet 没有 rounds**。裸终端的痕迹只有一块屏幕(`capture`),网页什么都不留——它们对 work 的意义是「做这件事时打开过什么」,记在登记里就够了。要不要给终端留命令历史、给网页留访问记录,是 [work.md §8](work.md) 留的那条待定。
+- **bash / http 类 worklet 没有 rounds**。裸终端没有痕迹(读终端归人:打开那扇窗),网页什么都不留——它们对 work 的意义是「做这件事时打开过什么」,记在登记里就够了。要不要给终端留命令历史、给网页留访问记录,是 [work.md §8](work.md) 留的那条待定。
 
 ---
 

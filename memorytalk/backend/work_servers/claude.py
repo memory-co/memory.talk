@@ -12,4 +12,4 @@ class ClaudeServer(AgentBase):
 
 
 def make(ctx):
-    return ClaudeServer(ctx.tmux, ctx.workspace, ctx.ttyd_url, ClaudeCodeAdapter(ctx.rt.claude_projects))
+    return ClaudeServer(ctx.tmuxd, ctx.workspace, ClaudeCodeAdapter(ctx.rt.claude_projects))

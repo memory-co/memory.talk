@@ -4,7 +4,7 @@ work 树、画布、工作单元(现场)、谁动过、round、事件、收件�
 
 | 文件 | 重点 |
 |---|---|
-| `__init__.py` | `WorkService(store, work_servers)`:树 `create` / `get` / `forest` / `update`(done 要求子 work 全完;结束后 `_freeze` 冻结工作单元)/ `search`;画布 `get_canvas` / `put_canvas`;工作单元 `attach(work_id, uri)`(登记 → 找 server 建现场 → 建不起来就撤登记 → 记 cwd → 进画布第一列)/ `reattach` / `list_worklets`(带 alive)/ `detach`(销毁现场 + 删登记 + 出画布)/ `capture` / `rounds`(先从把手同步新 round);`touch` / `list_users`;`read_inbox` / `manager_of` / `set_manager` / `_deliver`;`history` |
+| `__init__.py` | `WorkService(store, work_servers)`:树 `create` / `get` / `forest` / `update`(done 要求子 work 全完;结束后 `_freeze` 冻结工作单元)/ `search`;画布 `get_canvas` / `put_canvas`;工作单元 `attach(work_id, uri)`(登记 → 找 server 建现场 → 建不起来就撤登记 → 记 cwd → 进画布第一列)/ `reattach` / `list_worklets`(带 alive)/ `detach`(销毁现场 + 删登记 + 出画布)/ `rounds`(先从把手同步新 round);`touch` / `list_users`;`read_inbox` / `manager_of` / `set_manager` / `_deliver`;`history` |
 | `tree.py` | `WorkTree`:节点的 CRUD 和状态机(`_transition`),`forest()` 读时拼 `WorkNode`;`WorkNotFound` / `WorkConflict` |
 | `canvas.py` | `CanvasStore`:`get` / `put`(version 乐观锁;列 id、工作单元不能重复)/ `place(worklet)`(进第一列末尾,没有列就建 `c1`)/ `remove(worklet)` |
 | `worklets.py` | `WorkletRegistry`:工作单元登记的唯一权威,`add`(id = `<work_id>-w<n>`)/ `get` / `list` / `replace` / `touch` / `remove`;`WorkletNotFound` |

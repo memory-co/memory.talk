@@ -40,7 +40,7 @@ def cli(tmp_path):
         yield run
     finally:
         run("server", "stop", check=False)
-        subprocess.run(["tmux", "-L", env["MEMORY_TALK_TMUX_SOCKET"], "kill-server"], capture_output=True)
+        subprocess.run(["tmux", "-L", f"tmuxd-{env['MEMORY_TALK_TMUX_SOCKET']}", "kill-server"], capture_output=True)
 
 
 def test_cli_end_to_end(cli):
@@ -70,7 +70,7 @@ def test_cli_end_to_end(cli):
     assert "子事" in cli("work", "show", w["id"]).stdout or True
     assert cli("work", "set", w["id"], "--status", "done", check=False).returncode == 1        # 子没完
     s = json.loads(cli("--json", "work", "attach", w["id"], "bash://", user="alice").stdout)
-    assert s["alive"] and "只有把手" in cli("work", "attach", w["id"], "bash://").stdout
+    assert s["alive"] and "?arg=" in cli("work", "attach", w["id"], "bash://").stdout            # 窗:tmuxd 自带的 ttyd
     assert s["id"] in cli("work", "worklets", w["id"]).stdout
     cli("work", "detach", w["id"], s["id"])
     assert "在动 alice" in cli("work", "show", w["id"]).stdout

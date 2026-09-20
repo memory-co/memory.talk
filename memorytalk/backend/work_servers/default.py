@@ -16,4 +16,4 @@ class DefaultServer(TerminalBase):
 
 
 def make(ctx):
-    return DefaultServer(ctx.tmux, ctx.workspace, ctx.ttyd_url)
+    return DefaultServer(ctx.tmuxd, ctx.workspace)

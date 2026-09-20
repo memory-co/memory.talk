@@ -13,8 +13,8 @@ def test_external_url_is_embedded_directly(client):
     assert m["window"]["embed"] == "https://example.com/x" and m["window"]["url"] == "https://example.com/x"
 
 
-def test_no_handle_means_capture_is_409(client):
+def test_no_handle_means_no_rounds(client):
     w = client.post("/api/works", json={"goal": "看文档"}).json()
     m = client.post(f"/api/works/{w['id']}/worklets", json={"uri": "https://example.com/"}).json()
     assert m["handle"] == {"kind": "none", "capabilities": []} and m["alive"]
-    assert client.get(f"/api/works/{w['id']}/worklets/{m['id']}/capture").status_code == 409
+    assert client.get(f"/api/works/{w['id']}/worklets/{m['id']}/rounds").json() == []          # 没把手就没有痕迹

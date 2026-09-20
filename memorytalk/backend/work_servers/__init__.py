@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from memorytalk.backend.config import RuntimeConfig
-from memorytalk.backend.services.work_servers.terminal import Tmux
+from tmuxd import Tmuxd
 
 DEFAULT = "default"
 
@@ -19,13 +19,12 @@ DEFAULT = "default"
 @dataclass(frozen=True)
 class Context:
     rt: RuntimeConfig
-    tmux: Tmux
+    tmuxd: Tmuxd               # 终端类 server 的实现面:一个进程一份(自己的 socket / ttyd / state)
     workspace: Path
-    ttyd_url: str | None
 
 
-def load(rt: RuntimeConfig) -> list[object]:
-    ctx = Context(rt=rt, tmux=Tmux(rt.tmux_socket), workspace=rt.workspace, ttyd_url=rt.ttyd_url)
+def load(rt: RuntimeConfig, tmuxd: Tmuxd) -> list[object]:
+    ctx = Context(rt=rt, tmuxd=tmuxd, workspace=rt.workspace)
     servers = []
     for mod in pkgutil.iter_modules(__path__):
         if mod.name.startswith("_"):

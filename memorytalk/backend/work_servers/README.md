@@ -11,4 +11,4 @@
 | `http.py` | `http://` `https://` | 浏览器块:窗 = URL 本身 | `NoHandle`(把手为空,不撒谎) |
 | `default.py` | 其余任何协议 | 协议名当命令名(`vim://`、`htop://`)到某目录在 tmux 里跑 | 终端把手 |
 
-`__init__.py`:`Context(rt, tmux, workspace, ttyd_url)` 是每个 server 拿到的运行环境;`load(rt)` 用 `pkgutil` 扫这个目录,对每个模块调 `make(ctx)`,default 排最后(先查显式声明再兜底)。加一个 server = 加一个文件、写一个 `make(ctx)`。
+`__init__.py`:`Context(rt, tmuxd, workspace)` 是每个 server 拿到的运行环境(tmuxd 一个进程一份);`load(rt, tmuxd)` 用 `pkgutil` 扫这个目录,对每个模块调 `make(ctx)`,default 排最后(先查显式声明再兜底)。加一个 server = 加一个文件、写一个 `make(ctx)`。

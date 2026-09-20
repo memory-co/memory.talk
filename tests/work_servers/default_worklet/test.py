@@ -6,8 +6,8 @@ pytestmark = needs_tmux
 
 def test_unknown_scheme_runs_as_a_command(client, home):
     w = client.post("/api/works", json={"goal": "x"}).json()
-    d = client.post(f"/api/works/{w['id']}/worklets", json={"uri": f"sleep://{home / 'ws'}"})
-    assert d.status_code == 201 and d.json()["scheme"] == "sleep" and d.json()["alive"]
+    d = client.post(f"/api/works/{w['id']}/worklets", json={"uri": f"cat://{home / 'ws'}"})      # cat 等 stdin,现场一直活着
+    assert d.status_code == 201 and d.json()["scheme"] == "cat" and d.json()["alive"]
 
 
 def test_missing_command_is_400_and_leaves_no_worklet(client):

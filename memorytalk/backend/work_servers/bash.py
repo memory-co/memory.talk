@@ -11,4 +11,4 @@ class BashServer(TerminalBase):
 
 
 def make(ctx):
-    return BashServer(ctx.tmux, ctx.workspace, ctx.ttyd_url)
+    return BashServer(ctx.tmuxd, ctx.workspace)

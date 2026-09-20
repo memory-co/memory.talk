@@ -12,4 +12,4 @@ class KimiServer(AgentBase):
 
 
 def make(ctx):
-    return KimiServer(ctx.tmux, ctx.workspace, ctx.ttyd_url, KimiAdapter(ctx.rt.kimi_sessions))
+    return KimiServer(ctx.tmuxd, ctx.workspace, KimiAdapter(ctx.rt.kimi_sessions))

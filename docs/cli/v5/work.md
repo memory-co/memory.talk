@@ -12,7 +12,6 @@ memory.talk work
 ├── attach   <work_id> <uri>                      # 打开一个块:协议 → server 建现场
 ├── worklets <work_id>
 ├── detach   <work_id> <worklet_id>
-├── capture  <work_id> <worklet_id> [--lines 200]
 ├── rounds   <work_id> <worklet_id>
 │
 ├── inbox    <work_id>
@@ -64,17 +63,16 @@ memory.talk work attach work_…2f2f bash://
 memory.talk work attach work_…2f2f https://localhost:5173/
 ```
 
-输出:工作单元 id、窗地址(没配 ttyd 时老实打 `窗:无(只有把手)`)、把手能力。已结束的 work → exit 1;命令不在 PATH → exit 1 `cmd_not_found`。
+输出:工作单元 id、窗地址(tmuxd 自带的 ttyd,`?arg=<id>`)、把手能力。已结束的 work → exit 1;命令不在 PATH → exit 1 `cmd_not_found`。
 
 **agent 工作单元的环境里自动带 `MEMORY_TALK_WORK=<work_id>` 和 `MEMORY_TALK_USER=<当前 user>`**——agent 在里面再调 `memory.talk meta …`,提交就挂在这个 user 名下、变动不投回自己。
 
-## work worklets / detach / capture / rounds
+## work worklets / detach / rounds
 
 | 命令 | 说明 |
 |---|---|
 | `worklets <id>` | 工作单元清单:id、URI、活没活着、最近重入 |
 | `detach <id> <wid>` | 关闭即回收:销毁现场 + 删登记 |
-| `capture <id> <wid> [--lines N]` | 抓终端屏幕(`text/plain`);http 工作单元没把手 → exit 1 |
 | `rounds <id> <wid>` | agent 工作单元的 round(先从记录文件同步再读);`--json` 给逐 round 标注用 |
 
 ## work inbox

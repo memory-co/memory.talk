@@ -1,6 +1,8 @@
 """FastAPI 实例:装配 services、挂路由、错误映射。"""
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -22,7 +24,12 @@ from memorytalk.backend.services.work import WorkletNotFound, WorkConflict, Work
 def create_app(config: Config | None = None, runtime: RuntimeConfig | None = None) -> FastAPI:
     config = config or load_config()
     runtime = runtime or load_runtime_config()
-    app = FastAPI(title="memory.talk v5", version="5.0.0a0",
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        yield
+        app.state.work_servers.close()                 # 退出:收掉自己起的 ttyd;tmux 会话照跑
+
+    app = FastAPI(title="memory.talk v5", version="5.0.0a0", lifespan=lifespan,
                   description="work 树 + Metas(origin / issue / card 三层,可加用户层)+ 协议 server。")
 
     store = StoreService(config)

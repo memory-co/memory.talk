@@ -126,13 +126,6 @@ def detach(work_id: str, worklet_id: str, svc: WorkService = Depends(works), who
     return ok()
 
 
-@router.get("/{work_id}/worklets/{worklet_id}/capture",
-            summary="观测:抓终端屏幕(把手 capture)")
-def capture(work_id: str, worklet_id: str, lines: int = Query(200, ge=1, le=5000),
-            svc: WorkService = Depends(works)):
-    return ok(svc.capture(work_id, worklet_id, lines))
-
-
 @router.get("/{work_id}/worklets/{worklet_id}/rounds", response_model=Result[list[Round]],
             summary="痕迹:agent 工作单元的 round(先从把手同步新 round,再读 rounds.jsonl)")
 def rounds(work_id: str, worklet_id: str, svc: WorkService = Depends(works)):

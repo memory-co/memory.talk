@@ -61,4 +61,4 @@ memory.talk 运行中(pid 12345)
 
 ## 环境变量
 
-服务读的全部环境变量见 [`../../structure/v5/filesystem.md`](../../structure/v5/filesystem.md#环境变量):`MEMORY_TALK_HOME` / `MEMORY_TALK_STORE` / `MEMORY_TALK_TMUX_SOCKET` / `MEMORY_TALK_TTYD_URL` / 各平台会话记录根。`start` 把当时的环境记进 `instance.json`,`restart` 复用。
+服务读的全部环境变量见 [`../../structure/v5/filesystem.md`](../../structure/v5/filesystem.md#环境变量):`MEMORY_TALK_HOME` / `MEMORY_TALK_STORE` / `MEMORY_TALK_TMUX_SOCKET` / `MEMORY_TALK_TMUXD_*` / 各平台会话记录根。`start` 把当时的环境记进 `instance.json`,`restart` 复用。

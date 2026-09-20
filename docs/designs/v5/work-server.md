@@ -1,6 +1,6 @@
 # protocol server —— 每个协议背后,把现场建出来的那个东西(v5 设计)
 
-> **状态:框架稿,未实施。** 本篇只立 server 这一层的大框架:一个块由 URI 定位,URI 的协议(`://` 前面那个)决定去找哪个 server——**每个 server 自己声明它响应哪些协议**,一个 server 可以响应多个;没人声明的协议去 **default**。server 负责把那个现场建出来、交回一扇窗和一个把手。这是 shellbase 里最核心、但当时没有完全定名的那一层;v5 原生实现时把它叫 **server**。接口、注册方式、各 server 的契约后续分篇。总定位见 [README.md](README.md)。
+> **状态:定稿,已有实现。** 本篇立 server 这一层的框架:一个块由 URI 定位,URI 的协议(`://` 前面那个)决定去找哪个 server——**每个 server 自己声明它响应哪些协议**,一个 server 可以响应多个;没人声明的协议去 **default**。server 负责把那个现场建出来、交回一扇窗和一个把手。这是 shellbase 里最核心、但当时没有完全定名的那一层;v5 原生实现时把它叫 **server**。接口、注册方式、各 server 的契约后续分篇。总定位见 [README.md](README.md)。
 
 相关:
 - v5 work 树(块住在 work 的画布上;work 是现场登记的唯一权威): [work.md](work.md)
@@ -42,8 +42,8 @@ v5 给它一个名字:**server**,寻址规则只有两条:**server 自己声明�
 | 职责 | 意思 | 从哪来 |
 |---|---|---|
 | **声明响应哪些协议** | `protocols = ["http", "https"]`——一个 server 可以响应多个;`default` 不声明任何协议,专收没人要的 | shellbase 的「scheme 名即命令名」收进 default |
-| **幂等地建 / 取现场** | 拿一个稳定 id 来,有就给已有的,没有就建——建和取是同一个动作,像 `tmux new -A` | `*muxd` 规范 M4 |
-| **交回窗和把手** | 窗:一个人能直接打开的 HTTP 地址;把手:一个程序能驱动它的对象 | `*muxd` 规范 M1 / M2 |
+| **幂等地建 / 取现场** | 拿一个稳定 id 来,有就给已有的,没有就建——建和取是同一个动作,像 `tmux new -A` | `*muxd` 规范 M4;实现上就是 `Tmuxd.session(id=…)` |
+| **交回窗和把手** | 窗:一个人能直接打开的 HTTP 地址;把手:一个程序能驱动它的对象 | `*muxd` 规范 M1 / M2;实现上就是 `Session.url` 和 `Session` 本身 |
 
 外加三条它必须守的性质,全部来自 `*muxd` 规范,这里只点名:**现场活得比连接久**(关掉页面里面照常跑);**不代理那扇窗**(只报 URL,怎么摆是 work 画布的事);**状态不许撒谎**(建不出来就说建不出来,不给一个连不上的地址)。
 
@@ -67,12 +67,12 @@ server **不做**的事同样重要:它**不记 work**——哪个块属于哪�
 
 一个 server 一个文件,`memorytalk/backend/work_servers/<name>.py`:
 
-| server | 响应的协议 | 现场 | 窗 | 把手 | 蓝本 |
+| server | 响应的协议 | 现场 | 窗 | 把手 | 实现面 |
 |---|---|---|---|---|---|
-| **bash** | `bash` | tmux 会话里的 bash | ttyd 挂到 tmux 会话 | tmux:发键、抓屏 | tmuxd |
-| **claude / codex / kimi** | 各自同名 | 同 bash——就是一个跑着 agent 的 tmux 会话 | 同上 | 终端把手 **+ 读它的会话记录**(round) | tmuxd + v3 adapter |
-| **http** | `http`、`https` | 无(纯 iframe);将来可换成真浏览器实例 | URL 本身;本地服务经代理 | 现在为空;换成 webmuxd 后有 CDP | webmuxd |
-| **default** | (不声明)没人要的都来 | tmux 会话里跑「协议名」这个命令 | 同 bash | 同 bash | shellbase 的 attach 兜底 |
+| **bash** | `bash` | tmux 会话里的 bash | ttyd(tmuxd 自带)挂到 tmux 会话 | `send` | **tmuxd** |
+| **claude / codex / kimi** | 各自同名 | 同 bash——就是一个跑着 agent 的 tmux 会话 | 同上 | `send` **+ 读它的会话记录**(`rounds`) | **tmuxd** + v3 adapter |
+| **http** | `http`、`https` | 无(纯 iframe);将来换成真浏览器实例 | URL 本身 | 现在为空;换成 webmuxd 后有 CDP | 将来 **webmuxd**(先不做) |
+| **default** | (不声明)没人要的都来 | tmux 会话里跑「协议名」这个命令 | 同 bash | 同 bash | **tmuxd** |
 
 要 `vim://`?什么都不用做,default 接住。要给某个协议专门的把手(比如新的 agent CLI)?加一个文件、声明协议,它就从 default 手里接过去。**别的地方一行不改**。
 
@@ -83,19 +83,27 @@ server **不做**的事同样重要:它**不记 work**——哪个块属于哪�
 
 ---
 
-## 6. server 的形状:就是 `*muxd` 规范,不重新发明
+## 6. server 的形状:就是 `*muxd` 规范——所以直接用 `*muxd` 库,不自己实现
 
 server 这个概念**不新造一套规范**,它的形状就是 shellbase 已经写好的 `*muxd` 规范:两个端点、契约面 / 实现面分清、id 幂等、活得比连接久、库优先、可独立验证、不代理窗、失败说清楚、状态不撒谎。任何一个新 server 进来,先回答那三个问题——**窗是什么、把手是什么、哪一半是用户会直接碰到的**——答不出第三个就还没想清楚。
 
-所以 v5 里「server」和「`*muxd` 组件」基本是一回事,只差一层:`*muxd` 说的是**一个组件自己长什么样**,server 多说了一句**它响应哪些协议、在 memory.talk 里怎么被请求到**。tmuxd、webmuxd 是现成的 `*muxd` 组件,v5 的 bash / claude / codex / kimi / http server 就包在它们外面——或者按 muxd 的说法,**它们就是 server 的实现面**。
+「形状是 `*muxd` 规范」这句话只有一种兑现方式:**server 的实现面就是一个 `*muxd` 库**。自己再写一遍 `tmux new-session` / `has-session` / `kill-session`,然后说「照 tmuxd 的规范」,是空话——规范里的每一条(id 幂等、ttyd 那扇窗、活得比连接久、不碰用户自己的 tmux、失败说清楚)都是库里已经做完的事,自己实现一遍只会做出一个更差的、没被验证过的 tmuxd。所以:
+
+- **终端这一族(bash / claude / codex / kimi / default)全部跑在 [tmuxd](https://github.com/memory-co/tmuxd)(pip `tmuxd`)上。** memory.talk 进程里持有一个 `Tmuxd` 实例(自己的 socket、自己的 ttyd、自己的 state 目录,都在 `~/.memory.talk/tmuxd/` 下),每个终端类 server 拿着它:建 / 取现场 = `t.session(id=worklet_id, cwd=…, cmd=…)`;窗 = `s.url`(ttyd 跟着 tmuxd 自带,**不再需要自己配一个 ttyd**);把手 = `s`(`alive` / `send` / `send_key` / `kill`)。server 自己只剩两件事:**决定 cwd 和命令**(协议名当命令名、path 当工作目录),以及 agent 类**多一项把手**——从平台的会话记录里读 round(v3 adapter)。
+- **tmuxd 只写不读,所以 server 也只写不读。** 原来的 `capture`(抓屏)去掉:读终端归人(打开那扇窗),不归 API。agent 的 round 不是抓屏,是读平台自己落的记录文件,那是 adapter 的事。
+- **http server 将来跑在 webmuxd 上。** 浏览器那一块比终端复杂(真浏览器实例、CDP 把手),先不做;现在的 http server 就是最薄的那个——窗 = URL,把手为空。换成 webmuxd 时协议不变,work 层无感。
+
+所以 v5 里「server」和「`*muxd` 组件」的关系是:`*muxd` 库是**实现面**,server 是包在外面的**契约面**——多说一句它响应哪些协议、在 memory.talk 里怎么被请求到,再多一项 memory.talk 自己关心的把手能力(round)。
+
+窗的地址由 tmuxd 决定(`MEMORY_TALK_TMUXD_PORT` / `_BIND` / `_TOKEN` / `_URL_HOST` 透传给它);挂到公网时 ttyd 要么绑 `0.0.0.0` 带 token(浏览器里是 basic auth),要么由 memory.talk 自己反代——反代归网关那一层,不归 server。
 
 ---
 
 ## 7. 这篇有意不定的事
 
-- **server 是进程内的库,还是独立进程**:`*muxd` 规范说库优先(`import` 就能用,HTTP 面只为独立验证)。本篇倾向照搬——server 在 memory.talk 进程内被 `import`,各自的 runtime(tmux server、chromium)是它们自己的事。真要跨机器时再议远程 server。
+- ~~server 是进程内的库,还是独立进程~~:已定——**库**。tmuxd 在 memory.talk 进程内被 `import`,ttyd 是它的子进程,tmux server 谁的都不是(关掉 memory.talk 现场照跑)。真要跨机器时再议远程 server。
 - ~~协议认领是注册还是约定~~:已定——**server 声明协议(注册)+ default 兜底(约定)**,两者都要,声明优先。
 - ~~agent server 是不是终端 server 的一个特例~~:已定——各自独立成文件,共用 `TerminalBase` / `AgentBase` 两个基类。
 - ~~纯外链、纯静态页这类没有把手的块要不要也算 server~~:已定——算,`http.py` / `https.py` 就是最薄的 server。
-- **把手在 work 层暴露到什么程度**:只给观测(读 round)和销毁,还是也给驱动(往 agent 里发话)。给驱动就打开了「memory.talk 编排 agent」这扇门——那是另一个话题,本篇不碰。
+- **把手在 work 层暴露到什么程度**:现在只给观测(读 round)和销毁;`send` 在把手上有,API 不露。给驱动就打开了「memory.talk 编排 agent」这扇门——那是另一个话题,本篇不碰。
 - **远程现场**:块背后的现场在另一台机器上(server 在别处跑)——窗天然是 URL 所以没问题,把手怎么跨机器,留给需要时。

@@ -39,7 +39,7 @@ def home(tmp_path, monkeypatch, request):
     monkeypatch.setenv("MEMORY_TALK_TMUX_SOCKET", f"mt-test-{uuid.uuid4().hex[:8]}")
     monkeypatch.delenv("MEMORY_TALK_TTYD_URL", raising=False)
     yield tmp_path
-    subprocess.run(["tmux", "-L", os.environ["MEMORY_TALK_TMUX_SOCKET"], "kill-server"], capture_output=True)
+    subprocess.run(["tmux", "-L", f"tmuxd-{os.environ['MEMORY_TALK_TMUX_SOCKET']}", "kill-server"], capture_output=True)   # tmuxd 的 socket 是 tmuxd-<名>
 
 
 PASSWORD = "pw-123456"

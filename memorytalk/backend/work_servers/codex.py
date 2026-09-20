@@ -12,4 +12,4 @@ class CodexServer(AgentBase):
 
 
 def make(ctx):
-    return CodexServer(ctx.tmux, ctx.workspace, ctx.ttyd_url, CodexAdapter(ctx.rt.codex_sessions))
+    return CodexServer(ctx.tmuxd, ctx.workspace, CodexAdapter(ctx.rt.codex_sessions))

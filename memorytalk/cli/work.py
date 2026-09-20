@@ -37,12 +37,11 @@ def w_set(api, a):
     out(api.call("PATCH", f"/api/works/{a.work_id}", json_body=body), a.json)
 def w_attach(api, a):
     s = api.call("POST", f"/api/works/{a.work_id}/worklets", json_body={"uri": a.uri})
-    out(s, a.json, f"{s['id']}\n  窗    {s['window']['url'] or '无(只有把手)'}\n  把手  {s['handle']['kind']}: {', '.join(s['handle']['capabilities']) or '无'}\n  cwd   {s.get('cwd') or '-'}")
+    out(s, a.json, f"{s['id']}\n  窗    {s['window']['url'] or '无'}\n  把手  {s['handle']['kind']}: {', '.join(s['handle']['capabilities']) or '无'}\n  cwd   {s.get('cwd') or '-'}")
 def w_worklets(api, a):
     ss = api.call("GET", f"/api/works/{a.work_id}/worklets")
     out(ss, a.json, "\n".join(f"{s['id']}  {s['uri']}  {'活着' if s['alive'] else '死了'}  {s['last_attached']}" for s in ss) or "(没有工作单元)")
 def w_detach(api, a): api.call("DELETE", f"/api/works/{a.work_id}/worklets/{a.worklet_id}"); print("已回收")
-def w_capture(api, a): print(api.call("GET", f"/api/works/{a.work_id}/worklets/{a.worklet_id}/capture", params={"lines": a.lines}, text=True), end="")
 def w_rounds(api, a):
     rs = api.call("GET", f"/api/works/{a.work_id}/worklets/{a.worklet_id}/rounds")
     out(rs, a.json, "\n\n".join(f"[{i}] {r['role']}  {r.get('timestamp') or ''}\n{r['text']}" for i, r in enumerate(rs)))
@@ -87,7 +86,6 @@ def register(top) -> None:
     wp("attach", w_attach, (["uri"], {}))
     wp("worklets", w_worklets)
     wp("detach", w_detach, (["worklet_id"], {}))
-    wp("capture", w_capture, (["worklet_id"], {}), (["--lines"], {"type": int, "default": 200}))
     wp("rounds", w_rounds, (["worklet_id"], {}))
     wp("inbox", w_inbox)
     wp("manager", w_manager, (["--set"], {}), (["--unset"], {"action": "store_true"}))

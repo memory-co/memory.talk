@@ -17,6 +17,7 @@
 ├── users/                            ← user 档案(注册的实体;MEMORY_TALK_STORE=fs 时)
 │   └── <name>.json                   ←   name / display_name / email / created_at / role / password(scrypt 哈希,不出接口)
 ├── auth/tokens/<sha256>.json         ← 登录态:token 的哈希 → {user, created_at}(logout / 改密码即删)
+├── tmuxd/                            ← tmuxd 的 state(会话记录、ttyd 记录、tmux.conf);tmux 会话本身不落盘
 ├── credentials.json                  ← CLI 的登录态(客户端的事,按服务地址分开;memory.talk login 写)
 ├── works/                            ← 裸文件(现场层)
 │   └── <work_id>/
@@ -55,7 +56,7 @@
 
 | 东西 | 在哪 | 谁管 |
 |---|---|---|
-| tmux 会话(终端 / agent 现场) | tmux server,socket `-L <MEMORY_TALK_TMUX_SOCKET>`(默认 `memorytalk`) | server 层建 / 杀;工作单元名 = 工作单元 id |
+| tmux 会话(终端 / agent 现场) | tmuxd 的 tmux server,socket `tmuxd-<MEMORY_TALK_TMUX_SOCKET>`;ttyd 是 memory.talk 的子进程 | server 层经 tmuxd 建 / 杀;会话名 = 工作单元 id;state 在 `<home>/tmuxd/` |
 | 各平台的会话记录(agent 把手读的原文) | `~/.claude/projects/` `~/.codex/sessions/` `~/.kimi-code/sessions/` | 各平台自己写;memory.talk 只读,按 cwd + 工作单元创建时间定位 |
 
 ## 环境变量
@@ -67,8 +68,11 @@
 | `MEMORY_TALK_SQLITE` | `<HOME>/memory.sqlite` | sqlite 文件路径 |
 | `MEMORY_TALK_AUTHOR` / `MEMORY_TALK_EMAIL` | `memory.talk` / `memory.talk@localhost` | git author |
 | `MEMORY_TALK_WORKSPACE` | `~/workspace` | 终端类 URI 省略 path 时的 cwd |
-| `MEMORY_TALK_TMUX_SOCKET` | `memorytalk` | tmux socket 名 |
-| `MEMORY_TALK_TTYD_URL` | 无 | 终端那扇窗;不设则 `window.url = null` |
+| `MEMORY_TALK_TMUX_SOCKET` | `memorytalk` | tmuxd 的 socket 名(实际 tmux socket 是 `tmuxd-<名>`),和你自己的 tmux 隔离 |
+| `MEMORY_TALK_TMUXD_PORT` | tmuxd 挑空闲的 | ttyd 端口(那扇窗) |
+| `MEMORY_TALK_TMUXD_BIND` | `127.0.0.1` | ttyd 绑哪;`0.0.0.0` 必须同时给 token |
+| `MEMORY_TALK_TMUXD_TOKEN` | 无 | ttyd 的 basic auth(用户名 `tmuxd`) |
+| `MEMORY_TALK_TMUXD_URL_HOST` | 绑的地址 | 窗地址里写的 host(挂公网时给外部可达的那个) |
 | `MEMORY_TALK_CLAUDE_PROJECTS` / `MEMORY_TALK_CODEX_SESSIONS` / `MEMORY_TALK_KIMI_SESSIONS` | 各平台默认目录 | agent 会话记录根 |
 
 没有配置文件。

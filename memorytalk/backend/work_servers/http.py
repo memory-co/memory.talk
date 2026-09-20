@@ -23,12 +23,14 @@ class HttpServer:
     def info(self) -> WorkServerInfo:
         return WorkServerInfo(name=self.name, protocols=self.protocols, description=self.description)
 
-    def open(self, worklet_id: str, uri: ParsedUri, since_mtime: float = 0.0) -> tuple[Live, NoHandle]:
+    def window(self, worklet_id: str, uri: ParsedUri) -> Window:
         local = uri.host in ("localhost", "127.0.0.1")
         embed = f"/proxy/{uri.port}{uri.path or '/'}" if local and uri.port else uri.raw
+        return Window(url=uri.raw, embed=embed)
+
+    def open(self, worklet_id: str, uri: ParsedUri, since_mtime: float = 0.0) -> tuple[Live, NoHandle]:
         h = NoHandle()
-        return Live(worklet_id=worklet_id, server=self.name, window=Window(url=uri.raw, embed=embed),
-                    handle=h.info()), h
+        return Live(worklet_id=worklet_id, server=self.name, window=self.window(worklet_id, uri), handle=h.info()), h
 
     def handle(self, worklet_id: str, uri: ParsedUri, cwd: Path, since_mtime: float) -> NoHandle:
         return NoHandle()

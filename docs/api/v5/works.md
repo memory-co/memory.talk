@@ -179,12 +179,12 @@ user:谁当前正在操作、谁历史操作过。只做可见性,不做权限�
 {"id": "work_…-w1", "uri": "codex:///w/memory.talk", "scheme": "codex",
  "cwd": "/w/memory.talk", "created_at": "…", "last_attached": "…",
  "alive": true,
- "window": {"url": null, "embed": null},
- "handle": {"kind": "tmux+transcript", "capabilities": ["capture", "send", "rounds"]}}
+ "window": {"url": "http://127.0.0.1:43179/?arg=work_…-w1", "embed": "http://127.0.0.1:43179/?arg=work_…-w1"},
+ "handle": {"kind": "tmux+transcript", "capabilities": ["send", "rounds"]}}
 ```
 
 - 由哪个 server 建的不对外——`https://` 走 http server、`vim://` 走 default,调用方不感知。
-- `window.url` 为 `null` = 没配 ttyd,只有把手没有画面。
+- `window.url` 是 tmuxd 自带的 ttyd 地址(`http://<host>:<port>/?arg=<worklet_id>`);http 工作单元是 URL 本身。
 - 副作用:`worklets.json` 追加一条;终端类起一个 tmux 会话(名 = 工作单元 id);事件 `worklet.attached`。
 
 | 错误 | 状态 |
@@ -200,17 +200,7 @@ user:谁当前正在操作、谁历史操作过。只做可见性,不做权限�
 
 ## DELETE /api/works/{work_id}/worklets/{worklet_id}
 
-关闭即回收:销毁现场(`tmux kill-session`)+ 删登记 + 事件 `worklet.detached`。**200**,`data: null`。
-
-## GET /api/works/{work_id}/worklets/{worklet_id}/capture
-
-把手 `capture`:抓终端屏幕,`data` 是那段文本。
-
-| 参数 | 说明 |
-|---|---|
-| `lines` | 回看多少行,默认 200,`[1, 5000]` |
-
-把手没有 `capture`(http 工作单元)→ 409 `conflict`。
+关闭即回收:销毁现场(tmuxd `session.kill()`)+ 删登记 + 事件 `worklet.detached`。**200**,`data: null`。
 
 ## GET /api/works/{work_id}/worklets/{worklet_id}/rounds
 

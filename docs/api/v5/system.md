@@ -16,9 +16,9 @@
   "memory": "/home/me/.memory.talk/memory",
   "works": "/home/me/.memory.talk/works",
   "workspace": "/home/me/workspace",
-  "tmux_socket": "memorytalk",
-  "ttyd_url": null
+  "tmux_socket": "tmuxd-memorytalk",
+  "tmuxd": {"port": 43179, "bind": "127.0.0.1", "url_host": null}
 }
 ```
 
-`ttyd_url` 为 `null` 时,终端类成员的 `window.url` 也是 `null`——只有把手没有画面。
+`tmux_socket` 是 tmuxd 实际用的 tmux socket(`tmuxd-<MEMORY_TALK_TMUX_SOCKET>`);`tmuxd` 是那扇窗在哪(ttyd 端口、绑哪、对外写什么 host)。

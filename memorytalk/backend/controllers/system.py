@@ -15,4 +15,5 @@ def info(request: Request):
     store = request.app.state.store.provider
     return ok({"home": str(cfg.home), "metas": str(cfg.metas_dir),
                "store": {"family": store.family, "backend": type(store).__name__},
-               "workspace": str(rt.workspace), "tmux_socket": rt.tmux_socket, "ttyd_url": rt.ttyd_url})
+               "workspace": str(rt.workspace), "tmux_socket": request.app.state.work_servers.tmuxd.tmux_socket,
+               "tmuxd": {"port": request.app.state.work_servers.tmuxd.port, "bind": rt.tmuxd_bind, "url_host": rt.tmuxd_url_host}})

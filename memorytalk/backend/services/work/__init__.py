@@ -160,7 +160,8 @@ class WorkService:
         out = []
         for m in self.worklets.list(work_id):
             alive = self.work_servers.alive(m.server, m.id)
-            out.append(WorkletView(**m.model_dump(), alive=alive))
+            window = self.work_servers.window(m.server, m.id, m.uri) if alive else None      # 清单里就带窗,前端不用再 attach 一次
+            out.append(WorkletView(**m.model_dump(), alive=alive, window=window, handle=self._handle(m).info() if alive else None))
         return out
 
     def detach(self, work_id: str, worklet_id: str) -> None:
@@ -172,13 +173,6 @@ class WorkService:
         self.events.emit(work_id, "worklet.detached", worklet=worklet_id)
 
     # ---- 痕迹 ----
-
-    def capture(self, work_id: str, worklet_id: str, lines: int = 200) -> str:
-        m = self.worklets.get(work_id, worklet_id)
-        h = self._handle(m)
-        if not hasattr(h, "capture"):
-            raise WorkConflict(f"{worklet_id} 的把手没有 capture")
-        return h.capture(lines)
 
     def rounds(self, work_id: str, worklet_id: str) -> list[Round]:
         m = self.worklets.get(work_id, worklet_id)

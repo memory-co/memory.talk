@@ -31,10 +31,10 @@
 
 | server | 响应 | 现场 | 窗 | 把手 |
 |---|---|---|---|---|
-| `claude` / `codex` / `kimi` | 各自同名 | tmux 会话跑该 CLI | ttyd | `capture` `send` `rounds` |
-| `bash` | `bash` | tmux 会话 | ttyd | `capture` `send` |
+| `claude` / `codex` / `kimi` | 各自同名 | tmuxd session 跑该 CLI | tmuxd 的 ttyd | `send` `rounds` |
+| `bash` | `bash` | tmuxd session | tmuxd 的 ttyd | `send` |
 | `http` | `http` `https` | 无(纯 iframe) | URL 本身 | 无 |
-| `default` | 没人声明的 | tmux 会话里跑「协议名」命令(`vim://` → `vim`) | ttyd | `capture` `send` |
+| `default` | 没人声明的 | tmuxd session 里跑「协议名」命令(`vim://` → `vim`) | tmuxd 的 ttyd | `send` |
 
 ## Window
 
@@ -44,19 +44,19 @@
 
 | 字段 | 说明 |
 |---|---|
-| `url` | 人能直接打开的地址;**`null` = 这个现场没有画面**(没配 ttyd 时终端类就是 `null`,不给一个连不上的地址) |
+| `url` | 人能直接打开的地址;终端类是 tmuxd 自带的 ttyd(`?arg=<worklet_id>`);**`null` = 这个现场没有画面**(不给一个连不上的地址) |
 | `embed` | 画布 iframe 该装的地址;通常同 `url`,本地服务时是 `/proxy/<port>/…` |
 
 ## HandleInfo
 
 ```json
-{"kind": "tmux+transcript", "capabilities": ["capture", "send", "rounds"]}
+{"kind": "tmux+transcript", "capabilities": ["send", "rounds"]}
 ```
 
 | `kind` | 谁 | `capabilities` |
 |---|---|---|
-| `tmux` | bash | `capture`(抓屏)`send`(发键,只在进程内) |
-| `tmux+transcript` | claude / codex / kimi | 上面两项 + `rounds`(读会话记录) |
+| `tmux` | bash / default | `send`(发键,只在进程内;tmuxd 只写不读,没有抓屏) |
+| `tmux+transcript` | claude / codex / kimi | 上面一项 + `rounds`(读平台的会话记录) |
 | `none` | http | 空 |
 
 把手本体是 Python 对象;API 只报 `HandleInfo`。`send` 不暴露 API。
@@ -68,8 +68,8 @@
 ```json
 {
   "worklet_id": "work_…-w1", "server": "codex",   // server 只在内部流转,API 视图不带
-  "window": {"url": null, "embed": null},
-  "handle": {"kind": "tmux+transcript", "capabilities": ["capture", "send", "rounds"]},
+  "window": {"url": "http://127.0.0.1:43179/?arg=work_…-w1", "embed": "http://127.0.0.1:43179/?arg=work_…-w1"},
+  "handle": {"kind": "tmux+transcript", "capabilities": ["send", "rounds"]},
   "cwd": "/home/me/memory.talk", "command": ["codex"]
 }
 ```
@@ -83,4 +83,4 @@
 | `bad_uri` | 400 | 没有协议 | 改 URI |
 | `no_server` | 400 | 连 default 都没有(只在 `default.py` 被删时出现) | 加回 default |
 | `cmd_not_found` | 400 | 要跑的命令不在 PATH(bash / agent 类:server 名;default:协议名) | 装命令 |
-| `platform` | 502 | tmux 起不来 | 查 tmux,别重试 |
+| `platform` | 502 | tmuxd 建不出现场(tmux / ttyd 的问题) | 查 tmux、ttyd,别重试 |

@@ -1,63 +1,37 @@
-"""tmux 现场 + 终端类 server 的基类(蓝本 tmuxd)。具体的 server 在 backend/servers/ 里,各自声明响应哪些协议。
+"""终端类 server 的基类:实现面是 tmuxd(pip 库,tmux + ttyd)。具体的 server 在 backend/work_servers/ 里,各自声明响应哪些协议。
 
-现场 = tmux 会话(名字 = 工作单元 id),活得比连接久;
-窗   = ttyd(配置了地址才有;没配就老实报 None);
-把手 = send-keys / capture-pane / has-session。
+现场 = tmuxd 的 session(id = 工作单元 id),活得比连接久;
+窗   = session.url(ttyd 跟着 tmuxd 自带);
+把手 = session(alive / send / send_key / kill)。只写不读——抓屏不存在(docs/designs/v5/work-server.md §6)。
 """
 from __future__ import annotations
 
 import shlex
 import shutil
-import subprocess
 from pathlib import Path
+
+from tmuxd import Session, Tmuxd, TmuxdError
 
 from memorytalk.backend.models.work_server import HandleInfo, Live, ParsedUri, WorkServerError, WorkServerInfo, Window
 
 
-class Tmux:
-    def __init__(self, socket: str) -> None:
-        self.socket = socket
-
-    def _run(self, *args: str) -> subprocess.CompletedProcess:
-        return subprocess.run(["tmux", "-L", self.socket, *args], capture_output=True, text=True)
-
-    def has(self, name: str) -> bool:
-        return self._run("has-session", "-t", f"={name}").returncode == 0
-
-    def new(self, name: str, cwd: Path, cmd: list[str]) -> None:
-        cwd.mkdir(parents=True, exist_ok=True)
-        p = self._run("new-session", "-d", "-s", name, "-c", str(cwd), shlex.join(cmd))
-        if p.returncode != 0:
-            raise WorkServerError("platform", f"tmux new-session 失败: {p.stderr.strip()}")
-
-    def kill(self, name: str) -> None:
-        self._run("kill-session", "-t", f"={name}")
-
-    def send(self, name: str, text: str, enter: bool = True) -> None:
-        args = ["send-keys", "-t", f"{name}:", text]
-        if enter:
-            args.append("Enter")
-        self._run(*args)
-
-    def capture(self, name: str, lines: int = 200) -> str:
-        return self._run("capture-pane", "-p", "-t", f"{name}:", "-S", f"-{lines}").stdout
-
-
 class TmuxHandle:
-    def __init__(self, tmux: Tmux, name: str) -> None:
-        self.tmux, self.name = tmux, name
+    """把手:包一层 tmuxd 的 Session。按 id 懒取——现场可能已经退出了(命令跑完了),把手照样能回答「活没活着」。"""
+
+    def __init__(self, tmuxd: Tmuxd, worklet_id: str) -> None:
+        self.tmuxd, self.worklet_id = tmuxd, worklet_id
 
     def info(self) -> HandleInfo:
-        return HandleInfo(kind="tmux", capabilities=["capture", "send"])
+        return HandleInfo(kind="tmux", capabilities=["send"])
 
     def alive(self) -> bool:
-        return self.tmux.has(self.name)
+        return self.tmuxd.has(self.worklet_id)
 
-    def capture(self, lines: int = 200) -> str:
-        return self.tmux.capture(self.name, lines)
+    def session(self) -> Session:
+        return self.tmuxd.get(self.worklet_id)          # 没了 → NoSuchSession
 
     def send(self, text: str, enter: bool = True) -> None:
-        self.tmux.send(self.name, text, enter)
+        self.session().send(text, enter=enter)
 
 
 class TerminalBase:
@@ -66,8 +40,8 @@ class TerminalBase:
     protocols: list[str] = []
     description = ""
 
-    def __init__(self, tmux: Tmux, workspace: Path, ttyd_url: str | None) -> None:
-        self.tmux, self.workspace, self.ttyd_url = tmux, workspace, ttyd_url
+    def __init__(self, tmuxd: Tmuxd, workspace: Path) -> None:
+        self.tmuxd, self.workspace = tmuxd, workspace
 
     def info(self) -> WorkServerInfo:
         return WorkServerInfo(name=self.name, protocols=self.protocols, description=self.description)
@@ -87,18 +61,26 @@ class TerminalBase:
 
     def open(self, worklet_id: str, uri: ParsedUri, since_mtime: float = 0.0) -> tuple[Live, TmuxHandle]:
         cwd, cmd = self.resolve(uri)
-        if not self.tmux.has(worklet_id):
-            self.tmux.new(worklet_id, cwd, cmd)
+        cwd.mkdir(parents=True, exist_ok=True)
+        try:
+            session = self.tmuxd.session(id=worklet_id, cwd=str(cwd), cmd=shlex.join(cmd))   # 幂等:有就取回,没有就建
+        except TmuxdError as e:
+            raise WorkServerError("platform", f"tmuxd: {e}") from e
         handle = self.handle(worklet_id, uri, cwd, since_mtime)
-        url = f"{self.ttyd_url.rstrip('/')}/?arg={worklet_id}" if self.ttyd_url else None
-        return Live(worklet_id=worklet_id, server=self.name, window=Window(url=url, embed=url),
+        return Live(worklet_id=worklet_id, server=self.name, window=Window(url=session.url, embed=session.url),
                     handle=handle.info(), cwd=str(cwd), command=cmd), handle
 
     def handle(self, worklet_id: str, uri: ParsedUri, cwd: Path, since_mtime: float) -> TmuxHandle:
-        return TmuxHandle(self.tmux, worklet_id)
+        return TmuxHandle(self.tmuxd, worklet_id)
 
     def alive(self, worklet_id: str) -> bool:
-        return self.tmux.has(worklet_id)
+        return self.tmuxd.has(worklet_id)
+
+    def window(self, worklet_id: str, uri: ParsedUri) -> Window:
+        """那扇窗的地址,不用重新 open:tmuxd 的 ttyd 地址只由 id 决定。"""
+        url = self.tmuxd.url_for(worklet_id)
+        return Window(url=url, embed=url)
 
     def destroy(self, worklet_id: str) -> None:
-        self.tmux.kill(worklet_id)
+        if self.tmuxd.has(worklet_id):
+            self.tmuxd.get(worklet_id).kill()

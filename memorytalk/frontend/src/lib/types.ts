@@ -25,7 +25,7 @@ export interface LoginResult { token: string; user: User }
 export interface Server { name: string; protocols: string[]; description: string }
 export interface SystemInfo {
   home: string; metas: string; workspace: string; tmux_socket: string;
-  ttyd_url: string | null; store: { family: string; backend: string };
+  tmuxd: { port: number; bind: string; url_host: string | null }; store: { family: string; backend: string };
 }
 export interface Layer {
   name: string; description: string; builtin: boolean; suffix: string | null;
