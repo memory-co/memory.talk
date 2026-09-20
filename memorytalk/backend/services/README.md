@@ -5,18 +5,13 @@
 ```
 controllers ──▶ services ──▶ providers(介质原语)
                   │
-                  ├── collections/   认知层:分层 git 仓库
-                  │     git.py        git 原语(只跟命令行说话,不认识层)
-                  │     repo.py       分层拓扑:layer/* 权威分支 + stack 合并视图 + 路径归属守卫 + collections.json 锚定
-                  │     manager.py    manager.json:目录绑 work,最近祖先解析
-                  │     __init__.py   CollectionsService:层的装载(内置 + 用户层)、对象读写(一批文件改动 → 层的 check → 一个提交)、历史、检索、树、投递
-                  ├── work/          做事层:work 树、画布、会话(现场)、users(谁动过)、round、事件、收件箱
-                  │     repo.py       WorkRepo 业务接口 + fs 版 / db 版两份实现
-                  ├── users/         人:注册的实体,档案走仓储(密码哈希在记录里);活动统计从 work 与 collections 现算
-                  ├── auth/          门:没有 admin 先 setup;登录换 token(只存哈希);main.py 的中间件靠它把 token 变成名字
-                  ├── work_servers/  现场怎么建:tmux 基类、agent 基类(把手多一项读 round)、注册表、URI 解析、各平台会话记录 adapter
-                  ├── search/        综合搜索:自己不搜,把 q 交给每个 service 的 search(),汇总各家的命中
-                  └── store/         装配:按 MEMORY_TALK_STORE 选 provider,按族建 work / user 仓储
+                  ├── collections/    认知层:分层 git 仓库              → collections/README.md
+                  ├── work/           做事层:work 树、画布、会话、痕迹   → work/README.md
+                  ├── work_servers/   现场怎么建:基类、注册表、adapter   → work_servers/README.md
+                  ├── users/          人:注册的实体,活动统计现算         → users/README.md
+                  ├── auth/           门:setup、登录换 token             → auth/README.md
+                  ├── search/         综合搜索:汇总各家的 search()       → search/README.md
+                  └── store/          装配:选 provider,建仓储           → store/README.md
 ```
 
 ## 三条主线
@@ -37,4 +32,4 @@ controllers ──▶ services ──▶ providers(介质原语)
 
 - service 之间只通过构造函数注入(`main.py` 装配),不互相 import 对方的内部模块。
 - 错误是各自的异常类(`CollectionsError` / `WorkNotFound` / `UserExists` …),由 `main.py` 统一映射成 `Result` 信封里的 `error` 码;service 不认识 HTTP。
-- 不做权限:身份只校验「注册过没有」。
+- 权限只有一档:`admin` 管账号,其余谁都能动;身份从登录态来(`auth/`),service 拿到的是名字。
