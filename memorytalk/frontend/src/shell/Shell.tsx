@@ -14,7 +14,7 @@ import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupConte
 import { TaskTree } from './TaskTree';
 import { Home } from './Home';
 const GlobalSearch = lazy(() => import('./GlobalSearch').then(m => ({ default: m.GlobalSearch })));
-const Library = lazy(() => import('@/metas/Library').then(m => ({ default: m.Library })));
+const Metas = lazy(() => import('@/metas/Metas').then(m => ({ default: m.Metas })));
 const Settings = lazy(() => import('@/settings/Settings').then(m => ({ default: m.Settings })));
 const Workspace = lazy(() => import('./Workspace').then(m => ({ default: m.Workspace })));
 
@@ -53,7 +53,7 @@ function SidebarBody({ onNavigate, onClose }: { onNavigate: () => void; onClose?
   const works = useWorks(); const users = useUsers(); const system = useSystem();
   const user = usePreferences(s => s.user); const role = usePreferences(s => s.role);
   const currentUser = users.data?.find(u => u.name === user);
-  const go = (page: 'home' | 'library' | 'settings') => { navigate({ page }); onNavigate(); };
+  const go = (page: 'home' | 'meta' | 'settings') => { navigate({ page }); onNavigate(); };
   return <>
     <SidebarHeader className="border-b border-sidebar-border">
       <SidebarMenu><SidebarMenuItem className="flex items-center gap-1">
@@ -66,7 +66,7 @@ function SidebarBody({ onNavigate, onClose }: { onNavigate: () => void; onClose?
     <SidebarContent>
       <SidebarGroup><SidebarGroupContent><SidebarMenu>
         <SidebarMenuItem><SidebarMenuButton isActive={route.page === 'home'} onClick={() => go('home')} tooltip={t('nav.newWork')}><SquarePen /><span>{t('nav.newWork')}</span></SidebarMenuButton></SidebarMenuItem>
-        <SidebarMenuItem><SidebarMenuButton isActive={route.page === 'library'} onClick={() => go('library')} tooltip={t('nav.library')}><BookOpen /><span>{t('nav.library')}</span></SidebarMenuButton></SidebarMenuItem>
+        <SidebarMenuItem><SidebarMenuButton isActive={route.page === 'meta'} onClick={() => go('meta')} tooltip={t('nav.meta')}><BookOpen /><span>{t('nav.meta')}</span></SidebarMenuButton></SidebarMenuItem>
       </SidebarMenu></SidebarGroupContent></SidebarGroup>
       <SidebarGroup className="group-data-[collapsible=icon]:hidden">
         <SidebarGroupLabel>{t('nav.yourWorks')}<span className="ml-auto">{flattenWorks(works.data || []).length || ''}</span></SidebarGroupLabel>
@@ -94,11 +94,11 @@ function Crumbs() {
   const t = useT();
   const route = useRoute();
   const works = useWorks();
-  const pageName = route.page === 'home' ? t('nav.home') : route.page === 'library' ? t('nav.library') : route.page === 'settings' ? t('nav.settings') : t('nav.workspace');
+  const pageName = route.page === 'home' ? t('nav.home') : route.page === 'meta' ? t('nav.meta') : route.page === 'settings' ? t('nav.settings') : t('nav.workspace');
   const currentWork = route.work ? flattenWorks(works.data || []).find(w => w.id === route.work) : undefined;
   const home = (e: React.MouseEvent) => { e.preventDefault(); navigate({ page: 'home' }); };
   // 元认知页:打开的文件(或停在的目录)的真实路径逐段进面包屑,这就是全局定位
-  const located = route.page === 'library' ? (route.layer && route.path ? (route.file ? `${route.path}.${route.layer}/${route.file}` : route.path) : route.dir || '') : '';
+  const located = route.page === 'meta' ? (route.layer && route.path ? (route.file ? `${route.path}.${route.layer}/${route.file}` : route.path) : route.dir || '') : '';
   const segments = located ? located.split('/') : [];
   return <Breadcrumb className="min-w-0"><BreadcrumbList className="flex-nowrap">
     <BreadcrumbItem className="hidden md:block"><BreadcrumbLink href="#/" onClick={home}>memory.talk</BreadcrumbLink></BreadcrumbItem>
@@ -108,19 +108,19 @@ function Crumbs() {
       <BreadcrumbSeparator />
       <BreadcrumbItem className="min-w-0"><BreadcrumbPage className="block max-w-[45vw] truncate">{currentWork.goal}</BreadcrumbPage></BreadcrumbItem>
     </> : segments.length ? <>
-      <BreadcrumbItem><BreadcrumbLink href="#/library" onClick={e => { e.preventDefault(); navigate({ page: 'library', filter: route.filter, dir: '' }); }}>{pageName}</BreadcrumbLink></BreadcrumbItem>
+      <BreadcrumbItem><BreadcrumbLink href="#/meta" onClick={e => { e.preventDefault(); navigate({ page: 'meta', filter: route.filter, dir: '' }); }}>{pageName}</BreadcrumbLink></BreadcrumbItem>
       {segments.map((seg, i) => { const last = i === segments.length - 1; return <Fragment key={i}>
         <BreadcrumbSeparator className={last ? undefined : 'hidden md:block'} />
         <BreadcrumbItem className={cn('min-w-0', !last && 'hidden md:block')}>{last ? <BreadcrumbPage className="block max-w-[40vw] truncate font-mono text-xs">{seg}</BreadcrumbPage>
-          : <BreadcrumbLink href="#/library" className="font-mono text-xs" onClick={e => { e.preventDefault(); navigate({ page: 'library', filter: route.filter, dir: segments.slice(0, i + 1).join('/') }); }}>{seg}</BreadcrumbLink>}</BreadcrumbItem>
+          : <BreadcrumbLink href="#/meta" className="font-mono text-xs" onClick={e => { e.preventDefault(); navigate({ page: 'meta', filter: route.filter, dir: segments.slice(0, i + 1).join('/') }); }}>{seg}</BreadcrumbLink>}</BreadcrumbItem>
       </Fragment>; })}
     </> : <BreadcrumbItem><BreadcrumbPage>{pageName}</BreadcrumbPage></BreadcrumbItem>}
   </BreadcrumbList></Breadcrumb>;
 }
 
-function Page({ onLibrary, selection }: { onLibrary: () => void; selection: (s: { filter: string; layer?: string; path?: string; file?: string }) => void }) {
+function Page({ onMeta, selection }: { onMeta: () => void; selection: (s: { filter: string; layer?: string; path?: string; file?: string }) => void }) {
   const route = useRoute();
-  return <Suspense fallback={<Loading />}>{route.page === 'home' ? <Home /> : route.page === 'work' && route.work ? <Workspace key={route.work} id={route.work} onLibrary={onLibrary} /> : route.page === 'library' ? <Library filter={route.filter || 'all'} layer={route.layer} path={route.path} file={route.file} dir={route.dir} onSelect={selection} /> : <Settings />}</Suspense>;
+  return <Suspense fallback={<Loading />}>{route.page === 'home' ? <Home /> : route.page === 'work' && route.work ? <Workspace key={route.work} id={route.work} onMeta={onMeta} /> : route.page === 'meta' ? <Metas filter={route.filter || 'all'} layer={route.layer} path={route.path} file={route.file} dir={route.dir} onSelect={selection} /> : <Settings />}</Suspense>;
 }
 
 function ShellContent() {
@@ -139,9 +139,9 @@ function ShellContent() {
     };
     window.addEventListener('keydown', listener); return () => window.removeEventListener('keydown', listener);
   }, []);
-  const library = <Suspense fallback={<Loading />}><Library compact {...selection} onSelect={setSelection} work={route.work} /></Suspense>;
+  const meta = <Suspense fallback={<Loading />}><Metas compact {...selection} onSelect={setSelection} work={route.work} /></Suspense>;
   const searchDialog = searchLoaded && <Suspense fallback={null}><GlobalSearch open={search} onClose={() => setSearch(false)} /></Suspense>;
-  if (isMobile) return <><MobileShell onSearch={() => setSearch(true)} library={route.page === 'work' ? library : null} page={goInspector => <Page onLibrary={goInspector} selection={s => navigate({ page: 'library', ...s })} />} />{searchDialog}</>;
+  if (isMobile) return <><MobileShell onSearch={() => setSearch(true)} meta={route.page === 'work' ? meta : null} page={goInspector => <Page onMeta={goInspector} selection={s => navigate({ page: 'meta', ...s })} />} />{searchDialog}</>;
   return <>
     <Sidebar collapsible="icon"><SidebarBody onNavigate={() => undefined} /><SidebarRail /></Sidebar>
     <SidebarInset className="h-svh min-h-0 overflow-hidden">
@@ -156,11 +156,11 @@ function ShellContent() {
       </header>
       <div className="flex min-h-0 flex-1">
         <main id="main-content" tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto outline-none">
-          <Page onLibrary={() => setInspector(true)} selection={s => navigate({ page: 'library', ...s })} />
+          <Page onMeta={() => setInspector(true)} selection={s => navigate({ page: 'meta', ...s })} />
         </main>
         {route.page === 'work' && inspector && <aside className="flex w-80 shrink-0 flex-col border-l lg:w-96" aria-label={t('nav.inspector')}>
-          <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4 text-sm font-medium"><BookOpen className="size-4" />{t('nav.library')}</div>
-          <div className="flex min-h-0 flex-1 flex-col">{library}</div>
+          <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4 text-sm font-medium"><BookOpen className="size-4" />{t('nav.meta')}</div>
+          <div className="flex min-h-0 flex-1 flex-col">{meta}</div>
         </aside>}
       </div>
     </SidebarInset>
@@ -169,7 +169,7 @@ function ShellContent() {
 }
 
 /** 竖屏手机:侧栏 | 主内容 | 认知库面板 三列横向吸附。 */
-function MobileShell({ onSearch, library, page }: { onSearch: () => void; library: ReactNode; page: (goInspector: () => void) => ReactNode }) {
+function MobileShell({ onSearch, meta, page }: { onSearch: () => void; meta: ReactNode; page: (goInspector: () => void) => ReactNode }) {
   const t = useT();
   const route = useRoute();
   const track = useRef<HTMLDivElement>(null);
@@ -192,14 +192,14 @@ function MobileShell({ onSearch, library, page }: { onSearch: () => void; librar
         <Crumbs />
         <div className="ml-auto flex items-center gap-1">
           <Button variant="ghost" size="icon" onClick={onSearch} aria-label={t('search.title')}><Search /></Button>
-          {library && <Button variant="ghost" size="icon" aria-label={col === 2 ? t('nav.closeInspector') : t('nav.openInspector')} aria-pressed={col === 2} onClick={() => goTo(col === 2 ? 1 : 2)}><PanelRight /></Button>}
+          {meta && <Button variant="ghost" size="icon" aria-label={col === 2 ? t('nav.closeInspector') : t('nav.openInspector')} aria-pressed={col === 2} onClick={() => goTo(col === 2 ? 1 : 2)}><PanelRight /></Button>}
         </div>
       </header>
       <main id="main-content" tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto outline-none">{page(() => goTo(2))}</main>
     </div>
-    {library && <div className={cn('flex h-full w-full shrink-0 snap-start flex-col', safe)} aria-label={t('nav.inspector')} aria-hidden={col !== 2}>
-      <div className="flex h-14 shrink-0 items-center gap-2 border-b px-4 text-sm font-medium"><BookOpen className="size-4" />{t('nav.library')}<Button variant="ghost" size="icon" className="ml-auto size-8" aria-label={t('nav.closeInspectorPanel')} onClick={() => goTo(1)}><X /></Button></div>
-      <div className="flex min-h-0 flex-1 flex-col">{library}</div>
+    {meta && <div className={cn('flex h-full w-full shrink-0 snap-start flex-col', safe)} aria-label={t('nav.inspector')} aria-hidden={col !== 2}>
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b px-4 text-sm font-medium"><BookOpen className="size-4" />{t('nav.meta')}<Button variant="ghost" size="icon" className="ml-auto size-8" aria-label={t('nav.closeInspectorPanel')} onClick={() => goTo(1)}><X /></Button></div>
+      <div className="flex min-h-0 flex-1 flex-col">{meta}</div>
     </div>}
   </div>;
 }

@@ -38,7 +38,7 @@ const base = (p: string) => p.split('/').pop() || '';
 /** 一个对象的「主文件」:第一种 required 且固定的文件(readme.md)。 */
 const mainFile = (protocol?: Protocol) => protocol?.files.find(k => k.required && k.fixed)?.example;
 
-export function Library({ filter = ALL, layer, path, file, dir: dirProp, onSelect, compact = false, work }: Selection & {
+export function Metas({ filter = ALL, layer, path, file, dir: dirProp, onSelect, compact = false, work }: Selection & {
   onSelect: (selection: Selection) => void; compact?: boolean; work?: string;
 }) {
   const open: FileRef | null = layer && path ? { layer, path, file } : null;
@@ -63,22 +63,22 @@ export function Library({ filter = ALL, layer, path, file, dir: dirProp, onSelec
     for (const f of cc.files) {
       if (!f.can || !f.layer || (filter !== ALL && f.layer !== filter)) continue;
       const protocol = layers.data.find(l => l.name === f.layer)?.protocol;
-      if (inObject && f.pattern) { const kind = protocol?.files.find(k => k.pattern === f.pattern); if (kind) out.push({ key: `file:${f.pattern}`, label: t('library.new', { layer: kind.label }), value: { layer: f.layer, dir: here, object: objectOf(here, f.layer), kind } }); }
-      else if (!inObject) out.push({ key: 'origin', label: t('library.newFile', { layer: layerLabel(t, f.layer) }), value: { layer: f.layer, dir: here } });
+      if (inObject && f.pattern) { const kind = protocol?.files.find(k => k.pattern === f.pattern); if (kind) out.push({ key: `file:${f.pattern}`, label: t('meta.new', { layer: kind.label }), value: { layer: f.layer, dir: here, object: objectOf(here, f.layer), kind } }); }
+      else if (!inObject) out.push({ key: 'origin', label: t('meta.newFile', { layer: layerLabel(t, f.layer) }), value: { layer: f.layer, dir: here } });
     }
     for (const o of cc.objects) {
       if (!o.can || (filter !== ALL && o.layer !== filter)) continue;
       const protocol = layers.data.find(l => l.name === o.layer)?.protocol;
-      out.push({ key: `object:${o.layer}`, label: t('library.new', { layer: o.name }), value: { layer: o.layer, dir: here, kind: protocol?.files.find(k => k.required && k.fixed) } });
+      out.push({ key: `object:${o.layer}`, label: t('meta.new', { layer: o.name }), value: { layer: o.layer, dir: here, kind: protocol?.files.find(k => k.required && k.fixed) } });
     }
     return out;
   }, [tree.data, layers.data, filter, here, t]);
   const list = <div className="flex min-h-0 flex-1 flex-col">
     <div className="space-y-2 p-3">
-      <Tabs value={filter} onValueChange={value => onSelect({ filter: value, ...(open || {}) })}><TabsList className="h-8 w-full justify-start overflow-x-auto overscroll-x-contain" aria-label={t('library.layers')}><TabsTrigger value={ALL} className="gap-1.5 text-xs"><Layers className="size-3.5" />{t('layer.all')}</TabsTrigger>{(layers.data || []).map(item => <TabsTrigger key={item.name} value={item.name} className="gap-1.5 text-xs"><LayerIcon layer={item.name} className="size-3.5" />{layerLabel(t, item.name)}</TabsTrigger>)}</TabsList></Tabs>
+      <Tabs value={filter} onValueChange={value => onSelect({ filter: value, ...(open || {}) })}><TabsList className="h-8 w-full justify-start overflow-x-auto overscroll-x-contain" aria-label={t('meta.layers')}><TabsTrigger value={ALL} className="gap-1.5 text-xs"><Layers className="size-3.5" />{t('layer.all')}</TabsTrigger>{(layers.data || []).map(item => <TabsTrigger key={item.name} value={item.name} className="gap-1.5 text-xs"><LayerIcon layer={item.name} className="size-3.5" />{layerLabel(t, item.name)}</TabsTrigger>)}</TabsList></Tabs>
       <div className="flex items-center gap-2">
-        <Tabs value={view} onValueChange={v => setView(v as 'recent' | 'tree')} className="min-w-0 flex-1"><TabsList className="h-8 w-full" aria-label={t('library.view')}><TabsTrigger value="recent" className="flex-1 gap-1.5 text-xs"><Clock3 className="size-3.5" />{t('library.viewRecent')}</TabsTrigger><TabsTrigger value="tree" className="flex-1 gap-1.5 text-xs"><Folder className="size-3.5" />{t('library.viewTree')}</TabsTrigger></TabsList></Tabs>
-        <Select value="" onValueChange={key => { const o = options.find(x => x.key === key); if (o) setCreating(o.value); }} disabled={!options.length}><SelectTrigger className="h-8 w-auto shrink-0 gap-1" aria-label={t('library.newObject')}><Plus className="size-3.5" /><SelectValue placeholder={t('library.newObject')} /></SelectTrigger><SelectContent align="end">{options.map(o => <SelectItem key={o.key} value={o.key}>{o.label}</SelectItem>)}</SelectContent></Select>
+        <Tabs value={view} onValueChange={v => setView(v as 'recent' | 'tree')} className="min-w-0 flex-1"><TabsList className="h-8 w-full" aria-label={t('meta.view')}><TabsTrigger value="recent" className="flex-1 gap-1.5 text-xs"><Clock3 className="size-3.5" />{t('meta.viewRecent')}</TabsTrigger><TabsTrigger value="tree" className="flex-1 gap-1.5 text-xs"><Folder className="size-3.5" />{t('meta.viewTree')}</TabsTrigger></TabsList></Tabs>
+        <Select value="" onValueChange={key => { const o = options.find(x => x.key === key); if (o) setCreating(o.value); }} disabled={!options.length}><SelectTrigger className="h-8 w-auto shrink-0 gap-1" aria-label={t('meta.newObject')}><Plus className="size-3.5" /><SelectValue placeholder={t('meta.newObject')} /></SelectTrigger><SelectContent align="end">{options.map(o => <SelectItem key={o.key} value={o.key}>{o.label}</SelectItem>)}</SelectContent></Select>
       </div>
       {layers.isError && <ErrorState error={layers.error} retry={() => { void layers.refetch(); }} />}
     </div>
@@ -91,7 +91,7 @@ export function Library({ filter = ALL, layer, path, file, dir: dirProp, onSelec
   return <div className={cn('flex min-h-0 flex-1', compact ? 'flex-col' : 'flex-col md:flex-row')}>
     {compact ? (page || list) : <>
       <div className={cn('flex min-h-0 flex-col md:w-80 md:shrink-0 md:border-r', page ? 'hidden md:flex' : 'flex-1 md:flex-none')}>{list}</div>
-      <div className={cn('min-h-0 flex-1 flex-col', page ? 'flex' : 'hidden md:flex')}>{page || <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">{t('library.subtitle')}</div>}</div>
+      <div className={cn('min-h-0 flex-1 flex-col', page ? 'flex' : 'hidden md:flex')}>{page || <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">{t('meta.subtitle')}</div>}</div>
     </>}
   </div>;
 }
@@ -118,7 +118,7 @@ function RecentList({ filter, selected, onOpen }: { filter: string; selected: Fi
   const rows = pages.flatMap(p => p.items).flatMap(item => (item.files.length ? item.files : [undefined]).map(file => ({ item, ref: { layer: item.layer, path: item.path, file } as FileRef })));
   const last = pages[pages.length - 1];
   return <div className="min-h-0 flex-1 overflow-auto px-2 pb-2">
-    <div className="flex items-center justify-between px-1 pb-1 text-xs text-muted-foreground"><span>{t('library.viewRecent')}</span><span>{rows.length}</span></div>
+    <div className="flex items-center justify-between px-1 pb-1 text-xs text-muted-foreground"><span>{t('meta.viewRecent')}</span><span>{rows.length}</span></div>
     {page.isPending && !rows.length ? <div className="space-y-2 p-1">{[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-12" />)}</div>
       : page.isError ? <ErrorState error={page.error} retry={() => { void page.refetch(); }} />
       : rows.length ? <div className="flex flex-col gap-0.5">
@@ -126,9 +126,9 @@ function RecentList({ filter, selected, onOpen }: { filter: string; selected: Fi
           <LayerIcon layer={item.layer} className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
           <span className="min-w-0 flex-1"><span className="block truncate font-medium">{title(ref)}</span><span className="block truncate font-mono text-xs text-muted-foreground">{fullPath(ref)}</span><span className="block truncate text-xs text-muted-foreground">{item.author} · {dateLabel(item.date, locale)} · {item.subject}</span></span>
         </button>)}
-        {last?.next && <Button variant="ghost" size="sm" className="w-full" disabled={page.isFetching} onClick={() => setCursor(last.next)}>{page.isFetching ? <LoaderCircle className="animate-spin" /> : null}{t('library.loadMore')}</Button>}
+        {last?.next && <Button variant="ghost" size="sm" className="w-full" disabled={page.isFetching} onClick={() => setCursor(last.next)}>{page.isFetching ? <LoaderCircle className="animate-spin" /> : null}{t('meta.loadMore')}</Button>}
       </div>
-      : <Empty className="m-1" icon={<Clock3 className="size-5" />} title={t('library.empty', { layer: layerLabel(t, filter) })}><p>{t('library.emptyText')}</p></Empty>}
+      : <Empty className="m-1" icon={<Clock3 className="size-5" />} title={t('meta.empty', { layer: layerLabel(t, filter) })}><p>{t('meta.emptyText')}</p></Empty>}
   </div>;
 }
 
@@ -155,14 +155,14 @@ function TreeList({ dir, setDir, tree, selected, onOpen }: { dir: string; setDir
     {tree.isPending ? <div className="space-y-2 p-1">{[1, 2, 3].map(i => <Skeleton key={i} className="h-9" />)}</div>
       : tree.isError ? <ErrorState error={tree.error} retry={() => { void tree.refetch(); }} />
       : <div className="flex flex-col gap-0.5">
-        {dir && <button type="button" className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent" onClick={() => setDir(parent(dir))}><ArrowLeft className="size-4" />{t('library.up')}</button>}
+        {dir && <button type="button" className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-accent" onClick={() => setDir(parent(dir))}><ArrowLeft className="size-4" />{t('meta.up')}</button>}
         {items.map(item => {
           if (item.kind === 'dir') return <button type="button" key={item.path} className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={() => setDir(item.path)}><Folder className="size-4 text-muted-foreground" /><span className="truncate">{item.name}</span></button>;
           if (item.kind === 'object') return <button type="button" key={item.path} className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent" onClick={() => setDir(`${item.path}.${item.layer}`)}><FolderOpen className="size-4 text-muted-foreground" /><span className="truncate">{item.name}</span><Badge variant="secondary" className="ml-auto shrink-0 font-normal">{layerLabel(t, item.layer || '')}</Badge></button>;
           const ref: FileRef = item.object ? { layer: item.layer || ALL, path: item.object, file: item.rel || item.name } : { layer: item.layer || 'origin', path: item.path };
           return <button type="button" key={item.path} aria-current={same(selected, ref) ? 'true' : undefined} className={cn('flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent', same(selected, ref) && 'bg-accent')} onClick={() => onOpen(ref)}><FileText className="size-4 text-muted-foreground" /><span className="truncate">{item.name}</span></button>;
         })}
-        {!items.length && <p className="px-2 py-3 text-xs text-muted-foreground">{t('library.emptyDir')}</p>}
+        {!items.length && <p className="px-2 py-3 text-xs text-muted-foreground">{t('meta.emptyDir')}</p>}
       </div>}
   </div>;
 }
@@ -232,13 +232,13 @@ export function FilePage({ layer, path, file, creating, onClose, onOpen, work }:
   }, [editing, validName, targetPath, target, method, payload, work]);
   const refresh = () => { for (const key of ['tree', 'recent', 'object', 'history', 'search']) void queryClient.invalidateQueries({ queryKey: [key] }); };
   const save = useMutation({ mutationFn: () => api<MetaObject>(target, { method, body: { ...payload, subject: subject || undefined, reason }, work }),
-    onSuccess: () => { refresh(); toast.success(creating ? t('library.created') : t('library.saved')); setEditing(false); if (creating) onOpen({ layer, path: targetPath, file: raw ? undefined : targetRel }); } });
+    onSuccess: () => { refresh(); toast.success(creating ? t('meta.created') : t('meta.saved')); setEditing(false); if (creating) onOpen({ layer, path: targetPath, file: raw ? undefined : targetRel }); } });
   const remove = useMutation({ mutationFn: () => (raw || (kind?.fixed && kind.required)) ? api(`${target}?${new URLSearchParams({ reason: '' })}`, { method: 'DELETE', work }) : api(target, { method: 'PUT', body: { files: { [rel || '']: null }, reason: '' }, work }),
-    onSuccess: () => { refresh(); toast.success(t('library.deleted')); onClose(); } });
+    onSuccess: () => { refresh(); toast.success(t('meta.deleted')); onClose(); } });
   const ready = validName && check !== 'pending' && check?.ok === true && !save.isPending;
   const cancel = () => { if (creating) onClose(); else setEditing(false); };
   const ref: FileRef = { layer, path: objectPath, file: rel };
-  const title = creating ? (trimmed || t('library.untitled')) : fileTitle(ref, kind);
+  const title = creating ? (trimmed || t('meta.untitled')) : fileTitle(ref, kind);
   // 新建时预览会落到哪个路径:对象里的文件 = 对象目录/实例化的文件名;新对象 = dir/名字.layer/主文件;origin = dir/名字
   const shown = !creating ? fullPath(ref)
     : creating.object ? `${creating.object}.${layer}/${kind ? (kind.fixed ? kind.example : instantiate(kind, trimmed || '…')) : ''}`
@@ -246,7 +246,7 @@ export function FilePage({ layer, path, file, creating, onClose, onOpen, work }:
   const siblings = !creating && object.data && !raw ? Object.keys(object.data.files).filter(f => f !== rel).sort() : [];
   return <div className="flex min-h-0 flex-1 flex-col">
     <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
-      <Button variant="ghost" size="icon" className="size-8" onClick={editing ? cancel : onClose} aria-label={editing ? t('common.cancel') : t('library.back')}>{editing ? <X /> : <ArrowLeft />}</Button>
+      <Button variant="ghost" size="icon" className="size-8" onClick={editing ? cancel : onClose} aria-label={editing ? t('common.cancel') : t('meta.back')}>{editing ? <X /> : <ArrowLeft />}</Button>
       <Badge variant="secondary">{layerLabel(t, layer)}</Badge>
       {kind && <span className="text-xs text-muted-foreground">{kind.label}</span>}
       {editing ? <>
@@ -254,36 +254,36 @@ export function FilePage({ layer, path, file, creating, onClose, onOpen, work }:
         <Button variant="outline" size="sm" className="h-8" onClick={cancel} disabled={save.isPending}>{t('common.cancel')}</Button>
         <Button size="sm" className="h-8" disabled={!ready} onClick={() => save.mutate()}>{save.isPending && <LoaderCircle className="animate-spin" />}{t('common.save')}</Button>
       </> : <>
-        <Tabs value={tab} onValueChange={value => setTab(value as 'content' | 'history')} className="ml-auto"><TabsList className="h-8" aria-label={t('library.objectView')}><TabsTrigger value="content" className="text-xs">{t('library.tabContent')}</TabsTrigger><TabsTrigger value="history" className="gap-1 text-xs"><Clock3 className="size-3.5" />{t('library.tabHistory')}</TabsTrigger></TabsList></Tabs>
+        <Tabs value={tab} onValueChange={value => setTab(value as 'content' | 'history')} className="ml-auto"><TabsList className="h-8" aria-label={t('meta.objectView')}><TabsTrigger value="content" className="text-xs">{t('meta.tabContent')}</TabsTrigger><TabsTrigger value="history" className="gap-1 text-xs"><Clock3 className="size-3.5" />{t('meta.tabHistory')}</TabsTrigger></TabsList></Tabs>
         {!revision && parsed && protocol && <Button variant="outline" size="sm" className="h-8" onClick={beginEdit}><Pencil />{t('editor.edit')}</Button>}
-        {!revision && parsed && protocol && <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-destructive" aria-label={t('editor.deleteFile')} disabled={remove.isPending} onClick={() => { if (window.confirm(t('library.confirmDelete', { path: fullPath(ref) }))) remove.mutate(); }}><Trash2 /></Button>}
+        {!revision && parsed && protocol && <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-destructive" aria-label={t('editor.deleteFile')} disabled={remove.isPending} onClick={() => { if (window.confirm(t('meta.confirmDelete', { path: fullPath(ref) }))) remove.mutate(); }}><Trash2 /></Button>}
       </>}
     </div>
     <div className="min-h-0 flex-1 overflow-auto">{editing && protocol ? <div className="mx-auto flex max-w-3xl flex-col gap-5 p-4 md:p-6">
       <div className="space-y-1">
         <p className="truncate font-mono text-xs text-muted-foreground">{shown}</p>
-        {needName ? <Input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder={creating?.object ? kind?.name || t('library.untitled') : protocol.object ? protocol.object.name : t('library.fileName')} aria-label={t('library.fileName')} className="h-auto border-0 px-0 text-2xl font-semibold tracking-tight shadow-none focus-visible:ring-0 md:text-2xl" />
+        {needName ? <Input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder={creating?.object ? kind?.name || t('meta.untitled') : protocol.object ? protocol.object.name : t('meta.fileName')} aria-label={t('meta.fileName')} className="h-auto border-0 px-0 text-2xl font-semibold tracking-tight shadow-none focus-visible:ring-0 md:text-2xl" />
           : <h2 className="text-2xl font-semibold tracking-tight">{title}</h2>}
       </div>
       {kind?.format.fields && <div className="border-y py-3"><FieldsForm fields={kind.format.fields} value={fields} onChange={setFields} idPrefix="file" /></div>}
       {(kind?.format.body ?? 'markdown') === 'markdown'
-        ? <Suspense fallback={<Skeleton className="h-64" />}><MarkdownEditor key={session} value={body} onChange={setBody} placeholder={t('library.markdown')} className="min-h-64 rounded-md border px-3 py-1" /></Suspense>
+        ? <Suspense fallback={<Skeleton className="h-64" />}><MarkdownEditor key={session} value={body} onChange={setBody} placeholder={t('meta.markdown')} className="min-h-64 rounded-md border px-3 py-1" /></Suspense>
         : <div className="grid gap-1.5"><Label htmlFor="file-body" className="sr-only">{t('editor.body')}</Label><Textarea id="file-body" className="min-h-60 resize-y font-mono text-sm" value={body} onChange={e => setBody(e.target.value)} /></div>}
-      <div className="grid gap-2 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor="file-subject">{t('editor.subject')}</Label><Input id="file-subject" value={subject} onChange={e => setSubject(e.target.value)} placeholder={t('editor.subjectPlaceholder')} /></div><div className="grid gap-2"><Label htmlFor="file-reason">{t('library.reason')}</Label><Input id="file-reason" value={reason} onChange={e => setReason(e.target.value)} placeholder={t('library.reasonPlaceholder')} /></div></div>
+      <div className="grid gap-2 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor="file-subject">{t('editor.subject')}</Label><Input id="file-subject" value={subject} onChange={e => setSubject(e.target.value)} placeholder={t('editor.subjectPlaceholder')} /></div><div className="grid gap-2"><Label htmlFor="file-reason">{t('meta.reason')}</Label><Input id="file-reason" value={reason} onChange={e => setReason(e.target.value)} placeholder={t('meta.reasonPlaceholder')} /></div></div>
       {check && check !== 'pending' && !check.ok && <ErrorState error={new Error(check.reason || '')} />}
       {save.isError && <ErrorState error={save.error} />}
     </div>
     : !objectPath ? null : object.isPending ? <Loading /> : object.isError ? <div className="p-4"><ErrorState error={object.error} retry={() => { void object.refetch(); }} /></div> : <div className="mx-auto flex max-w-3xl flex-col gap-5 p-4 md:p-6">
       <h2 className="text-2xl font-semibold tracking-tight">{title}</h2>
-      {revision && <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-xs"><Clock3 className="size-3.5" /><span>{t('library.revision', { rev: revision.slice(0, 7) })}</span><Button variant="link" size="sm" className="ml-auto h-auto p-0 text-xs" onClick={() => setRevision('')}>{t('library.backToCurrent')}</Button></div>}
+      {revision && <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-xs"><Clock3 className="size-3.5" /><span>{t('meta.revision', { rev: revision.slice(0, 7) })}</span><Button variant="link" size="sm" className="ml-auto h-auto p-0 text-xs" onClick={() => setRevision('')}>{t('meta.backToCurrent')}</Button></div>}
       {tab === 'history' ? history.isPending ? <Loading /> : history.isError ? <ErrorState error={history.error} /> : <ol className="ml-1.5 space-y-4 border-l pl-5">{history.data?.map(item => <li key={item.sha} className="relative"><span className="absolute -left-[26px] top-1.5 size-2.5 rounded-full border-2 border-background bg-muted-foreground" /><button type="button" className="block w-full text-left" onClick={() => { setRevision(item.sha); setTab('content'); }}><span className="block text-sm font-medium break-all">{item.subject}</span><span className="mt-1 block text-xs text-muted-foreground">{item.author} · {dateLabel(item.date, locale)} · <span className="font-mono">{item.sha.slice(0, 7)}</span></span></button></li>)}</ol>
-        : parsed === null ? <Empty icon={<FileText className="size-5" />} title={t('library.noSuchFile')} />
+        : parsed === null ? <Empty icon={<FileText className="size-5" />} title={t('meta.noSuchFile')} />
         : <>
-          {parsed.invalid && <ErrorState error={new Error(t('library.invalidMeta'))} />}
+          {parsed.invalid && <ErrorState error={new Error(t('meta.invalidMeta'))} />}
           <Properties fields={parsed.fields} protocol={protocol} onOpen={onOpen} />
           {kind?.format.body === 'text' ? <pre className="overflow-auto whitespace-pre-wrap break-all rounded-md border bg-muted p-3 font-mono text-xs">{parsed.body}</pre>
             : <Suspense fallback={<Skeleton className="h-32" />}><MarkdownEditor key={`${revision}:${object.dataUpdatedAt}`} value={parsed.body} readOnly /></Suspense>}
-          {siblings.length > 0 && <div className="space-y-1 border-t pt-4"><h4 className="text-xs font-medium text-muted-foreground">{t('library.siblings')}</h4>{siblings.map(f => <Button key={f} variant="ghost" size="sm" className="h-8 w-full justify-start gap-2 font-normal" onClick={() => onOpen({ layer, path: objectPath, file: f })}><FileText className="size-3.5 text-muted-foreground" /><span className="truncate">{fileTitle({ layer, path: objectPath, file: f }, kindOf(protocol, f))}</span><span className="ml-auto truncate font-mono text-xs text-muted-foreground">{f}</span></Button>)}</div>}
+          {siblings.length > 0 && <div className="space-y-1 border-t pt-4"><h4 className="text-xs font-medium text-muted-foreground">{t('meta.siblings')}</h4>{siblings.map(f => <Button key={f} variant="ghost" size="sm" className="h-8 w-full justify-start gap-2 font-normal" onClick={() => onOpen({ layer, path: objectPath, file: f })}><FileText className="size-3.5 text-muted-foreground" /><span className="truncate">{fileTitle({ layer, path: objectPath, file: f }, kindOf(protocol, f))}</span><span className="ml-auto truncate font-mono text-xs text-muted-foreground">{f}</span></Button>)}</div>}
         </>}
     </div>}</div>
   </div>;

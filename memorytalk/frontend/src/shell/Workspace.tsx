@@ -26,7 +26,7 @@ function layout(canvas: Canvas | undefined, sessions: Session[]): Column[] {
   return columns;
 }
 
-export function Workspace({ id, onLibrary }: { id: string; onLibrary: () => void }) {
+export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
   const t = useT();
   const work = useWork(id);
   const base = `/works/${encodeURIComponent(id)}`;
@@ -73,7 +73,7 @@ export function Workspace({ id, onLibrary }: { id: string; onLibrary: () => void
     {sessions.isPending || canvas.isPending ? <Loading /> : sessions.isError ? <div className="p-4"><ErrorState error={sessions.error} retry={() => { void sessions.refetch(); }} /></div>
       : total === 0 && columns.length === 1 ? <div className="flex flex-1 p-4"><Empty icon={<Terminal className="size-5" />} title={ended ? t('work.endedTitle') : t('work.readyTitle')}>
         <p>{ended ? t('work.endedText') : t('work.readyText')}</p>
-        <div className="flex flex-wrap justify-center gap-2">{!ended && <Button onClick={() => setAdding(columns[0].id)}><Plus />{t('work.addSession')}</Button>}<Button variant="outline" onClick={onLibrary}><BookOpen />{t('work.viewLibrary')}</Button></div>
+        <div className="flex flex-wrap justify-center gap-2">{!ended && <Button onClick={() => setAdding(columns[0].id)}><Plus />{t('work.addSession')}</Button>}<Button variant="outline" onClick={onMeta}><BookOpen />{t('work.viewMeta')}</Button></div>
       </Empty></div>
       : <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:flex-row md:items-start md:overflow-x-auto md:overflow-y-hidden" aria-label={t('work.sessions')}>
         {columns.map((column, ci) => column.collapsed

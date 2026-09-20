@@ -70,7 +70,7 @@ export function Home() {
     <Card><CardContent className="p-4"><WorkComposer /></CardContent></Card>
     <section className="space-y-3">
       <div className="flex items-center justify-between"><h2 className="text-sm font-medium">{t('home.recent')}</h2>
-        <Button variant="ghost" size="sm" onClick={() => navigate({ page: 'library' })}><BookOpen />{t('home.fromLibrary')}</Button></div>
+        <Button variant="ghost" size="sm" onClick={() => navigate({ page: 'meta' })}><BookOpen />{t('home.fromMeta')}</Button></div>
       {works.isError ? <ErrorState error={works.error} retry={() => { void works.refetch(); }} />
         : works.isPending ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-28" />)}</div>
         : recent.length ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
