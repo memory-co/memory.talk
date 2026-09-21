@@ -78,7 +78,7 @@ server **不做**的事同样重要:它**不记 work**——哪个块属于哪�
 
 两点值得单说:
 
-- **agent 类 server 和 bash 的关系**。在 shellbase 里 `codex://` 和 `bash://` 完全同构——都是「到某目录跑某命令」。v5 里它们的**现场**仍然同构(都是 tmux 会话),差别只在**把手**:memory.talk 关心 agent 的 **round**——那是 work 留下的主要痕迹、issue 的原料。所以 claude / codex / kimi = bash 的把手 **再加一项「读会话记录」**(代码上是同一个基类多一个 adapter)。v3 的平台 adapter(从 Claude Code / Codex 的记录文件里读 round)在 v5 就住在这里:它不再是「事后 sync 的读取器」,而是 agent server 把手的一部分——现场在跑,round 就在流出来。
+- **agent 类 server 和 bash 的关系**。在 shellbase 里 `codex://` 和 `bash://` 完全同构——都是「到某目录跑某命令」。v5 里它们的**现场**仍然同构(都是 tmux 会话),差别只在**把手**:memory.talk 关心 agent 的 **round**——那是 work 留下的主要痕迹、issue 的原料。所以 claude / codex / kimi = bash 的把手 **再加一项「读会话记录」**(代码上是同样的 open,把手换成带 adapter 的 AgentHandle)。v3 的平台 adapter(从 Claude Code / Codex 的记录文件里读 round)在 v5 就住在这里:它不再是「事后 sync 的读取器」,而是 agent server 把手的一部分——现场在跑,round 就在流出来。
 - **http server 现在是最薄的**。shellbase v1 的浏览器面板是纯 iframe,没有把手;这不妨碍它是一个 server——窗就是那个 URL,把手为空,状态老实报「只有画面没有把手」(M13)。将来换成 webmuxd 一类的真浏览器实例,窗和把手都变强,协议不变,work 层无感——**这正是把它立成 server 的意义:实现面可以整个换掉,契约面不动**。
 
 ---
@@ -103,7 +103,7 @@ server 这个概念**不新造一套规范**,它的形状就是 shellbase 已经
 
 - ~~server 是进程内的库,还是独立进程~~:已定——**库**。tmuxd 在 memory.talk 进程内被 `import`,ttyd 是它的子进程,tmux server 谁的都不是(关掉 memory.talk 现场照跑)。真要跨机器时再议远程 server。
 - ~~协议认领是注册还是约定~~:已定——**server 声明协议(注册)+ default 兜底(约定)**,两者都要,声明优先。
-- ~~agent server 是不是终端 server 的一个特例~~:已定——各自独立成文件,共用 `TerminalBase` / `AgentBase` 两个基类。
+- ~~agent server 是不是终端 server 的一个特例~~:已定——各自独立成文件,**不共用基类**:每个 server 自己写 `__init__`(收注入的 tmuxd)和 `open`(调 `tmuxd.session`),像 controller 一样一眼看全;共用的只有几个小件(解析命令、开 session、把手)。
 - ~~纯外链、纯静态页这类没有把手的块要不要也算 server~~:已定——算,`http.py` / `https.py` 就是最薄的 server。
 - **把手在 work 层暴露到什么程度**:现在只给观测(读 round)和销毁;`send` 在把手上有,API 不露。给驱动就打开了「memory.talk 编排 agent」这扇门——那是另一个话题,本篇不碰。
 - **远程现场**:块背后的现场在另一台机器上(server 在别处跑)——窗天然是 URL 所以没问题,把手怎么跨机器,留给需要时。
