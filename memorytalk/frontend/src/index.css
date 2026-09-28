@@ -73,6 +73,8 @@
   --crepe-font-title: inherit; --crepe-font-default: inherit; --crepe-base-font-size: 15px;
   --crepe-shadow-1: 0 1px 2px 0 rgb(0 0 0 / 0.05); --crepe-shadow-2: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 }
+/* Crepe 给 .milkdown 铺了一层方角底色;外框没有内边距时它会盖住圆角边框的弧线,跟着外框取圆角。 */
+.milkdown.milkdown { border-radius: inherit; }
 .milkdown.milkdown .ProseMirror { padding: 0.5rem 0.25rem; min-height: 100%; }
 /* 块手柄:Crepe 把「+」和拖拽放在同一个浮层里、贴在块左侧。这里把浮层横向拉满编辑区(top 仍由 Crepe 按块算),「+」贴左、拖拽贴右;可编辑时正文四周留同样的边距(左右正好放手柄)。 */
 .milkdown.milkdown .ProseMirror[contenteditable="true"] { padding: 2.5rem; }
