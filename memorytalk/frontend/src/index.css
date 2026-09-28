@@ -74,8 +74,8 @@
   --crepe-shadow-1: 0 1px 2px 0 rgb(0 0 0 / 0.05); --crepe-shadow-2: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 }
 .milkdown.milkdown .ProseMirror { padding: 0.5rem 0.25rem; min-height: 100%; }
-/* 块手柄:Crepe 把「+」和拖拽放在同一个浮层里、贴在块左侧。这里把浮层横向拉满编辑区(top 仍由 Crepe 按块算),「+」贴左、拖拽贴右;可编辑时正文左右各让出手柄的位置。 */
-.milkdown.milkdown .ProseMirror[contenteditable="true"] { padding-inline: 2.75rem; }
+/* 块手柄:Crepe 把「+」和拖拽放在同一个浮层里、贴在块左侧。这里把浮层横向拉满编辑区(top 仍由 Crepe 按块算),「+」贴左、拖拽贴右;可编辑时正文四周留同样的边距(左右正好放手柄)。 */
+.milkdown.milkdown .ProseMirror[contenteditable="true"] { padding: 2.5rem; }
 .milkdown.milkdown .milkdown-block-handle { left: 0 !important; right: 0; justify-content: space-between; padding-inline: 0.375rem; pointer-events: none; }
 .milkdown.milkdown .milkdown-block-handle[data-show='true'] .operation-item { pointer-events: auto; }
 .milkdown.milkdown .ProseMirror h1, .milkdown.milkdown .ProseMirror h2, .milkdown.milkdown .ProseMirror h3, .milkdown.milkdown .ProseMirror h4 { font-family: inherit; font-weight: 600; }

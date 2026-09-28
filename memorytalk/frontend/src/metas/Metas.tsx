@@ -267,7 +267,7 @@ export function FilePage({ layer, path, file, creating, onClose, onOpen, work }:
       </div>
       {kind?.format.fields && <div className="border-y py-3"><FieldsForm fields={kind.format.fields} value={fields} onChange={setFields} idPrefix="file" /></div>}
       {(kind?.format.body ?? 'markdown') === 'markdown'
-        ? <Suspense fallback={<Skeleton className="h-64" />}><MarkdownEditor key={editRun} value={body} onChange={setBody} placeholder={t('meta.markdown')} className="min-h-64 rounded-md border py-1" /></Suspense>
+        ? <Suspense fallback={<Skeleton className="h-64" />}><MarkdownEditor key={editRun} value={body} onChange={setBody} placeholder={t('meta.markdown')} className="min-h-64 rounded-md border" /></Suspense>
         : <div className="grid gap-1.5"><Label htmlFor="file-body" className="sr-only">{t('editor.body')}</Label><Textarea id="file-body" className="min-h-60 resize-y font-mono text-sm" value={body} onChange={e => setBody(e.target.value)} /></div>}
       <div className="grid gap-2 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor="file-subject">{t('editor.subject')}</Label><Input id="file-subject" value={subject} onChange={e => setSubject(e.target.value)} placeholder={t('editor.subjectPlaceholder')} /></div><div className="grid gap-2"><Label htmlFor="file-reason">{t('meta.reason')}</Label><Input id="file-reason" value={reason} onChange={e => setReason(e.target.value)} placeholder={t('meta.reasonPlaceholder')} /></div></div>
       {check && check !== 'pending' && !check.ok && <ErrorState error={new Error(check.reason || '')} />}
