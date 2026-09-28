@@ -259,7 +259,7 @@ export function FilePage({ layer, path, file, creating, onClose, onOpen, work }:
         {!revision && parsed && protocol && <Button variant="ghost" size="icon" className="size-8 text-muted-foreground hover:text-destructive" aria-label={t('editor.deleteFile')} disabled={remove.isPending} onClick={() => { if (window.confirm(t('meta.confirmDelete', { path: fullPath(ref) }))) remove.mutate(); }}><Trash2 /></Button>}
       </>}
     </div>
-    <div className="min-h-0 flex-1 overflow-auto">{editing && protocol ? <div className="mx-auto flex max-w-3xl flex-col gap-5 p-4 md:p-6">
+    <div className="min-h-0 flex-1 overflow-auto">{editing && protocol ? <div className="flex flex-col gap-5 p-4 md:p-6">
       <div className="space-y-1">
         <p className="truncate font-mono text-xs text-muted-foreground">{shown}</p>
         {needName ? <Input autoFocus value={name} onChange={e => setName(e.target.value)} placeholder={creating?.object ? kind?.name || t('meta.untitled') : protocol.object ? protocol.object.name : t('meta.fileName')} aria-label={t('meta.fileName')} className="h-auto border-0 px-0 text-2xl font-semibold tracking-tight shadow-none focus-visible:ring-0 md:text-2xl" />
@@ -267,13 +267,13 @@ export function FilePage({ layer, path, file, creating, onClose, onOpen, work }:
       </div>
       {kind?.format.fields && <div className="border-y py-3"><FieldsForm fields={kind.format.fields} value={fields} onChange={setFields} idPrefix="file" /></div>}
       {(kind?.format.body ?? 'markdown') === 'markdown'
-        ? <Suspense fallback={<Skeleton className="h-64" />}><MarkdownEditor key={editRun} value={body} onChange={setBody} placeholder={t('meta.markdown')} className="min-h-64 rounded-md border px-3 py-1" /></Suspense>
+        ? <Suspense fallback={<Skeleton className="h-64" />}><MarkdownEditor key={editRun} value={body} onChange={setBody} placeholder={t('meta.markdown')} className="min-h-64 rounded-md border py-1" /></Suspense>
         : <div className="grid gap-1.5"><Label htmlFor="file-body" className="sr-only">{t('editor.body')}</Label><Textarea id="file-body" className="min-h-60 resize-y font-mono text-sm" value={body} onChange={e => setBody(e.target.value)} /></div>}
       <div className="grid gap-2 sm:grid-cols-2"><div className="grid gap-2"><Label htmlFor="file-subject">{t('editor.subject')}</Label><Input id="file-subject" value={subject} onChange={e => setSubject(e.target.value)} placeholder={t('editor.subjectPlaceholder')} /></div><div className="grid gap-2"><Label htmlFor="file-reason">{t('meta.reason')}</Label><Input id="file-reason" value={reason} onChange={e => setReason(e.target.value)} placeholder={t('meta.reasonPlaceholder')} /></div></div>
       {check && check !== 'pending' && !check.ok && <ErrorState error={new Error(check.reason || '')} />}
       {save.isError && <ErrorState error={save.error} />}
     </div>
-    : !objectPath ? null : object.isPending ? <Loading /> : object.isError ? <div className="p-4"><ErrorState error={object.error} retry={() => { void object.refetch(); }} /></div> : <div className="mx-auto flex max-w-3xl flex-col gap-5 p-4 md:p-6">
+    : !objectPath ? null : object.isPending ? <Loading /> : object.isError ? <div className="p-4"><ErrorState error={object.error} retry={() => { void object.refetch(); }} /></div> : <div className="flex flex-col gap-5 p-4 md:p-6">
       <h2 className="text-2xl font-semibold tracking-tight">{title}</h2>
       {revision && <div className="flex items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-xs"><Clock3 className="size-3.5" /><span>{t('meta.revision', { rev: revision.slice(0, 7) })}</span><Button variant="link" size="sm" className="ml-auto h-auto p-0 text-xs" onClick={() => setRevision('')}>{t('meta.backToCurrent')}</Button></div>}
       {tab === 'history' ? history.isPending ? <Loading /> : history.isError ? <ErrorState error={history.error} /> : <ol className="ml-1.5 space-y-4 border-l pl-5">{history.data?.map(item => <li key={item.sha} className="relative"><span className="absolute -left-[26px] top-1.5 size-2.5 rounded-full border-2 border-background bg-muted-foreground" /><button type="button" className="block w-full text-left" onClick={() => { setRevision(item.sha); setTab('content'); }}><span className="block text-sm font-medium break-all">{item.subject}</span><span className="mt-1 block text-xs text-muted-foreground">{item.author} · {dateLabel(item.date, locale)} · <span className="font-mono">{item.sha.slice(0, 7)}</span></span></button></li>)}</ol>
