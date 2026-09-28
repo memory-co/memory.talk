@@ -1,4 +1,3 @@
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useMemo, useRef, useState } from 'react';
@@ -10,7 +9,7 @@ import { queryClient } from '@/lib/query';
 import { useServers, useSystem, useWork } from '@/lib/queries';
 import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-import { workletLabel, statusLabel, workStatuses, type Canvas, type Column, type Worklet, type Work, type WorkStatus } from '@/lib/types';
+import { workletLabel, type Canvas, type Column, type Worklet } from '@/lib/types';
 import { Empty, ErrorState, Loading, Modal } from '@/components/Shared';
 import { PanelView } from './PanelView';
 
@@ -32,10 +31,6 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
   const [adding, setAdding] = useState<string | null>(null);          // 往哪一列加工作单元
   const columns = useMemo(() => layout(canvas.data, worklets.data || []), [canvas.data, worklets.data]);
   const byId = useMemo(() => new Map((worklets.data || []).map(s => [s.id, s])), [worklets.data]);
-  const update = useMutation({ mutationFn: (status: WorkStatus) => api<Work>(base, { method: 'PATCH', body: { status } }),
-    onSuccess: () => { for (const key of [['work', id], ['works'], ['worklets', id]]) void queryClient.invalidateQueries({ queryKey: key }); },
-    onError: (error: Error) => toast.error(error.message),
-  });
   // 布局改动:整份 PUT,带 version;被别处改过就重新载入
   const save = useMutation({ mutationFn: (next: Column[]) => api<Canvas>(`${base}/canvas`, { method: 'PUT', body: { version: canvas.data?.version ?? 0, columns: next } }),
     onSuccess: data => queryClient.setQueryData(['canvas', id], data),
@@ -62,7 +57,6 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
   return <div className="flex min-h-0 flex-1 flex-col">
     <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
       <h1 className="min-w-0 flex-1 truncate text-base font-semibold" title={work.data.goal}>{work.data.goal}</h1>
-      <Select value={work.data.status} disabled={update.isPending} onValueChange={value => update.mutate(value as WorkStatus)}><SelectTrigger aria-label={t('work.statusLabel')} className="h-8 w-32"><SelectValue /></SelectTrigger><SelectContent>{workStatuses.map(value => <SelectItem key={value} value={value}>{statusLabel(t, value)}</SelectItem>)}</SelectContent></Select>
     </div>
     {worklets.isPending || canvas.isPending ? <Loading /> : worklets.isError ? <div className="p-4"><ErrorState error={worklets.error} retry={() => { void worklets.refetch(); }} /></div>
       : total === 0 && columns.length === 1 ? <div className="flex flex-1 p-4"><Empty icon={<Terminal className="size-5" />} title={ended ? t('work.endedTitle') : t('work.readyTitle')}>

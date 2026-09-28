@@ -1,11 +1,15 @@
 import { Collapsible, CollapsibleContent } from '@/components/ui/collapsible';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { SidebarMenu, SidebarMenuAction, SidebarMenuButton, SidebarMenuItem, SidebarMenuSub, SidebarMenuSubButton, SidebarMenuSubItem } from '@/components/ui/sidebar';
 import { useState, type MouseEvent } from 'react';
-import { ChevronDown, ChevronRight, Dot, GitBranch, MoreHorizontal } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { Archive, ArchiveRestore, ChevronDown, ChevronRight, Dot, GitBranch, MoreHorizontal } from 'lucide-react';
 import { RunningMark } from '@/components/Shared';
+import { api } from '@/lib/api';
+import { queryClient } from '@/lib/query';
 import { navigate } from '@/lib/router';
-import { statusLabel, type Work } from '@/lib/types';
+import { statusLabel, type Work, type WorkStatus } from '@/lib/types';
 import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { NewSubwork } from './Home';
@@ -21,16 +25,23 @@ export function TaskTree({ works, selected, onNavigate }: { works: Work[]; selec
   </>;
 }
 
-/** 行尾的「⋯」:只在悬停这一行(或菜单开着 / 键盘聚焦)时出现,点开是这个 work 的操作菜单。用 peer 而不是 group-hover,悬停子行时不会把父行的也带出来。 */
+/** 行尾的「⋯」:只在悬停这一行(或菜单开着 / 键盘聚焦)时出现,点开是这个 work 的操作菜单:拆分、归档 / 改回运行中。用 peer 而不是 group-hover,悬停子行时不会把父行的也带出来。 */
 function RowActions({ work, onSplit, className }: { work: Work; onSplit: (id: string) => void; className?: string }) {
   const t = useT();
   const ended = work.status === 'archived';
+  const setStatus = useMutation({ mutationFn: (status: WorkStatus) => api<Work>(`/works/${encodeURIComponent(work.id)}`, { method: 'PATCH', body: { status } }),
+    onSuccess: () => { for (const key of [['work', work.id], ['works'], ['worklets', work.id]]) void queryClient.invalidateQueries({ queryKey: key }); },
+    onError: (error: Error) => toast.error(error.message),
+  });
   return <DropdownMenu>
     <DropdownMenuTrigger asChild>
       <SidebarMenuAction aria-label={`${t('work.actions')} ${work.goal}`} className={cn('hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 md:opacity-0', className)}><MoreHorizontal /></SidebarMenuAction>
     </DropdownMenuTrigger>
     <DropdownMenuContent side="bottom" align="start">
       <DropdownMenuItem disabled={ended} onSelect={() => onSplit(work.id)}><GitBranch />{t('work.split')}</DropdownMenuItem>
+      <DropdownMenuSeparator />
+      {ended ? <DropdownMenuItem disabled={setStatus.isPending} onSelect={() => setStatus.mutate('running')}><ArchiveRestore />{t('work.unarchive')}</DropdownMenuItem>
+        : <DropdownMenuItem disabled={setStatus.isPending} onSelect={() => setStatus.mutate('archived')}><Archive />{t('work.archive')}</DropdownMenuItem>}
     </DropdownMenuContent>
   </DropdownMenu>;
 }
