@@ -93,5 +93,8 @@
 .milkdown.milkdown .milkdown-slash-menu .menu-groups .menu-group li svg { width: 1rem; height: 1rem; color: hsl(var(--muted-foreground)); fill: hsl(var(--muted-foreground)); }
 .milkdown.milkdown .milkdown-slash-menu .menu-groups .menu-group li > span { font-size: 0.875rem; font-weight: 400; }
 .milkdown.milkdown .milkdown-slash-menu .menu-groups .menu-group + .menu-group::before { margin: 0.25rem 0; background: hsl(var(--border)); }
+/* 表格:Crepe 的格线是 outline 色再淡 80%,几乎看不见;对齐 .markdown 的表格——实色 border、px-3 py-1.5,表头 muted 底 + 中等字重。 */
+.milkdown.milkdown .milkdown-table-block :is(th, td) { border: 1px solid hsl(var(--border)); padding: 0.375rem 0.75rem; }
+.milkdown.milkdown .milkdown-table-block th { background: hsl(var(--muted)); font-weight: 500; }
 .milkdown.milkdown .ProseMirror h1, .milkdown.milkdown .ProseMirror h2, .milkdown.milkdown .ProseMirror h3, .milkdown.milkdown .ProseMirror h4 { font-family: inherit; font-weight: 600; }
 .milkdown.milkdown .ProseMirror h1 { font-size: 1.75em; } .milkdown.milkdown .ProseMirror h2 { font-size: 1.5em; } .milkdown.milkdown .ProseMirror h3 { font-size: 1.25em; } .milkdown.milkdown .ProseMirror h4 { font-size: 1.1em; }
