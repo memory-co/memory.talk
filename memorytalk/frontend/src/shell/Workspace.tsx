@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen, Bot, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, Columns3, ExternalLink, GitBranch, Globe, LoaderCircle, Plus, Sparkles, Terminal, Wand2, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen, Bot, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, Columns3, ExternalLink, Globe, LoaderCircle, Plus, Sparkles, Terminal, Wand2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApiError, api } from '@/lib/api';
 import { queryClient } from '@/lib/query';
@@ -12,7 +12,6 @@ import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { workletLabel, statusLabel, workStatuses, type Canvas, type Column, type Worklet, type Work, type WorkStatus } from '@/lib/types';
 import { Empty, ErrorState, Loading, Modal } from '@/components/Shared';
-import { NewSubwork } from './Home';
 import { PanelView } from './PanelView';
 
 /** 画布 = 几列,每列从上到下摆工作单元(docs/structure/v5/work.md#canvas)。没画布 / 没提到的工作单元补到第一列;已不存在的工作单元丢掉。 */
@@ -31,7 +30,6 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
   const worklets = useQuery({ queryKey: ['worklets', id], queryFn: ({ signal }) => api<Worklet[]>(`${base}/worklets`, { signal }), refetchInterval: 8_000 });
   const canvas = useQuery({ queryKey: ['canvas', id], queryFn: ({ signal }) => api<Canvas>(`${base}/canvas`, { signal }) });
   const [adding, setAdding] = useState<string | null>(null);          // 往哪一列加工作单元
-  const [subwork, setSubwork] = useState(false);
   const columns = useMemo(() => layout(canvas.data, worklets.data || []), [canvas.data, worklets.data]);
   const byId = useMemo(() => new Map((worklets.data || []).map(s => [s.id, s])), [worklets.data]);
   const update = useMutation({ mutationFn: (status: WorkStatus) => api<Work>(base, { method: 'PATCH', body: { status } }),
@@ -65,7 +63,6 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
     <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
       <h1 className="min-w-0 flex-1 truncate text-base font-semibold" title={work.data.goal}>{work.data.goal}</h1>
       <Select value={work.data.status} disabled={update.isPending} onValueChange={value => update.mutate(value as WorkStatus)}><SelectTrigger aria-label={t('work.statusLabel')} className="h-8 w-32"><SelectValue /></SelectTrigger><SelectContent>{workStatuses.map(value => <SelectItem key={value} value={value}>{statusLabel(t, value)}</SelectItem>)}</SelectContent></Select>
-      <Button variant="outline" size="sm" onClick={() => setSubwork(true)} disabled={ended}><GitBranch />{t('work.split')}</Button>
     </div>
     {worklets.isPending || canvas.isPending ? <Loading /> : worklets.isError ? <div className="p-4"><ErrorState error={worklets.error} retry={() => { void worklets.refetch(); }} /></div>
       : total === 0 && columns.length === 1 ? <div className="flex flex-1 p-4"><Empty icon={<Terminal className="size-5" />} title={ended ? t('work.endedTitle') : t('work.readyTitle')}>
@@ -110,7 +107,6 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
     <Modal open={adding !== null} onClose={() => setAdding(null)} title={t('attach.title')} description={t('attach.description')}>
       {adding && <NewWorklet id={id} onCreated={worklet => { placeNew(worklet, adding); setAdding(null); }} />}
     </Modal>
-    <NewSubwork parent={id} open={subwork} onClose={() => setSubwork(false)} />
   </div>;
 }
 
