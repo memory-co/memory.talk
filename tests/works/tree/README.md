@@ -5,7 +5,7 @@
 父不存在 → 404;work 没有 project 字段。
 
 ## 不在这测什么
-- 状态与完成收拢 → `status`
+- 状态(运行中 / 归档)→ `status`
 - 归属 → `users/work_ownership`
 
 ## fixture 来源

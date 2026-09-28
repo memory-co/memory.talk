@@ -1,10 +1,10 @@
 import { localeTag, type Key, type Locale, type T } from './i18n';
 import type { FileKind, Protocol } from './protocol';
 
-export type WorkStatus = 'todo' | 'doing' | 'done' | 'abandoned';
+export type WorkStatus = 'running' | 'archived';
 export interface Work {
   id: string; goal: string; parent: string | null; status: WorkStatus;
-  created_by: string | null; created_at: string; done_at: string | null; children?: Work[];
+  created_by: string | null; created_at: string; archived_at: string | null; children?: Work[];
 }
 export interface Worklet {
   id: string; uri: string; scheme: string; cwd: string | null; alive: boolean;
@@ -46,7 +46,7 @@ export interface Revision { sha: string; author: string; date: string; subject: 
 export interface SearchHit { kind: 'work' | 'meta' | 'user'; id: string; title: string; snippet: string; layer: string | null; file: string | null; line: number | null; status: string | null }
 export interface SearchResult { query: string; hits: SearchHit[]; counts: Record<string, number> }
 export interface InboxItem { ts: string; layer: string; path: string; subject: string; by: string | null }
-export const workStatuses: WorkStatus[] = ['todo', 'doing', 'done', 'abandoned'];
+export const workStatuses: WorkStatus[] = ['running', 'archived'];
 export const statusLabel = (t: T, status: WorkStatus) => t(`status.${status}`);
 export const layerLabel = (t: T, layer: string) => (['origin', 'issue', 'card', 'all'].includes(layer) ? t(`layer.${layer}` as Key) : layer);
 const schemeNames: Record<string, string> = { codex: 'Codex', claude: 'Claude Code', kimi: 'Kimi' };

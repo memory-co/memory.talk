@@ -47,7 +47,7 @@ Issue ──(meta.links)──▶ Issue                       ← IBIS 边
 Card  ──(links)──▶ Card                             ← 内链
 ```
 
-全部是**裸 id 引用,无外键**:work 不知道 issue 的存在(issue 记 `manager_work`,work 侧靠 `GET /api/issues?manager_work=` 反查);card / issue 记的 `work_id` 可以指向已结束甚至已不存在的 work,读时容忍悬挂。
+全部是**裸 id 引用,无外键**:work 不知道 issue 的存在(issue 记 `manager_work`,work 侧靠 `GET /api/issues?manager_work=` 反查);card / issue 记的 `work_id` 可以指向已归档甚至已不存在的 work,读时容忍悬挂。
 
 ## 磁盘布局速查
 

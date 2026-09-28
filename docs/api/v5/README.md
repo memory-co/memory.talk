@@ -17,7 +17,7 @@
 | `POST` | `/api/works` | 开工:建一个 work(parent= 挂到树上) |
 | `GET` | `/api/works/servers` | 有哪些 work server(bash / claude / codex / kimi / http / default)及各自响应的协议;attach 时按协议去找它们 |
 | `GET` | `/api/works/{work_id}` | 读一个 work(带身份 = 打开它,记一笔在操作) |
-| `PATCH` | `/api/works/{work_id}` | 改目标 / 状态;done 要求子 work 全完;结束后工作单元冻结 |
+| `PATCH` | `/api/works/{work_id}` | 改目标 / 状态(`running` / `archived`);归档后工作单元冻结 |
 | `GET` | `/api/works/{work_id}/canvas` | 画布:几列、每列从上到下摆哪些工作单元、哪些收起(视图,随时可重排) |
 | `PUT` | `/api/works/{work_id}/canvas` | 全量写画布(version 乐观锁) |
 | `GET` | `/api/works/{work_id}/events` | work 自己的时间线 |
@@ -67,7 +67,7 @@
   | 401 | `unauthorized` | 没带 token / token 不认识 / 密码不对 |
   | 403 | `forbidden` | member 做 admin 的事 |
   | 404 | `not_found` / `no_layer` | work、工作单元、对象、层不存在 |
-  | 409 | `exists` / `conflict` / `guard` / `setup_required` | 对象已存在 / work 状态、画布、结束后 attach / **跨层提交被守卫拒绝** / 还没 admin |
+  | 409 | `exists` / `conflict` / `guard` / `setup_required` | 对象已存在 / work 状态、画布、归档后 attach / **跨层提交被守卫拒绝** / 还没 admin |
   | 422 | `invalid` | 对象不符合层的 schema(或 FastAPI 默认校验) |
   | 502 | `platform` | tmux 起不来 |
 

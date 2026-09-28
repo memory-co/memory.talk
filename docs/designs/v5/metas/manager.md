@@ -72,7 +72,7 @@ memory.talk/配置/旧的 settings 方案.md             ← origin 变了(新�
 | 在哪 | 变动 = | 谁产生 |
 |---|---|---|
 | Metas(git) | 一个 commit 触碰了这个目录下的路径 | collectbase 的 post-commit 就是天然的信号源;一个 commit 一条变动,带 `[层名]`、动词、路径、trailer |
-| work 目录(裸文件) | work 的事件:状态变了、新 worklet、新 round、做完 | work 层的 events.jsonl 就是信号源 |
+| work 目录(裸文件) | work 的事件:状态变了(含归档)、新 worklet、新 round | work 层的 events.jsonl 就是信号源 |
 
 **打过去**:变动**投递**到 manager work 的**收件箱**——work 目录下一个 append-only 的 `inbox.jsonl`。每条:什么时候、哪个路径、什么变动、谁干的、以及**它是被哪个 `manager.json` 路由过来的**(便于回答「为什么这事到我这」)。
 
@@ -91,7 +91,7 @@ manager 机制不规定动作。但把它接到 v5 已有的几条线上,会自�
 | issue 多了一条论证 | 看看某个立场站住了没;站住了就**写卡**(`[issue] decide` + `[card] write`) |
 | issue 冒出来、没人管 | 绑到自己(写一个 `manager.json`),或**派出**一个论证 work 去取证 |
 | 一张卡被改 | 检查链接到它的卡和 issue 有没有过时;有争议就开讨论页 |
-| 子 work 做完 | 看兄弟节点完了没;都完了推进父 work 的状态,或写下一步的子 work |
+| 子 work 归档 | 看兄弟节点还有没有在跑的;决定要不要归档父 work,或写下一步的子 work |
 | 一片卡里加了新卡 | 更新目录 / 合并重复的卡 |
 
 这些都是「把事情往下做」——manager work 是**在推进**,不是在**审批**。它没有比别人更大的权限(user.md:不做权限),只是变动先到它这里、它先动手。

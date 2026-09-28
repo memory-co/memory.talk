@@ -3,7 +3,7 @@
 
 def test_event_order_created_status_frozen(client):
     w = client.post("/api/works", json={"goal": "x"}).json()
-    client.patch(f"/api/works/{w['id']}", json={"status": "done"})
+    client.patch(f"/api/works/{w['id']}", json={"status": "archived"})
     assert [e["type"] for e in client.get(f"/api/works/{w['id']}/events").json()] == ["created", "status", "frozen"]
 
 
@@ -20,9 +20,9 @@ def test_manager_json_overrides_the_parent(client):
     c = client.post("/api/works", json={"goal": "子", "parent": root["id"]}).json()
     other = client.post("/api/works", json={"goal": "别处"}).json()
     assert client.put(f"/api/works/{c['id']}/manager", json={"work": other["id"]}).json()["work"] == other["id"]
-    client.patch(f"/api/works/{c['id']}", json={"status": "doing"})
+    client.patch(f"/api/works/{c['id']}", json={"status": "archived"})
     last = client.get(f"/api/works/{other['id']}/inbox").json()[-1]
-    assert last["subject"] == "status todo -> doing" and last["routed_by"] == c["id"]
+    assert last["subject"] == "status running -> archived" and last["routed_by"] == c["id"]
 
 
 def test_unset_manager_returns_to_parent(client):

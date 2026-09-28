@@ -6,7 +6,7 @@ import { localeTag, useT } from '@/lib/i18n';
 import { navigate, useRoute } from '@/lib/router';
 import { flattenWorks } from '@/lib/types';
 import { cn } from '@/lib/utils';
-import { ErrorState, Loading, Logo, UserAvatar } from '@/components/Shared';
+import { ErrorState, Loading, Logo, RunningMark, UserAvatar } from '@/components/Shared';
 import { Button } from '@/components/ui/button';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { Separator } from '@/components/ui/separator';
@@ -110,7 +110,7 @@ function Crumbs() {
       <BreadcrumbItem><BreadcrumbLink href="#/" onClick={home}>{pageName}</BreadcrumbLink></BreadcrumbItem>
       <BreadcrumbSeparator />
       {ancestors.map(w => <Fragment key={w.id}><BreadcrumbItem className="hidden min-w-0 md:block"><BreadcrumbLink href={`#/work/${encodeURIComponent(w.id)}`} className="block max-w-[20vw] truncate" onClick={e => { e.preventDefault(); navigate({ page: 'work', work: w.id }); }}>{w.goal}</BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator className="hidden md:block" /></Fragment>)}
-      <BreadcrumbItem className="min-w-0"><BreadcrumbPage className="block max-w-[45vw] truncate">{currentWork.goal}</BreadcrumbPage></BreadcrumbItem>
+      <BreadcrumbItem className="min-w-0"><BreadcrumbPage className="block max-w-[45vw] truncate">{currentWork.goal}</BreadcrumbPage>{currentWork.status === 'running' && <RunningMark />}</BreadcrumbItem>
     </> : segments.length ? <>
       <BreadcrumbItem><BreadcrumbLink href="#/meta" onClick={e => { e.preventDefault(); navigate({ page: 'meta', filter: route.filter, dir: '' }); }}>{pageName}</BreadcrumbLink></BreadcrumbItem>
       {segments.map((seg, i) => { const last = i === segments.length - 1; return <Fragment key={i}>

@@ -103,12 +103,12 @@ class WorkService:
         if req.status and req.status != before.status:
             self.events.emit(work_id, "status", **{"from": before.status, "to": work.status})
             self._deliver(work_id, f"status {before.status} -> {work.status}")
-        if work.status in ("done", "abandoned") and before.status not in ("done", "abandoned"):
+        if work.status == "archived" and before.status != "archived":
             self._freeze(work_id)
         return work
 
     def _freeze(self, work_id: str) -> None:
-        """做完:工作单元冻结——现场销毁,登记留着(可回去看痕迹,不再是干活的地方)。"""
+        """归档:工作单元冻结——现场销毁,登记留着(可回去看痕迹,不再是干活的地方)。"""
         for m in self.worklets.list(work_id):
             try:
                 self.work_servers.destroy(m.server, m.id)
@@ -130,8 +130,8 @@ class WorkService:
 
     def attach(self, work_id: str, raw_uri: str) -> WorkletView:
         work = self.tree.get(work_id)
-        if work.status in ("done", "abandoned"):
-            raise WorkConflict(f"{work_id} 已结束,不再是干活的地方")
+        if work.status == "archived":
+            raise WorkConflict(f"{work_id} 已归档,不再是干活的地方")
         uri, server = self.work_servers.resolve(raw_uri)
         m = self.worklets.add(work_id, raw_uri, uri.scheme, server.name, None)
         try:
@@ -177,7 +177,7 @@ class WorkService:
     def rounds(self, work_id: str, worklet_id: str) -> list[Round]:
         m = self.worklets.get(work_id, worklet_id)
         work = self.tree.get(work_id)
-        if work.status not in ("done", "abandoned"):
+        if work.status != "archived":
             h = self._handle(m)
             if hasattr(h, "rounds"):
                 self.round_log.sync(work_id, worklet_id, h.rounds())

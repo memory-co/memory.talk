@@ -62,9 +62,9 @@ panel(画布上的格子) ──装着──▶ worklet(现场的身份) ──�
 1. **attach**(在 work 里打开一个块)。work 层先登记一条工作单元、分配 id;拿协议去 server 那里寻址;server 用这个 id 幂等地建现场——终端类就是起一个 **tmux 会话,工作单元名 = worklet id**;交回窗(嵌进画布)和把手(留给 work 层观测)。建现场失败,登记回滚,不留半个工作单元。
 2. **reattach**(重入)。换设备、刷新页面、服务重启之后,拿 worklet id 再 open 一次:现场还在就直接取回,不在就按原 URI 重建。**同一个 id 永远是同一个现场**——这是 tmux `new -A` 的语义,也是 `*muxd` 规范的 M4。
 3. **detach**(关闭即回收)。销毁现场 + 删登记。跟 shellbase 一样,关块不是从画布上摘掉,是真的 kill。
-4. **freeze**(work 结束)。work 做完或放弃,所有工作单元的现场销毁、**登记留着**:工作单元不再活着、不能再 attach,但还能回去看它的 rounds。这是「结束以后工作单元冻结,现场可以回去看但不再是干活的地方」([work.md §6](work.md))在 worklet 上的落法。
+4. **freeze**(work 归档)。work 归档,所有工作单元的现场销毁、**登记留着**:工作单元不再活着、不能再 attach,但还能回去看它的 rounds。这是「结束以后工作单元冻结,现场可以回去看但不再是干活的地方」([work.md §6](work.md))在 worklet 上的落法。
 
-detach 和 freeze 的差别:detach 是「这个现场我不要了」,登记一起删;freeze 是「这件事做完了」,登记作为痕迹的索引留下。
+detach 和 freeze 的差别:detach 是「这个现场我不要了」,登记一起删;freeze 是「这件事不在这里干了」,登记作为痕迹的索引留下。
 
 ---
 
@@ -90,6 +90,6 @@ agent 类 worklet(claude / codex / kimi)的把手多一项 `rounds`:按 cwd + �
 
 - **worklet 能不能换 URI**:shellbase 的做法是「改 URI = 销毁重建」。v5 倾向同样——worklet 的 URI 是它身份的一部分,要换就 detach 再 attach 一个新的;但「同一个 agent 工作单元换个工作目录」这种需求真出现了再议。
 - **一个 worklet 能不能被多个 panel 装**:同一个 tmux 会话在画布上开两个格子镜像,shellbase 靠完整 URI 显式做到。v5 的 panel 记 `worklet`,技术上允许两个 panel 指同一个工作单元;要不要允许,看协作(多人看同一个 agent)是不是真需求。
-- **freeze 之后能不能「解冻」**:work 从 done 改回 doing,工作单元要不要跟着能重新 attach。倾向能——登记还在,reattach 会按原 URI 重建;但 agent 的会话记录已经是新的一份,round 会接着追加还是另起,要定。
-- **rounds 的同步时机**:现在是读的时候顺手同步(pull)。要不要在 worklet 活着的时候后台盯着记录文件(watch),让标注流程能实时看到新 round——这跟「逐 round 标注是在 work 进行中做还是做完再做」绑在一起。
+- **freeze 之后能不能「解冻」**:work 从归档改回运行中(已允许),工作单元要不要跟着能重新 attach。倾向能——登记还在,reattach 会按原 URI 重建;但 agent 的会话记录已经是新的一份,round 会接着追加还是另起,要定。
+- **rounds 的同步时机**:现在是读的时候顺手同步(pull)。要不要在 worklet 活着的时候后台盯着记录文件(watch),让标注流程能实时看到新 round——这跟「逐 round 标注是在 work 运行中做还是归档后再做」绑在一起。
 - **非 tmux 的现场怎么算活着**:http 类 worklet 永远 `alive`,因为没有进程。换成 webmuxd 之后有真的浏览器实例,alive 才有意义;现在是老实报「没有把手所以无从判断」还是报 `true`,本篇先按 `true`。

@@ -73,8 +73,8 @@ class DatabaseProvider:
 ```python
 works = db.table("works", Column("id", str, primary=True), Column("parent", str, index=True, nullable=True),
                  Column("created_by", str, index=True), Column("status", str), Column("data", JSON))
-db.select(works).where(works.c.created_by == user, works.c.status != "done").order_by(works.c.created_at.desc()).all()
-db.update(works).where(works.c.id == wid, works.c.version == expect).set(status="done", version=expect + 1).run()
+db.select(works).where(works.c.created_by == user, works.c.status != "archived").order_by(works.c.created_at.desc()).all()
+db.update(works).where(works.c.id == wid, works.c.version == expect).set(status="archived", version=expect + 1).run()
 ```
 
 | 实现 | 备注 |

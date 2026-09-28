@@ -1,9 +1,9 @@
 """works/tree -- nodes, parent/child, forest. See README.md."""
 
 
-def test_create_root_is_todo_without_parent(client):
+def test_create_root_is_running_without_parent(client):
     w = client.post("/api/works", json={"goal": "把 v5 做出来"}).json()
-    assert w["status"] == "todo" and w["parent"] is None and "project" not in w
+    assert w["status"] == "running" and w["parent"] is None and "project" not in w
 
 
 def test_children_are_nested_under_parent_in_forest(client):

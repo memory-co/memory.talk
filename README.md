@@ -35,7 +35,7 @@ memory.talk meta write issue memory.talk/配置/该走文件还是环境变量 -
 memory.talk meta act   issue position memory.talk/配置/该走文件还是环境变量 --field claim='只用环境变量'
 memory.talk meta act   issue decide   memory.talk/配置/该走文件还是环境变量 \
     --field position=p1 --field card=memory.talk/配置/配置只来自环境变量
-memory.talk work set $W --status done
+memory.talk work set $W --status archived
 ```
 
 ## 存储

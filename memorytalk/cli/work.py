@@ -12,7 +12,7 @@ def w_list(api, a):
         return out(forest, True)
     def walk(nodes, depth):
         for n in nodes:
-            if not a.all and n["status"] in ("done", "abandoned"):
+            if not a.all and n["status"] == "archived":
                 continue
             print(f"{'  ' * depth}{n['id']}  {n['status']:<9} {n.get('created_by') or '-':<8} {n['goal']}")
             walk(n["children"], depth + 1)
@@ -82,7 +82,7 @@ def register(top) -> None:
     wp("create", w_create, (["--goal"], {"required": True}), (["--parent"], {}), wid=False)
     wp("list", w_list, (["--root"], {}), (["--created-by"], {"dest": "created_by"}), (["--all"], {"action": "store_true"}), wid=False)
     wp("show", w_show)
-    wp("set", w_set, (["--goal"], {}), (["--status"], {"choices": ["todo", "doing", "done", "abandoned"]}))
+    wp("set", w_set, (["--goal"], {}), (["--status"], {"choices": ["running", "archived"]}))
     wp("attach", w_attach, (["uri"], {}))
     wp("worklets", w_worklets)
     wp("detach", w_detach, (["worklet_id"], {}))

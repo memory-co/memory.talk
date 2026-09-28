@@ -56,5 +56,5 @@ memory.talk work attach $W codex:///home/alice/memory.talk   # 在这个 work �
 memory.talk meta write issue memory.talk/配置/该走文件还是环境变量 --put readme.md='起服务要读几样配置……'
 memory.talk meta edit  issue memory.talk/配置/该走文件还是环境变量 --put positions/只用环境变量.md=@立场.md --subject 'position …: 只用环境变量'   # frontmatter 里 rank / verdict
 memory.talk meta write card memory.talk/配置/配置只来自环境变量 --put readme.md=@卡.md                                     # frontmatter 里 issue: <那个 issue 的 path>
-memory.talk work set $W --status done
+memory.talk work set $W --status archived
 ```

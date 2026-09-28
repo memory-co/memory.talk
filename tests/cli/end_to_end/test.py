@@ -68,7 +68,6 @@ def test_cli_end_to_end(cli):
     assert w["id"] in cli("work", "list").stdout
     child = json.loads(cli("--json", "work", "create", "--goal", "子事", "--parent", w["id"], user="alice").stdout)
     assert "子事" in cli("work", "show", w["id"]).stdout or True
-    assert cli("work", "set", w["id"], "--status", "done", check=False).returncode == 1        # 子没完
     s = json.loads(cli("--json", "work", "attach", w["id"], "bash://", user="alice").stdout)
     assert s["alive"] and "?arg=" in cli("work", "attach", w["id"], "bash://").stdout            # 窗:tmuxd 自带的 ttyd
     assert s["id"] in cli("work", "worklets", w["id"]).stdout
@@ -103,8 +102,7 @@ def test_cli_end_to_end(cli):
     # assert ip in cli("meta", "managed", "--work", w["id"]).stdout
     assert "positions/{name}.md" in cli("meta", "layers").stdout
 
-    cli("work", "set", child["id"], "--status", "done", user="alice")
-    assert json.loads(cli("--json", "work", "set", w["id"], "--status", "done").stdout)["status"] == "done"
+    assert json.loads(cli("--json", "work", "set", w["id"], "--status", "archived").stdout)["status"] == "archived"
     cli("user", "passwd", "alice", "--new-password", "alice-pw-2", user="admin")            # admin 给 alice 改密码 → 她的登录态作废
     assert cli("work", "list", user="alice", check=False).returncode == 1
     cli("logout", user="alice")                                                              # 作废了的也能退干净

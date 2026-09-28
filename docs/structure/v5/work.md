@@ -12,9 +12,9 @@
   "goal": "把 v5 做出来",
   "created_by": "alice",
   "parent": null,
-  "status": "doing",
+  "status": "running",
   "created_at": "2026-09-05T23:02:07Z",
-  "done_at": null
+  "archived_at": null
 }
 ```
 
@@ -24,14 +24,17 @@
 | `goal` | string | 它是什么事(一句话) |
 | `created_by` | string \| null | 谁建的(归属,建时定下不改;**不是权限**,见 [designs user.md](../../designs/v5/user.md)) |
 | `parent` | string \| null | 属于哪件更大的事;`null` = 根。**work 之间只有这一种直接关系**——没有 project 之类的分组字段,横向关系靠 issue |
-| `status` | `todo` \| `doing` \| `done` \| `abandoned` | 三层里只有 work 有状态 |
+| `status` | `running` \| `archived` | 三层里只有 work 有状态;新建即 `running` |
 | `created_at` | ISO 8601 | |
-| `done_at` | ISO 8601 \| null | `done` / `abandoned` 时写;回到 `todo` / `doing` 清空 |
+| `archived_at` | ISO 8601 \| null | 进入 `archived` 时写(已是 `archived` 则保留);回到 `running` 清空 |
 
 **状态规则**:
-- `done` 要求所有子 work 都是 `done` 或 `abandoned`,否则 `409`(完成从叶子往上收拢)。
-- 进入 `done` / `abandoned` 即**冻结**:所有工作单元的现场销毁、登记留着、不能再 attach;`rounds` 不再从把手同步,只读已记的。
-- 没有 `doing` 的自动推断——开工 / 在做 / 待做由人或 agent 标。
+- 只有两档:`running`(还在这里干活)/ `archived`(不再在这里干活——做成了还是放下了,对系统没有区别)。
+- 归档**不看子 work**:父子各归各的,没有「子 work 全完才能归档」的约束。
+- 进入 `archived` 即**冻结**:所有工作单元的现场销毁、登记留着、不能再 attach;`rounds` 不再从把手同步,只读已记的。
+- 可以从 `archived` 改回 `running`(取消归档)。
+- 写入只收 `running` / `archived`,别的值 `422`。旧的 `work.json` 里的 `todo` / `doing` / `done` / `abandoned` 与 `done_at` 读时透明折算:`todo` / `doing` → `running`,`done` / `abandoned` → `archived`,`done_at` → `archived_at`。
+- 没有自动归档——由人或 agent 标。
 
 **读视图 `WorkNode`** = Work + `children: WorkNode[]`(读时拼出来,不存)。
 
@@ -131,7 +134,7 @@ work 自己的时间线,append-only。v3 `events.jsonl` 在 v5 唯一保留的�
 ```json
 {"ts": "2026-09-05T23:02:07Z", "type": "created", "data": {"goal": "把 v5 做出来", "parent": null}}
 {"ts": "2026-09-05T23:02:10Z", "type": "worklet.attached", "data": {"worklet": "…-w1", "uri": "codex:///…", "server": "codex"}}
-{"ts": "2026-09-06T01:00:00Z", "type": "status", "data": {"from": "doing", "to": "done"}}
+{"ts": "2026-09-06T01:00:00Z", "type": "status", "data": {"from": "running", "to": "archived"}}
 {"ts": "2026-09-06T01:00:00Z", "type": "frozen", "data": {}}
 ```
 
@@ -139,7 +142,7 @@ work 自己的时间线,append-only。v3 `events.jsonl` 在 v5 唯一保留的�
 |---|---|
 | `created` | `goal`, `parent` |
 | `status` | `from`, `to` |
-| `frozen` | — (结束时现场已销毁) |
+| `frozen` | — (归档时现场已销毁) |
 | `worklet.attached` | `worklet`, `uri`, `server` |
 | `worklet.detached` | `worklet` |
 

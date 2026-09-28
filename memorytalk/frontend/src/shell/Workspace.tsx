@@ -57,7 +57,7 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
   const placeNew = (worklet: Worklet, colId: string) => { if (columns[0]?.id !== colId) edit(cols => { const at = find(cols, worklet.id); const panel = at ? cols[at[0]].panels.splice(at[1], 1)[0] : { worklet: worklet.id, collapsed: false }; (cols.find(c => c.id === colId) || cols[0]).panels.push(panel); return cols; }); };
   if (work.isPending) return <Loading />;
   if (work.isError) return <div className="p-4"><ErrorState error={work.error} retry={() => { void work.refetch(); }} /></div>;
-  const ended = ['done', 'abandoned'].includes(work.data.status);
+  const ended = work.data.status === 'archived';
   const total = worklets.data?.length ?? 0;
   return <div className="flex min-h-0 flex-1 flex-col">
     <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">

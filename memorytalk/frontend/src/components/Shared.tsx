@@ -1,5 +1,5 @@
 import { useDialogFocus } from '@/hooks/use-dialog-focus';
-import { AlertCircle, LoaderCircle } from 'lucide-react';
+import { AlertCircle, LoaderCircle, Play } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
@@ -52,4 +52,11 @@ export function safeWindowUrl(raw?: string | null): string | null {
   if (!raw) return null;
   try { const url = new URL(raw, window.location.origin); return ['http:', 'https:'].includes(url.protocol) ? url.href : null; }
   catch { return null; }
+}
+
+/** 运行中的标记:一个实心的播放三角,跟在 work 名字后面;归档了就不画。 */
+export function RunningMark({ className }: { className?: string }) {
+  const t = useT();
+  // 包一层 span:侧栏按钮会把直接子 svg 强制成 size-4
+  return <span role="img" aria-label={t('status.running')} title={t('status.running')} className={cn('inline-flex shrink-0', className)}><Play aria-hidden className="size-3 fill-emerald-500 text-emerald-500" /></span>;
 }

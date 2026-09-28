@@ -7,7 +7,7 @@ memory.talk work
 ├── create  --goal '<一句话>' [--parent <work_id>]
 ├── list    [--root <work_id>] [--created-by <user>] [--all]
 ├── show    <work_id>
-├── set     <work_id> [--goal '<…>'] [--status todo|doing|done|abandoned]
+├── set     <work_id> [--goal '<…>'] [--status running|archived]
 │
 ├── attach   <work_id> <uri>                      # 打开一个块:协议 → server 建现场
 ├── worklets <work_id>
@@ -27,23 +27,23 @@ memory.talk work
 memory.talk work create --goal '把配置改成环境变量' [--parent work_…]
 ```
 
-`created_by` = `--user` / `MEMORY_TALK_USER`。输出新 work 的 id、目标、状态(`todo`)。父不存在 → exit 1。
+`created_by` = `--user` / `MEMORY_TALK_USER`。输出新 work 的 id、目标、状态(`running`)。父不存在 → exit 1。
 
 ## work list
 
-树,默认只列没结束的(`todo` / `doing`);`--all` 连 `done` / `abandoned` 一起。
+树,默认只列运行中的(`running`);`--all` 连 `archived` 一起。
 
 ```
-work_…2f2f  doing  alice  把 v5 做出来
-  work_…a1b2  done   alice  实现 issue
-  work_…c3d4  doing  bob    实现 work
+work_…2f2f  running   alice    把 v5 做出来
+  work_…a1b2  archived  alice    实现 issue
+  work_…c3d4  running   bob      实现 work
 ```
 
 | 参数 | 说明 |
 |---|---|
 | `--root <id>` | 只看这一棵 |
 | `--created-by <user>` | 只看某人建的(`--created-by me` = 当前 `--user`) |
-| `--all` | 含已结束的 |
+| `--all` | 含已归档的 |
 
 ## work show
 
@@ -51,7 +51,7 @@ work_…2f2f  doing  alice  把 v5 做出来
 
 ## work set
 
-改目标 / 状态。`--status done` 要求子 work 全完,否则 exit 1 并列出未完的子 work;结束后工作单元冻结(现场销毁、登记留着)。
+改目标 / 状态。`--status archived` 归档:不看子 work,父子各归各的;归档后工作单元冻结(现场销毁、登记留着)。`--status running` 取消归档。
 
 ## work attach
 
@@ -63,7 +63,7 @@ memory.talk work attach work_…2f2f bash://
 memory.talk work attach work_…2f2f https://localhost:5173/
 ```
 
-输出:工作单元 id、窗地址(tmuxd 自带的 ttyd,`?arg=<id>`)、把手能力。已结束的 work → exit 1;命令不在 PATH → exit 1 `cmd_not_found`。
+输出:工作单元 id、窗地址(tmuxd 自带的 ttyd,`?arg=<id>`)、把手能力。已归档的 work → exit 1;命令不在 PATH → exit 1 `cmd_not_found`。
 
 **agent 工作单元的环境里自动带 `MEMORY_TALK_WORK=<work_id>` 和 `MEMORY_TALK_USER=<当前 user>`**——agent 在里面再调 `memory.talk meta …`,提交就挂在这个 user 名下、变动不投回自己。
 

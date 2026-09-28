@@ -1,4 +1,4 @@
-"""work 树:节点、父子、状态、完成收拢(work.md §2)。IO 走仓储。"""
+"""work 树:节点、父子、状态(运行中 / 归档)(work.md §2)。IO 走仓储。"""
 from __future__ import annotations
 
 import secrets
@@ -78,12 +78,7 @@ class WorkTree:
         return work
 
     def _transition(self, work: Work, status: WorkStatus) -> dict:
-        """完成 = 叶子做完,往上收拢:子 work 还没完的父 work 不能 done。"""
-        if status == "done":
-            pending = [c.id for c in self.children(work.id) if c.status not in ("done", "abandoned")]
-            if pending:
-                raise WorkConflict(f"{work.id} 还有未完成的子 work: {', '.join(pending)}")
-            return {"status": status, "done_at": now()}
-        if status == "abandoned":
-            return {"status": status, "done_at": now()}
-        return {"status": status, "done_at": None}
+        """只有两档:运行中 / 归档。归档记下时间,拿回运行中就清掉;不看子 work(各归各的)。"""
+        if status == "archived":
+            return {"status": status, "archived_at": work.archived_at if work.status == "archived" else now()}
+        return {"status": status, "archived_at": None}

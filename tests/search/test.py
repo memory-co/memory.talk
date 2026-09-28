@@ -16,7 +16,7 @@ def test_hits_come_grouped_by_kind(client):
     kinds = [h["kind"] for h in r["hits"]]
     assert kinds == sorted(kinds, key=["work", "meta", "user"].index) and set(kinds) == {"work", "meta", "user"}
     work = next(h for h in r["hits"] if h["kind"] == "work")
-    assert work["title"] == "把配置改成环境变量" and work["status"] == "todo"
+    assert work["title"] == "把配置改成环境变量" and work["status"] == "running"
     coll = next(h for h in r["hits"] if h["kind"] == "meta")
     assert (coll["layer"], coll["id"], coll["file"], coll["line"]) == ("issue", IP, f"{IP}.issue/readme.md", 1)
     user = next(h for h in r["hits"] if h["kind"] == "user")

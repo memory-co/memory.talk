@@ -7,7 +7,7 @@
 ```json
 {"query": "环境变量",
  "hits": [
-   {"kind": "work", "id": "work_…", "title": "把配置改成环境变量", "snippet": "doing", "status": "doing"},
+   {"kind": "work", "id": "work_…", "title": "把配置改成环境变量", "snippet": "running", "status": "running"},
    {"kind": "meta", "id": "memory.talk/配置/该走文件还是环境变量", "title": "该走文件还是环境变量", "layer": "issue",
     "file": "memory.talk/配置/该走文件还是环境变量.issue/positions/只用环境变量.md", "line": 1, "snippet": "够用"},
    {"kind": "user", "id": "alice", "title": "环境变量爱好者", "snippet": "alice@example.com"}],

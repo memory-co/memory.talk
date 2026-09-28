@@ -16,10 +16,10 @@ work 树(森林)。
 ```json
 [
   {"id": "work_…2f2f", "goal": "把 v5 做出来", "created_by": "alice", "parent": null,
-   "status": "doing", "created_at": "…", "done_at": null,
+   "status": "running", "created_at": "…", "archived_at": null,
    "children": [
-     {"id": "work_…a1b2", "goal": "实现 issue", "parent": "work_…2f2f", "status": "done",
-      "created_at": "…", "done_at": "…", "children": []}
+     {"id": "work_…a1b2", "goal": "实现 issue", "parent": "work_…2f2f", "status": "archived",
+      "created_at": "…", "archived_at": "…", "children": []}
    ]}
 ]
 ```
@@ -39,7 +39,7 @@ work 树(森林)。
 | `goal` | 是 | 一句话 |
 | `parent` | 否 | 挂到哪个 work 下;不存在 → 404 |
 
-**201** 返回 Work(`status: "todo"`,`created_by` = 请求头里的 user,没带则 `null`)。副作用:`works/<id>/work.json` + 一条 `created` 事件。
+**201** 返回 Work(`status: "running"`,`created_by` = 请求头里的 user,没带则 `null`)。副作用:`works/<id>/work.json` + 一条 `created` 事件。
 
 ## GET /api/works/servers
 
@@ -61,18 +61,17 @@ work 树(森林)。
 ## PATCH /api/works/{work_id}
 
 ```json
-{"goal": "…", "status": "done"}
+{"goal": "…", "status": "archived"}
 ```
 
-两个字段都可选。`status` 规则:
+两个字段都可选。`status` 只收 `running` / `archived`,别的值 → 422。规则:
 
 | 目标 | 规则 | 副作用 |
 |---|---|---|
-| `todo` / `doing` | 无 | `done_at` 清空 |
-| `done` | 所有子 work 须为 `done` / `abandoned`,否则 **409** `conflict`(message 列出未完的子 work) | `done_at`;**冻结**:工作单元现场全部销毁(登记留着),事件 `status` + `frozen` |
-| `abandoned` | 无 | 同上 |
+| `running` | 无(可从 `archived` 改回) | `archived_at` 清空 |
+| `archived` | 无——**不看子 work**,父子各自归档 | `archived_at`(已归档则保留);**冻结**:工作单元现场全部销毁(登记留着),事件 `status` + `frozen` |
 
-结束后:`POST …/worklets` → 409;`rounds` 不再从把手同步。
+归档后:`POST …/worklets` → 409;`rounds` 不再从把手同步。
 
 ## GET /api/works/{work_id}/events
 
@@ -80,7 +79,7 @@ work 树(森林)。
 [
   {"ts": "…", "type": "created", "data": {"goal": "…", "parent": null}},
   {"ts": "…", "type": "worklet.attached", "data": {"worklet": "…-w1", "uri": "codex:///w", "server": "codex"}},
-  {"ts": "…", "type": "status", "data": {"from": "doing", "to": "done"}},
+  {"ts": "…", "type": "status", "data": {"from": "running", "to": "archived"}},
   {"ts": "…", "type": "frozen", "data": {}}
 ]
 ```
@@ -96,7 +95,7 @@ work 树(森林)。
 ```json
 [{"ts": "…", "layer": "issue", "path": "memory.talk/配置/该走文件还是环境变量", "subject": "position …#p2: 只用环境变量",
   "sha": "…", "by": "alice", "routed_by": "memory.talk"},
- {"ts": "…", "layer": "work", "path": "work_…child", "subject": "status todo -> doing", "sha": null, "by": null, "routed_by": "parent"}]
+ {"ts": "…", "layer": "work", "path": "work_…child", "subject": "status running -> archived", "sha": null, "by": null, "routed_by": "parent"}]
 ```
 
 ## GET /api/works/{work_id}/manager
@@ -189,7 +188,7 @@ user:谁当前正在操作、谁历史操作过。只做可见性,不做权限�
 
 | 错误 | 状态 |
 |---|---|
-| work 已结束 | 409 `conflict` |
+| work 已归档 | 409 `conflict` |
 | URI 没协议 | 400 `bad_uri` |
 | 要跑的命令不在 PATH(如 `vim://` 走 default 但没装 vim) | 400 `cmd_not_found` |
 | tmux 起不来 | 502 `platform` |
@@ -204,7 +203,7 @@ user:谁当前正在操作、谁历史操作过。只做可见性,不做权限�
 
 ## GET /api/works/{work_id}/worklets/{worklet_id}/rounds
 
-agent 工作单元的工作单元痕迹。work 未结束时先从把手同步:按 cwd + 工作单元创建时间定位平台记录文件,新 round 追加进 `rounds.jsonl`(按 `id` 去重);然后返回全部。
+agent 工作单元的工作单元痕迹。work 运行中时先从把手同步:按 cwd + 工作单元创建时间定位平台记录文件,新 round 追加进 `rounds.jsonl`(按 `id` 去重);然后返回全部。
 
 ```json
 [{"id": "u1", "timestamp": "2026-09-05T10:00:00Z", "role": "human", "text": "把配置改成环境变量"},

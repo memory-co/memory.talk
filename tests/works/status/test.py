@@ -1,33 +1,38 @@
-"""works/status -- done rollup. See README.md."""
+"""works/status -- two states: running / archived. See README.md."""
 
 
-def _tree(client):
+def test_new_work_is_running(client):
+    assert client.post("/api/works", json={"goal": "x"}).json()["status"] == "running"
+
+
+def test_archive_sets_archived_at_and_unarchive_clears_it(client):
+    w = client.post("/api/works", json={"goal": "x"}).json()
+    archived = client.patch(f"/api/works/{w['id']}", json={"status": "archived"}).json()
+    assert archived["status"] == "archived" and archived["archived_at"]
+    assert client.patch(f"/api/works/{w['id']}", json={"status": "running"}).json()["archived_at"] is None
+
+
+def test_parent_archives_regardless_of_children(client):
     root = client.post("/api/works", json={"goal": "根"}).json()
-    a = client.post("/api/works", json={"goal": "A", "parent": root["id"]}).json()
-    b = client.post("/api/works", json={"goal": "B", "parent": root["id"]}).json()
-    return root, a, b
+    child = client.post("/api/works", json={"goal": "A", "parent": root["id"]}).json()
+    assert client.patch(f"/api/works/{root['id']}", json={"status": "archived"}).json()["status"] == "archived"
+    assert client.get(f"/api/works/{child['id']}").json()["status"] == "running"
 
 
-def test_parent_cannot_finish_before_children(client):
-    root, a, b = _tree(client)
-    r = client.patch(f"/api/works/{root['id']}", json={"status": "done"})
-    assert r.status_code == 409 and a["id"] in r.json()["message"] and b["id"] in r.json()["message"]
-
-
-def test_parent_finishes_once_children_are_done_or_abandoned(client):
-    root, a, b = _tree(client)
-    client.patch(f"/api/works/{a['id']}", json={"status": "done"})
-    client.patch(f"/api/works/{b['id']}", json={"status": "abandoned"})
-    assert client.patch(f"/api/works/{root['id']}", json={"status": "done"}).json()["status"] == "done"
-
-
-def test_done_at_is_set_and_cleared(client):
+def test_old_statuses_are_rejected_on_write(client):
     w = client.post("/api/works", json={"goal": "x"}).json()
-    assert client.patch(f"/api/works/{w['id']}", json={"status": "done"}).json()["done_at"]
-    assert client.patch(f"/api/works/{w['id']}", json={"status": "doing"}).json()["done_at"] is None
+    assert client.patch(f"/api/works/{w['id']}", json={"status": "done"}).status_code == 422
 
 
-def test_finished_work_rejects_new_worklets(client):
+def test_legacy_stored_statuses_read_as_two_states():
+    from memorytalk.backend.models.work import Work
+    base = {"id": "w", "goal": "g", "created_at": "t"}
+    assert Work(**base, status="todo").status == Work(**base, status="doing").status == "running"
+    old = Work(**base, status="abandoned", done_at="t2")
+    assert old.status == "archived" and old.archived_at == "t2"
+
+
+def test_archived_work_rejects_new_worklets(client):
     w = client.post("/api/works", json={"goal": "x"}).json()
-    client.patch(f"/api/works/{w['id']}", json={"status": "done"})
+    client.patch(f"/api/works/{w['id']}", json={"status": "archived"})
     assert client.post(f"/api/works/{w['id']}/worklets", json={"uri": "bash://"}).status_code == 409

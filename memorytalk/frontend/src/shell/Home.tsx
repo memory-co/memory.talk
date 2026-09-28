@@ -77,7 +77,7 @@ export function Home() {
           {recent.map(work => <Card key={work.id} role="button" tabIndex={0} className="flex cursor-pointer flex-col transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => navigate({ page: 'work', work: work.id })} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate({ page: 'work', work: work.id }); } }}>
             <CardHeader className="p-4 pb-2"><CardDescription className="text-xs">{dateLabel(work.created_at, locale)}</CardDescription><CardTitle className="line-clamp-2 text-sm font-medium leading-snug">{work.goal}</CardTitle></CardHeader>
-            <CardFooter className="mt-auto p-4 pt-0"><Badge variant={work.status === 'doing' ? 'default' : 'secondary'}>{statusLabel(t, work.status)}</Badge></CardFooter>
+            <CardFooter className="mt-auto p-4 pt-0"><Badge variant={work.status === 'running' ? 'default' : 'secondary'}>{statusLabel(t, work.status)}</Badge></CardFooter>
           </Card>)}
         </div>
         : <Card className="border-dashed"><CardHeader className="flex-row items-start gap-3 space-y-0"><Sparkles className="mt-0.5 size-5 text-muted-foreground" /><div className="space-y-1"><CardTitle className="text-sm">{t('home.emptyTitle')}</CardTitle><CardDescription>{t('home.emptyText')}</CardDescription></div></CardHeader></Card>}

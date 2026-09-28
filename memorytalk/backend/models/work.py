@@ -3,11 +3,14 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 from .work_server import HandleInfo, Window
 
-WorkStatus = Literal["todo", "doing", "done", "abandoned"]
+WorkStatus = Literal["running", "archived"]
+
+# 旧的四档状态读进来时折成两档:还在做的都是 running,做完 / 放下的都是 archived。
+_LEGACY_STATUS = {"todo": "running", "doing": "running", "done": "archived", "abandoned": "archived"}
 
 
 class Work(BaseModel):
@@ -15,9 +18,14 @@ class Work(BaseModel):
     goal: str = Field(description="它是什么事(一句话)")
     created_by: str | None = Field(None, description="谁建的(归属,建时定下不改;不是权限)")
     parent: str | None = Field(None, description="属于哪件更大的事")
-    status: WorkStatus = "todo"
+    status: WorkStatus = "running"
     created_at: str
-    done_at: str | None = None
+    archived_at: str | None = Field(None, validation_alias=AliasChoices("archived_at", "done_at"))
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _legacy_status(cls, v):
+        return _LEGACY_STATUS.get(v, v)
 
 
 class WorkCreate(BaseModel):

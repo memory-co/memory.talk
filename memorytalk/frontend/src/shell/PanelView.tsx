@@ -21,7 +21,7 @@ export function PanelView({ work, worklet }: { work: Work; worklet: Worklet }) {
   const [confirm, setConfirm] = useState(false);
   const [copied, setCopied] = useState(false);
   const base = `/works/${encodeURIComponent(work.id)}/worklets/${encodeURIComponent(worklet.id)}`;
-  const ended = ['done', 'abandoned'].includes(work.status);
+  const ended = work.status === 'archived';
   const web = ['http', 'https'].includes(worklet.scheme);
   const agent = ['codex', 'claude', 'kimi'].includes(worklet.scheme);
   const live = useQuery<Worklet>({ queryKey: ['live', work.id, worklet.id], enabled: false });
