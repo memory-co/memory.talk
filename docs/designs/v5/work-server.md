@@ -95,11 +95,86 @@ server 这个概念**不新造一套规范**,它的形状就是 shellbase 已经
 
 所以 v5 里「server」和「`*muxd` 组件」的关系是:`*muxd` 库是**实现面**,server 是包在外面的**契约面**——多说一句它响应哪些协议、在 memory.talk 里怎么被请求到,再多一项 memory.talk 自己关心的把手能力(round)。
 
-窗的地址由 tmuxd 决定(`MEMORY_TALK_TMUXD_PORT` / `_BIND` / `_TOKEN` / `_URL_HOST` 透传给它);挂到公网时 ttyd 要么绑 `0.0.0.0` 带 token(浏览器里是 basic auth),要么由 memory.talk 自己反代——反代归网关那一层,不归 server。
+窗的地址由 tmuxd 决定(现在是 `MEMORY_TALK_TMUXD_PORT` / `_BIND` / `_TOKEN` / `_URL_HOST` 透传给它,ttyd 单独占一个端口、用 basic auth)。这让窗落在 memory.talk 的门外;改成挂到 memory.talk 主路由上的设计见 §7。反代仍归网关那一层,不归 server。
 
 ---
 
-## 7. 这篇有意不定的事
+## 7. 窗挂到主路由上:ttyd 走 unix socket,tmuxd 交出一个 ASGI handle(设计中,未实现)
+
+### 7.1 现在的问题
+
+`Tmuxd(...)` 在 `WorkServerService.__init__` 里被实例化,顺手拉起 ttyd 听一个 TCP 端口(`MEMORY_TALK_TMUXD_PORT`);`s.url` 是 `http://<host>:<port>/?arg=<id>`,前端 iframe 直接连过去。于是**窗在 memory.talk 的门外**:
+
+- 多一个端口要开防火墙(2026-09-28 那次「8091 没了」:ttyd 好好的,是云上防火墙只放了 8090);
+- 多一套认证:ttyd 的 basic auth(`tmuxd:<token>`,明文、全员共用),和 memory.talk 的登录([auth.md](auth.md))毫无关系——拿到这个 token 的人绕过登录直接进 shell;
+- 四个环境变量(`_PORT` / `_BIND` / `_TOKEN` / `_URL_HOST`)只为让浏览器找得到这扇窗。
+
+### 7.2 目标形状
+
+```
+浏览器 ──https──▶ memory.talk(uvicorn,一个端口)
+                  ├─ /api/...  FastAPI 路由(Bearer 门)
+                  ├─ /tty/...  ──▶ t.asgi(authorize=…) ──UDS──▶ ttyd -i <state>/ttyd.sock -b /tty
+                  └─ /         前端静态资源
+```
+
+窗仍然是 ttyd 那一页,只是**从 memory.talk 同一个端口、同一扇门进去**。tmuxd 交出来的 handle 是一个 **ASGI app**,memory.talk 一行 `app.mount("/tty", tmuxd.asgi(authorize=tty_gate))` 挂上。
+
+### 7.3 为什么是 ASGI,而不是 FastAPI router
+
+ASGI 是调用约定(`async def app(scope, receive, send)`),不是框架:FastAPI / Starlette / Litestar / Quart 都能 mount。tmuxd 已有的 `tmuxd.server.router` 是 FastAPI 的 `APIRouter`,那是**控制 API**(JSON 进 JSON 出,给 CLI 用),和这里的**窗流量**是两件事,不合并。依赖分层:
+
+| 层 | 依赖 |
+|---|---|
+| `import tmuxd`(核心) | 无,同现在 |
+| `tmuxd.asgi`(extra `tmuxd[asgi]`) | asyncio + `websockets`(只用来连 ttyd 那一侧;uvicorn standard 已带) |
+| `tmuxd.server`(extra `tmuxd[server]`) | FastAPI,不变 |
+| memory.talk | 一行 mount + 一个 `authorize` 函数 |
+
+唯一挂不上的是 WSGI(Flask / 同步 Django)——WSGI 没有 WebSocket,谁实现都一样。
+
+### 7.4 和 `*muxd` 规范 M11「不代理那扇窗」的关系
+
+M11 说组件只报 URL,「要不要套一层网关是上层的事」。这条不破:
+
+- **核心只加两个部署参数,仍然只报 URL**:`listen="unix"`(ttyd `-i <state_dir>/ttyd.sock`,0600)和 `base_path="/tty"`(ttyd `-b`,它自己的页面、`/token`、`/ws` 都带这个前缀)。`s.url` 变成相对的 `/tty/?arg=<id>`。没有自造路径、没有 302、不解析 ttyd 协议。
+- **转发器是上层工具,放在 extra 里**:`t.asgi()` 只做字节搬运——HTTP 原样转到 UDS;WebSocket 两侧各一个 task 对拷帧,透传 `tty` 子协议,不看帧内容。它是 tmuxd 替上层备好的网关零件,不是核心行为;不装 extra、不 mount,tmuxd 和今天一样。
+- 如果 tmuxd 那边坚持核心之外也不收,这段转发器原样落在 memory.talk 里(`services/work_servers/tty_proxy.py`),接口不变。
+
+### 7.5 tmuxd 这边要改的
+
+- `Tmuxd(listen="unix" | ("tcp", port), base_path=None, ...)`:默认 unix;TCP 模式留给 CLI / 单独使用。unix 模式下 bind / token 不再需要(socket 文件权限就是门),`bind=0.0.0.0` 必须带 token 的检查只在 TCP 模式生效。
+- ttyd 记录从 `ttyd-<port>.json` 改成按监听地址命名(unix 模式 `ttyd-unix.json`),`ensure()` 认领旧 ttyd 也按 socket 路径认。
+- `url_for(sid)`:unix 模式返回 `<base_path>/?arg=<sid>`(相对地址);TCP 模式同现在。
+- `t.asgi(authorize=None)`:`authorize(scope) -> bool | Awaitable[bool]`,为假回 401/403(WebSocket 用 close 1008)。tmuxd 不懂谁是谁,**鉴权全在钩子里**。
+- 生命周期**仍归 `Tmuxd`**:ttyd 在 `__init__` 起、`close()` 收;ASGI app 不管 ttyd 死活(也避开 Starlette mount 子 app 收不到 lifespan 的坑)。
+
+### 7.6 memory.talk 这边要改的
+
+- `config.py`:删掉 `MEMORY_TALK_TMUXD_PORT` / `_BIND` / `_TOKEN` / `_URL_HOST`;`WorkServerService` 构造 `Tmuxd(listen="unix", base_path="/tty", ...)`。
+- `main.py`:`app.mount("/tty", work_server_svc.tmuxd.asgi(authorize=tty_gate))`,放在 `mount_frontend` 之前。现有的 `gate` 中间件只拦 `/api`,不碰 `/tty`。
+- **门:票据换 cookie。** 现在的门是 `Authorization: Bearer`,而 iframe 加载页面、浏览器开 WebSocket 都带不了自定义头。所以:
+  1. 前端拿窗(列 worklet / open,本身带 Bearer)时,后端给窗地址附一张**短期票据**:`/tty/?arg=<id>&ticket=<t>`。票据绑 user + worklet id,60 秒有效,一次性,服务端只记 sha256(同 [auth.md §3](auth.md) 的 token 存法)。
+  2. `tty_gate` 在 `/tty/` 页面请求上核票,通过就种 cookie(`Path=/tty; HttpOnly; SameSite=Strict`,值是另一张绑定 user + worklet 的会话票)。
+  3. 之后 `/tty/token`、`/tty/ws` 凭 cookie 放行,并且**核对 ws 请求的 `arg` 等于票上的 worklet id**——一张票只开一扇窗,不能拿去连别人的 session。
+  4. 用户 logout / 换密码时,他的 tty 会话票一起作废(和 token 同一处撤销)。
+- `Window.url` / `Window.embed` 变成同源相对地址,前端 iframe 不用再关心 host 和端口。
+
+### 7.7 考虑过、没选的
+
+- **前面放 Caddy / nginx 反代 UDS,`forward_auth` 回 memory.talk 鉴权**:Python 代码最少,但部署从一个进程变两个,和「`memorytalk server daemon` 一条命令起来」相悖。留作生产部署的可选形态——unix socket + base_path 这一半对它同样适用。
+- **不要 ttyd,tmuxd 在 ASGI 里自己开 pty 跑 `tmux attach`、自己讲 ttyd 的 WS 协议(或前端直接上 xterm.js)**:少一个子进程、少一跳、不用带 ttyd 二进制;代价是终端协议、resize、流控都自己维护。**接口先定成 `t.asgi()`,这条留作第二阶段**——以后换掉 `asgi()` 的内部,调用方不改。
+- **ttyd 仍走 TCP 但只绑 127.0.0.1,转发器连本地端口**:改动最小,但端口冲突、按端口记录的麻烦都还在。只作为过渡。
+
+### 7.8 要留神的
+
+- **同源 iframe**:ttyd 页面和 memory.talk 同源后,它的 JS 能读父页面 localStorage 里的 Bearer token。ttyd 前端是可信代码、xterm 不执行终端输出,风险低;要更紧就把 `/tty` 挂到独立子域做 origin 隔离(`sandbox` 帮不上:ttyd 页面要 `allow-scripts` + `allow-same-origin` 才能连 ws,两者同开等于没沙箱)。
+- **长连接**:uvicorn 要装 WebSocket 支持(`uvicorn[standard]`);前面再有代理时空闲超时要放宽。
+- **单进程**:ttyd / tmuxd 状态在一个进程里。uvicorn 多 worker 会各起一份 ttyd 争同一个 socket——memory.talk 保持单 worker,这里写明。
+
+---
+
+## 8. 这篇有意不定的事
 
 - ~~server 是进程内的库,还是独立进程~~:已定——**库**。tmuxd 在 memory.talk 进程内被 `import`,ttyd 是它的子进程,tmux server 谁的都不是(关掉 memory.talk 现场照跑)。真要跨机器时再议远程 server。
 - ~~协议认领是注册还是约定~~:已定——**server 声明协议(注册)+ default 兜底(约定)**,两者都要,声明优先。
