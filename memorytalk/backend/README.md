@@ -16,12 +16,12 @@ work_servers/  每个协议一个 server,把现场建出来              → wor
 
 ## 一个请求怎么走
 
-1. **进门**(`gateway.py` 的 `AuthMiddleware`,纯 ASGI,包在最外层,HTTP 和 WebSocket 都管):`/api/*` 除了 `auth/status`、`auth/setup`、`auth/login`、`system/health` 只认 Bearer JWT;`/tty/*`(终端窗)只认 `mt_tty` cookie,WebSocket 另验 Origin。没有 admin → `/api` 409 `setup_required`;没有效凭证 → 401(`/tty` 403 / close 1008);过了门,名字放进 `request.state.user`。设计:[auth.md](../../docs/designs/v5/auth.md)。
+1. **进门**(`gateway.py` 的 `AuthMiddleware`,纯 ASGI,包在最外层,HTTP 和 WebSocket 都管):`/api/*` 除了 `auth/status`、`auth/setup`、`auth/login`、`system/health` 只认 Bearer JWT;`/surface/*`(窗)只认 `mt_surface` cookie,WebSocket 另验 Origin。没有 admin → `/api` 409 `setup_required`;没有效凭证 → 401(`/surface` 403 / close 1008);过了门,名字放进 `request.state.user`。设计:[auth.md](../../docs/designs/v5/auth.md)。
 2. **路由**(`controllers/`):从 `request.app.state` 拿 service,调一个方法,`ok()` 包成 `{data, message}`。
 3. **业务**(`services/`):只认仓储接口和别的 service,不认识 HTTP。出错抛自己的异常类。
 4. **错误映射**(`main.py`):`WorkNotFound` / `UserNotFound` / `WorkletNotFound` → 404,`WorkConflict` → 409,`UserExists` → 409,`MetasError` / `AuthError` / `WorkServerError` 各带自己的状态码;都变成 `{data: null, message, error}`。
 5. **前端**(`gateway.py`):有构建产物就在 `/` 托管 `index.html`、`/assets` 托管静态资源;不拦。
-6. **终端窗**(`/tty`):`tmuxd.asgi()` 挂在这里,经 unix socket 原样转给 ttyd;门在第 1 步,它自己不设。
+6. **窗**(`/surface/*`):终端是 `/surface/tmuxd`,`tmuxd.asgi()` 挂在这里,经 unix socket 原样转给 ttyd;门在第 1 步,它自己不设。
 
 ## 装配
 

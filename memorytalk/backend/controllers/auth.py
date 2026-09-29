@@ -1,24 +1,23 @@
 """/api/auth —— 门:status / setup / login / logout。身份来自 token(docs/designs/v5/auth.md),controller 从 request.state.user 取。
-终端窗(/tty,iframe + WebSocket)带不了 Authorization 头:status 顺手把 token 种成只发给 /tty 的 HttpOnly cookie,门(gateway.AuthMiddleware)在 /tty 下认它。"""
+窗(/surface/*:终端、以后的浏览器;iframe + WebSocket)带不了 Authorization 头:status 顺手把 token 种成只发给 /surface 的 HttpOnly cookie,门(gateway.AuthMiddleware)在 /surface 下认它。"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request, Response
 
-from memorytalk.backend.gateway import TTY_COOKIE
+from memorytalk.backend.gateway import SURFACE_COOKIE, SURFACE_PATH
 from memorytalk.backend.models.auth import AuthStatus, LoginRequest, LoginResult, SetupRequest
 from memorytalk.backend.models.result import Result, ok
 from memorytalk.backend.services.auth import ADMIN, AuthError, AuthService
-from memorytalk.backend.services.work_servers import TTY_PATH
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-def _tty_cookie(response: Response, token: str | None) -> None:
-    """有效 token → 种进 /tty 的 cookie(和 Bearer 同一个串:logout / 换密码一起作废);没有 → 清掉。"""
+def _surface_cookie(response: Response, token: str | None) -> None:
+    """有效 token → 种进 /surface 的 cookie(和 Bearer 同一个串:logout / 换密码一起作废);没有 → 清掉。"""
     if token:
-        response.set_cookie(TTY_COOKIE, token, path=TTY_PATH, httponly=True, samesite="strict")
+        response.set_cookie(SURFACE_COOKIE, token, path=SURFACE_PATH, httponly=True, samesite="strict")
     else:
-        response.delete_cookie(TTY_COOKIE, path=TTY_PATH, httponly=True, samesite="strict")
+        response.delete_cookie(SURFACE_COOKIE, path=SURFACE_PATH, httponly=True, samesite="strict")
 
 
 def auth(request: Request) -> AuthService:
@@ -46,7 +45,7 @@ def require_admin(request: Request) -> str:
 def status(request: Request, response: Response, svc: AuthService = Depends(auth)):
     token = bearer(request)
     name = svc.resolve(token)
-    _tty_cookie(response, token if name else None)
+    _surface_cookie(response, token if name else None)
     return ok(AuthStatus(setup_required=svc.setup_required(), authenticated=name is not None,
                          user=svc.users.get(name) if name else None))
 
@@ -64,5 +63,5 @@ def login(req: LoginRequest, svc: AuthService = Depends(auth)):
 @router.post("/logout", response_model=Result[dict], summary="作废这次带的 token")
 def logout(request: Request, response: Response, svc: AuthService = Depends(auth)):
     svc.logout(bearer(request))
-    _tty_cookie(response, None)
+    _surface_cookie(response, None)
     return ok({})

@@ -11,21 +11,21 @@
 
 ## 1. 一句话:没有 admin 就先建 admin;有了之后,没登录什么都看不到
 
-服务起来之后,任何请求先过一道门(`gateway.py` 的 `AuthMiddleware`,纯 ASGI,包在整个 app 最外层——API 路由、挂上来的 `/tty` 子 app、HTTP 和 WebSocket 都先过它,子 app 自己不设门),按顺序回答两个问题:
+服务起来之后,任何请求先过一道门(`gateway.py` 的 `AuthMiddleware`,纯 ASGI,包在整个 app 最外层——API 路由、挂在 `/surface` 下的窗(子 app)、HTTP 和 WebSocket 都先过它,子 app 自己不设门),按顺序回答两个问题:
 
 1. **有 `admin` 这个账号吗?** 没有 → 除了 `GET /api/auth/status` 和 `POST /api/auth/setup`,全部 409 `setup_required`。前端看到这个状态就只显示 **setup 页**:设 admin 的密码(可带显示名、邮箱),设完自动登录进去。这一步只能做一次——`admin` 一旦存在,`setup` 就 404。
 2. **带了有效 token 吗?** 没带、或 token 不认识 → 401 `unauthorized`。前端看到 401 就清掉本地登录态,显示 **登录页**。
 
-门之外的只有:`/`(前端页面本身)、`/assets`(静态资源)、`/api/auth/status`、`/api/auth/setup`、`/api/auth/login`、`/api/system/health`。其余 `/api/*` 和 `/tty/*` 一律要凭证。
+门之外的只有:`/`(前端页面本身)、`/assets`(静态资源)、`/api/auth/status`、`/api/auth/setup`、`/api/auth/login`、`/api/system/health`。其余 `/api/*` 和 `/surface/*` 一律要凭证。
 
 **凭证按路径定,不互相回退:**
 
 | 路径 | 认什么 | 为什么 |
 |---|---|---|
 | `/api/*` | 只认 `Authorization: Bearer <JWT>` | 不认 cookie:浏览器会自动带 cookie,认了就得防 CSRF;只认头就天然没有 |
-| `/tty/*`(终端窗的页面、`/token`、`/ws`) | 只认 `mt_tty` cookie;WebSocket 另要 `Origin` 与 `Host` 同源(没有 Origin 的非浏览器客户端不算跨站) | iframe 和浏览器 WebSocket 带不了自定义头;WebSocket 不受 CORS 管,Origin 校验防跨站劫持 |
+| `/surface/*`(终端窗的页面、`/token`、`/ws`) | 只认 `mt_surface` cookie;WebSocket 另要 `Origin` 与 `Host` 同源(没有 Origin 的非浏览器客户端不算跨站) | iframe 和浏览器 WebSocket 带不了自定义头;WebSocket 不受 CORS 管,Origin 校验防跨站劫持 |
 
-过了门,名字放进 `scope["state"]["user"]`(FastAPI 里就是 `request.state.user`)。被拒:`/api` 401(setup 前 409),`/tty` HTTP 403、WebSocket 握手不 accept 直接 close 1008。
+过了门,名字放进 `scope["state"]["user"]`(FastAPI 里就是 `request.state.user`)。被拒:`/api` 401(setup 前 409),`/surface` HTTP 403、WebSocket 握手不 accept 直接 close 1008。
 
 ## 2. 账号:user 加两个字段
 
@@ -50,7 +50,7 @@ admin 能做而 member 不能做的,只有三件:**建账号**(`POST /api/users`
 
 - **网页**:进来先问 `GET /api/auth/status` → `{setup_required, authenticated, user}`。`setup_required` → setup 页;没登录 → 登录页;登录了 → 正常的壳。token 存浏览器本地(和语言、侧栏折叠放一起),每个请求带上;任何一个请求 401 就回登录页。设置页里:改自己的显示名 / 邮箱 / 密码、退出登录;admin 多一块「团队成员」——建账号、给人设密码。原来那个「选一个身份」的单选没有了,身份就是登录的人。
 - **CLI**:`memory.talk setup`(首次,设 admin 密码)、`memory.talk login [--user <名字>]`(问密码,token 存到 `~/.memory.talk/credentials.json`,按服务地址分开记)、`memory.talk logout`。之后所有命令自动带 token;也可以 `MEMORY_TALK_TOKEN` 环境变量直接给。`--user` / `MEMORY_TALK_USER` 只用来挑存的是哪个人的凭据,不再自报身份。
-- **终端窗(iframe / WebSocket)**:带不了 `Authorization` 头。`GET /api/auth/status` 在 token 有效时顺手把同一个 JWT 种成 `mt_tty` cookie(`Path=/tty; HttpOnly; SameSite=Strict`),无效就清掉;logout 也清。门在 `/tty` 下只认它(§1 的表)。token 作废,cookie 同时失效。见 [work-server.md §7.6](work-server.md)。
+- **窗(`/surface/*`:终端,以后的浏览器;iframe / WebSocket)**:带不了 `Authorization` 头。`GET /api/auth/status` 在 token 有效时顺手把同一个 JWT 种成 `mt_surface` cookie(`Path=/surface; HttpOnly; SameSite=Strict`),无效就清掉;logout 也清。门在 `/surface` 下只认它(§1 的表)。token 作废,cookie 同时失效。见 [work-server.md §7.6](work-server.md)。
 - **agent 工作单元里**:tmux 里跑的 agent 要调 API,得有 token——给它 `MEMORY_TALK_TOKEN`(比如 admin 专门 login 一次,把 token 放进 workspace 的环境)。服务端**不**自动把开工作单元那个人的 token 塞进工作单元环境;这是有意的:浏览器的登录态不该出现在一个 shell 里。
 
 ## 5. 不做什么

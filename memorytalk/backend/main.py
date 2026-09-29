@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from memorytalk.backend.models.result import fail
-from memorytalk.backend.gateway import AuthMiddleware, mount_frontend
+from memorytalk.backend.gateway import SURFACE_PATH, AuthMiddleware, mount_frontend
 
 from memorytalk.backend.config import Config, RuntimeConfig, load_config, load_runtime_config
 from memorytalk.backend.controllers import auth, metas, search, system, users, works
@@ -15,7 +15,7 @@ from memorytalk.backend.models.work_server import WorkServerError
 from memorytalk.backend.services.auth import AuthError, AuthService, jwt
 from memorytalk.backend.services.metas import MetasError, MetasService
 from memorytalk.backend.services.search import SearchService
-from memorytalk.backend.services.work_servers import TTY_PATH, WorkServerService
+from memorytalk.backend.services.work_servers import WorkServerService
 from memorytalk.backend.services.store import StoreService
 from memorytalk.backend.services.users import UserExists, UserNotFound, UserService
 from memorytalk.backend.services.work import WorkletNotFound, WorkConflict, WorkNotFound, WorkService
@@ -34,7 +34,8 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
 
     store = StoreService(config)
     collect_svc = MetasService(config, store.work_repo)
-    work_server_svc = WorkServerService(runtime)
+    tmuxd_path = f"{SURFACE_PATH}/tmuxd"               # 终端窗挂在这;以后浏览器窗在 /surface/webmuxd
+    work_server_svc = WorkServerService(runtime, tmuxd_path)
     work_svc = WorkService(store, work_server_svc)
     user_svc = UserService(store.user_repo, store.work_repo, collect_svc)
     collect_svc.author_of = user_svc.author
@@ -48,7 +49,7 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
     for r in (system.router, auth.router, works.router, users.router, metas.router, search.router):
         app.include_router(r)
 
-    app.add_middleware(AuthMiddleware, auth=app.state.auth, tty_path=TTY_PATH)   # 门:/api 和 /tty、HTTP 和 WebSocket 都先过它
+    app.add_middleware(AuthMiddleware, auth=app.state.auth)   # 门:/api 和 /surface、HTTP 和 WebSocket 都先过它
 
     def _err(status: int, code: str):
         async def handler(_: Request, exc: Exception):
@@ -73,6 +74,6 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
         status = {"bad_uri": 400, "cmd_not_found": 400, "no_server": 400, "platform": 502}.get(exc.code, 500)
         return JSONResponse(fail(exc.code, str(exc)), status_code=status)
 
-    app.mount(TTY_PATH, work_server_svc.tmuxd.asgi())   # 终端窗:经 unix socket 到 ttyd;门在 AuthMiddleware,这里不再设
+    app.mount(tmuxd_path, work_server_svc.tmuxd.asgi())   # 终端窗:经 unix socket 到 ttyd;门在 AuthMiddleware,这里不再设
     mount_frontend(app)
     return app

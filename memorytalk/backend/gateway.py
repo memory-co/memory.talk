@@ -26,21 +26,22 @@ def mount_frontend(app: FastAPI, directory: Path | None = None) -> None:
 # ---- 门:一个纯 ASGI 中间件,包住整个 app(docs/designs/v5/auth.md §5) ----
 
 OPEN = {"/api/auth/status", "/api/auth/setup", "/api/auth/login", "/api/system/health"}
-TTY_COOKIE = "mt_tty"
+SURFACE_PATH = "/surface"          # 窗(surface)都挂在这下面:/surface/tmuxd(终端),以后 /surface/webmuxd(浏览器)……
+SURFACE_COOKIE = "mt_surface"      # 窗的门:iframe / WebSocket 带不了头,凭它进;Path=/surface
 
 
 class AuthMiddleware:
-    """门:纯 ASGI,包在最外层——/api 路由和挂上来的 /tty 子 app、HTTP 和 WebSocket 都先过这里,子 app 自己不再设门。
+    """门:纯 ASGI,包在最外层——/api 路由和挂在 /surface 下的窗(子 app)、HTTP 和 WebSocket 都先过这里,子 app 自己不再设门。
 
     凭证按路径定,不互相回退:
       /api/*(OPEN 以外)  只认 Authorization: Bearer <JWT>。不认 cookie:浏览器会自动带 cookie,认了就有 CSRF。
-      /tty/*              只认 mt_tty cookie(iframe / WebSocket 带不了头);WebSocket 另验 Origin 同源(防跨站劫持)。
+      /surface/*          只认 mt_surface cookie(iframe / WebSocket 带不了头);WebSocket 另验 Origin 同源(防跨站劫持)。
       其余(前端、OPEN)  放行。
-    没有 admin → /api 409 setup_required、/tty 一律拒;过了门,名字放进 scope["state"]["user"](FastAPI 里是 request.state.user)。
+    没有 admin → /api 409 setup_required、/surface 一律拒;过了门,名字放进 scope["state"]["user"](FastAPI 里是 request.state.user)。
     """
 
-    def __init__(self, app, auth, tty_path: str) -> None:
-        self.app, self.auth, self.tty = app, auth, tty_path
+    def __init__(self, app, auth) -> None:
+        self.app, self.auth = app, auth
 
     async def __call__(self, scope, receive, send):
         if scope["type"] not in ("http", "websocket"):
@@ -48,8 +49,8 @@ class AuthMiddleware:
         path = scope["path"]
         if path.startswith("/api") and path not in OPEN:
             kind = "api"
-        elif path == self.tty or path.startswith(self.tty + "/"):
-            kind = "tty"
+        elif path == SURFACE_PATH or path.startswith(SURFACE_PATH + "/"):
+            kind = "surface"
         else:
             return await self.app(scope, receive, send)
 
@@ -60,7 +61,7 @@ class AuthMiddleware:
             value = headers.get("authorization", "")
             token = value[7:].strip() if value.lower().startswith("bearer ") else None
         else:
-            morsel = SimpleCookie(headers.get("cookie", "")).get(TTY_COOKIE)
+            morsel = SimpleCookie(headers.get("cookie", "")).get(SURFACE_COOKIE)
             token = morsel.value if morsel is not None else None
             if scope["type"] == "websocket" and not _same_origin(headers):
                 return await _reject(scope, receive, send, kind, 403, "forbidden", "跨站的 WebSocket")

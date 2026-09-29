@@ -95,7 +95,7 @@ server 这个概念**不新造一套规范**,它的形状就是 shellbase 已经
 
 所以 v5 里「server」和「`*muxd` 组件」的关系是:`*muxd` 库是**实现面**,server 是包在外面的**契约面**——多说一句它响应哪些协议、在 memory.talk 里怎么被请求到,再多一项 memory.talk 自己关心的把手能力(round)。
 
-窗的地址由 tmuxd 决定:ttyd 听 state 目录里的 unix socket,`tmuxd.asgi()` 挂在 memory.talk 主路由的 `/tty`,窗 = `/tty/?arg=<worklet_id>`,和 API 同一个端口、同一扇门(§7)。再往外的反代归网关那一层,不归 server。
+窗的地址由 tmuxd 决定:ttyd 听 state 目录里的 unix socket,`tmuxd.asgi()` 挂在 memory.talk 主路由的 `/surface/tmuxd`,窗 = `/surface/tmuxd/?arg=<worklet_id>`,和 API 同一个端口、同一扇门(§7)。再往外的反代归网关那一层,不归 server。
 
 ---
 
@@ -114,11 +114,13 @@ server 这个概念**不新造一套规范**,它的形状就是 shellbase 已经
 ```
 浏览器 ──https──▶ memory.talk(uvicorn,一个端口)
                   ├─ /api/...  FastAPI 路由(Bearer 门)
-                  ├─ /tty/...  ──▶ t.asgi(authorize=…) ──UDS──▶ ttyd -i <state>/ttyd.sock -b /tty
+                  ├─ /surface/tmuxd/...  ──▶ t.asgi() ──UDS──▶ ttyd -i <state>/ttyd.sock -b /surface/tmuxd
                   └─ /         前端静态资源
 ```
 
-窗仍然是 ttyd 那一页,只是**从 memory.talk 同一个端口、同一扇门进去**。tmuxd 交出来的 handle 是一个 **ASGI app**,memory.talk 一行 `app.mount("/tty", tmuxd.asgi(authorize=tty_gate))` 挂上。
+窗仍然是 ttyd 那一页,只是**从 memory.talk 同一个端口、同一扇门进去**。tmuxd 交出来的 handle 是一个 **ASGI app**,memory.talk 一行 `app.mount("/surface/tmuxd", tmuxd.asgi())` 挂上。
+
+**`/surface` 是所有「窗」的命名空间**:终端在 `/surface/tmuxd`,以后浏览器(webmuxd)挂 `/surface/webmuxd`,同一个 cookie、同一条门规则(auth.md §1)。前缀定在 `gateway.SURFACE_PATH`,每个窗的挂载点由 `main.py` 拼好注入给对应的 service。
 
 ### 7.3 为什么是 ASGI,而不是 FastAPI router
 
@@ -137,7 +139,7 @@ ASGI 是调用约定(`async def app(scope, receive, send)`),不是框架:FastAPI
 
 M11 说组件只报 URL,「要不要套一层网关是上层的事」。这条不破:
 
-- **核心只加两个部署参数,仍然只报 URL**:`listen="unix"`(ttyd `-i <state_dir>/ttyd.sock`,0600)和 `base_path="/tty"`(ttyd `-b`,它自己的页面、`/token`、`/ws` 都带这个前缀)。`s.url` 变成相对的 `/tty/?arg=<id>`。没有自造路径、没有 302、不解析 ttyd 协议。
+- **核心只加两个部署参数,仍然只报 URL**:`listen="unix"`(ttyd `-i <state_dir>/ttyd.sock`,0600)和 `base_path="/surface/tmuxd"`(ttyd `-b`,它自己的页面、`/token`、`/ws` 都带这个前缀)。`s.url` 变成相对的 `/surface/tmuxd/?arg=<id>`。没有自造路径、没有 302、不解析 ttyd 协议。
 - **转发器是上层工具,放在 extra 里**:`t.asgi()` 只做字节搬运——HTTP 原样转到 UDS;WebSocket 两侧各一个 task 对拷帧,透传 `tty` 子协议,不看帧内容。它是 tmuxd 替上层备好的网关零件,不是核心行为;不装 extra、不 mount,tmuxd 和今天一样。
 - 如果 tmuxd 那边坚持核心之外也不收,这段转发器原样落在 memory.talk 里(`services/work_servers/tty_proxy.py`),接口不变。
 
@@ -151,14 +153,14 @@ M11 说组件只报 URL,「要不要套一层网关是上层的事」。这条�
 
 ### 7.6 memory.talk 这边
 
-- `config.py`:删掉 `MEMORY_TALK_TMUXD_PORT` / `_BIND` / `_TOKEN` / `_URL_HOST`;`WorkServerService` 构造 `Tmuxd(listen="unix", base_path="/tty", ...)`。unix socket 路径有长度上限(103 字节):`<MEMORY_TALK_HOME>/tmuxd/<socket 名>/ttyd.sock` 太长时 tmuxd 起不来并说清楚,把 home 放短一点。
-- 开发时 vite 也把 `/tty` 代理过去(`ws: true`)。
-- `main.py`:`app.mount("/tty", work_server_svc.tmuxd.asgi(authorize=tty_gate))`,放在 `mount_frontend` 之前。现有的 `gate` 中间件只拦 `/api`,不碰 `/tty`。
-- **门:token 种成只发给 `/tty` 的 cookie。** 现在的门是 `Authorization: Bearer`,而 iframe 加载页面、浏览器开 WebSocket 都带不了自定义头。所以:
-  1. 前端进门本来就先问 `GET /api/auth/status`(token 变了会再问)。这次带的 token 有效,响应就顺手 `Set-Cookie: mt_tty=<同一个 token>; Path=/tty; HttpOnly; SameSite=Strict`;无效就清掉。前端一行不用改。
-  2. **门不在 tmuxd 里,在最前面**:`gateway.AuthMiddleware`(纯 ASGI,包住整个 app)在 `/tty/*` 下只认这个 cookie,WebSocket 另验 Origin 同源;`tmuxd.asgi()` 不传 `authorize`,自己不设门。tmuxd 文档警告过「不传 authorize 就谁都能进」——这里成立的前提是 mount 在中间件里面,别把 `/tty` 挪到门外。规则表见 [auth.md §1](auth.md)。
-  3. 用的就是 Bearer 那个串,所以撤销是白来的:logout(响应也清 cookie)/ 换密码作废 token,cookie 同时失效。cookie 只发往 `/tty`、JS 读不到,不比放在 localStorage 里的 Bearer 多暴露什么。
-  4. **不按 worklet 绑。** 原先设想过「拿窗时发一张绑 user + worklet、60 秒一次性的票放进 iframe 地址」,实现时放弃了:前端会刷新 worklet 清单,每次换票 = iframe 地址变 = 终端整页重载;而且 [auth.md §2](auth.md) 本来就不做细粒度权限——进了门的人哪个 work 都能动,窗也一样。窗地址于是稳定为 `/tty/?arg=<id>`。
+- `config.py`:删掉 `MEMORY_TALK_TMUXD_PORT` / `_BIND` / `_TOKEN` / `_URL_HOST`;`WorkServerService(runtime, tmuxd_path)` 构造 `Tmuxd(listen="unix", base_path=tmuxd_path, ...)`,`tmuxd_path = /surface/tmuxd` 由 `main.py` 给。unix socket 路径有长度上限(103 字节):`<MEMORY_TALK_HOME>/tmuxd/<socket 名>/ttyd.sock` 太长时 tmuxd 起不来并说清楚,把 home 放短一点。
+- 开发时 vite 也把 `/surface` 代理过去(`ws: true`)。
+- `main.py`:`app.mount(tmuxd_path, work_server_svc.tmuxd.asgi())`,放在 `mount_frontend` 之前。
+- **门:token 种成只发给 `/surface` 的 cookie。** 现在的门是 `Authorization: Bearer`,而 iframe 加载页面、浏览器开 WebSocket 都带不了自定义头。所以:
+  1. 前端进门本来就先问 `GET /api/auth/status`(token 变了会再问)。这次带的 token 有效,响应就顺手 `Set-Cookie: mt_surface=<同一个 token>; Path=/surface; HttpOnly; SameSite=Strict`;无效就清掉。前端一行不用改。
+  2. **门不在 tmuxd 里,在最前面**:`gateway.AuthMiddleware`(纯 ASGI,包住整个 app)在 `/surface/*` 下只认这个 cookie,WebSocket 另验 Origin 同源;`tmuxd.asgi()` 不传 `authorize`,自己不设门。tmuxd 文档警告过「不传 authorize 就谁都能进」——这里成立的前提是 mount 在中间件里面,别把 `/surface` 挪到门外。规则表见 [auth.md §1](auth.md)。
+  3. 用的就是 Bearer 那个串,所以撤销是白来的:logout(响应也清 cookie)/ 换密码作废 token,cookie 同时失效。cookie 只发往 `/surface`、JS 读不到,不比放在 localStorage 里的 Bearer 多暴露什么。
+  4. **不按 worklet 绑。** 原先设想过「拿窗时发一张绑 user + worklet、60 秒一次性的票放进 iframe 地址」,实现时放弃了:前端会刷新 worklet 清单,每次换票 = iframe 地址变 = 终端整页重载;而且 [auth.md §2](auth.md) 本来就不做细粒度权限——进了门的人哪个 work 都能动,窗也一样。窗地址于是稳定为 `/surface/tmuxd/?arg=<id>`。
 - `Window.url` / `Window.embed` 变成同源相对地址,前端 iframe 不用再关心 host 和端口。
 
 ### 7.7 考虑过、没选的
@@ -169,7 +171,7 @@ M11 说组件只报 URL,「要不要套一层网关是上层的事」。这条�
 
 ### 7.8 要留神的
 
-- **同源 iframe**:ttyd 页面和 memory.talk 同源后,它的 JS 能读父页面 localStorage 里的 Bearer token。ttyd 前端是可信代码、xterm 不执行终端输出,风险低;要更紧就把 `/tty` 挂到独立子域做 origin 隔离(`sandbox` 帮不上:ttyd 页面要 `allow-scripts` + `allow-same-origin` 才能连 ws,两者同开等于没沙箱)。
+- **同源 iframe**:ttyd 页面和 memory.talk 同源后,它的 JS 能读父页面 localStorage 里的 Bearer token。ttyd 前端是可信代码、xterm 不执行终端输出,风险低;要更紧就把 `/surface` 挂到独立子域做 origin 隔离(`sandbox` 帮不上:ttyd 页面要 `allow-scripts` + `allow-same-origin` 才能连 ws,两者同开等于没沙箱)。
 - **长连接**:uvicorn 要装 WebSocket 支持(`uvicorn[standard]`);前面再有代理时空闲超时要放宽。
 - **单进程**:ttyd / tmuxd 状态在一个进程里。uvicorn 多 worker 会各起一份 ttyd 争同一个 socket——memory.talk 保持单 worker,这里写明。
 

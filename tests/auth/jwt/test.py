@@ -48,6 +48,6 @@ def test_valid_signature_but_revoked_jti_is_401(client):
     assert client.get("/api/works", headers=_bearer(token)).status_code == 401
 
 
-def test_api_ignores_the_tty_cookie(client):
-    client.cookies.set("mt_tty", client.tokens["admin"])
+def test_api_ignores_the_surface_cookie(client):
+    client.cookies.set("mt_surface", client.tokens["admin"])
     assert client.get("/api/works", headers={"Authorization": ""}).status_code == 401
