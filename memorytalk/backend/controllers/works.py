@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, Query, Request
 
 from memorytalk.backend.models.metas import InboxItem
 from memorytalk.backend.models.work_server import WorkServerInfo
-from memorytalk.backend.models.work import (Canvas, CanvasPut, Event, Round, Worklet, WorkletCreate, WorkletView, Work,
-                         WorkCreate, WorkNode, WorkUpdate, WorkUsers)
+from memorytalk.backend.models.work import (Canvas, ColumnCreate, ColumnUpdate, Event, Round, Worklet, WorkletCreate, WorkletMove,
+                         WorkletUpdate, WorkletView, Work, WorkCreate, WorkNode, WorkUpdate, WorkUsers)
 from memorytalk.backend.services.metas import MetasService
 from memorytalk.backend.services.work import WorkService
 
@@ -50,10 +50,10 @@ def get(work_id: str, svc: WorkService = Depends(works), who: str | None = Depen
 
 
 @router.patch("/{work_id}", response_model=Result[Work],
-              summary="改目标 / 状态;done 要求子 work 全完;结束后工作单元冻结")
+              summary="改目标 / 状态(running / archived);归档后工作单元冻结")
 def update(work_id: str, req: WorkUpdate, svc: WorkService = Depends(works), who: str | None = Depends(user)):
     svc.touch(work_id, who)
-    return ok(svc.update(work_id, req))
+    return ok(svc.update(work_id, req, by=who))
 
 
 @router.get("/{work_id}/events", response_model=Result[list[Event]], summary="work 自己的时间线")
@@ -94,10 +94,23 @@ def get_canvas(work_id: str, svc: WorkService = Depends(works)):
     return ok(svc.get_canvas(work_id))
 
 
-@router.put("/{work_id}/canvas", response_model=Result[Canvas], summary="全量写画布(version 乐观锁)")
-def put_canvas(work_id: str, req: CanvasPut, svc: WorkService = Depends(works), who: str | None = Depends(user)):
+@router.post("/{work_id}/columns", response_model=Result[Canvas], status_code=201,
+             summary="加一列(服务端发编号 c<n>,永不复用;beside + side 定位置,不给 = 最右)")
+def add_column(work_id: str, req: ColumnCreate, svc: WorkService = Depends(works), who: str | None = Depends(user)):
     svc.touch(work_id, who)
-    return ok(svc.put_canvas(work_id, req))
+    return ok(svc.add_column(work_id, req, by=who))
+
+
+@router.patch("/{work_id}/columns/{column_id}", response_model=Result[Canvas], summary="改别名(编号不动)/ 收起展开")
+def update_column(work_id: str, column_id: str, req: ColumnUpdate, svc: WorkService = Depends(works), who: str | None = Depends(user)):
+    svc.touch(work_id, who)
+    return ok(svc.update_column(work_id, column_id, req, by=who))
+
+
+@router.delete("/{work_id}/columns/{column_id}", response_model=Result[Canvas], summary="删一列:只有空列能删,最后一列不能删")
+def remove_column(work_id: str, column_id: str, svc: WorkService = Depends(works), who: str | None = Depends(user)):
+    svc.touch(work_id, who)
+    return ok(svc.remove_column(work_id, column_id, by=who))
 
 
 @router.get("/{work_id}/worklets", response_model=Result[list[WorkletView]], summary="工作单元清单(含活没活着)")
@@ -109,7 +122,7 @@ def worklets(work_id: str, svc: WorkService = Depends(works)):
              summary="在 work 里打开一个块:协议 → server 建现场,登记工作单元,交回窗 + 把手")
 def attach(work_id: str, req: WorkletCreate, svc: WorkService = Depends(works), who: str | None = Depends(user)):
     svc.touch(work_id, who)
-    return ok(svc.attach(work_id, req.uri))
+    return ok(svc.attach(work_id, req.uri, req.column, by=who))
 
 
 @router.post("/{work_id}/worklets/{worklet_id}/attach", response_model=Result[WorkletView],
@@ -122,8 +135,21 @@ def reattach(work_id: str, worklet_id: str, svc: WorkService = Depends(works), w
 @router.delete("/{work_id}/worklets/{worklet_id}", summary="关闭即回收:销毁现场 + 删登记")
 def detach(work_id: str, worklet_id: str, svc: WorkService = Depends(works), who: str | None = Depends(user)):
     svc.touch(work_id, who)
-    svc.detach(work_id, worklet_id)
+    svc.detach(work_id, worklet_id, by=who)
     return ok()
+
+
+@router.post("/{work_id}/worklets/{worklet_id}/move", response_model=Result[Canvas],
+             summary="挪工作单元:到哪一列、列里第几个(不给 = 末尾)")
+def move_worklet(work_id: str, worklet_id: str, req: WorkletMove, svc: WorkService = Depends(works), who: str | None = Depends(user)):
+    svc.touch(work_id, who)
+    return ok(svc.move_worklet(work_id, worklet_id, req, by=who))
+
+
+@router.patch("/{work_id}/worklets/{worklet_id}", response_model=Result[Canvas], summary="收起 / 展开工作单元(不记事件)")
+def update_worklet(work_id: str, worklet_id: str, req: WorkletUpdate, svc: WorkService = Depends(works), who: str | None = Depends(user)):
+    svc.touch(work_id, who)
+    return ok(svc.update_worklet(work_id, worklet_id, req))
 
 
 @router.get("/{work_id}/worklets/{worklet_id}/rounds", response_model=Result[list[Round]],

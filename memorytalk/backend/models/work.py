@@ -50,21 +50,40 @@ class Panel(BaseModel):
 
 
 class Column(BaseModel):
-    id: str = Field(description="前端自定,画布内唯一")
-    name: str = Field("", max_length=80, description="列名;空 = 前端显示「第 n 列」")
+    """一列 = 固定编号 + 别名(work-events.md §3):id 写成 c<编号>,服务端发、永不改不复用;别名随便改、可空可重名。"""
+    id: str = Field(description="c<编号>;服务端发,永不改、不复用")
+    alias: str = Field("", max_length=80, validation_alias=AliasChoices("alias", "name"),
+                       description="别名;空 = 前端显示「列 <编号>」。旧数据里叫 name")
     panels: list[Panel] = Field(default_factory=list, description="从上到下")
     collapsed: bool = Field(False, description="整列收起 = 缩成一条窄边")
 
 
 class Canvas(BaseModel):
-    """布局 = 几列,每列从上到下摆工作单元。默认一列;工作单元开了就进第一列的末尾,关了就从格子里拿掉。"""
+    """布局 = 几列,每列从上到下摆工作单元。至少一列;工作单元开的时候定在哪一列,关了就从格子里拿掉。
+    不再整份覆盖:每个动作一个请求(work-events.md §2)。"""
     version: int = 0
+    next_column: int = Field(0, description="下一列的编号;单调递增")
     columns: list[Column] = Field(default_factory=list)
 
 
-class CanvasPut(BaseModel):
-    version: int = Field(description="乐观锁:必须等于当前 version")
-    columns: list[Column]
+class ColumnCreate(BaseModel):
+    alias: str = Field("", max_length=80)
+    beside: str | None = Field(None, description="挨着哪一列加;不给 = 加在最右")
+    side: Literal["left", "right"] = "right"
+
+
+class ColumnUpdate(BaseModel):
+    alias: str | None = Field(None, max_length=80, description="改别名(编号不动)")
+    collapsed: bool | None = None
+
+
+class WorkletMove(BaseModel):
+    column: str = Field(description="挪到哪一列(c<编号>)")
+    index: int | None = Field(None, ge=0, description="列里从上数第几个;不给 = 放末尾")
+
+
+class WorkletUpdate(BaseModel):
+    collapsed: bool
 
 
 # ---- 工作单元:现场,身份脱离布局 ----
@@ -81,6 +100,7 @@ class Worklet(BaseModel):
 
 class WorkletCreate(BaseModel):
     uri: str
+    column: str | None = Field(None, description="放进哪一列(c<编号>);不给 = 最左一列")
 
 
 class WorkletView(Worklet):

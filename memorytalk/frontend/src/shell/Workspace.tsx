@@ -4,31 +4,32 @@ import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen, Bot, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, Columns3, ExternalLink, Globe, LoaderCircle, Plus, Sparkles, Terminal, Wand2, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { ApiError, api } from '@/lib/api';
+import { api } from '@/lib/api';
 import { queryClient } from '@/lib/query';
 import { useServers, useSystem, useWork } from '@/lib/queries';
 import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-import { workletLabel, type Canvas, type Column, type Worklet } from '@/lib/types';
+import { columnLabel, workletLabel, type Canvas, type Column, type Worklet } from '@/lib/types';
 import { Empty, ErrorState, Loading, Modal } from '@/components/Shared';
 import { PanelView } from './PanelView';
 
-/** 画布 = 几列,每列从上到下摆工作单元(docs/structure/v5/work.md#canvas)。没画布 / 没提到的工作单元补到第一列;已不存在的工作单元丢掉。 */
+/** 画布 = 几列,每列从上到下摆工作单元(docs/structure/v5/work.md#canvas)。服务端总给至少一列;没提到的工作单元补到第一列,已不存在的丢掉。 */
 function layout(canvas: Canvas | undefined, worklets: Worklet[]): Column[] {
   const ids = new Set(worklets.map(s => s.id));
-  const columns: Column[] = (canvas?.columns.length ? canvas.columns : [{ id: 'c1', panels: [], collapsed: false }]).map(c => ({ id: c.id, name: c.name || '', collapsed: !!c.collapsed, panels: c.panels.filter(p => ids.has(p.worklet)) }));
+  const columns: Column[] = (canvas?.columns.length ? canvas.columns : [{ id: 'c1', alias: '', panels: [], collapsed: false }]).map(c => ({ id: c.id, alias: c.alias || '', collapsed: !!c.collapsed, panels: c.panels.filter(p => ids.has(p.worklet)) }));
   const placed = new Set(columns.flatMap(c => c.panels.map(p => p.worklet)));
   for (const s of worklets) if (!placed.has(s.id)) columns[0].panels.push({ worklet: s.id, collapsed: false });
   return columns;
 }
 
-/** 列名:点一下就地改(回车 / 失焦保存,Esc 放弃);清空 = 回到「第 n 列」。 */
-function ColumnName({ name, fallback, onRename }: { name: string; fallback: string; onRename: (name: string) => void }) {
+/** 列标题:「列 3 · 别名」。点一下就地改别名(回车 / 失焦保存,Esc 放弃);编号不动,清空别名就只剩「列 3」。 */
+function ColumnName({ column, onRename }: { column: Column; onRename: (alias: string) => void }) {
   const t = useT();
   const [draft, setDraft] = useState<string | null>(null);
-  const commit = () => { if (draft === null) return; const next = draft.trim(); setDraft(null); if (next !== name) onRename(next); };
-  if (draft !== null) return <Input autoFocus value={draft} maxLength={80} placeholder={fallback} aria-label={t('work.renameColumn')} className="h-7 w-48 px-2 text-xs" onFocus={e => e.currentTarget.select()} onChange={e => setDraft(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); else if (e.key === 'Escape') { e.stopPropagation(); setDraft(null); } }} />;
-  return <button type="button" className="min-w-0 truncate rounded px-1 py-0.5 text-left hover:bg-accent hover:text-foreground" title={t('work.renameColumn')} onClick={() => setDraft(name)}>{name || fallback}</button>;
+  const number = t('work.column', { n: column.id.replace(/^c/, '') });
+  const commit = () => { if (draft === null) return; const next = draft.trim(); setDraft(null); if (next !== column.alias) onRename(next); };
+  if (draft !== null) return <span className="flex min-w-0 items-center gap-1.5"><span className="shrink-0">{number}</span><Input autoFocus value={draft} maxLength={80} placeholder={t('work.renameColumn')} aria-label={t('work.renameColumn')} className="h-7 w-48 px-2 text-xs" onFocus={e => e.currentTarget.select()} onChange={e => setDraft(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); else if (e.key === 'Escape') { e.stopPropagation(); setDraft(null); } }} /></span>;
+  return <button type="button" className="min-w-0 truncate rounded px-1 py-0.5 text-left hover:bg-accent hover:text-foreground" title={t('work.renameColumn')} onClick={() => setDraft(column.alias)}>{columnLabel(t, column)}</button>;
 }
 
 export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
@@ -40,26 +41,26 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
   const [adding, setAdding] = useState<string | null>(null);          // 往哪一列加工作单元
   const columns = useMemo(() => layout(canvas.data, worklets.data || []), [canvas.data, worklets.data]);
   const byId = useMemo(() => new Map((worklets.data || []).map(s => [s.id, s])), [worklets.data]);
-  // 布局改动:整份 PUT,带 version;被别处改过就重新载入
-  const save = useMutation({ mutationFn: (next: Column[]) => api<Canvas>(`${base}/canvas`, { method: 'PUT', body: { version: canvas.data?.version ?? 0, columns: next } }),
-    onSuccess: data => queryClient.setQueryData(['canvas', id], data),
-    onError: (error: Error) => { if (error instanceof ApiError && error.status === 409) { toast.message(t('work.layoutConflict')); void queryClient.invalidateQueries({ queryKey: ['canvas', id] }); } else toast.error(error.message); },
+  // 布局改动:一个动作一个请求(work-events.md),服务端在当前画布上做、记事件,交回新画布
+  const op = useMutation({ mutationFn: ({ path, method, body }: { path: string; method: 'POST' | 'PATCH' | 'DELETE'; body?: unknown }) => api<Canvas>(`${base}${path}`, { method, body }),
+    onSuccess: data => { queryClient.setQueryData(['canvas', id], data); void queryClient.invalidateQueries({ queryKey: ['events', id] }); },
+    onError: (error: Error) => { toast.error(error.message); void queryClient.invalidateQueries({ queryKey: ['canvas', id] }); },
   });
-  const edit = (fn: (cols: Column[]) => Column[]) => save.mutate(fn(columns.map(c => ({ id: c.id, name: c.name, collapsed: c.collapsed, panels: c.panels.map(p => ({ ...p })) }))));
-  const find = (cols: Column[], worklet: string) => { for (let ci = 0; ci < cols.length; ci++) { const pi = cols[ci].panels.findIndex(p => p.worklet === worklet); if (pi >= 0) return [ci, pi] as const; } return null; };
-  const toggle = (worklet: string) => edit(cols => { const at = find(cols, worklet); if (at) cols[at[0]].panels[at[1]].collapsed = !cols[at[0]].panels[at[1]].collapsed; return cols; });
-  const move = (worklet: string, dir: 'left' | 'right' | 'up' | 'down') => edit(cols => {
-    const at = find(cols, worklet); if (!at) return cols;
-    const [ci, pi] = at; const [panel] = cols[ci].panels.splice(pi, 1);
-    if (dir === 'left' || dir === 'right') cols[Math.max(0, Math.min(cols.length - 1, ci + (dir === 'left' ? -1 : 1)))].panels.push(panel);
-    else cols[ci].panels.splice(Math.max(0, Math.min(cols[ci].panels.length, pi + (dir === 'up' ? -1 : 1))), 0, panel);
-    return cols;
-  });
-  const addColumn = (beside: string, side: 'left' | 'right') => edit(cols => { let n = cols.length + 1; while (cols.some(c => c.id === `c${n}`)) n++; const i = cols.findIndex(c => c.id === beside); cols.splice(i < 0 ? cols.length : i + (side === 'right' ? 1 : 0), 0, { id: `c${n}`, panels: [], collapsed: false }); return cols; });
-  const removeColumn = (colId: string) => edit(cols => cols.length > 1 ? cols.filter(c => c.id !== colId || c.panels.length > 0) : cols);   // 只有空列能删
-  const renameColumn = (colId: string, name: string) => edit(cols => cols.map(c => (c.id === colId ? { ...c, name } : c)));
-  const toggleColumn = (colId: string) => edit(cols => cols.map(c => (c.id === colId ? { ...c, collapsed: !c.collapsed } : c)));
-  const placeNew = (worklet: Worklet, colId: string) => { if (columns[0]?.id !== colId) edit(cols => { const at = find(cols, worklet.id); const panel = at ? cols[at[0]].panels.splice(at[1], 1)[0] : { worklet: worklet.id, collapsed: false }; (cols.find(c => c.id === colId) || cols[0]).panels.push(panel); return cols; }); };
+  const worklet$ = (w: string) => `/worklets/${encodeURIComponent(w)}`;
+  const column$ = (c: string) => `/columns/${encodeURIComponent(c)}`;
+  const find = (worklet: string) => { for (let ci = 0; ci < columns.length; ci++) { const pi = columns[ci].panels.findIndex(p => p.worklet === worklet); if (pi >= 0) return [ci, pi] as const; } return null; };
+  const toggle = (worklet: string) => { const at = find(worklet); if (at) op.mutate({ path: worklet$(worklet), method: 'PATCH', body: { collapsed: !columns[at[0]].panels[at[1]].collapsed } }); };
+  const move = (worklet: string, dir: 'left' | 'right' | 'up' | 'down') => {
+    const at = find(worklet); if (!at) return;
+    const [ci, pi] = at;
+    const body = dir === 'left' || dir === 'right' ? { column: columns[Math.max(0, Math.min(columns.length - 1, ci + (dir === 'left' ? -1 : 1)))].id }
+      : { column: columns[ci].id, index: Math.max(0, pi + (dir === 'up' ? -1 : 1)) };
+    op.mutate({ path: `${worklet$(worklet)}/move`, method: 'POST', body });
+  };
+  const addColumn = (beside: string, side: 'left' | 'right') => op.mutate({ path: '/columns', method: 'POST', body: { beside, side } });
+  const removeColumn = (colId: string) => op.mutate({ path: column$(colId), method: 'DELETE' });    // 只有空列能删(服务端也拦)
+  const renameColumn = (colId: string, alias: string) => op.mutate({ path: column$(colId), method: 'PATCH', body: { alias } });
+  const toggleColumn = (column: Column) => op.mutate({ path: column$(column.id), method: 'PATCH', body: { collapsed: !column.collapsed } });
   if (work.isPending) return <Loading />;
   if (work.isError) return <div className="p-4"><ErrorState error={work.error} retry={() => { void work.refetch(); }} /></div>;
   const ended = work.data.status === 'archived';
@@ -75,14 +76,14 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
       </Empty></div>
       : <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:flex-row md:items-start md:overflow-x-auto md:overflow-y-hidden" aria-label={t('work.worklets')}>
         {columns.map((column, ci) => column.collapsed
-          ? <button key={column.id} type="button" className="flex shrink-0 items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground hover:bg-accent md:h-full md:w-10 md:flex-col md:justify-start md:px-0 md:py-3" aria-label={t('work.expandColumn')} title={t('work.expandColumn')} aria-expanded={false} onClick={() => toggleColumn(column.id)}>
-            <ChevronsRight className="size-4" /><span className="md:[writing-mode:vertical-rl]">{column.name || t('work.column', { n: ci + 1 })} · {column.panels.length}</span>
+          ? <button key={column.id} type="button" className="flex shrink-0 items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground hover:bg-accent md:h-full md:w-10 md:flex-col md:justify-start md:px-0 md:py-3" aria-label={t('work.expandColumn')} title={t('work.expandColumn')} aria-expanded={false} onClick={() => toggleColumn(column)}>
+            <ChevronsRight className="size-4" /><span className="md:[writing-mode:vertical-rl]">{columnLabel(t, column)} · {column.panels.length}</span>
           </button>
-          : <section key={column.id} className={cn('flex min-w-0 flex-col gap-3 md:h-full md:min-w-[28rem] md:flex-1 md:overflow-y-auto md:pr-1', columns.length > 1 && 'md:basis-0')} aria-label={column.name || t('work.column', { n: ci + 1 })}>
-          {columns.length > 1 && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Columns3 className="size-3.5 shrink-0" /><ColumnName name={column.name || ''} fallback={t('work.column', { n: ci + 1 })} onRename={name => renameColumn(column.id, name)} /><span>{column.panels.length}</span>
+          : <section key={column.id} className={cn('flex min-w-0 flex-col gap-3 md:h-full md:min-w-[28rem] md:flex-1 md:overflow-y-auto md:pr-1', columns.length > 1 && 'md:basis-0')} aria-label={columnLabel(t, column)}>
+          {columns.length > 1 && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Columns3 className="size-3.5 shrink-0" /><ColumnName column={column} onRename={alias => renameColumn(column.id, alias)} /><span>{column.panels.length}</span>
             <div className="ml-auto flex items-center">
               {column.panels.length === 0 && <Button variant="ghost" size="icon" className="size-7" aria-label={t('work.removeColumn')} title={t('work.removeColumn')} onClick={() => removeColumn(column.id)}><X className="size-3.5" /></Button>}
-              <Button variant="ghost" size="icon" className="size-7" aria-label={t('work.collapseColumn')} title={t('work.collapseColumn')} aria-expanded onClick={() => toggleColumn(column.id)}><ChevronsLeft className="size-3.5" /></Button>
+              <Button variant="ghost" size="icon" className="size-7" aria-label={t('work.collapseColumn')} title={t('work.collapseColumn')} aria-expanded onClick={() => toggleColumn(column)}><ChevronsLeft className="size-3.5" /></Button>
             </div></div>}
           {column.panels.map((panel, pi) => { const worklet = byId.get(panel.worklet); if (!worklet) return null; const index = (worklets.data || []).findIndex(s => s.id === worklet.id) + 1; return <div key={worklet.id} className="flex shrink-0 flex-col overflow-hidden rounded-lg border bg-card">
             <div className="flex items-center gap-1 border-b bg-muted/40 px-2 py-1">
@@ -102,14 +103,14 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
           </div>; })}
           {!column.panels.length && <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">{t('work.emptyColumn')}</p>}
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" className="text-muted-foreground" disabled={save.isPending} onClick={() => addColumn(column.id, 'left')} title={t('work.addColumnLeft')}><ChevronsLeft />{t('work.addColumnLeft')}</Button>
+            <Button variant="ghost" size="sm" className="text-muted-foreground" disabled={op.isPending} onClick={() => addColumn(column.id, 'left')} title={t('work.addColumnLeft')}><ChevronsLeft />{t('work.addColumnLeft')}</Button>
             {!ended && <Button variant="ghost" size="sm" className="flex-1 text-muted-foreground" onClick={() => setAdding(column.id)}><Plus />{t('work.addSession')}</Button>}
-            <Button variant="ghost" size="sm" className="ml-auto text-muted-foreground" disabled={save.isPending} onClick={() => addColumn(column.id, 'right')} title={t('work.addColumnRight')}>{t('work.addColumnRight')}<ChevronsRight /></Button>
+            <Button variant="ghost" size="sm" className="ml-auto text-muted-foreground" disabled={op.isPending} onClick={() => addColumn(column.id, 'right')} title={t('work.addColumnRight')}>{t('work.addColumnRight')}<ChevronsRight /></Button>
           </div>
         </section>)}
       </div>}
     <Modal open={adding !== null} onClose={() => setAdding(null)} title={t('attach.title')} description={t('attach.description')}>
-      {adding && <NewWorklet id={id} onCreated={worklet => { placeNew(worklet, adding); setAdding(null); }} />}
+      {adding && <NewWorklet id={id} column={adding} onCreated={() => setAdding(null)} />}
     </Modal>
   </div>;
 }
@@ -118,16 +119,16 @@ const DESCRIBED = ['bash', 'codex', 'claude', 'kimi', 'https'];
 
 /** 弹层里的新建工作单元:像浏览器的新标签页——上面一条能输入的地址栏(块即 URI),下面几块应用。点应用只是把 URI 填进地址栏
  *  (终端类带上默认工作目录,网页是 https://),改不改都行,回车或点「打开」才建。 */
-function NewWorklet({ id, onCreated }: { id: string; onCreated: (worklet: Worklet) => void }) {
+function NewWorklet({ id, column, onCreated }: { id: string; column: string; onCreated: (worklet: Worklet) => void }) {
   const t = useT();
   const servers = useServers();
   const system = useSystem();
   const input = useRef<HTMLInputElement>(null);
   const [uri, setUri] = useState('');
-  const mutation = useMutation({ mutationFn: (raw: string) => api<Worklet>(`/works/${encodeURIComponent(id)}/worklets`, { method: 'POST', body: { uri: raw } }),
+  const mutation = useMutation({ mutationFn: (raw: string) => api<Worklet>(`/works/${encodeURIComponent(id)}/worklets`, { method: 'POST', body: { uri: raw, column } }),
     onSuccess: async worklet => {
       queryClient.setQueryData(['live', id, worklet.id], worklet);
-      await Promise.all([queryClient.invalidateQueries({ queryKey: ['worklets', id] }), queryClient.invalidateQueries({ queryKey: ['canvas', id] })]);
+      await Promise.all(['worklets', 'canvas', 'events'].map(key => queryClient.invalidateQueries({ queryKey: [key, id] })));
       onCreated(worklet); setUri(''); toast.success(t('attach.added'));
     } });
   const valid = /^[a-z][a-z0-9+.-]*:\/\//i.test(uri.trim());

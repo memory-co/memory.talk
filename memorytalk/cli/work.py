@@ -35,8 +35,13 @@ def w_show(api, a):
 def w_set(api, a):
     body = {k: v for k, v in {"goal": value(a.goal) if a.goal else None, "status": a.status}.items() if v is not None}
     out(api.call("PATCH", f"/api/works/{a.work_id}", json_body=body), a.json)
+def _column(c: str | None) -> str | None:
+    """--column 3 或 --column c3 都行:列编号,不是位置。"""
+    return None if not c else (c if c.startswith("c") else f"c{c}")
+
+
 def w_attach(api, a):
-    s = api.call("POST", f"/api/works/{a.work_id}/worklets", json_body={"uri": a.uri})
+    s = api.call("POST", f"/api/works/{a.work_id}/worklets", json_body={"uri": a.uri, "column": _column(a.column)})
     out(s, a.json, f"{s['id']}\n  窗    {s['window']['url'] or '无'}\n  把手  {s['handle']['kind']}: {', '.join(s['handle']['capabilities']) or '无'}\n  cwd   {s.get('cwd') or '-'}")
 def w_worklets(api, a):
     ss = api.call("GET", f"/api/works/{a.work_id}/worklets")
@@ -83,7 +88,7 @@ def register(top) -> None:
     wp("list", w_list, (["--root"], {}), (["--created-by"], {"dest": "created_by"}), (["--all"], {"action": "store_true"}), wid=False)
     wp("show", w_show)
     wp("set", w_set, (["--goal"], {}), (["--status"], {"choices": ["running", "archived"]}))
-    wp("attach", w_attach, (["uri"], {}))
+    wp("attach", w_attach, (["uri"], {}), (["--column"], {"help": "放进哪一列(编号:3 或 c3);不给 = 最左一列"}))
     wp("worklets", w_worklets)
     wp("detach", w_detach, (["worklet_id"], {}))
     wp("rounds", w_rounds, (["worklet_id"], {}))

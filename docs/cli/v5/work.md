@@ -9,7 +9,7 @@ memory.talk work
 ├── show    <work_id>
 ├── set     <work_id> [--goal '<…>'] [--status running|archived]
 │
-├── attach   <work_id> <uri>                      # 打开一个块:协议 → server 建现场
+├── attach   <work_id> <uri> [--column <n>]       # 打开一个块:协议 → server 建现场
 ├── worklets <work_id>
 ├── detach   <work_id> <worklet_id>
 ├── rounds   <work_id> <worklet_id>
@@ -60,10 +60,14 @@ work_…2f2f  running   alice    把 v5 做出来
 ```bash
 memory.talk work attach work_…2f2f codex:///home/alice/memory.talk
 memory.talk work attach work_…2f2f bash://
-memory.talk work attach work_…2f2f https://localhost:5173/
+memory.talk work attach work_…2f2f https://localhost:5173/ --column 3
 ```
 
-输出:工作单元 id、窗地址(tmuxd 自带的 ttyd,`?arg=<id>`)、把手能力。已归档的 work → exit 1;命令不在 PATH → exit 1 `cmd_not_found`。
+| 参数 | 说明 |
+|---|---|
+| `--column <n>` | 放进画布哪一列的末尾:列**编号**(`3` 或 `c3`,界面上的「列 3」),不是从左数的位置;不给 = 最左一列 |
+
+输出:工作单元 id、窗地址(tmuxd 自带的 ttyd,`?arg=<id>`)、把手能力。已归档的 work → exit 1;命令不在 PATH → exit 1 `cmd_not_found`;列不存在 → exit 1(不建现场)。
 
 **agent 工作单元的环境里自动带 `MEMORY_TALK_WORK=<work_id>` 和 `MEMORY_TALK_USER=<当前 user>`**——agent 在里面再调 `memory.talk meta …`,提交就挂在这个 user 名下、变动不投回自己。
 

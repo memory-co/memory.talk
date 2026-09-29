@@ -40,29 +40,33 @@
 
 ## Canvas
 
-work 的画布:**几列,每列从上到下摆工作单元**,每个工作单元可收起。默认一列。**只是视图**——重排不改变 work 的工作单元和目的。
+work 的画布:**几列,每列从上到下摆工作单元**,每个工作单元可收起。**至少一列**,新 work 就有一列 `c1`。**只是视图**——重排不改变 work 的工作单元和目的。没有整份写口:加列 / 改别名 / 删列 / 挪 / 收起各是一个请求,服务端在当前画布上做(见 [api works.md](../../api/v5/works.md#get-apiworkswork_idcanvas)、[designs work-events.md](../../designs/v5/work-events.md))。
 
 ```json
 {
   "version": 3,
+  "next_column": 4,
   "columns": [
-    {"id": "c1", "name": "调研", "panels": [{"worklet": "work_2026…2f2f-w1", "collapsed": false}, {"worklet": "work_2026…2f2f-w2", "collapsed": true}]},
-    {"id": "c2", "panels": [{"worklet": "work_2026…2f2f-w3", "collapsed": false}], "collapsed": true}
+    {"id": "c1", "alias": "调研", "panels": [{"worklet": "work_2026…2f2f-w1", "collapsed": false}, {"worklet": "work_2026…2f2f-w2", "collapsed": true}], "collapsed": false},
+    {"id": "c3", "alias": "", "panels": [{"worklet": "work_2026…2f2f-w4", "collapsed": false}], "collapsed": true}
   ]
 }
 ```
 
 | 字段 | 说明 |
 |---|---|
-| `version` | 乐观锁;`PUT` 必须带当前值,成功后 +1;工作单元开 / 关时服务端自己改画布也 +1 |
-| `columns[].id` | 前端自定,画布内唯一 |
-| `columns[].name` | 列名,可空(默认);空时前端显示「第 n 列」;最长 80 |
+| `version` | 每个动作成功后 +1(工作单元开 / 关时服务端改画布也 +1);客户端不用带,只拿它判断缓存旧没旧 |
+| `next_column` | 下一列的编号;加列时发 `c<next_column>` 再 +1,单调递增 |
+| `columns[].id` | `c<编号>`:列的身份,**服务端发,永不改、不复用**(删过列编号就不连续);端点、事件、CLI 一律用它 |
+| `columns[].alias` | 别名,可空(默认)、可重名,最长 80;改名只改它。前端显示 `列 <编号>` / `列 <编号> · <别名>`,**不按位置叫「第 n 列」** |
 | `columns[].panels[]` | 这一列从上到下的格子 |
-| `columns[].collapsed` | 整列收起 = 缩成一条窄边;列只有空了才能删 |
+| `columns[].collapsed` | 整列收起 = 缩成一条窄边;列只有空了才能删,最后一列不能删 |
 | `panels[].worklet` | 装的是哪个工作单元;一个工作单元最多出现在一个格子里 |
 | `panels[].collapsed` | 收起 = 只剩标题行 |
 
-**跟 shellbase 唯一有意不同的地方**:格子的身份不在 `(window, block)` 位置参数里,而在 `worklet`——把工作单元挪到别的列,工作单元不变。开出来的工作单元自动进第一列末尾,关掉的自动从格子里拿掉;画布里没提到的工作单元前端补在第一列。
+**旧数据读时规整**(不回写,下一次动作才存):`name` 当 `alias` 读;不是 `c<n>` 形式的列 id(早期的 `left` / `right`)按从左到右接着发新号;没有列就补一列;`next_column` 至少是最大编号 + 1。
+
+**跟 shellbase 唯一有意不同的地方**:格子的身份不在 `(window, block)` 位置参数里,而在 `worklet`——把工作单元挪到别的列,工作单元不变。开出来的工作单元进指定列末尾(不指定 = 最左一列),关掉的自动从格子里拿掉;画布里没提到的工作单元前端补在第一列。
 
 ## Worklet
 
@@ -81,7 +85,7 @@ work 的一个工作单元 = 一个现场。**在 work 里打开就是它的**,�
 
 | 字段 | 说明 |
 |---|---|
-| `id` | `<work_id>-w<n>`,work 内顺序编号;**就是 tmux 会话名**(终端类) |
+| `id` | `<work_id>-w<n>`,work 内**单调递增、不复用**(关掉 `-w1` 再开一个是 `-w2`;计数在 `seq.json` 的 `worklet`,没有计数的旧 work 从现有登记和事件里出现过的最大号之后接着发);**就是 tmux 会话名**(终端类) |
 | `uri` | 打开它用的 URI(原样) |
 | `scheme` | URI 的协议 |
 | (`server`) | 建它的 server 名,**只在登记文件里、不对外**——销毁 / 取把手时内部用(`https` → `http`,`vim` → `default`,调用方不感知) |
@@ -133,27 +137,37 @@ agent 工作单元的工作单元痕迹:从各平台的记录文件读出来、a
 work 自己的时间线,append-only。v3 `events.jsonl` 在 v5 唯一保留的地方。
 
 ```json
-{"ts": "2026-09-05T23:02:07Z", "type": "created", "data": {"goal": "把 v5 做出来", "parent": null}}
-{"ts": "2026-09-05T23:02:10Z", "type": "worklet.attached", "data": {"worklet": "…-w1", "uri": "codex:///…", "server": "codex"}}
-{"ts": "2026-09-06T01:00:00Z", "type": "status", "data": {"from": "running", "to": "archived"}}
-{"ts": "2026-09-06T01:00:00Z", "type": "frozen", "data": {}}
+{"ts": "2026-09-05T23:02:07Z", "type": "created", "data": {"goal": "把 v5 做出来", "parent": null, "by": "alice"}}
+{"ts": "2026-09-05T23:02:09Z", "type": "column.renamed", "data": {"by": "alice", "column": {"id": "c1", "alias": "调研"}, "from": ""}}
+{"ts": "2026-09-05T23:02:10Z", "type": "worklet.attached", "data": {"by": "alice", "worklet": "…-w1", "uri": "codex:///…", "server": "codex", "column": {"id": "c1", "alias": "调研"}}}
+{"ts": "2026-09-06T01:00:00Z", "type": "status", "data": {"by": "alice", "from": "running", "to": "archived"}}
+{"ts": "2026-09-06T01:00:00Z", "type": "frozen", "data": {"by": "alice"}}
 ```
 
-| `type` | `data` |
+**每条都带 `by`**:登录态里的人,没有则 `null`(归档连带的 `frozen` 记触发归档的人)。**列标记** = `{"id": "c<n>", "alias": "<当时的别名>"}`:`id` 是身份,`alias` 是事件发生时的快照,只为时间线好读,后来改名不回改。
+
+| `type` | `data`(除 `by` 外) |
 |---|---|
 | `created` | `goal`, `parent` |
 | `status` | `from`, `to` |
 | `frozen` | — (归档时现场已销毁) |
-| `worklet.attached` | `worklet`, `uri`, `server` |
-| `worklet.detached` | `worklet` |
+| `column.added` | `column`(列标记) |
+| `column.renamed` | `column`(新别名), `from`(旧别名) |
+| `column.removed` | `column` |
+| `worklet.attached` | `worklet`, `uri`, `server`, `column`(放进哪一列) |
+| `worklet.moved` | `worklet`, `from: {column, index}`, `to: {column, index}`(位置没变不记) |
+| `worklet.detached` | `worklet`, `uri`, `column`(原来在哪一列;不在画布上 = `null`) |
+
+收起 / 展开(列或工作单元)**不记**。旧事件没有 `by` / `column` 的原样保留,不回填。
 
 ## 存储
 
 ```
 works/<work_id>/                      根 work 一个目录
 ├── work.json         原子写(临时文件 + rename)
-├── canvas.json       原子写;不存在 = 空画布 version 0
+├── canvas.json       原子写;不存在 = version 0、一列 c1
 ├── worklets.json     原子写;数组(现场)
+├── seq.json          原子写;{"worklet": <下一个工作单元编号>},单调不复用
 ├── users.json        原子写;数组(人)
 ├── events.jsonl      只追加
 ├── worklets/<worklet_id>/rounds.jsonl   只追加

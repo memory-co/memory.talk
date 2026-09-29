@@ -4,14 +4,14 @@ from __future__ import annotations
 from memorytalk.backend.models.search import SearchHit
 
 from datetime import datetime
-from memorytalk.backend.models.work import (Canvas, CanvasPut, Event, Round, Worklet, WorkletView, Work, WorkCreate, WorkUsers,
-                         WorkNode, WorkUpdate)
+from memorytalk.backend.models.work import (Canvas, Column, ColumnCreate, ColumnUpdate, Event, Round, Worklet, WorkletMove,
+                         WorkletUpdate, WorkletView, Work, WorkCreate, WorkUsers, WorkNode, WorkUpdate)
 from memorytalk.backend.services.work_servers import WorkServerService
 from memorytalk.backend.services.store import StoreService
 
 from .repo import WorkRepo
 
-from .canvas import CanvasStore
+from .canvas import CanvasStore, ColumnNotFound, PanelNotFound
 from .events import Events
 from .inbox import Inbox
 from .users import WorkUserRegistry
@@ -97,41 +97,71 @@ class WorkService:
     def forest(self, root: str | None = None, created_by: str | None = None) -> list[WorkNode]:
         return self.tree.forest(root, created_by)
 
-    def update(self, work_id: str, req: WorkUpdate) -> Work:
+    def update(self, work_id: str, req: WorkUpdate, by: str | None = None) -> Work:
         before = self.tree.get(work_id)
         work = self.tree.update(work_id, req)
         if req.status and req.status != before.status:
-            self.events.emit(work_id, "status", **{"from": before.status, "to": work.status})
-            self._deliver(work_id, f"status {before.status} -> {work.status}")
+            self.events.emit(work_id, "status", by=by, **{"from": before.status, "to": work.status})
+            self._deliver(work_id, f"status {before.status} -> {work.status}", by=by)
         if work.status == "archived" and before.status != "archived":
-            self._freeze(work_id)
+            self._freeze(work_id, by)
         return work
 
-    def _freeze(self, work_id: str) -> None:
+    def _freeze(self, work_id: str, by: str | None = None) -> None:
         """归档:工作单元冻结——现场销毁,登记留着(可回去看痕迹,不再是干活的地方)。"""
         for m in self.worklets.list(work_id):
             try:
                 self.work_servers.destroy(m.server, m.id)
             except Exception:
                 pass
-        self.events.emit(work_id, "frozen")
+        self.events.emit(work_id, "frozen", by=by)
 
-    # ---- 画布 ----
+    # ---- 画布:每个动作一个方法,动了哪一列就记进事件(work-events.md) ----
 
     def get_canvas(self, work_id: str) -> Canvas:
         self.tree.get(work_id)
         return self.canvas.get(work_id)
 
-    def put_canvas(self, work_id: str, req: CanvasPut) -> Canvas:
+    def add_column(self, work_id: str, req: ColumnCreate, by: str | None = None) -> Canvas:
         self.tree.get(work_id)
-        return self.canvas.put(work_id, req)
+        cv, col = self.canvas.add_column(work_id, req.alias.strip(), req.beside, req.side)
+        self.events.emit(work_id, "column.added", by=by, column=_col(col))
+        return cv
+
+    def update_column(self, work_id: str, column_id: str, req: ColumnUpdate, by: str | None = None) -> Canvas:
+        self.tree.get(work_id)
+        alias = req.alias.strip() if req.alias is not None else None
+        cv, before, after = self.canvas.update_column(work_id, column_id, alias, req.collapsed)
+        if after.alias != before.alias:                  # 收起 / 展开不记(work-events.md §2)
+            self.events.emit(work_id, "column.renamed", by=by, column=_col(after), **{"from": before.alias})
+        return cv
+
+    def remove_column(self, work_id: str, column_id: str, by: str | None = None) -> Canvas:
+        self.tree.get(work_id)
+        cv, col = self.canvas.remove_column(work_id, column_id)
+        self.events.emit(work_id, "column.removed", by=by, column=_col(col))
+        return cv
+
+    def move_worklet(self, work_id: str, worklet_id: str, req: WorkletMove, by: str | None = None) -> Canvas:
+        self.worklets.get(work_id, worklet_id)
+        cv, (src, i), (dst, j) = self.canvas.move(work_id, worklet_id, req.column, req.index)
+        if (src.id, i) != (dst.id, j):
+            self.events.emit(work_id, "worklet.moved", by=by, worklet=worklet_id,
+                             **{"from": {"column": _col(src), "index": i}, "to": {"column": _col(dst), "index": j}})
+        return cv
+
+    def update_worklet(self, work_id: str, worklet_id: str, req: WorkletUpdate) -> Canvas:
+        self.worklets.get(work_id, worklet_id)
+        return self.canvas.set_collapsed(work_id, worklet_id, req.collapsed)
 
     # ---- 工作单元:在 work 里打开,就是它的 ----
 
-    def attach(self, work_id: str, raw_uri: str) -> WorkletView:
+    def attach(self, work_id: str, raw_uri: str, column: str | None = None, by: str | None = None) -> WorkletView:
         work = self.tree.get(work_id)
         if work.status == "archived":
             raise WorkConflict(f"{work_id} 已归档,不再是干活的地方")
+        if column:
+            self.canvas.check_column(work_id, column)                   # 列不在就别建现场
         uri, server = self.work_servers.resolve(raw_uri)
         m = self.worklets.add(work_id, raw_uri, uri.scheme, server.name, None)
         try:
@@ -141,8 +171,8 @@ class WorkService:
             raise
         if live.cwd:
             m = self._set_cwd(work_id, m, live.cwd)
-        self.canvas.place(work_id, m.id)                                # 视图跟着记:进第一列末尾
-        self.events.emit(work_id, "worklet.attached", worklet=m.id, uri=raw_uri, server=server.name)
+        _, col = self.canvas.place(work_id, m.id, column)               # 开的时候就定列:给了放那列末尾,没给放最左一列
+        self.events.emit(work_id, "worklet.attached", by=by, worklet=m.id, uri=raw_uri, server=server.name, column=_col(col))
         return WorkletView(**m.model_dump(), alive=True, window=live.window, handle=live.handle)
 
     def reattach(self, work_id: str, worklet_id: str) -> WorkletView:
@@ -164,13 +194,13 @@ class WorkService:
             out.append(WorkletView(**m.model_dump(), alive=alive, window=window, handle=self._handle(m).info() if alive else None))
         return out
 
-    def detach(self, work_id: str, worklet_id: str) -> None:
+    def detach(self, work_id: str, worklet_id: str, by: str | None = None) -> None:
         """关闭即回收:销毁现场 + 删登记。"""
         m = self.worklets.get(work_id, worklet_id)
         self.work_servers.destroy(m.server, m.id)
         self.worklets.remove(work_id, worklet_id)
-        self.canvas.remove(work_id, worklet_id)
-        self.events.emit(work_id, "worklet.detached", worklet=worklet_id)
+        col = self.canvas.remove(work_id, worklet_id)
+        self.events.emit(work_id, "worklet.detached", by=by, worklet=worklet_id, uri=m.uri, column=_col(col) if col else None)
 
     # ---- 痕迹 ----
 
@@ -191,8 +221,13 @@ class WorkService:
         return self.events.read(work_id)
 
 
+def _col(c: Column) -> dict:
+    """事件里的列标记:编号是身份,别名是当时的快照(work-events.md §3)。"""
+    return {"id": c.id, "alias": c.alias}
+
+
 def _epoch(iso: str) -> float:
     return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
 
 
-__all__ = ["WorkService", "WorkNotFound", "WorkConflict", "WorkletNotFound", "WorkRepo"]
+__all__ = ["WorkService", "WorkNotFound", "WorkConflict", "WorkletNotFound", "ColumnNotFound", "PanelNotFound", "WorkRepo"]

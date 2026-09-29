@@ -1,6 +1,6 @@
 # Works API
 
-work 树、画布、工作单元(现场)、user、痕迹、事件、召回。登录后的请求(身份来自 token,见 [auth.md](auth.md)),凡会动某个 work 的(建、改、重排画布、开 / 重入 / 关工作单元、打开 work 本身),都会把这个人记进该 work 的users 名单。字段语义见 [`../../structure/v5/work.md`](../../structure/v5/work.md)。
+work 树、画布、工作单元(现场)、user、痕迹、事件、召回。登录后的请求(身份来自 token,见 [auth.md](auth.md)),凡会动某个 work 的(建、改、画布上的每个动作、开 / 重入 / 关工作单元、打开 work 本身),都会把这个人记进该 work 的users 名单;记事件的动作还把这个人写进事件的 `by`。字段语义见 [`../../structure/v5/work.md`](../../structure/v5/work.md)。
 
 ---
 
@@ -77,12 +77,18 @@ work 树(森林)。
 
 ```json
 [
-  {"ts": "…", "type": "created", "data": {"goal": "…", "parent": null}},
-  {"ts": "…", "type": "worklet.attached", "data": {"worklet": "…-w1", "uri": "codex:///w", "server": "codex"}},
-  {"ts": "…", "type": "status", "data": {"from": "running", "to": "archived"}},
-  {"ts": "…", "type": "frozen", "data": {}}
+  {"ts": "…", "type": "created", "data": {"goal": "…", "parent": null, "by": "alice"}},
+  {"ts": "…", "type": "column.added", "data": {"by": "alice", "column": {"id": "c2", "alias": ""}}},
+  {"ts": "…", "type": "column.renamed", "data": {"by": "alice", "column": {"id": "c2", "alias": "测试"}, "from": ""}},
+  {"ts": "…", "type": "worklet.attached", "data": {"by": "alice", "worklet": "…-w1", "uri": "codex:///w", "server": "codex", "column": {"id": "c2", "alias": "测试"}}},
+  {"ts": "…", "type": "worklet.moved", "data": {"by": "bob", "worklet": "…-w1", "from": {"column": {"id": "c2", "alias": "测试"}, "index": 0}, "to": {"column": {"id": "c1", "alias": ""}, "index": 1}}},
+  {"ts": "…", "type": "worklet.detached", "data": {"by": "bob", "worklet": "…-w1", "uri": "codex:///w", "column": {"id": "c1", "alias": ""}}},
+  {"ts": "…", "type": "status", "data": {"by": "alice", "from": "running", "to": "archived"}},
+  {"ts": "…", "type": "frozen", "data": {"by": "alice"}}
 ]
 ```
+
+每条都带 `by`(登录态里的人,没有则 `null`)。画布动作带列标记 `{"id": "c<n>", "alias": "<当时的别名>"}`:`id` 是身份,`alias` 是事件发生那一刻的快照,后来改名不回改。收起 / 展开(列或工作单元)不记事件。各 `type` 的 `data` 见 [structure work.md#event](../../structure/v5/work.md#event)。旧事件没有 `by` / `column` 的照原样返回,不回填。
 
 ---|---|
 | `dir` | 只给这个目录之下的对象;空 = 全部 |
@@ -135,23 +141,48 @@ user:谁当前正在操作、谁历史操作过。只做可见性,不做权限�
 ## GET /api/works/{work_id}/canvas
 
 ```json
-{"version": 3,
- "columns": [{"id": "c1", "name": "调研", "panels": [{"worklet": "work_…-w1", "collapsed": false}, {"worklet": "work_…-w2", "collapsed": true}]},
-             {"id": "c2", "panels": [{"worklet": "work_…-w3", "collapsed": false}], "collapsed": true}]}
+{"version": 3, "next_column": 4,
+ "columns": [{"id": "c1", "alias": "调研", "panels": [{"worklet": "work_…-w1", "collapsed": false}, {"worklet": "work_…-w2", "collapsed": true}], "collapsed": false},
+             {"id": "c3", "alias": "", "panels": [{"worklet": "work_…-w4", "collapsed": false}], "collapsed": true}]}
 ```
 
-布局 = 几列,每列从上到下摆工作单元;工作单元可收起(只剩标题行),整列也可收起(缩成一条窄边);列可以起名(`name`,空 = 前端显示「第 n 列」)。从未写过 = `version 0`、空 `columns`(前端当一列画)。
+布局 = 几列,每列从上到下摆工作单元;工作单元可收起(只剩标题行),整列也可收起(缩成一条窄边)。**一列 = 固定编号 + 别名**:`id` 是 `c<编号>`,服务端发、单调递增、永不改不复用(删过列编号就不连续,如上例没有 `c2`);`alias` 是别名,可空可重名,改名只改它(空 = 前端显示「列 <编号>」,否则「列 <编号> · <别名>」)。**至少一列**:新 work 的画布就是 `{"version": 0, "next_column": 2, "columns": [{"id": "c1", …}]}`。旧数据读时规整:`name` 当 `alias` 读,不是 `c<n>` 形式的列 id 按从左到右接着发新号,`next_column` 取最大编号 + 1。
 
-## PUT /api/works/{work_id}/canvas
+**画布没有整份写口**(`PUT …/canvas` 已撤,→ 405):每个动作一个请求,服务端在当前画布上做、存回、`version + 1`、记事件,返回新画布。不需要客户端带 `version`(服务端串行,两人各做各的动作都成功);`version` 只用来判断本地缓存旧没旧。**画布是视图**——它不建、不删工作单元;但跟着工作单元走:`POST …/worklets` 开出来的工作单元进指定列末尾,`DELETE` 掉的自动从格子里拿掉,这两处也 `version + 1`。
 
-全量覆盖:`{"version": 3, "columns": [...]}`。
+## POST /api/works/{work_id}/columns
+
+加一列。
+
+```json
+{"alias": "测试", "beside": "c1", "side": "right"}
+```
+
+| 字段 | 必填 | 说明 |
+|---|---|---|
+| `alias` | 否 | 别名,默认空;最长 80(超长 → 422) |
+| `beside` | 否 | 挨着哪一列加;不给 = 加在最右 |
+| `side` | 否 | `left` / `right`(默认 `right`),相对 `beside` |
+
+**201** 返回新画布;新列 id = `c<next_column>`,`next_column + 1`。事件 `column.added`。`beside` 不存在 → 404。
+
+## PATCH /api/works/{work_id}/columns/{column_id}
+
+```json
+{"alias": "测试", "collapsed": true}
+```
+
+两个字段都可选。`alias` 改别名(编号不动;首尾空白去掉;空串 = 清掉别名),变了才记事件 `column.renamed`(带 `from` = 旧别名);`collapsed` 收起 / 展开整列,不记事件。返回新画布。列不存在 → 404。
+
+## DELETE /api/works/{work_id}/columns/{column_id}
+
+删一列,返回新画布,事件 `column.removed`。删掉的编号不再发。
 
 | 错误 | 状态 |
 |---|---|
-| `version` ≠ 当前 | 409 `conflict` `canvas version 0 != 1` |
-| 列 id 重复 / 一个工作单元出现在两个格子里 | 409 `conflict` |
-
-成功返回新画布,`version + 1`。**画布是视图**——它不建、不删工作单元;工作单元走下面的端点。但它跟着工作单元走:`POST …/worklets` 开出来的工作单元自动进第一列末尾(没有列就建 `c1`),`DELETE` 掉的工作单元自动从格子里拿掉,这两处也会让 `version + 1`。
+| 列不存在 | 404 `not_found` |
+| 列里还有工作单元(只有空列能删) | 409 `conflict` |
+| 这是最后一列 | 409 `conflict` |
 
 ---
 
@@ -169,8 +200,13 @@ user:谁当前正在操作、谁历史操作过。只做可见性,不做权限�
 在 work 里打开一个块:拿协议去 server 那里寻址(声明了的 server,否则 default)→ 幂等建现场 → 登记工作单元 → 交回窗 + 把手。建现场失败则不留登记。
 
 ```json
-{"uri": "codex:///w/memory.talk"}
+{"uri": "codex:///w/memory.talk", "column": "c3"}
 ```
+
+| 字段 | 必填 | 说明 |
+|---|---|---|
+| `uri` | 是 | 块即 URI |
+| `column` | 否 | 放进哪一列(`c<编号>`)的末尾;不给 = 最左一列。开的时候就定列,不用再挪 |
 
 **201**:
 
@@ -184,11 +220,13 @@ user:谁当前正在操作、谁历史操作过。只做可见性,不做权限�
 
 - 由哪个 server 建的不对外——`https://` 走 http server、`vim://` 走 default,调用方不感知。
 - `window.url` 是 tmuxd 自带的 ttyd 地址(`http://<host>:<port>/?arg=<worklet_id>`);http 工作单元是 URL 本身。
-- 副作用:`worklets.json` 追加一条;终端类起一个 tmux 会话(名 = 工作单元 id);事件 `worklet.attached`。
+- id `<work_id>-w<n>` 在 work 内单调递增、不复用:关掉 `-w1` 再开一个是 `-w2`(计数存在 `seq`)。
+- 副作用:`worklets.json` 追加一条;终端类起一个 tmux 会话(名 = 工作单元 id);进画布那一列末尾;事件 `worklet.attached`(带 `column`)。
 
 | 错误 | 状态 |
 |---|---|
 | work 已归档 | 409 `conflict` |
+| `column` 不存在(先验,不建现场、不留登记) | 404 `not_found` |
 | URI 没协议 | 400 `bad_uri` |
 | 要跑的命令不在 PATH(如 `vim://` 走 default 但没装 vim) | 400 `cmd_not_found` |
 | tmux 起不来 | 502 `platform` |
@@ -199,7 +237,26 @@ user:谁当前正在操作、谁历史操作过。只做可见性,不做权限�
 
 ## DELETE /api/works/{work_id}/worklets/{worklet_id}
 
-关闭即回收:销毁现场(tmuxd `session.kill()`)+ 删登记 + 事件 `worklet.detached`。**200**,`data: null`。
+关闭即回收:销毁现场(tmuxd `session.kill()`)+ 删登记 + 从格子里拿掉 + 事件 `worklet.detached`(带 `uri` 和原来所在的 `column`;不在画布上则 `column: null`)。**200**,`data: null`。
+
+## POST /api/works/{work_id}/worklets/{worklet_id}/move
+
+挪工作单元:左右挪 = 换列放末尾,上下挪 = 同列换 `index`,一个接口。
+
+```json
+{"column": "c1", "index": 0}
+```
+
+| 字段 | 必填 | 说明 |
+|---|---|---|
+| `column` | 是 | 挪到哪一列(`c<编号>`) |
+| `index` | 否 | 列里从上数第几个(从 0 起,超出按末尾算;负数 → 422);不给 = 末尾 |
+
+返回新画布。位置真变了才记事件 `worklet.moved`(`from` / `to` 各是 `{column, index}`)。工作单元不存在或不在画布上、目标列不存在 → 404。
+
+## PATCH /api/works/{work_id}/worklets/{worklet_id}
+
+`{"collapsed": true}` 收起 / 展开这个工作单元的格子。返回新画布,不记事件。工作单元不存在或不在画布上 → 404。
 
 ## GET /api/works/{work_id}/worklets/{worklet_id}/rounds
 

@@ -18,18 +18,22 @@
 | `GET` | `/api/works/servers` | 有哪些 work server(bash / claude / codex / kimi / http / default)及各自响应的协议;attach 时按协议去找它们 |
 | `GET` | `/api/works/{work_id}` | 读一个 work(带身份 = 打开它,记一笔在操作) |
 | `PATCH` | `/api/works/{work_id}` | 改目标 / 状态(`running` / `archived`);归档后工作单元冻结 |
-| `GET` | `/api/works/{work_id}/canvas` | 画布:几列、每列从上到下摆哪些工作单元、哪些收起(视图,随时可重排) |
-| `PUT` | `/api/works/{work_id}/canvas` | 全量写画布(version 乐观锁) |
+| `GET` | `/api/works/{work_id}/canvas` | 画布:几列(编号 + 别名)、每列从上到下摆哪些工作单元、哪些收起(视图;没有整份写口,每个动作一个请求) |
+| `POST` | `/api/works/{work_id}/columns` | 加一列(服务端发编号 c<n>,永不复用;beside + side 定位置,不给 = 最右) |
+| `PATCH` | `/api/works/{work_id}/columns/{column_id}` | 改别名(编号不动)/ 收起展开 |
+| `DELETE` | `/api/works/{work_id}/columns/{column_id}` | 删一列:只有空列能删,最后一列不能删 |
 | `GET` | `/api/works/{work_id}/events` | work 自己的时间线 |
 | `GET` | `/api/works/{work_id}/inbox` | 收件箱:被 manager.json 路由过来的变动(Metas 的对象、子 work 的状态) |
 | `GET` | `/api/works/{work_id}/manager` | 这个 work 的变动打给谁:manager.json,没有则父 work |
 | `PUT` | `/api/works/{work_id}/manager` | 改写默认:这棵子树的变动打给指定 work(null = 删掉,回到父) |
 | `GET` | `/api/works/{work_id}/worklets` | 工作单元清单(含活没活着) |
-| `POST` | `/api/works/{work_id}/worklets` | 在 work 里打开一个块:协议 → server 建现场,登记工作单元,交回窗 + 把手 |
+| `POST` | `/api/works/{work_id}/worklets` | 在 work 里打开一个块:协议 → server 建现场,登记工作单元,放进指定列(column=,不给 = 最左),交回窗 + 把手 |
 | `GET` | `/api/works/{work_id}/users` | user:谁当前正在操作(current)、谁历史操作过(history)。只做可见性,不做权限 |
 | `DELETE` | `/api/works/{work_id}/worklets/{worklet_id}` | 关闭即回收:销毁现场 + 删登记 |
 | `POST` | `/api/works/{work_id}/users/touch` | 我在操作这个 work(心跳;身份来自登录态) |
 | `POST` | `/api/works/{work_id}/worklets/{worklet_id}/attach` | 重入:幂等取回同一个现场 |
+| `POST` | `/api/works/{work_id}/worklets/{worklet_id}/move` | 挪工作单元:到哪一列、列里第几个(不给 = 末尾) |
+| `PATCH` | `/api/works/{work_id}/worklets/{worklet_id}` | 收起 / 展开工作单元(不记事件) |
 | `GET` | `/api/works/{work_id}/worklets/{worklet_id}/rounds` | 痕迹:agent 工作单元的 round(先从把手同步新 round,再读 rounds.jsonl) |
 | `GET` | `/api/users` | 所有注册的 user,带活动统计,按最近活动倒序 |
 | `POST` | `/api/users` | 建一个账号(admin;name 唯一;可带初始密码) |
@@ -66,8 +70,8 @@
   | 400 | `bad_uri` / `no_server` / `cmd_not_found` / `guard` | URI 没协议 / 连 default 都没有 / 命令不在 PATH / 空改动、路径不合法 |
   | 401 | `unauthorized` | 没带 token / token 不认识 / 密码不对 |
   | 403 | `forbidden` | member 做 admin 的事 |
-  | 404 | `not_found` / `no_layer` | work、工作单元、对象、层不存在 |
-  | 409 | `exists` / `conflict` / `guard` / `setup_required` | 对象已存在 / work 状态、画布、归档后 attach / **跨层提交被守卫拒绝** / 还没 admin |
+  | 404 | `not_found` / `no_layer` | work、工作单元、画布上的列 / 格子、对象、层不存在 |
+  | 409 | `exists` / `conflict` / `guard` / `setup_required` | 对象已存在 / 删非空列或最后一列、归档后 attach / **跨层提交被守卫拒绝** / 还没 admin |
   | 422 | `invalid` | 对象不符合层的 schema(或 FastAPI 默认校验) |
   | 502 | `platform` | tmux 起不来 |
 
@@ -79,7 +83,7 @@
 
 | 对象 | 形态 |
 |---|---|
-| work | `work_<时间戳><4hex>`;工作单元 `<work_id>-w<n>` |
+| work | `work_<时间戳><4hex>`;工作单元 `<work_id>-w<n>`(work 内单调,不复用);画布的列 `c<n>`(画布内单调,不复用) |
 | Metas 对象 | **路径**(不含后缀):`memory.talk/配置/该走文件还是环境变量` ↔ 目录 `….issue/`;origin 就是文件路径 |
 | position / argument | issue 内顺序编号 `p<n>` / `a<n>` |
 
@@ -87,7 +91,7 @@
 
 ```
 ~/.memory.talk/metas/   分层 git 仓库(Metas):layer/origin、layer/issue、layer/card(+ 用户层)、stack;工作树跟着 stack
-~/.memory.talk/works/    work 的记录(MEMORY_TALK_STORE=fs 时):<work_id>/{work,canvas,worklets,users,manager}.json,子 work 在 <work_id>/subs/<child_id>/ 下 + events/inbox.jsonl + worklets/<wid>/rounds.jsonl
+~/.memory.talk/works/    work 的记录(MEMORY_TALK_STORE=fs 时):<work_id>/{work,canvas,worklets,seq,users,manager}.json,子 work 在 <work_id>/subs/<child_id>/ 下 + events/inbox.jsonl + worklets/<wid>/rounds.jsonl
 ~/.memory.talk/unmanaged.jsonl   没人管的变动
 ~/.memory.talk/memory.sqlite     MEMORY_TALK_STORE=sqlite 时,上面两样都在这里(works / work_docs / work_logs 三张表)
 ```

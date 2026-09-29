@@ -4,12 +4,12 @@ work 树、画布、工作单元(现场)、谁动过、round、事件、收件�
 
 | 文件 | 重点 |
 |---|---|
-| `__init__.py` | `WorkService(store, work_servers)`:树 `create` / `get` / `forest` / `update`(状态只有 running / archived;归档后 `_freeze` 冻结工作单元,不看子 work)/ `search`;画布 `get_canvas` / `put_canvas`;工作单元 `attach(work_id, uri)`(登记 → 找 server 建现场 → 建不起来就撤登记 → 记 cwd → 进画布第一列)/ `reattach` / `list_worklets`(带 alive)/ `detach`(销毁现场 + 删登记 + 出画布)/ `rounds`(先从把手同步新 round);`touch` / `list_users`;`read_inbox` / `manager_of` / `set_manager` / `_deliver`;`history` |
+| `__init__.py` | `WorkService(store, work_servers)`:树 `create` / `get` / `forest` / `update`(状态只有 running / archived;归档后 `_freeze` 冻结工作单元,不看子 work)/ `search`;画布每个动作一个方法(设计:[work-events.md](../../../../docs/designs/v5/work-events.md)):`get_canvas` / `add_column` / `update_column`(别名变了才记 `column.renamed`,收起不记)/ `remove_column` / `move_worklet`(位置变了才记 `worklet.moved`)/ `update_worklet`(收起,不记);工作单元 `attach(work_id, uri, column)`(先验列 → 登记 → 找 server 建现场 → 建不起来就撤登记 → 记 cwd → 进那一列末尾,不给列 = 最左)/ `reattach` / `list_worklets`(带 alive)/ `detach`(销毁现场 + 删登记 + 出画布)/ `rounds`(先从把手同步新 round);事件都带 `by`,画布动作带列标记 `_col()` = `{id, alias}`;`touch` / `list_users`;`read_inbox` / `manager_of` / `set_manager` / `_deliver`;`history` |
 | `tree.py` | `WorkTree`:节点的 CRUD 和状态机(`_transition`),`forest()` 读时拼 `WorkNode`;`WorkNotFound` / `WorkConflict` |
-| `canvas.py` | `CanvasStore`:`get` / `put`(version 乐观锁;列 id、工作单元不能重复)/ `place(worklet)`(进第一列末尾,没有列就建 `c1`)/ `remove(worklet)` |
-| `worklets.py` | `WorkletRegistry`:工作单元登记的唯一权威,`add`(id = `<work_id>-w<n>`)/ `get` / `list` / `replace` / `touch` / `remove`;`WorkletNotFound` |
+| `canvas.py` | `CanvasStore`:一列 = 固定编号 `c<n>` + 别名;`get`(读时规整:至少一列、非 `c<n>` 的旧 id 接着发号、`next_column` 在最大号之后)/ `add_column`(发 `c<next_column>`,永不复用)/ `update_column` / `remove_column`(只删空列,最后一列不删)/ `place(worklet, column)` / `check_column` / `move` / `set_collapsed` / `remove(worklet)`;每个动作在一把锁里读-改-写、`version + 1`,把动了哪一列交回去给 `WorkService` 记事件;`ColumnNotFound` / `PanelNotFound` |
+| `worklets.py` | `WorkletRegistry`:工作单元登记的唯一权威,`add`(id = `<work_id>-w<n>`,单调不复用,计数在 `seq` 记录;旧 work 从登记和事件里见过的最大号之后接着发)/ `get` / `list` / `replace` / `touch` / `remove`;`WorkletNotFound` |
 | `users.py` | `WorkUserRegistry`:`touch(work_id, user)` 记一笔,`list()` 算出 `current`(最近 120 秒)和 `history` |
 | `rounds.py` | `Rounds`:`read` / `sync(fresh)`(只追加没见过的 round) |
 | `events.py` | `Events`:`emit(work_id, type, **data)` / `read` —— work 自己的 append-only 时间线 |
 | `inbox.py` | `Inbox`:`read` / `put` / `put_unmanaged` —— manager.json 路由过来的变动 |
-| `repo.py` | `WorkRepo` 接口:`get_work` / `put_work` / `list_works`;每个 work 下的小文档 `get_doc` / `put_doc` / `del_doc`(canvas / worklets / users / manager);流 `append` / `read`(events / inbox / rounds);`append_unmanaged`。`FsWorkRepo`(`works/<id>/…`,子 work 在父目录的 `subs/<id>/` 下,目录就是树;id → 目录懒扫索引)+ `DbWorkRepo`(`works` / `work_docs` / `work_logs` 表);`make_work_repo(store)` |
+| `repo.py` | `WorkRepo` 接口:`get_work` / `put_work` / `list_works`;每个 work 下的小文档 `get_doc` / `put_doc` / `del_doc`(canvas / worklets / seq / users / manager);流 `append` / `read`(events / inbox / rounds);`append_unmanaged`。`FsWorkRepo`(`works/<id>/…`,子 work 在父目录的 `subs/<id>/` 下,目录就是树;id → 目录懒扫索引)+ `DbWorkRepo`(`works` / `work_docs` / `work_logs` 表);`make_work_repo(store)` |

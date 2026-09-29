@@ -13,8 +13,8 @@ export interface Worklet {
   handle?: { kind: string; capabilities: string[] } | null;
 }
 export interface Panel { worklet: string; collapsed: boolean }
-export interface Column { id: string; name?: string; panels: Panel[]; collapsed: boolean }
-export interface Canvas { version: number; columns: Column[] }
+export interface Column { id: string; alias: string; panels: Panel[]; collapsed: boolean }
+export interface Canvas { version: number; next_column: number; columns: Column[] }
 export interface Round { id: string; timestamp: string | null; role: string; text: string }
 export interface User {
   name: string; display_name: string; email: string; created_at: string; role: 'admin' | 'member';
@@ -51,6 +51,11 @@ export const workStatuses: WorkStatus[] = ['running', 'archived'];
 export const statusLabel = (t: T, status: WorkStatus) => t(`status.${status}`);
 export const layerLabel = (t: T, layer: string) => (['origin', 'issue', 'card', 'all'].includes(layer) ? t(`layer.${layer}` as Key) : layer);
 const schemeNames: Record<string, string> = { codex: 'Codex', claude: 'Claude Code', kimi: 'Kimi' };
+/** 列 = 固定编号 + 别名(work-events.md §3):「列 3」或「列 3 · 测试」。编号从 id(c3)里取,不按位置数。 */
+export const columnLabel = (t: T, column: { id: string; alias?: string | null }) => {
+  const n = t('work.column', { n: column.id.replace(/^c/, '') });
+  return column.alias ? `${n} · ${column.alias}` : n;
+};
 export const workletLabel = (t: T, scheme: string) => schemeNames[scheme] || (['bash', 'http', 'https'].includes(scheme) ? t(`scheme.${scheme}` as Key) : scheme);
 export function flattenWorks(works: Work[]): Work[] {
   return works.flatMap(w => [w, ...flattenWorks(w.children || [])]);

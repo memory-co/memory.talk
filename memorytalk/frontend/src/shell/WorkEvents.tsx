@@ -1,13 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, CirclePlus, History, Snowflake, SquareArrowOutUpRight, SquareX, type LucideIcon } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowRightLeft, CirclePlus, Columns3, History, Pencil, Snowflake, SquareArrowOutUpRight, SquareX, Trash2, type LucideIcon } from 'lucide-react';
 import { api } from '@/lib/api';
 import { localeTag, useT, type T } from '@/lib/i18n';
 import { usePreferences } from '@/lib/store';
-import { workletLabel, type WorkEvent } from '@/lib/types';
+import { columnLabel, workletLabel, type WorkEvent } from '@/lib/types';
 import { Empty, ErrorState, Loading } from '@/components/Shared';
 import { cn } from '@/lib/utils';
 
-/** 右侧面板:这个 work 的时间线(GET /works/{id}/events),新的在上。事件只有后端会写的那几种,认不出的原样显示 type。 */
+/** 右侧面板:这个 work 的时间线(GET /works/{id}/events),新的在上。画布动作带列标记 `{id, alias}`(当时的别名),每条带 `by`(docs/designs/v5/work-events.md);
+ *  旧事件没有这两样就少一截。认不出的 type 原样显示。 */
 export function WorkEvents({ id }: { id: string }) {
   const t = useT();
   const locale = usePreferences(s => s.locale);
@@ -24,7 +25,7 @@ export function WorkEvents({ id }: { id: string }) {
         <span className="absolute -left-[31px] top-0 flex size-5 items-center justify-center rounded-full border bg-background text-muted-foreground"><Icon className="size-3" /></span>
         <p className="text-sm font-medium">{title}</p>
         {detail && <p className={cn('mt-0.5 break-all text-xs text-muted-foreground', e.type.startsWith('worklet.') && 'font-mono')}>{detail}</p>}
-        <p className="mt-1 text-xs text-muted-foreground"><time dateTime={e.ts}>{time(e.ts)}</time></p>
+        <p className="mt-1 text-xs text-muted-foreground">{typeof e.data.by === 'string' && e.data.by && <>{e.data.by} · </>}<time dateTime={e.ts}>{time(e.ts)}</time></p>
       </li>;
     })}</ol>
   </div>;
@@ -32,18 +33,34 @@ export function WorkEvents({ id }: { id: string }) {
 
 const statusName = (t: T, s: unknown) => (s === 'running' || s === 'archived' ? t(`status.${s}`) : String(s));
 const scheme = (uri: unknown) => String(uri || '').split(':')[0];
+type ColumnMark = { id: string; alias?: string };
+const isColumn = (c: unknown): c is ColumnMark => !!c && typeof c === 'object' && typeof (c as ColumnMark).id === 'string';
+const alias = (a: unknown) => (typeof a === 'string' && a ? `「${a}」` : '');
 
 function describe(t: T, e: WorkEvent, before: WorkEvent[]): { icon: LucideIcon; title: string; detail?: string } {
   const d = e.data;
+  const col = (c: unknown) => (isColumn(c) ? columnLabel(t, c) : '');
+  // 工作单元叫什么:事件里有 uri 就用,没有(旧的关闭 / 挪动事件)就往前找最近一次打开它的事件
+  const uriOf = (): string => (typeof d.uri === 'string' ? d.uri : String([...before].reverse().find(x => x.type === 'worklet.attached' && x.data.worklet === d.worklet)?.data.uri ?? ''));
+  const name = () => { const uri = uriOf(); return uri ? workletLabel(t, scheme(uri)) : String(d.worklet ?? ''); };
+  const at = (key: 'events.attachedIn' | 'events.detachedIn', plain: 'events.attached' | 'events.detached') => (isColumn(d.column) ? t(key, { name: name(), column: col(d.column) }) : t(plain, { name: name() }));
   switch (e.type) {
-    case 'created': return { icon: CirclePlus, title: d.by ? t('events.createdBy', { by: String(d.by) }) : t('events.created'), detail: String(d.goal ?? '') };
+    case 'created': return { icon: CirclePlus, title: t('events.created'), detail: String(d.goal ?? '') };
     case 'status': return { icon: d.to === 'archived' ? Archive : ArchiveRestore, title: t('events.status', { from: statusName(t, d.from), to: statusName(t, d.to) }) };
     case 'frozen': return { icon: Snowflake, title: t('events.frozen') };
-    case 'worklet.attached': return { icon: SquareArrowOutUpRight, title: t('events.attached', { name: workletLabel(t, scheme(d.uri)) }), detail: String(d.uri ?? '') };
-    case 'worklet.detached': {
-      // 关闭事件只带工作单元 id(id 会复用),往前找最近一次打开它的事件拿 URI
-      const opened = [...before].reverse().find(x => x.type === 'worklet.attached' && x.data.worklet === d.worklet);
-      return { icon: SquareX, title: t('events.detached', { name: opened ? workletLabel(t, scheme(opened.data.uri)) : String(d.worklet ?? '') }), detail: opened ? String(opened.data.uri ?? '') : undefined };
+    case 'column.added': return { icon: Columns3, title: t('events.columnAdded', { column: col(d.column) }) };
+    case 'column.renamed': {
+      const number = isColumn(d.column) ? t('work.column', { n: d.column.id.replace(/^c/, '') }) : '';
+      const to = isColumn(d.column) ? d.column.alias : '';
+      return { icon: Pencil, title: to ? t('events.columnRenamed', { column: number, alias: alias(to) }) : t('events.columnUnnamed', { column: number }), detail: d.from ? t('events.columnWas', { alias: alias(d.from) }) : undefined };
+    }
+    case 'column.removed': return { icon: Trash2, title: t('events.columnRemoved', { column: col(d.column) }) };
+    case 'worklet.attached': return { icon: SquareArrowOutUpRight, title: at('events.attachedIn', 'events.attached'), detail: uriOf() };
+    case 'worklet.detached': return { icon: SquareX, title: at('events.detachedIn', 'events.detached'), detail: uriOf() || undefined };
+    case 'worklet.moved': {
+      const from = d.from as { column?: unknown } | undefined, to = d.to as { column?: unknown; index?: number } | undefined;
+      const same = isColumn(from?.column) && isColumn(to?.column) && from.column.id === to.column.id;
+      return { icon: ArrowRightLeft, title: same ? t('events.reordered', { name: name(), column: col(to?.column), n: (to?.index ?? 0) + 1 }) : t('events.moved', { name: name(), from: col(from?.column), to: col(to?.column) }), detail: uriOf() || undefined };
     }
     default: return { icon: History, title: e.type, detail: Object.keys(d).length ? JSON.stringify(d) : undefined };
   }
