@@ -8,6 +8,7 @@
 - shellbase window 与块即 URI(work 运行时的蓝本,底层逻辑完全一致): [shellbase design.md](https://github.com/memory-co/shellbase/blob/main/docs/v1/works/design.md) / [uri.md](https://github.com/memory-co/shellbase/blob/main/docs/v1/works/uri.md)
 - v3 explore(先验 / 后验工作区,被 work 并入): [../v3/explore.md](../v3/explore.md)
 - v4 逐 round 标注(work → issue 的入口): [../v4/worklet-annotation.md](../v4/worklet-annotation.md)
+- v5 work-events(画布动作逐个进时间线,带列标记): [work-events.md](work-events.md)
 
 ---
 
