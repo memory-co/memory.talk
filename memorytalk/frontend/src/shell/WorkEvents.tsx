@@ -3,7 +3,7 @@ import { Archive, ArchiveRestore, ArrowRightLeft, CirclePlus, Columns3, History,
 import { api } from '@/lib/api';
 import { localeTag, useT, type T } from '@/lib/i18n';
 import { usePreferences } from '@/lib/store';
-import { columnLabel, workletLabel, type WorkEvent } from '@/lib/types';
+import { columnLabel, columnNumber, workletLabel, type WorkEvent } from '@/lib/types';
 import { Empty, ErrorState, Loading } from '@/components/Shared';
 import { cn } from '@/lib/utils';
 
@@ -23,7 +23,7 @@ export function WorkEvents({ id }: { id: string }) {
       const { icon: Icon, title, detail } = describe(t, e, list.slice(0, i));
       return <li key={i} className="relative">
         <span className="absolute -left-[31px] top-0 flex size-5 items-center justify-center rounded-full border bg-background text-muted-foreground"><Icon className="size-3" /></span>
-        <p className="text-sm font-medium">{title}</p>
+        <p className="text-sm font-medium">{title.replace(/\s*(「[^」]*」)\s*/g, '$1')}</p>
         {detail && <p className={cn('mt-0.5 break-all text-xs text-muted-foreground', e.type.startsWith('worklet.') && 'font-mono')}>{detail}</p>}
         <p className="mt-1 text-xs text-muted-foreground">{typeof e.data.by === 'string' && e.data.by && <>{e.data.by} · </>}<time dateTime={e.ts}>{time(e.ts)}</time></p>
       </li>;
@@ -35,11 +35,11 @@ const statusName = (t: T, s: unknown) => (s === 'running' || s === 'archived' ? 
 const scheme = (uri: unknown) => String(uri || '').split(':')[0];
 type ColumnMark = { id: string; alias?: string };
 const isColumn = (c: unknown): c is ColumnMark => !!c && typeof c === 'object' && typeof (c as ColumnMark).id === 'string';
-const alias = (a: unknown) => (typeof a === 'string' && a ? `「${a}」` : '');
+const aliasOf = (t: T, a: unknown) => (typeof a === 'string' && a ? t('events.alias', { alias: a }) : '');
 
 function describe(t: T, e: WorkEvent, before: WorkEvent[]): { icon: LucideIcon; title: string; detail?: string } {
   const d = e.data;
-  const col = (c: unknown) => (isColumn(c) ? columnLabel(t, c) : '');
+  const col = (c: unknown) => (isColumn(c) ? (c.alias ? t('events.alias', { alias: c.alias }) : columnLabel(t, c)) : '');   // 有别名就用(当时的)别名,没有就「列 n」
   // 工作单元叫什么:事件里有 uri 就用,没有(旧的关闭 / 挪动事件)就往前找最近一次打开它的事件
   const uriOf = (): string => (typeof d.uri === 'string' ? d.uri : String([...before].reverse().find(x => x.type === 'worklet.attached' && x.data.worklet === d.worklet)?.data.uri ?? ''));
   const name = () => { const uri = uriOf(); return uri ? workletLabel(t, scheme(uri)) : String(d.worklet ?? ''); };
@@ -50,9 +50,9 @@ function describe(t: T, e: WorkEvent, before: WorkEvent[]): { icon: LucideIcon; 
     case 'frozen': return { icon: Snowflake, title: t('events.frozen') };
     case 'column.added': return { icon: Columns3, title: t('events.columnAdded', { column: col(d.column) }) };
     case 'column.renamed': {
-      const number = isColumn(d.column) ? t('work.column', { n: d.column.id.replace(/^c/, '') }) : '';
+      const number = isColumn(d.column) ? columnNumber(t, d.column) : '';
       const to = isColumn(d.column) ? d.column.alias : '';
-      return { icon: Pencil, title: to ? t('events.columnRenamed', { column: number, alias: alias(to) }) : t('events.columnUnnamed', { column: number }), detail: d.from ? t('events.columnWas', { alias: alias(d.from) }) : undefined };
+      return { icon: Pencil, title: to ? t('events.columnRenamed', { column: number, alias: aliasOf(t, to) }) : t('events.columnUnnamed', { column: number }), detail: d.from ? t('events.columnWas', { alias: aliasOf(t, d.from) }) : undefined };
     }
     case 'column.removed': return { icon: Trash2, title: t('events.columnRemoved', { column: col(d.column) }) };
     case 'worklet.attached': return { icon: SquareArrowOutUpRight, title: at('events.attachedIn', 'events.attached'), detail: uriOf() };

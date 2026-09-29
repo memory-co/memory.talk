@@ -2,14 +2,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen, Bot, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, Columns3, ExternalLink, Globe, LoaderCircle, Plus, Sparkles, Terminal, Wand2, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen, Bot, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink, Globe, LoaderCircle, Plus, Sparkles, Terminal, Wand2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { queryClient } from '@/lib/query';
 import { useServers, useSystem, useWork } from '@/lib/queries';
 import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
-import { columnLabel, workletLabel, type Canvas, type Column, type Worklet } from '@/lib/types';
+import { columnLabel, columnNumber, workletLabel, type Canvas, type Column, type Worklet } from '@/lib/types';
 import { Empty, ErrorState, Loading, Modal } from '@/components/Shared';
 import { PanelView } from './PanelView';
 
@@ -22,14 +22,13 @@ function layout(canvas: Canvas | undefined, worklets: Worklet[]): Column[] {
   return columns;
 }
 
-/** 列标题:「列 3 · 别名」。点一下就地改别名(回车 / 失焦保存,Esc 放弃);编号不动,清空别名就只剩「列 3」。 */
+/** 列标题:有别名显示别名,没有显示「列 3」。点一下就地改别名(无边框,回车 / 失焦保存,Esc 放弃);编号不动,清空别名回到「列 3」。 */
 function ColumnName({ column, onRename }: { column: Column; onRename: (alias: string) => void }) {
   const t = useT();
   const [draft, setDraft] = useState<string | null>(null);
-  const number = t('work.column', { n: column.id.replace(/^c/, '') });
   const commit = () => { if (draft === null) return; const next = draft.trim(); setDraft(null); if (next !== column.alias) onRename(next); };
-  if (draft !== null) return <span className="flex min-w-0 items-center gap-1.5"><span className="shrink-0">{number}</span><Input autoFocus value={draft} maxLength={80} placeholder={t('work.renameColumn')} aria-label={t('work.renameColumn')} className="h-7 w-48 px-2 text-xs" onFocus={e => e.currentTarget.select()} onChange={e => setDraft(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); else if (e.key === 'Escape') { e.stopPropagation(); setDraft(null); } }} /></span>;
-  return <button type="button" className="min-w-0 truncate rounded px-1 py-0.5 text-left hover:bg-accent hover:text-foreground" title={t('work.renameColumn')} onClick={() => setDraft(column.alias)}>{columnLabel(t, column)}</button>;
+  if (draft !== null) return <Input autoFocus value={draft} maxLength={80} placeholder={columnNumber(t, column)} aria-label={t('work.renameColumn')} className="h-6 min-w-0 flex-1 rounded border-0 bg-accent/70 px-1 py-0 text-xs text-foreground shadow-none focus-visible:ring-0 md:text-xs" onFocus={e => e.currentTarget.select()} onChange={e => setDraft(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); else if (e.key === 'Escape') { e.stopPropagation(); setDraft(null); } }} />;
+  return <button type="button" className={cn('min-w-0 truncate rounded px-1 py-0.5 text-left hover:bg-accent hover:text-foreground', column.alias && 'text-foreground')} title={t('work.renameColumn')} onClick={() => setDraft(column.alias)}>{columnLabel(t, column)}</button>;
 }
 
 export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
@@ -80,7 +79,7 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
             <ChevronsRight className="size-4" /><span className="md:[writing-mode:vertical-rl]">{columnLabel(t, column)} · {column.panels.length}</span>
           </button>
           : <section key={column.id} className={cn('flex min-w-0 flex-col gap-3 md:h-full md:min-w-[28rem] md:flex-1 md:overflow-y-auto md:pr-1', columns.length > 1 && 'md:basis-0')} aria-label={columnLabel(t, column)}>
-          {columns.length > 1 && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Columns3 className="size-3.5 shrink-0" /><ColumnName column={column} onRename={alias => renameColumn(column.id, alias)} /><span>{column.panels.length}</span>
+          {columns.length > 1 && <div className="flex items-center gap-2 text-xs text-muted-foreground"><ColumnName column={column} onRename={alias => renameColumn(column.id, alias)} /><span>{column.panels.length}</span>
             <div className="ml-auto flex items-center">
               {column.panels.length === 0 && <Button variant="ghost" size="icon" className="size-7" aria-label={t('work.removeColumn')} title={t('work.removeColumn')} onClick={() => removeColumn(column.id)}><X className="size-3.5" /></Button>}
               <Button variant="ghost" size="icon" className="size-7" aria-label={t('work.collapseColumn')} title={t('work.collapseColumn')} aria-expanded onClick={() => toggleColumn(column)}><ChevronsLeft className="size-3.5" /></Button>

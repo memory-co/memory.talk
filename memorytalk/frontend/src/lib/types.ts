@@ -51,11 +51,9 @@ export const workStatuses: WorkStatus[] = ['running', 'archived'];
 export const statusLabel = (t: T, status: WorkStatus) => t(`status.${status}`);
 export const layerLabel = (t: T, layer: string) => (['origin', 'issue', 'card', 'all'].includes(layer) ? t(`layer.${layer}` as Key) : layer);
 const schemeNames: Record<string, string> = { codex: 'Codex', claude: 'Claude Code', kimi: 'Kimi' };
-/** 列 = 固定编号 + 别名(work-events.md §3):「列 3」或「列 3 · 测试」。编号从 id(c3)里取,不按位置数。 */
-export const columnLabel = (t: T, column: { id: string; alias?: string | null }) => {
-  const n = t('work.column', { n: column.id.replace(/^c/, '') });
-  return column.alias ? `${n} · ${column.alias}` : n;
-};
+/** 列 = 固定编号 + 别名(work-events.md §3):起了别名就只显示别名,没起就是「列 3」(编号从 id 里取,不按位置数)。 */
+export const columnNumber = (t: T, column: { id: string }) => t('work.column', { n: column.id.replace(/^c/, '') });
+export const columnLabel = (t: T, column: { id: string; alias?: string | null }) => column.alias || columnNumber(t, column);
 export const workletLabel = (t: T, scheme: string) => schemeNames[scheme] || (['bash', 'http', 'https'].includes(scheme) ? t(`scheme.${scheme}` as Key) : scheme);
 export function flattenWorks(works: Work[]): Work[] {
   return works.flatMap(w => [w, ...flattenWorks(w.children || [])]);
