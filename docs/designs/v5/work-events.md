@@ -29,8 +29,8 @@
 
 | 动作 | 端点 | 事件 `type` | 事件 `data`(除 `by` 外) |
 |---|---|---|---|
-| 加一列 | `POST /works/{id}/columns` `{name?, beside, side: "left"\|"right"}` | `column.added` | `column` |
-| 改列名 | `PATCH /works/{id}/columns/{col}` `{name}` | `column.renamed` | `column`(新名), `from`(旧名) |
+| 加一列 | `POST /works/{id}/columns` `{alias?, beside, side: "left"\|"right"}` | `column.added` | `column`(新编号) |
+| 改别名 | `PATCH /works/{id}/columns/{col}` `{alias}` | `column.renamed` | `column`(新别名), `from`(旧别名) |
 | 删空列 | `DELETE /works/{id}/columns/{col}` | `column.removed` | `column` |
 | 收起 / 展开列 | `PATCH /works/{id}/columns/{col}` `{collapsed}` | **不记** | — |
 | 打开工作单元 | `POST /works/{id}/worklets` `{uri, column?}` | `worklet.attached` | `worklet`, `uri`, `server`, `column` |
@@ -43,35 +43,41 @@
 
 - **打开时就定列。** `POST /worklets` 带 `column`,服务端直接放进那一列末尾,一步到位;不带就是第一列(CLI 和 agent 不关心布局)。前端的「放进第一列再挪」那一步删掉。
 - **只有空列能删**,跟现在一样;删非空列 → 409。最后一列不能删。
-- **挪到哪一列用 `column` + `index`**(这里的 `index` 是列里从上数第几个;列在画布里的位置是 `column.index`,别混):左右挪 = 换列放末尾,上下挪 = 同列换 `index`。一个接口,不分四个方向。
+- **挪到哪一列用 `column` + `index`**(`index` 是列里从上数第几个):左右挪 = 换列放末尾,上下挪 = 同列换 `index`。一个接口,不分四个方向。
 - **收起 / 展开不记事件。** 它是「我现在想怎么看」,不是「在这件事上做了什么」;一边看一边来回点,会把时间线刷满。它仍然走单独的请求、仍然改快照,只是不写事件。(这条是取舍,见 §7。)
 
-## 3. 事件里的列标记
+## 3. 列的身份:编号 + 别名
 
-每条跟画布有关的事件都带 `column`,形状固定:
+一列有两样东西,分开管:
+
+- **编号**:建列时服务端发的整数,`1`、`2`、`3`……**永不改、永不复用**,列删了号也不还。它就是这一列的身份,对外的 id 写成 `c<编号>`(`c3`),端点、事件、CLI、agent 定位一律用它。
+- **别名**(`alias`):人起的名字,可空、可重复、随时改。**改名只改别名**,编号不动。
+
+界面上一律「编号 + 别名」:`列 3 · 测试`;没有别名就是 `列 3`。**不再按位置叫「第 n 列」**——位置会变:在最左边加一列,原来的「第 1 列」就成了「第 2 列」,旧事件里的「第 1 列」指的就不是同一列了。编号不跟位置走,列怎么增删、怎么排,`列 3` 永远是那一列;说「去列 3 看看」、agent 往 `c3` 里开终端,都不会指错。(副作用:删过列之后编号会不连续,比如只剩 `列 1`、`列 3`——这是故意的。)
+
+事件里的列标记:
 
 ```json
-{"column": {"id": "c2", "name": "测试", "index": 1}}
+{"column": {"id": "c3", "alias": "测试"}}
 ```
 
-- **`id` 是身份,`name` / `index` 是当时的快照。** 列随时会改名,时间线要显示的是「当时叫什么」——三天前在「调研」列打开的终端,不该因为这列后来改名叫「测试」就显示成「在测试列打开」。改名本身是一条 `column.renamed`,前后两个名字都在。
-- **`index` 是当时从左数第几列(0 起)。** 名字为空就记空字符串,显示时按 `index` 写「第 n 列」;列会被增删挪位,所以位置也得在事件发生时记下,事后从快照推不出来。
-- **名字可以重复。** 两列都叫「测试」没关系,身份是 `id`;时间线里重名时在名字后带上 id 区分。
+- **`id` 是身份,`alias` 是事件发生时的别名快照**,只为时间线好读——三天前在「调研」列打开的终端,显示成「在 列 3 · 调研 打开」,不因后来改名而变。要找「现在的这一列」,拿 `id` 对快照。
+- 改名本身是一条 `column.renamed`,带 `from`(旧别名),前后两个别名都在。
 
 完整例子:
 
 ```json
-{"ts": "…", "type": "column.added",     "data": {"by": "alice", "column": {"id": "c3", "name": "", "index": 2}}}
-{"ts": "…", "type": "column.renamed",   "data": {"by": "alice", "column": {"id": "c3", "name": "测试", "index": 2}, "from": ""}}
-{"ts": "…", "type": "worklet.attached", "data": {"by": "alice", "worklet": "work_…-w4", "uri": "bash:///ws", "server": "bash", "column": {"id": "c3", "name": "测试", "index": 2}}}
-{"ts": "…", "type": "worklet.moved",    "data": {"by": "bob", "worklet": "work_…-w4", "from": {"column": {"id": "c3", "name": "测试", "index": 2}, "index": 0}, "to": {"column": {"id": "c1", "name": "", "index": 0}, "index": 1}}}
-{"ts": "…", "type": "worklet.detached", "data": {"by": "bob", "worklet": "work_…-w4", "uri": "bash:///ws", "column": {"id": "c1", "name": "", "index": 0}}}
+{"ts": "…", "type": "column.added",     "data": {"by": "alice", "column": {"id": "c3", "alias": ""}}}
+{"ts": "…", "type": "column.renamed",   "data": {"by": "alice", "column": {"id": "c3", "alias": "测试"}, "from": ""}}
+{"ts": "…", "type": "worklet.attached", "data": {"by": "alice", "worklet": "work_…-w4", "uri": "bash:///ws", "server": "bash", "column": {"id": "c3", "alias": "测试"}}}
+{"ts": "…", "type": "worklet.moved",    "data": {"by": "bob", "worklet": "work_…-w4", "from": {"column": {"id": "c3", "alias": "测试"}, "index": 0}, "to": {"column": {"id": "c1", "alias": ""}, "index": 1}}}
+{"ts": "…", "type": "worklet.detached", "data": {"by": "bob", "worklet": "work_…-w4", "uri": "bash:///ws", "column": {"id": "c1", "alias": ""}}}
 ```
 
 ## 4. 每条事件都有 `by`,id 不复用
 
 - **`by`**:所有事件都带,取登录态里的人(`request.state.user`,见 [auth.md](auth.md))。服务端自己触发的(比如归档连带的 `frozen`)记触发它的那个人;真正没有人的(将来的定时任务)记 `null`。
-- **列 id 服务端发,单调递增**:画布里多存一个 `next_column`,加列时发 `c<next_column>` 再 +1;删了的号不再用。
+- **列编号服务端发,单调递增**:画布里多存一个 `next_column`,加列时发 `c<next_column>` 再 +1;删了的号不再用(§3)。
 - **工作单元 id 同样单调**:work 里记一个 `next_worklet`,不再取「现有最大号 + 1」。关掉的 `-w1` 不会被下一个顶替。
 
 这两条是时间线能读的前提:事件里的 id 必须永远只指一个东西。
@@ -97,17 +103,18 @@
 
 右侧「动态」按 §3 的列标记写成人话,例:
 
-- `alice 加了一列(第 3 列)`
-- `alice 把第 3 列改名为「测试」`
-- `alice 在「测试」列打开了终端` · `bash:///ws`
-- `bob 把终端从「测试」挪到第 1 列`
-- `bob 在第 1 列关闭了终端`
+- `alice 加了 列 3`
+- `alice 把 列 3 的别名改为「测试」`
+- `alice 在 列 3 · 测试 打开了终端` · `bash:///ws`
+- `bob 把终端从 列 3 · 测试 挪到 列 1`
+- `bob 在 列 1 关闭了终端`
 
 时间线顶部可以按列筛选(「只看测试列」),列表来自事件里出现过的列 id,已删的列也能选。
 
 ## 8. 迁移
 
-- **旧画布**:列 id 原样保留;`next_column` 取现有 `c<n>` 的最大号 + 1。`name` 早已有(默认空)。
+- **旧画布**:`c<n>` 形式的列 id 原样保留,编号就是 n;不是这个形式的(早期测试里的 `left` / `right`)按从左到右接着发新号。`next_column` 取最大编号 + 1。现有的 `name` 字段改名为 `alias`(读旧数据时 `name` 当 `alias` 读)。
+- **界面**:列标题从按位置的「第 n 列」改成 `列 <编号>`,有别名就 `列 <编号> · <别名>`;点标题改的是别名。
 - **旧工作单元**:`next_worklet` 取现有最大号 + 1(已经复用过的号没法追回,只保证以后不再复用)。
 - **旧事件**:没有 `by` / `column` 的照旧显示,只是少一截(「打开了终端」,没有「在哪一列」「谁」)。不回填。
 - **`PUT /canvas` 撤掉**:唯一的调用方是前端,跟着一起改;CLI 不碰画布。
