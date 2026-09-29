@@ -15,7 +15,7 @@ from memorytalk.backend.models.work_server import WorkServerError
 from memorytalk.backend.services.auth import AuthError, AuthService
 from memorytalk.backend.services.metas import MetasError, MetasService
 from memorytalk.backend.services.search import SearchService
-from memorytalk.backend.services.work_servers import WorkServerService
+from memorytalk.backend.services.work_servers import TTY_PATH, WorkServerService
 from memorytalk.backend.services.store import StoreService
 from memorytalk.backend.services.users import UserExists, UserNotFound, UserService
 from memorytalk.backend.services.work import WorkletNotFound, WorkConflict, WorkNotFound, WorkService
@@ -87,5 +87,6 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
         status = {"bad_uri": 400, "cmd_not_found": 400, "no_server": 400, "platform": 502}.get(exc.code, 500)
         return JSONResponse(fail(exc.code, str(exc)), status_code=status)
 
+    app.mount(TTY_PATH, work_server_svc.tmuxd.asgi(authorize=auth.tty_gate(app.state.auth)))   # 终端窗:经 unix socket 到 ttyd
     mount_frontend(app)
     return app

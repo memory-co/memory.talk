@@ -13,7 +13,8 @@ def health():
 def info(request: Request):
     cfg, rt = request.app.state.config, request.app.state.runtime
     store = request.app.state.store.provider
+    tmuxd = request.app.state.work_servers.tmuxd
     return ok({"home": str(cfg.home), "metas": str(cfg.metas_dir),
                "store": {"family": store.family, "backend": type(store).__name__},
-               "workspace": str(rt.workspace), "tmux_socket": request.app.state.work_servers.tmuxd.tmux_socket,
-               "tmuxd": {"port": request.app.state.work_servers.tmuxd.port, "bind": rt.tmuxd_bind, "url_host": rt.tmuxd_url_host}})
+               "workspace": str(rt.workspace), "tmux_socket": tmuxd.tmux_socket,
+               "tmuxd": {"listen": tmuxd.listen, "socket": tmuxd.socket_path, "mount": tmuxd.base_path}})

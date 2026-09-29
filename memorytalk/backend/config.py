@@ -42,10 +42,6 @@ class RuntimeConfig:
     workspace: Path            # 终端 / agent 类 URI 省略 path 时的默认 cwd
     tmux_socket: str           # tmuxd 的 socket 名(实际 tmux socket 是 tmuxd-<名>),与用户自己的 tmux 隔离
     tmuxd_state: Path          # tmuxd 的 state 目录(会话记录、ttyd 记录、渲染出的 tmux.conf)
-    tmuxd_port: int | None     # ttyd 端口;None = tmuxd 自己挑一个空闲的
-    tmuxd_bind: str            # ttyd 绑哪:127.0.0.1(默认)或 0.0.0.0(必须带 token)
-    tmuxd_token: str | None    # ttyd 的 basic auth(用户名固定 tmuxd)
-    tmuxd_url_host: str | None # 窗地址里写的 host(挂公网时给外部可达的那个)
     claude_projects: Path      # Claude Code 会话记录根
     codex_sessions: Path       # Codex 会话记录根
     kimi_sessions: Path        # Kimi Code 会话记录根
@@ -56,10 +52,6 @@ def load_runtime_config() -> RuntimeConfig:
         workspace=Path(_env("MEMORY_TALK_WORKSPACE", "~/workspace")).expanduser(),
         tmux_socket=_env("MEMORY_TALK_TMUX_SOCKET", "memorytalk"),
         tmuxd_state=Path(os.environ.get("MEMORY_TALK_HOME", "~/.memory.talk")).expanduser() / "tmuxd",
-        tmuxd_port=int(os.environ["MEMORY_TALK_TMUXD_PORT"]) if os.environ.get("MEMORY_TALK_TMUXD_PORT") else None,
-        tmuxd_bind=_env("MEMORY_TALK_TMUXD_BIND", "127.0.0.1"),
-        tmuxd_token=os.environ.get("MEMORY_TALK_TMUXD_TOKEN") or None,
-        tmuxd_url_host=os.environ.get("MEMORY_TALK_TMUXD_URL_HOST") or None,
         claude_projects=Path(_env("MEMORY_TALK_CLAUDE_PROJECTS", "~/.claude/projects")).expanduser(),
         codex_sessions=Path(_env("MEMORY_TALK_CODEX_SESSIONS", "~/.codex/sessions")).expanduser(),
         kimi_sessions=Path(_env("MEMORY_TALK_KIMI_SESSIONS", "~/.kimi-code/sessions")).expanduser(),

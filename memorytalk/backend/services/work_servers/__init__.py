@@ -10,15 +10,18 @@ from memorytalk.backend.models.work_server import Live, WorkServerError, WorkSer
 from .registry import Registry
 from .uri import parse_uri
 
+TTY_PATH = "/tty"                  # 窗挂在主路由的这个前缀下
+
 
 class WorkServerService:
     def __init__(self, rt: RuntimeConfig) -> None:
         from tmuxd import Tmuxd
         from memorytalk.backend import work_servers  # backend/work_servers/
         self.rt = rt
-        # 一个进程一份 tmuxd:自己的 tmux socket(tmuxd-<名>)、自己的 ttyd(这一行之后就起来了)、state 在 <home>/tmuxd/
-        self.tmuxd = Tmuxd(rt.tmuxd_port, bind=rt.tmuxd_bind, token=rt.tmuxd_token, socket=rt.tmux_socket, workspace=str(rt.workspace),
-                           state_dir=str(rt.tmuxd_state), url_host=rt.tmuxd_url_host)
+        # 一个进程一份 tmuxd:自己的 tmux socket(tmuxd-<名>)、自己的 ttyd(这一行之后就起来了)、state 在 <home>/tmuxd/。
+        # ttyd 听 state 目录里的 unix socket,不占端口;窗 = /tty/?arg=<id>,由 main.py 把 tmuxd.asgi() 挂到 /tty(work-server.md §7)
+        self.tmuxd = Tmuxd(listen="unix", base_path=TTY_PATH, socket=rt.tmux_socket, workspace=str(rt.workspace),
+                           state_dir=str(rt.tmuxd_state))
         self.registry = Registry(work_servers.load(rt, self.tmuxd))
 
     def close(self) -> None:
