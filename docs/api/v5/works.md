@@ -136,11 +136,11 @@ user:谁当前正在操作、谁历史操作过。只做可见性,不做权限�
 
 ```json
 {"version": 3,
- "columns": [{"id": "c1", "panels": [{"worklet": "work_…-w1", "collapsed": false}, {"worklet": "work_…-w2", "collapsed": true}]},
+ "columns": [{"id": "c1", "name": "调研", "panels": [{"worklet": "work_…-w1", "collapsed": false}, {"worklet": "work_…-w2", "collapsed": true}]},
              {"id": "c2", "panels": [{"worklet": "work_…-w3", "collapsed": false}], "collapsed": true}]}
 ```
 
-布局 = 几列,每列从上到下摆工作单元;工作单元可收起(只剩标题行),整列也可收起(缩成一条窄边)。从未写过 = `version 0`、空 `columns`(前端当一列画)。
+布局 = 几列,每列从上到下摆工作单元;工作单元可收起(只剩标题行),整列也可收起(缩成一条窄边);列可以起名(`name`,空 = 前端显示「第 n 列」)。从未写过 = `version 0`、空 `columns`(前端当一列画)。
 
 ## PUT /api/works/{work_id}/canvas
 

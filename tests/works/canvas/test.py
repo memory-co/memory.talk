@@ -16,6 +16,12 @@ def test_put_bumps_version_and_keeps_order(client):
     assert [(p["worklet"], p["collapsed"]) for p in cv["columns"][0]["panels"]] == [("w-s1", False), ("w-s2", True)]
 
 
+def test_column_name_round_trips_and_defaults_empty(client):
+    w = client.post("/api/works", json={"goal": "x"}).json()
+    cv = client.put(f"/api/works/{w['id']}/canvas", json={"version": 0, "columns": [{"id": "c1", "name": "调研"}, {"id": "c2"}]}).json()
+    assert [c["name"] for c in cv["columns"]] == ["调研", ""]
+
+
 def test_stale_version_is_409(client):
     w = client.post("/api/works", json={"goal": "x"}).json()
     client.put(f"/api/works/{w['id']}/canvas", json={"version": 0, "columns": COLUMNS})
@@ -41,7 +47,7 @@ def test_new_session_lands_at_the_end_of_the_first_column(client):
     w = client.post("/api/works", json={"goal": "x"}).json()
     s1 = client.post(f"/api/works/{w['id']}/worklets", json={"uri": "bash://"}).json()
     cv = client.get(f"/api/works/{w['id']}/canvas").json()
-    assert cv["version"] == 1 and cv["columns"] == [{"id": "c1", "panels": [{"worklet": s1["id"], "collapsed": False}], "collapsed": False}]
+    assert cv["version"] == 1 and cv["columns"] == [{"id": "c1", "name": "", "panels": [{"worklet": s1["id"], "collapsed": False}], "collapsed": False}]
     client.put(f"/api/works/{w['id']}/canvas", json={"version": 1, "columns": [{"id": "left", "panels": [{"worklet": s1["id"], "collapsed": True}]}, {"id": "right", "panels": []}]})
     s2 = client.post(f"/api/works/{w['id']}/worklets", json={"uri": "bash://"}).json()
     cv = client.get(f"/api/works/{w['id']}/canvas").json()
@@ -53,4 +59,13 @@ def test_detached_session_leaves_the_canvas(client):
     w = client.post("/api/works", json={"goal": "x"}).json()
     s1 = client.post(f"/api/works/{w['id']}/worklets", json={"uri": "bash://"}).json()
     client.delete(f"/api/works/{w['id']}/worklets/{s1['id']}")
-    assert client.get(f"/api/works/{w['id']}/canvas").json()["columns"] == [{"id": "c1", "panels": [], "collapsed": False}]
+    assert client.get(f"/api/works/{w['id']}/canvas").json()["columns"] == [{"id": "c1", "name": "", "panels": [], "collapsed": False}]
+
+
+@needs_tmux
+def test_detach_keeps_column_names(client):
+    w = client.post("/api/works", json={"goal": "x"}).json()
+    s1 = client.post(f"/api/works/{w['id']}/worklets", json={"uri": "bash://"}).json()
+    client.put(f"/api/works/{w['id']}/canvas", json={"version": 1, "columns": [{"id": "c1", "name": "调研", "panels": [{"worklet": s1["id"]}]}]})
+    client.delete(f"/api/works/{w['id']}/worklets/{s1['id']}")
+    assert client.get(f"/api/works/{w['id']}/canvas").json()["columns"][0]["name"] == "调研"

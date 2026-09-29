@@ -7,6 +7,6 @@
 | `TaskTree.tsx` | `TaskTree`:侧栏里的 work 树(`WorkRow` / `SubRow` / `Lead`);每行悬停出「⋯」(`RowActions`),点开是这个 work 的操作菜单:「拆分工作」(弹 `NewSubwork`)、「归档」/「改回运行中」(PATCH status) |
 | `Home.tsx` | `Home`:工作台首页,`WorkComposer`(建 work 的输入框,也给拆分子 work 用)、`NewSubwork`(弹窗) |
 | `WorkEvents.tsx` | `WorkEvents`:工作页右侧的「动态」面板——这个 work 的事件时间线(`GET /works/{id}/events`,5 秒刷新,新的在上):创建、状态变化、冻结、打开 / 关闭工作单元(关闭事件往前找同 id 的打开事件拿 URI) |
-| `Workspace.tsx` | `Workspace`:一个 work 的页面——头部(目标;拆分、归档在侧栏每行的「⋯」里),下面是画布:**几列,每列从上到下摆工作单元卡片**。`layout()` 把后端画布和工作单元清单对齐(没提到的工作单元补到第一列,没了的丢掉);`edit()` 整份 PUT 画布带 version,409 就重载;工作单元可收起、上下左右挪;列可收起成窄边,空了才能删;每列底部一排:左边加一列 / 添加工作单元 / 右边加一列;「添加工作单元」弹出 `NewWorklet`(弹层里像浏览器新标签页:上面一条地址栏,块即 URI;下面几块应用,点一块只是把 URI 填进地址栏,回车或「打开」才建),建好后 `placeNew` 挪到那一列 |
+| `Workspace.tsx` | `Workspace`:一个 work 的页面——头部(目标;拆分、归档在侧栏每行的「⋯」里),下面是画布:**几列,每列从上到下摆工作单元卡片**。`layout()` 把后端画布和工作单元清单对齐(没提到的工作单元补到第一列,没了的丢掉);`edit()` 整份 PUT 画布带 version,409 就重载;工作单元可收起、上下左右挪;列可收起成窄边,空了才能删;列名点一下就地改(`ColumnName`,清空回到「第 n 列」);每列底部一排:左边加一列 / 添加工作单元 / 右边加一列;「添加工作单元」弹出 `NewWorklet`(弹层里像浏览器新标签页:上面一条地址栏,块即 URI;下面几块应用,点一块只是把 URI 填进地址栏,回车或「打开」才建),建好后 `placeNew` 挪到那一列 |
 | `PanelView.tsx` | `PanelView`:一个工作单元的身体——终端(iframe 装 tmuxd 交回的 ttyd 地址)/ agent 的对话记录 / 网页 iframe;复制地址、新窗口打开、重连、结束工作单元 |
 | `GlobalSearch.tsx` | `GlobalSearch`:⌘K 弹窗,`GET /search` 按 kind 分组(工作 / 元认知 / 成员),点了就跳 |

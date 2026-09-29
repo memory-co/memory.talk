@@ -51,6 +51,7 @@ class Panel(BaseModel):
 
 class Column(BaseModel):
     id: str = Field(description="前端自定,画布内唯一")
+    name: str = Field("", max_length=80, description="列名;空 = 前端显示「第 n 列」")
     panels: list[Panel] = Field(default_factory=list, description="从上到下")
     collapsed: bool = Field(False, description="整列收起 = 缩成一条窄边")
 

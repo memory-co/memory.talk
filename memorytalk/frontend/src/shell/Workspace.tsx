@@ -16,10 +16,19 @@ import { PanelView } from './PanelView';
 /** 画布 = 几列,每列从上到下摆工作单元(docs/structure/v5/work.md#canvas)。没画布 / 没提到的工作单元补到第一列;已不存在的工作单元丢掉。 */
 function layout(canvas: Canvas | undefined, worklets: Worklet[]): Column[] {
   const ids = new Set(worklets.map(s => s.id));
-  const columns: Column[] = (canvas?.columns.length ? canvas.columns : [{ id: 'c1', panels: [], collapsed: false }]).map(c => ({ id: c.id, collapsed: !!c.collapsed, panels: c.panels.filter(p => ids.has(p.worklet)) }));
+  const columns: Column[] = (canvas?.columns.length ? canvas.columns : [{ id: 'c1', panels: [], collapsed: false }]).map(c => ({ id: c.id, name: c.name || '', collapsed: !!c.collapsed, panels: c.panels.filter(p => ids.has(p.worklet)) }));
   const placed = new Set(columns.flatMap(c => c.panels.map(p => p.worklet)));
   for (const s of worklets) if (!placed.has(s.id)) columns[0].panels.push({ worklet: s.id, collapsed: false });
   return columns;
+}
+
+/** 列名:点一下就地改(回车 / 失焦保存,Esc 放弃);清空 = 回到「第 n 列」。 */
+function ColumnName({ name, fallback, onRename }: { name: string; fallback: string; onRename: (name: string) => void }) {
+  const t = useT();
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => { if (draft === null) return; const next = draft.trim(); setDraft(null); if (next !== name) onRename(next); };
+  if (draft !== null) return <Input autoFocus value={draft} maxLength={80} placeholder={fallback} aria-label={t('work.renameColumn')} className="h-7 w-48 px-2 text-xs" onFocus={e => e.currentTarget.select()} onChange={e => setDraft(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); else if (e.key === 'Escape') { e.stopPropagation(); setDraft(null); } }} />;
+  return <button type="button" className="min-w-0 truncate rounded px-1 py-0.5 text-left hover:bg-accent hover:text-foreground" title={t('work.renameColumn')} onClick={() => setDraft(name)}>{name || fallback}</button>;
 }
 
 export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
@@ -36,7 +45,7 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
     onSuccess: data => queryClient.setQueryData(['canvas', id], data),
     onError: (error: Error) => { if (error instanceof ApiError && error.status === 409) { toast.message(t('work.layoutConflict')); void queryClient.invalidateQueries({ queryKey: ['canvas', id] }); } else toast.error(error.message); },
   });
-  const edit = (fn: (cols: Column[]) => Column[]) => save.mutate(fn(columns.map(c => ({ id: c.id, collapsed: c.collapsed, panels: c.panels.map(p => ({ ...p })) }))));
+  const edit = (fn: (cols: Column[]) => Column[]) => save.mutate(fn(columns.map(c => ({ id: c.id, name: c.name, collapsed: c.collapsed, panels: c.panels.map(p => ({ ...p })) }))));
   const find = (cols: Column[], worklet: string) => { for (let ci = 0; ci < cols.length; ci++) { const pi = cols[ci].panels.findIndex(p => p.worklet === worklet); if (pi >= 0) return [ci, pi] as const; } return null; };
   const toggle = (worklet: string) => edit(cols => { const at = find(cols, worklet); if (at) cols[at[0]].panels[at[1]].collapsed = !cols[at[0]].panels[at[1]].collapsed; return cols; });
   const move = (worklet: string, dir: 'left' | 'right' | 'up' | 'down') => edit(cols => {
@@ -48,6 +57,7 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
   });
   const addColumn = (beside: string, side: 'left' | 'right') => edit(cols => { let n = cols.length + 1; while (cols.some(c => c.id === `c${n}`)) n++; const i = cols.findIndex(c => c.id === beside); cols.splice(i < 0 ? cols.length : i + (side === 'right' ? 1 : 0), 0, { id: `c${n}`, panels: [], collapsed: false }); return cols; });
   const removeColumn = (colId: string) => edit(cols => cols.length > 1 ? cols.filter(c => c.id !== colId || c.panels.length > 0) : cols);   // 只有空列能删
+  const renameColumn = (colId: string, name: string) => edit(cols => cols.map(c => (c.id === colId ? { ...c, name } : c)));
   const toggleColumn = (colId: string) => edit(cols => cols.map(c => (c.id === colId ? { ...c, collapsed: !c.collapsed } : c)));
   const placeNew = (worklet: Worklet, colId: string) => { if (columns[0]?.id !== colId) edit(cols => { const at = find(cols, worklet.id); const panel = at ? cols[at[0]].panels.splice(at[1], 1)[0] : { worklet: worklet.id, collapsed: false }; (cols.find(c => c.id === colId) || cols[0]).panels.push(panel); return cols; }); };
   if (work.isPending) return <Loading />;
@@ -66,10 +76,10 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
       : <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:flex-row md:items-start md:overflow-x-auto md:overflow-y-hidden" aria-label={t('work.worklets')}>
         {columns.map((column, ci) => column.collapsed
           ? <button key={column.id} type="button" className="flex shrink-0 items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground hover:bg-accent md:h-full md:w-10 md:flex-col md:justify-start md:px-0 md:py-3" aria-label={t('work.expandColumn')} title={t('work.expandColumn')} aria-expanded={false} onClick={() => toggleColumn(column.id)}>
-            <ChevronsRight className="size-4" /><span className="md:[writing-mode:vertical-rl]">{t('work.column', { n: ci + 1 })} · {column.panels.length}</span>
+            <ChevronsRight className="size-4" /><span className="md:[writing-mode:vertical-rl]">{column.name || t('work.column', { n: ci + 1 })} · {column.panels.length}</span>
           </button>
-          : <section key={column.id} className={cn('flex min-w-0 flex-col gap-3 md:h-full md:min-w-[28rem] md:flex-1 md:overflow-y-auto md:pr-1', columns.length > 1 && 'md:basis-0')} aria-label={t('work.column', { n: ci + 1 })}>
-          {columns.length > 1 && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Columns3 className="size-3.5" />{t('work.column', { n: ci + 1 })}<span>{column.panels.length}</span>
+          : <section key={column.id} className={cn('flex min-w-0 flex-col gap-3 md:h-full md:min-w-[28rem] md:flex-1 md:overflow-y-auto md:pr-1', columns.length > 1 && 'md:basis-0')} aria-label={column.name || t('work.column', { n: ci + 1 })}>
+          {columns.length > 1 && <div className="flex items-center gap-2 text-xs text-muted-foreground"><Columns3 className="size-3.5 shrink-0" /><ColumnName name={column.name || ''} fallback={t('work.column', { n: ci + 1 })} onRename={name => renameColumn(column.id, name)} /><span>{column.panels.length}</span>
             <div className="ml-auto flex items-center">
               {column.panels.length === 0 && <Button variant="ghost" size="icon" className="size-7" aria-label={t('work.removeColumn')} title={t('work.removeColumn')} onClick={() => removeColumn(column.id)}><X className="size-3.5" /></Button>}
               <Button variant="ghost" size="icon" className="size-7" aria-label={t('work.collapseColumn')} title={t('work.collapseColumn')} aria-expanded onClick={() => toggleColumn(column.id)}><ChevronsLeft className="size-3.5" /></Button>

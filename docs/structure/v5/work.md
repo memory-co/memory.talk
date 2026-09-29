@@ -46,7 +46,7 @@ work 的画布:**几列,每列从上到下摆工作单元**,每个工作单元�
 {
   "version": 3,
   "columns": [
-    {"id": "c1", "panels": [{"worklet": "work_2026…2f2f-w1", "collapsed": false}, {"worklet": "work_2026…2f2f-w2", "collapsed": true}]},
+    {"id": "c1", "name": "调研", "panels": [{"worklet": "work_2026…2f2f-w1", "collapsed": false}, {"worklet": "work_2026…2f2f-w2", "collapsed": true}]},
     {"id": "c2", "panels": [{"worklet": "work_2026…2f2f-w3", "collapsed": false}], "collapsed": true}
   ]
 }
@@ -56,6 +56,7 @@ work 的画布:**几列,每列从上到下摆工作单元**,每个工作单元�
 |---|---|
 | `version` | 乐观锁;`PUT` 必须带当前值,成功后 +1;工作单元开 / 关时服务端自己改画布也 +1 |
 | `columns[].id` | 前端自定,画布内唯一 |
+| `columns[].name` | 列名,可空(默认);空时前端显示「第 n 列」;最长 80 |
 | `columns[].panels[]` | 这一列从上到下的格子 |
 | `columns[].collapsed` | 整列收起 = 缩成一条窄边;列只有空了才能删 |
 | `panels[].worklet` | 装的是哪个工作单元;一个工作单元最多出现在一个格子里 |

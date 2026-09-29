@@ -51,5 +51,5 @@ class CanvasStore:
         cur = self.get(work_id)
         if not any(p.worklet == worklet_id for c in cur.columns for p in c.panels):
             return
-        columns = [Column(id=c.id, collapsed=c.collapsed, panels=[p for p in c.panels if p.worklet != worklet_id]) for c in cur.columns]
+        columns = [c.model_copy(update={"panels": [p for p in c.panels if p.worklet != worklet_id]}) for c in cur.columns]
         self._save(work_id, cur, columns)
