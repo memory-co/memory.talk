@@ -7,12 +7,12 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from memorytalk.backend.models.result import fail
-from memorytalk.backend.gateway import mount_frontend
+from memorytalk.backend.gateway import AuthMiddleware, mount_frontend
 
 from memorytalk.backend.config import Config, RuntimeConfig, load_config, load_runtime_config
 from memorytalk.backend.controllers import auth, metas, search, system, users, works
 from memorytalk.backend.models.work_server import WorkServerError
-from memorytalk.backend.services.auth import AuthError, AuthService
+from memorytalk.backend.services.auth import AuthError, AuthService, jwt
 from memorytalk.backend.services.metas import MetasError, MetasService
 from memorytalk.backend.services.search import SearchService
 from memorytalk.backend.services.work_servers import TTY_PATH, WorkServerService
@@ -42,27 +42,13 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
     app.state.store, app.state.metas = store, collect_svc
     app.state.work_servers, app.state.works = work_server_svc, work_svc
     app.state.users = user_svc
-    app.state.auth = AuthService(user_svc, store.token_repo)
+    app.state.auth = AuthService(user_svc, store.token_repo, jwt.load_key(config.home))
     app.state.search = SearchService(work_svc, collect_svc, user_svc)
 
     for r in (system.router, auth.router, works.router, users.router, metas.router, search.router):
         app.include_router(r)
 
-    OPEN = {"/api/auth/status", "/api/auth/setup", "/api/auth/login", "/api/system/health"}
-
-    @app.middleware("http")
-    async def gate(request: Request, call_next):
-        """门(docs/designs/v5/auth.md):没有 admin → 只放 setup;有了 → 没有效 token 的 /api 请求一律 401。前端页面和静态资源不拦。"""
-        path = request.url.path
-        if path.startswith("/api") and path not in OPEN:
-            svc: AuthService = request.app.state.auth
-            if svc.setup_required():
-                return JSONResponse(fail("setup_required", "还没有 admin 账号,先 POST /api/auth/setup"), status_code=409)
-            name = svc.resolve(auth.bearer(request))
-            if name is None:
-                return JSONResponse(fail("unauthorized", "要登录:Authorization: Bearer <token>"), status_code=401)
-            request.state.user = name
-        return await call_next(request)
+    app.add_middleware(AuthMiddleware, auth=app.state.auth, tty_path=TTY_PATH)   # 门:/api 和 /tty、HTTP 和 WebSocket 都先过它
 
     def _err(status: int, code: str):
         async def handler(_: Request, exc: Exception):
@@ -87,6 +73,6 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
         status = {"bad_uri": 400, "cmd_not_found": 400, "no_server": 400, "platform": 502}.get(exc.code, 500)
         return JSONResponse(fail(exc.code, str(exc)), status_code=status)
 
-    app.mount(TTY_PATH, work_server_svc.tmuxd.asgi(authorize=auth.tty_gate(app.state.auth)))   # 终端窗:经 unix socket 到 ttyd
+    app.mount(TTY_PATH, work_server_svc.tmuxd.asgi())   # 终端窗:经 unix socket 到 ttyd;门在 AuthMiddleware,这里不再设
     mount_frontend(app)
     return app

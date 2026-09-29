@@ -1,19 +1,16 @@
 """/api/auth —— 门:status / setup / login / logout。身份来自 token(docs/designs/v5/auth.md),controller 从 request.state.user 取。
-终端窗(/tty,iframe + WebSocket)带不了 Authorization 头:status 顺手把 token 种成只发给 /tty 的 HttpOnly cookie,tty_gate 认它。"""
+终端窗(/tty,iframe + WebSocket)带不了 Authorization 头:status 顺手把 token 种成只发给 /tty 的 HttpOnly cookie,门(gateway.AuthMiddleware)在 /tty 下认它。"""
 from __future__ import annotations
-
-from http.cookies import SimpleCookie
 
 from fastapi import APIRouter, Depends, Request, Response
 
+from memorytalk.backend.gateway import TTY_COOKIE
 from memorytalk.backend.models.auth import AuthStatus, LoginRequest, LoginResult, SetupRequest
 from memorytalk.backend.models.result import Result, ok
 from memorytalk.backend.services.auth import ADMIN, AuthError, AuthService
 from memorytalk.backend.services.work_servers import TTY_PATH
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-
-TTY_COOKIE = "mt_tty"
 
 
 def _tty_cookie(response: Response, token: str | None) -> None:
@@ -22,15 +19,6 @@ def _tty_cookie(response: Response, token: str | None) -> None:
         response.set_cookie(TTY_COOKIE, token, path=TTY_PATH, httponly=True, samesite="strict")
     else:
         response.delete_cookie(TTY_COOKIE, path=TTY_PATH, httponly=True, samesite="strict")
-
-
-def tty_gate(svc: AuthService):
-    """挂 /tty 的 tmuxd.asgi(authorize=…):页面、/token、/ws、静态资源每一个请求都过这里,凭 cookie 里的 token 放行。"""
-    def authorize(scope) -> bool:
-        raw = b"; ".join(v for k, v in scope.get("headers", []) if k == b"cookie").decode("latin-1")
-        morsel = SimpleCookie(raw).get(TTY_COOKIE) if raw else None
-        return morsel is not None and not svc.setup_required() and svc.resolve(morsel.value) is not None
-    return authorize
 
 
 def auth(request: Request) -> AuthService:

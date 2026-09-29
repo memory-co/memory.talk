@@ -12,7 +12,7 @@ v5 的三层:**work**(做事,裸文件)、**issue**(议事,git)、**card**(记�
 | Canvas / Panel | work 的画布:24×16 网格上的块;**视图,可随时重排** | `works/<id>/canvas.json` | [work.md](work.md#canvas) |
 | Worklet | work 的工作单元 = 一个现场:URI + 建它的 server;**身份脱离布局** | `works/<id>/worklets.json` | [work.md](work.md#worklet) |
 | **User** | 注册的实体,和 work 平级:名字 / 显示名 / 邮箱 / 注册时间 / 角色(admin 只有一个);密码哈希存在记录里不出接口 | `users/<name>.json`(或 `users` 表) | [api users.md](../../api/v5/users.md) |
-| Token | 登录态:随机串的 sha256 → 谁的、何时发;logout / 改密码即删 | `auth/tokens/<sha256>.json`(或 `auth_tokens` 表) | [api auth.md](../../api/v5/auth.md) |
+| Token | 登录态:JWT(HS256,`<home>/jwt.key` 签);登记的是 jti 的 sha256 → 谁的、何时发、何时过期;logout / 改密码即删 | `auth/tokens/<sha256>.json`(或 `auth_tokens` 表) | [api auth.md](../../api/v5/auth.md) |
 | WorkUser | 谁动过这个 work;只做可见性;work 另有 `created_by` 归属(指向一个注册的 User) | `works/<id>/users.json` | [work.md](work.md#workuserusers) |
 | Round | agent 工作单元的工作单元痕迹,append-only | `works/<id>/worklets/<worklet>/rounds.jsonl` | [work.md](work.md#round) |
 | Event | work 自己的时间线,append-only | `works/<id>/events.jsonl` | [work.md](work.md#event) |

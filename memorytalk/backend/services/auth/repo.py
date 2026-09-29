@@ -1,4 +1,4 @@
-"""token 记录的仓储:fs auth/tokens/<sha256>.json;db auth_tokens 表。记的是 token 的哈希 → {user, created_at}。"""
+"""token 登记的仓储:fs auth/tokens/<sha256>.json;db auth_tokens 表。记的是 JWT 里 jti 的哈希 → {user, created_at, exp};在 = 没被作废。"""
 from __future__ import annotations
 
 import json

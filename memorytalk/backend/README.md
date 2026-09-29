@@ -16,17 +16,18 @@ work_servers/  每个协议一个 server,把现场建出来              → wor
 
 ## 一个请求怎么走
 
-1. **进门**(`main.py` 的 `gate` 中间件):`/api/*` 除了 `auth/status`、`auth/setup`、`auth/login`、`system/health`,没有 admin 就 409 `setup_required`,没有效 token 就 401;过了门,名字放进 `request.state.user`。设计:[auth.md](../../docs/designs/v5/auth.md)。
+1. **进门**(`gateway.py` 的 `AuthMiddleware`,纯 ASGI,包在最外层,HTTP 和 WebSocket 都管):`/api/*` 除了 `auth/status`、`auth/setup`、`auth/login`、`system/health` 只认 Bearer JWT;`/tty/*`(终端窗)只认 `mt_tty` cookie,WebSocket 另验 Origin。没有 admin → `/api` 409 `setup_required`;没有效凭证 → 401(`/tty` 403 / close 1008);过了门,名字放进 `request.state.user`。设计:[auth.md](../../docs/designs/v5/auth.md)。
 2. **路由**(`controllers/`):从 `request.app.state` 拿 service,调一个方法,`ok()` 包成 `{data, message}`。
 3. **业务**(`services/`):只认仓储接口和别的 service,不认识 HTTP。出错抛自己的异常类。
 4. **错误映射**(`main.py`):`WorkNotFound` / `UserNotFound` / `WorkletNotFound` → 404,`WorkConflict` → 409,`UserExists` → 409,`MetasError` / `AuthError` / `WorkServerError` 各带自己的状态码;都变成 `{data: null, message, error}`。
 5. **前端**(`gateway.py`):有构建产物就在 `/` 托管 `index.html`、`/assets` 托管静态资源;不拦。
+6. **终端窗**(`/tty`):`tmuxd.asgi()` 挂在这里,经 unix socket 原样转给 ttyd;门在第 1 步,它自己不设。
 
 ## 装配
 
 `main.py` 的 `create_app(config, runtime)`:
 
-- `config.py`:`Config`(`MEMORY_TALK_HOME`、git author 默认名)和 `RuntimeConfig`(workspace、tmuxd 的 socket / 端口 / bind / token / 对外 host、各平台会话记录根)。全部来自环境变量,没有配置文件。
+- `config.py`:`Config`(`MEMORY_TALK_HOME`、git author 默认名)和 `RuntimeConfig`(workspace、tmuxd 的 socket 名和 state 目录、各平台会话记录根)。全部来自环境变量,没有配置文件。
 - `StoreService` 按 `MEMORY_TALK_STORE` 选 provider、建仓储;`MetasService` 自己开 git 仓库;`WorkServerService` 装载 `work_servers/`;`WorkService`、`UserService`、`AuthService`、`SearchService` 依次注入。全部挂在 `app.state`,测试直接 `create_app()` 起一个。
 
 ## 边界

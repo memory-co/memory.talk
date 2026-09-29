@@ -1,6 +1,6 @@
 # Auth API
 
-门。机制见 [designs auth.md](../../designs/v5/auth.md):没有 `admin` 账号时先 setup;有了之后所有 `/api/*`(除本页的 status / setup / login 和 `/api/system/health`)都要 `Authorization: Bearer <token>`,否则 401 `unauthorized`。身份从 token 来,`X-Memory-Talk-User` 头被忽略。
+门。机制见 [designs auth.md](../../designs/v5/auth.md):没有 `admin` 账号时先 setup;有了之后所有 `/api/*`(除本页的 status / setup / login 和 `/api/system/health`)都要 `Authorization: Bearer <token>`(token 是 JWT,见设计 §3),否则 401 `unauthorized`。终端窗 `/tty/*` 不认头,认 status 种下的 `mt_tty` cookie。身份从 token 来,`X-Memory-Talk-User` 头被忽略。
 
 ## GET /api/auth/status
 
@@ -8,7 +8,7 @@
 {"setup_required": false, "authenticated": true, "user": {"name": "alice", "display_name": "Alice", "email": "…", "created_at": "…", "role": "member"}}
 ```
 
-不拦。`setup_required` = 还没有 admin;`authenticated` = 这次带的 token 有效;`user` = token 对应的账号(没带 / 无效 → `null`)。前端进来先问它。
+不拦。`setup_required` = 还没有 admin;`authenticated` = 这次带的 token 有效;`user` = token 对应的账号(没带 / 无效 → `null`)。前端进来先问它。token 有效时响应顺手 `Set-Cookie: mt_tty=<token>; Path=/tty; HttpOnly; SameSite=Strict`(终端窗的门),无效就清掉。
 
 ## POST /api/auth/setup
 
@@ -24,16 +24,16 @@
 {"name": "alice", "password": "…"}
 ```
 
-**200** `{token, user}`。名字或密码不对 → 401 `unauthorized`(不区分哪个不对)。没设过密码的账号登不进。token 不过期;换密码会作废这个人的全部 token。
+**200** `{token, user}`。名字或密码不对 → 401 `unauthorized`(不区分哪个不对)。没设过密码的账号登不进。token 是 JWT,30 天过期(过期 → 401,重新登录);换密码会作废这个人的全部 token。
 
 ## POST /api/auth/logout
 
-作废这次带的 token。返回 `{}`。
+作废这次带的 token(删掉它的 jti 登记),并清掉 `mt_tty` cookie。返回 `{}`。
 
 ## 错误
 
 | 状态 | error | 什么时候 |
 |---|---|---|
-| 401 | `unauthorized` | 没带 token / token 不认识 / 密码不对 / 改自己密码旧密码不对 |
+| 401 | `unauthorized` | 没带 token / 签名不对 / 过期 / 已作废 / 密码不对 / 改自己密码旧密码不对 |
 | 403 | `forbidden` | member 做 admin 的事(建账号、给别人设密码、改别人档案) |
 | 409 | `setup_required` | 还没 admin |

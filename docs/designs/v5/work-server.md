@@ -156,7 +156,7 @@ M11 说组件只报 URL,「要不要套一层网关是上层的事」。这条�
 - `main.py`:`app.mount("/tty", work_server_svc.tmuxd.asgi(authorize=tty_gate))`,放在 `mount_frontend` 之前。现有的 `gate` 中间件只拦 `/api`,不碰 `/tty`。
 - **门:token 种成只发给 `/tty` 的 cookie。** 现在的门是 `Authorization: Bearer`,而 iframe 加载页面、浏览器开 WebSocket 都带不了自定义头。所以:
   1. 前端进门本来就先问 `GET /api/auth/status`(token 变了会再问)。这次带的 token 有效,响应就顺手 `Set-Cookie: mt_tty=<同一个 token>; Path=/tty; HttpOnly; SameSite=Strict`;无效就清掉。前端一行不用改。
-  2. `tty_gate`(`controllers/auth.py`)是 `tmuxd.asgi(authorize=…)` 的钩子:页面、`/token`、`/ws`、静态资源每个请求都过它,取 cookie 里的 token 走 `AuthService.resolve`,认得出人就放行。
+  2. **门不在 tmuxd 里,在最前面**:`gateway.AuthMiddleware`(纯 ASGI,包住整个 app)在 `/tty/*` 下只认这个 cookie,WebSocket 另验 Origin 同源;`tmuxd.asgi()` 不传 `authorize`,自己不设门。tmuxd 文档警告过「不传 authorize 就谁都能进」——这里成立的前提是 mount 在中间件里面,别把 `/tty` 挪到门外。规则表见 [auth.md §1](auth.md)。
   3. 用的就是 Bearer 那个串,所以撤销是白来的:logout(响应也清 cookie)/ 换密码作废 token,cookie 同时失效。cookie 只发往 `/tty`、JS 读不到,不比放在 localStorage 里的 Bearer 多暴露什么。
   4. **不按 worklet 绑。** 原先设想过「拿窗时发一张绑 user + worklet、60 秒一次性的票放进 iframe 地址」,实现时放弃了:前端会刷新 worklet 清单,每次换票 = iframe 地址变 = 终端整页重载;而且 [auth.md §2](auth.md) 本来就不做细粒度权限——进了门的人哪个 work 都能动,窗也一样。窗地址于是稳定为 `/tty/?arg=<id>`。
 - `Window.url` / `Window.embed` 变成同源相对地址,前端 iframe 不用再关心 host 和端口。

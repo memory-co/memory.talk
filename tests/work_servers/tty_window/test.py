@@ -53,6 +53,21 @@ def test_websocket_without_cookie_is_closed(client, worklet):
     assert e.value.code == 1008
 
 
+def test_cross_site_websocket_is_refused_even_with_the_cookie(client, worklet):
+    client.get("/api/auth/status")
+    with pytest.raises(WebSocketDisconnect) as e:
+        with client.websocket_connect(f"/tty/ws?arg={worklet['id']}", subprotocols=["tty"], headers={"origin": "http://evil.example"}):
+            pass
+    assert e.value.code == 1008
+
+
+def test_same_origin_websocket_gets_in(client, worklet):
+    client.get("/api/auth/status")
+    with client.websocket_connect(f"/tty/ws?arg={worklet['id']}", subprotocols=["tty"], headers={"origin": "http://testserver"}) as ws:
+        ws.send_text('{"AuthToken":"","columns":80,"rows":24}')
+        assert ws.receive_bytes()
+
+
 def test_logout_shuts_the_window(client, worklet, H):
     token = client.tokens["alice"]
     client.get("/api/auth/status", headers=H("alice"))

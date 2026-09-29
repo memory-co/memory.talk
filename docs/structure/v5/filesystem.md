@@ -16,7 +16,8 @@
 ├── layers/                           ← 用户自定义层:<名>.yaml 各一份协议,启动时载入(和内置层一模一样)
 ├── users/                            ← user 档案(注册的实体;MEMORY_TALK_STORE=fs 时)
 │   └── <name>.json                   ←   name / display_name / email / created_at / role / password(scrypt 哈希,不出接口)
-├── auth/tokens/<sha256>.json         ← 登录态:token 的哈希 → {user, created_at}(logout / 改密码即删)
+├── jwt.key                           ← 签 JWT 的密钥(首次启动生成,0600;换掉 = 全员重新登录)
+├── auth/tokens/<sha256>.json         ← 登录态登记:JWT 里 jti 的哈希 → {user, created_at, exp}(logout / 改密码即删)
 ├── tmuxd/                            ← tmuxd 的 state(会话记录、ttyd 记录、tmux.conf、ttyd.sock——窗经它挂到 /tty);tmux 会话本身不落盘
 ├── credentials.json                  ← CLI 的登录态(客户端的事,按服务地址分开;memory.talk login 写)
 ├── works/                            ← 裸文件(现场层)
