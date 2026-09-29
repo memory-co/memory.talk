@@ -11,15 +11,19 @@ from .registry import Registry
 from .uri import parse_uri
 
 class WorkServerService:
-    def __init__(self, rt: RuntimeConfig, tmuxd_path: str) -> None:
+    def __init__(self, rt: RuntimeConfig, surface_path: str) -> None:
         from tmuxd import Tmuxd
         from memorytalk.backend import work_servers  # backend/work_servers/
         self.rt = rt
         # 一个进程一份 tmuxd:自己的 tmux socket(tmuxd-<名>)、自己的 ttyd(这一行之后就起来了)、state 在 <home>/tmuxd/。
-        # ttyd 听 state 目录里的 unix socket,不占端口;窗 = <tmuxd_path>/?arg=<id>,由 main.py 把 tmuxd.asgi() 挂到 tmuxd_path(/surface/tmuxd,work-server.md §7)
-        self.tmuxd = Tmuxd(listen="unix", base_path=tmuxd_path, socket=rt.tmux_socket, workspace=str(rt.workspace),
+        # ttyd 听 state 目录里的 unix socket,不占端口;窗 = <surface_path>/tmuxd/?arg=<id>,经 surfaces() 交给 main.py 挂上(work-server.md §7)
+        self.tmuxd = Tmuxd(listen="unix", base_path=f"{surface_path}/tmuxd", socket=rt.tmux_socket, workspace=str(rt.workspace),
                            state_dir=str(rt.tmuxd_state))
         self.registry = Registry(work_servers.load(rt, self.tmuxd))
+
+    def surfaces(self) -> list[tuple[str, object]]:
+        """这个进程里所有的窗:(挂载点, ASGI app),挂载点就是各自的 base_path。门不在这里,在 gateway.AuthMiddleware。"""
+        return [(self.tmuxd.base_path, self.tmuxd.asgi())]
 
     def close(self) -> None:
         """进程退出:收掉自己起的 ttyd;tmux 会话不是我们的,照跑。"""

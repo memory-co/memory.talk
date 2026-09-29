@@ -34,8 +34,7 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
 
     store = StoreService(config)
     collect_svc = MetasService(config, store.work_repo)
-    tmuxd_path = f"{SURFACE_PATH}/tmuxd"               # 终端窗挂在这;以后浏览器窗在 /surface/webmuxd
-    work_server_svc = WorkServerService(runtime, tmuxd_path)
+    work_server_svc = WorkServerService(runtime, SURFACE_PATH)   # 窗都挂在 /surface 下;下面有哪些窗由它自己定
     work_svc = WorkService(store, work_server_svc)
     user_svc = UserService(store.user_repo, store.work_repo, collect_svc)
     collect_svc.author_of = user_svc.author
@@ -74,6 +73,7 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
         status = {"bad_uri": 400, "cmd_not_found": 400, "no_server": 400, "platform": 502}.get(exc.code, 500)
         return JSONResponse(fail(exc.code, str(exc)), status_code=status)
 
-    app.mount(tmuxd_path, work_server_svc.tmuxd.asgi())   # 终端窗:经 unix socket 到 ttyd;门在 AuthMiddleware,这里不再设
+    for path, surface in work_server_svc.surfaces():   # 窗:/surface/tmuxd(经 unix socket 到 ttyd)……;门在 AuthMiddleware,这里不再设
+        app.mount(path, surface)
     mount_frontend(app)
     return app

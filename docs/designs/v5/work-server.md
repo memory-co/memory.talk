@@ -120,7 +120,7 @@ server 这个概念**不新造一套规范**,它的形状就是 shellbase 已经
 
 窗仍然是 ttyd 那一页,只是**从 memory.talk 同一个端口、同一扇门进去**。tmuxd 交出来的 handle 是一个 **ASGI app**,memory.talk 一行 `app.mount("/surface/tmuxd", tmuxd.asgi())` 挂上。
 
-**`/surface` 是所有「窗」的命名空间**:终端在 `/surface/tmuxd`,以后浏览器(webmuxd)挂 `/surface/webmuxd`,同一个 cookie、同一条门规则(auth.md §1)。前缀定在 `gateway.SURFACE_PATH`,每个窗的挂载点由 `main.py` 拼好注入给对应的 service。
+**`/surface` 是所有「窗」的命名空间**:终端在 `/surface/tmuxd`,以后浏览器(webmuxd)挂 `/surface/webmuxd`,同一个 cookie、同一条门规则(auth.md §1)。前缀定在 `gateway.SURFACE_PATH`,`main.py` 只把它交给 `WorkServerService`;下面有哪些窗、各叫什么由 service 自己定,`surfaces()` 交回「(挂载点, ASGI app)」清单,`main.py` 逐个 mount。挂载点就是各实例的 `base_path`,只算一次。加 webmuxd = service 里多一个实例、`surfaces()` 多一行,`main.py` / 门 / cookie 不动。
 
 ### 7.3 为什么是 ASGI,而不是 FastAPI router
 
@@ -153,9 +153,9 @@ M11 说组件只报 URL,「要不要套一层网关是上层的事」。这条�
 
 ### 7.6 memory.talk 这边
 
-- `config.py`:删掉 `MEMORY_TALK_TMUXD_PORT` / `_BIND` / `_TOKEN` / `_URL_HOST`;`WorkServerService(runtime, tmuxd_path)` 构造 `Tmuxd(listen="unix", base_path=tmuxd_path, ...)`,`tmuxd_path = /surface/tmuxd` 由 `main.py` 给。unix socket 路径有长度上限(103 字节):`<MEMORY_TALK_HOME>/tmuxd/<socket 名>/ttyd.sock` 太长时 tmuxd 起不来并说清楚,把 home 放短一点。
+- `config.py`:删掉 `MEMORY_TALK_TMUXD_PORT` / `_BIND` / `_TOKEN` / `_URL_HOST`;`WorkServerService(runtime, surface_path)` 构造 `Tmuxd(listen="unix", base_path=f"{surface_path}/tmuxd", ...)`。unix socket 路径有长度上限(103 字节):`<MEMORY_TALK_HOME>/tmuxd/<socket 名>/ttyd.sock` 太长时 tmuxd 起不来并说清楚,把 home 放短一点。
 - 开发时 vite 也把 `/surface` 代理过去(`ws: true`)。
-- `main.py`:`app.mount(tmuxd_path, work_server_svc.tmuxd.asgi())`,放在 `mount_frontend` 之前。
+- `main.py`:`for path, surface in work_server_svc.surfaces(): app.mount(path, surface)`,放在 `mount_frontend` 之前。
 - **门:token 种成只发给 `/surface` 的 cookie。** 现在的门是 `Authorization: Bearer`,而 iframe 加载页面、浏览器开 WebSocket 都带不了自定义头。所以:
   1. 前端进门本来就先问 `GET /api/auth/status`(token 变了会再问)。这次带的 token 有效,响应就顺手 `Set-Cookie: mt_surface=<同一个 token>; Path=/surface; HttpOnly; SameSite=Strict`;无效就清掉。前端一行不用改。
   2. **门不在 tmuxd 里,在最前面**:`gateway.AuthMiddleware`(纯 ASGI,包住整个 app)在 `/surface/*` 下只认这个 cookie,WebSocket 另验 Origin 同源;`tmuxd.asgi()` 不传 `authorize`,自己不设门。tmuxd 文档警告过「不传 authorize 就谁都能进」——这里成立的前提是 mount 在中间件里面,别把 `/surface` 挪到门外。规则表见 [auth.md §1](auth.md)。
