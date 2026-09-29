@@ -45,6 +45,7 @@ export interface MetaObject {
 export interface Revision { sha: string; author: string; date: string; subject: string; body: string }
 export interface SearchHit { kind: 'work' | 'meta' | 'user'; id: string; title: string; snippet: string; layer: string | null; file: string | null; line: number | null; status: string | null }
 export interface SearchResult { query: string; hits: SearchHit[]; counts: Record<string, number> }
+export interface WorkEvent { ts: string; type: string; data: Record<string, unknown> }
 export interface InboxItem { ts: string; layer: string; path: string; subject: string; by: string | null }
 export const workStatuses: WorkStatus[] = ['running', 'archived'];
 export const statusLabel = (t: T, status: WorkStatus) => t(`status.${status}`);

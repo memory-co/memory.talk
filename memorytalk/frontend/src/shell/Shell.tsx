@@ -1,5 +1,5 @@
 import { Fragment, lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { BookOpen, ChevronsUpDown, Menu, PanelRight, Search, SquarePen, UserRound, X } from 'lucide-react';
+import { BookOpen, ChevronsUpDown, History, Menu, PanelRight, Search, SquarePen, UserRound, X } from 'lucide-react';
 import { useWorks, useUsers, useSystem } from '@/lib/queries';
 import { usePreferences } from '@/lib/store';
 import { localeTag, useT } from '@/lib/i18n';
@@ -12,6 +12,7 @@ import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbP
 import { Separator } from '@/components/ui/separator';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarMenuSkeleton, SidebarProvider, SidebarRail, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
 import { TaskTree } from './TaskTree';
+import { WorkEvents } from './WorkEvents';
 import { Home } from './Home';
 const GlobalSearch = lazy(() => import('./GlobalSearch').then(m => ({ default: m.GlobalSearch })));
 const Metas = lazy(() => import('@/metas/Metas').then(m => ({ default: m.Metas })));
@@ -135,7 +136,6 @@ function ShellContent() {
   const [searchLoaded, setSearchLoaded] = useState(false);
   useEffect(() => { if (search) setSearchLoaded(true); }, [search]);
   const [inspector, setInspector] = useState(false);
-  const [selection, setSelection] = useState<{ filter: string; layer?: string; path?: string; file?: string }>({ filter: 'all' });
   useEffect(() => {
     const listener = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setSearch(true); }
@@ -143,9 +143,10 @@ function ShellContent() {
     };
     window.addEventListener('keydown', listener); return () => window.removeEventListener('keydown', listener);
   }, []);
-  const meta = <Suspense fallback={<Loading />}><Metas compact {...selection} onSelect={setSelection} work={route.work} /></Suspense>;
+  const events = route.page === 'work' && route.work ? <WorkEvents key={route.work} id={route.work} /> : null;
+  const toMeta = () => navigate({ page: 'meta' });
   const searchDialog = searchLoaded && <Suspense fallback={null}><GlobalSearch open={search} onClose={() => setSearch(false)} /></Suspense>;
-  if (isMobile) return <><MobileShell onSearch={() => setSearch(true)} meta={route.page === 'work' ? meta : null} page={goInspector => <Page onMeta={goInspector} selection={s => navigate({ page: 'meta', ...s })} />} />{searchDialog}</>;
+  if (isMobile) return <><MobileShell onSearch={() => setSearch(true)} events={events} page={<Page onMeta={toMeta} selection={s => navigate({ page: 'meta', ...s })} />} />{searchDialog}</>;
   return <>
     <Sidebar collapsible="icon"><SidebarBody onNavigate={() => undefined} /><SidebarRail /></Sidebar>
     <SidebarInset className="h-svh min-h-0 overflow-hidden">
@@ -160,11 +161,11 @@ function ShellContent() {
       </header>
       <div className="flex min-h-0 flex-1">
         <main id="main-content" tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto outline-none">
-          <Page onMeta={() => setInspector(true)} selection={s => navigate({ page: 'meta', ...s })} />
+          <Page onMeta={toMeta} selection={s => navigate({ page: 'meta', ...s })} />
         </main>
-        {route.page === 'work' && inspector && <aside className="flex w-80 shrink-0 flex-col border-l lg:w-96" aria-label={t('nav.inspector')}>
-          <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4 text-sm font-medium"><BookOpen className="size-4" />{t('nav.meta')}</div>
-          <div className="flex min-h-0 flex-1 flex-col">{meta}</div>
+        {events && inspector && <aside className="flex w-80 shrink-0 flex-col border-l lg:w-96" aria-label={t('nav.inspector')}>
+          <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4 text-sm font-medium"><History className="size-4" />{t('nav.events')}</div>
+          <div className="flex min-h-0 flex-1 flex-col">{events}</div>
         </aside>}
       </div>
     </SidebarInset>
@@ -172,8 +173,8 @@ function ShellContent() {
   </>;
 }
 
-/** 竖屏手机:侧栏 | 主内容 | 认知库面板 三列横向吸附。 */
-function MobileShell({ onSearch, meta, page }: { onSearch: () => void; meta: ReactNode; page: (goInspector: () => void) => ReactNode }) {
+/** 竖屏手机:侧栏 | 主内容 | 动态面板 三列横向吸附。 */
+function MobileShell({ onSearch, events, page }: { onSearch: () => void; events: ReactNode; page: ReactNode }) {
   const t = useT();
   const route = useRoute();
   const track = useRef<HTMLDivElement>(null);
@@ -196,14 +197,14 @@ function MobileShell({ onSearch, meta, page }: { onSearch: () => void; meta: Rea
         <Crumbs />
         <div className="ml-auto flex items-center gap-1">
           <Button variant="ghost" size="icon" onClick={onSearch} aria-label={t('search.title')}><Search /></Button>
-          {meta && <Button variant="ghost" size="icon" aria-label={col === 2 ? t('nav.closeInspector') : t('nav.openInspector')} aria-pressed={col === 2} onClick={() => goTo(col === 2 ? 1 : 2)}><PanelRight /></Button>}
+          {events && <Button variant="ghost" size="icon" aria-label={col === 2 ? t('nav.closeInspector') : t('nav.openInspector')} aria-pressed={col === 2} onClick={() => goTo(col === 2 ? 1 : 2)}><PanelRight /></Button>}
         </div>
       </header>
-      <main id="main-content" tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto outline-none">{page(() => goTo(2))}</main>
+      <main id="main-content" tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto outline-none">{page}</main>
     </div>
-    {meta && <div className={cn('flex h-full w-full shrink-0 snap-start flex-col', safe)} aria-label={t('nav.inspector')} aria-hidden={col !== 2}>
-      <div className="flex h-14 shrink-0 items-center gap-2 border-b px-4 text-sm font-medium"><BookOpen className="size-4" />{t('nav.meta')}<Button variant="ghost" size="icon" className="ml-auto size-8" aria-label={t('nav.closeInspectorPanel')} onClick={() => goTo(1)}><X /></Button></div>
-      <div className="flex min-h-0 flex-1 flex-col">{meta}</div>
+    {events && <div className={cn('flex h-full w-full shrink-0 snap-start flex-col', safe)} aria-label={t('nav.inspector')} aria-hidden={col !== 2}>
+      <div className="flex h-14 shrink-0 items-center gap-2 border-b px-4 text-sm font-medium"><History className="size-4" />{t('nav.events')}<Button variant="ghost" size="icon" className="ml-auto size-8" aria-label={t('nav.closeInspectorPanel')} onClick={() => goTo(1)}><X /></Button></div>
+      <div className="flex min-h-0 flex-1 flex-col">{events}</div>
     </div>}
   </div>;
 }
