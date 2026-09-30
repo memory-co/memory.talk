@@ -31,7 +31,7 @@ dependencies = [
     "pydantic>=2.7",
     "pyyaml>=6",
     "httpx>=0.27",          # CLI 调本地 API
-    "tmuxd[asgi]>=3.0",     # 终端类 work server 的实现面:tmux + ttyd;窗经 t.asgi() 挂在 /tty(docs/designs/v5/work-server.md §6-7)
+    "tmuxd[asgi]>=3.0.1",     # 终端类 work server 的实现面:tmux + ttyd;窗经 t.asgi() 挂在 /tty(docs/designs/v5/work-server.md §6-7)
 ]
 
 [project.optional-dependencies]
