@@ -1,172 +1,135 @@
-# work-store —— work 的记录存在哪:local 或 db(v5 设计)
+# work-store —— work 存在两个 sqlite 里:works.db 管现在,worktrace.db 管经过(v5 设计)
 
-> **状态:已实施。** 本篇把 work 这一半的存储讲清楚:一个 work 有哪几样记录,各是什么形状,在 **local**(`MEMORY_TALK_STORE=fs`,本地文件系统)和 **db**(`MEMORY_TALK_STORE=sqlite`)两种形态下分别落在哪里。重点回答两个问题:**列布局(画布)存在哪**、**事件存在哪**。provider 这层抽象本身见 [provider.md](provider.md)。本篇只讲 work 的仓储怎么用它。
+> **状态:设计中,未实施(改版)。** 上一版是两种形态可选:local 把 work 的记录散成目录树里的文件,db 用一个 sqlite。这一版**只留 sqlite**,并且拆成两个文件:
+>
+> - **`works.db`**:work 的全部信息,也就是它**现在**是什么样;
+> - **`worktrace.db`**:work 的全部轨迹,也就是它**怎么走到现在**的。
+>
+> work 这一半不再有文件系统那套,仓储只剩一份实现,用的是同一种 provider(`SQLite`)。本篇讲清楚每样记录在哪个库、哪张表,重点是**列布局存在哪**、**轨迹(原来的 events)存在哪**。
 
 相关:
-- provider 两族基类(文件系统型 / 数据库型),仓储按族各写一份: [provider.md](provider.md)
-- 画布是显示层,快照和事件各存各的: [work.md](work.md) / [work-events.md](work-events.md)
+- provider 的两族基类: [provider.md](provider.md)。work 这一半以后只用数据库型
+- 轨迹的模型(段 / 点、OTel 字段): [work-trace.md](work-trace.md)
+- 画布是显示层;快照和轨迹各存各的: [work.md](work.md) / [work-events.md](work-events.md)
 - worklet 的身份脱离布局(登记和画布分开存): [worklet.md](worklet.md)
 - 认知层在 git 里,不在本篇: [metas/store.md](metas/store.md)
-- 目录 / 表的速查: [`../../structure/v5/filesystem.md`](../../structure/v5/filesystem.md)
-- 代码:`memorytalk/backend/services/work/repo.py`(`FsWorkRepo` / `DbWorkRepo`)
 
 ---
 
-## 1. 一句话:三种形状,一份接口,两种落法
+## 1. 为什么改:一套 provider,两个库
 
-work 的记录不管存在哪,都只有三种形状:
+**不要文件那套了。** 上一版为了两种形态,仓储写了两份(`FsWorkRepo` / `DbWorkRepo`),测试也按 fs、sqlite 各跑一遍;为了让两边长得一样,db 那边只能迁就文件的形状:一张 `work_docs` 装所有 JSON doc,一张 `work_logs` 装所有流。只留 sqlite 以后:
 
-| 形状 | 是什么 | 怎么写 |
+- **仓储只有一份**,表可以按业务来设计。登记是一行一个工作单元,不再是一整个数组塞进一个 doc;要查的字段都是真的列。
+- **一个动作可以是一个事务**。「在列 3 打开终端」要改登记、计数器、画布三处,以前是三次独立的写,现在在 `works.db` 里一次提交(§6)。
+- **没有目录扫描**。按父列子 work、按建的人筛,都走索引。
+
+**为什么是两个库,不是一个:** 现在的状态和经过的轨迹,性质完全不一样。
+
+| | `works.db`(现在) | `worktrace.db`(经过) |
 |---|---|---|
-| **节点** | work 本身:目标、父、状态、谁建的 | 整份替换 |
-| **小记录(doc)** | 挂在一个 work 下的一份 JSON,按 `kind` 区分:`canvas`、`worklets`、`seq`、`users`、`manager` | 整份替换 |
-| **流(stream)** | 挂在一个 work 下的只追加序列,按名字区分:`events`、`inbox`、`rounds`(再按 worklet 分) | 只追加,从不改旧行 |
+| 装什么 | work 节点、画布、登记、谁动过、manager、收件箱 | 段、点(work-trace.md)、agent 的 round |
+| 读写 | 读多写少,每次动作读-改-写几行 | 几乎只追加,量随时间一直涨 |
+| 体量 | 小,和 work 数、工作单元数成正比 | 大,和发生过多少事成正比;round 尤其大 |
+| 丢了会怎样 | 丢了就丢了 work | 丢了只是少了历史,work 照样能干活 |
+| 运维 | 要好好备份 | 可以归档、截断、单独拷给可观测那边分析 |
 
-业务层只认一个接口 `WorkRepo`:`get_work / put_work / list_works`、`get_doc / put_doc / del_doc`、`append / read`、`append_unmanaged`。**画布、登记、事件这些概念只出现在业务层**(`canvas.py`、`worklets.py`、`events.py`……),仓储只知道「某个 work 的某个 kind」「某个 work 的某条流」。启动时 `StoreService` 按 `MEMORY_TALK_STORE` 选 provider,`make_work_repo` 按族给出 `FsWorkRepo` 或 `DbWorkRepo`,业务层不知道底下是什么。
+分成两个文件,两边各有自己的 WAL 和写锁,轨迹写得再多也不会挡住状态的读写;备份、归档、清理也能分开做。这和 work-events.md §5 定下的原则是一致的:**快照管「现在」,轨迹管「经过」**。
 
-## 2. 一个 work 有哪些记录
-
-| 记录 | 形状 | kind / 流名 | 谁写 | 说明 |
-|---|---|---|---|---|
-| work 节点 | 节点 | — | `tree.py` | `id / goal / parent / status / created_by / created_at …` |
-| **画布(列布局)** | doc | `canvas` | `canvas.py` | 几列、每列装哪些工作单元、收起没有;见 §5 |
-| 工作单元登记 | doc | `worklets` | `worklets.py` | 数组:`id / uri / scheme / server / cwd / created_at / last_attached`。**不含位置** |
-| 计数器 | doc | `seq` | `worklets.py` | `{"worklet": n}`:下一个工作单元编号,单调递增、不复用 |
-| 谁动过 | doc | `users` | `users.py` | 只做可见性 |
-| manager | doc | `manager` | `WorkService` | `{"work": <id>}`;没有 = 用父 work 的 |
-| **事件(时间线)** | 流 | `events` | `events.py` | 见 §6 |
-| 收件箱 | 流 | `inbox` | `inbox.py` | manager 路由过来的变动 |
-| round | 流(按 worklet 分) | `rounds` + `sub=<worklet_id>` | `rounds.py` | agent 工作单元的痕迹 |
-| 没人管的变动 | 流(全局) | `unmanaged` | `inbox.py` | 不属于任何 work |
-
-画布和工作单元登记是**两份**:登记回答「有哪些现场」,画布回答「它们摆在哪」。画布里的格子只存 worklet id,关掉工作单元时两边各删各的([worklet.md](worklet.md))。
-
-## 3. local:目录就是树
-
-`MEMORY_TALK_STORE=fs`(默认),provider 是 `LocalFS`,根在 `MEMORY_TALK_HOME`(默认 `~/.memory.talk`)。
+## 2. 在哪、怎么配
 
 ```
-<home>/
-├── works/
-│   └── <work_id>/                        ← 根 work
-│       ├── work.json                     ← 节点
-│       ├── canvas.json                   ← doc:画布(列布局)
-│       ├── worklets.json                 ← doc:工作单元登记
-│       ├── seq.json                      ← doc:编号计数器
-│       ├── users.json                    ← doc:谁动过
-│       ├── manager.json                  ← doc(可选)
-│       ├── events.jsonl                  ← 流:时间线
-│       ├── inbox.jsonl                   ← 流:收件箱
-│       ├── worklets/<worklet_id>/rounds.jsonl   ← 流:round,按 worklet 分
-│       └── subs/<child_id>/              ← 子 work,结构和父一样,可以一直往下套
-└── unmanaged.jsonl                       ← 全局流
+<MEMORY_TALK_HOME>/
+├── works.db          ← 现在(+ works.db-wal / works.db-shm)
+└── worktrace.db      ← 经过(+ worktrace.db-wal / worktrace.db-shm)
 ```
 
-规则:
+- 默认都在 `MEMORY_TALK_HOME` 下;`MEMORY_TALK_WORKS_DB` / `MEMORY_TALK_WORKTRACE_DB` 可以分别改路径,比如把轨迹放到更大的盘上。
+- 每个库一个 `SQLite` provider 实例,各自开 WAL,各自一把进程内锁。仓储构造时拿到两个 provider:`WorkRepo(works: DatabaseProvider, trace: DatabaseProvider)`。
+- `MEMORY_TALK_STORE` 不再决定 work 存在哪。users / auth 放在哪,见 §8。
+- 表结构启动时按仓储里的声明建(`provider.table(...)` / `ensure_table`),不手写迁移 SQL。
 
-- **路径规则**:doc 是 `<work 目录>/<kind>.json`,流是 `<work 目录>/<流名>.jsonl`,带 `sub` 的流在 `<work 目录>/worklets/<sub>/<流名>.jsonl`。
-- **目录就是树**:子 work 住在父目录的 `subs/` 下,建的时候按 `parent` 定位置,之后不搬。`works/` 这一层只有根 work。
-- **id → 目录**:仓储启动后懒扫一遍 `works/**/work.json` 建内存索引,建 work 时顺手登记;找不到就重扫。`list_works` 每次都重扫、读每个 `work.json` 再过滤,量级是「一个团队的 work 数」,够用。
-- **doc 原子写**:写临时文件 `.tmp-*` 再 `os.replace`,读的人要么看到旧的一整份,要么看到新的一整份。
-- **流只追加**:`open(..., "ab")` 写一行 JSON + `\n`。读就是整个文件按行解析。
-- **人能直接看**:`cat canvas.json`、`tail -f events.jsonl`、`grep` 都行。这是 local 形态最大的好处。
+## 3. works.db:work 的全部信息
 
-## 4. db:三张表
+| 表 | 主键 | 列 | 说明 |
+|---|---|---|---|
+| `works` | `id` | `parent`(索引)、`goal`、`status`、`created_by`(索引)、`created_at`、`archived_at`、`manager`、`next_worklet` | work 节点。`manager` 是这棵子树的变动打给谁(空 = 用父 work 的);`next_worklet` 是下一个工作单元的编号,单调递增、不复用(原来的 `seq` doc)。**树就是 `parent` 列** |
+| `canvases` | `work_id` | `version`、`next_column`、`columns`(JSON) | 画布,一个 work 一行。见 §4 |
+| `worklets` | `id` | `work_id`(索引)、`uri`、`scheme`、`server`、`cwd`、`created_at`、`last_attached` | 工作单元登记,一个一行。**不含位置**,位置在画布里 |
+| `work_users` | (`work_id`, `user`) | `first_seen`、`last_seen`、`ops` | 谁动过,只做可见性 |
+| `inbox` | `seq`(自增) | `work_id`(索引,空 = 没人管)、`ts`、`item`(JSON) | 收件箱:manager 路由过来的变动。原来的 `unmanaged.jsonl` 就是 `work_id` 为空的那些行 |
 
-`MEMORY_TALK_STORE=sqlite`,provider 是 `SQLite`,文件默认 `<home>/memory.sqlite`(`MEMORY_TALK_SQLITE` 可改),WAL 模式,进程内一把锁串行化。仓储不写 SQL,用 provider 的 `table / select / insert / update / delete` 原语。work 这一半一共三张表:
+收件箱放在 `works.db` 而不是 `worktrace.db`:它是别的地方打给这个 work 的消息,等着被处理,属于这个 work 的「现在」;轨迹记的是这个 work 自己做过什么。
 
-| 表 | 列 | 装什么 |
-|---|---|---|
-| `works` | `id`(主键)、`parent`(索引)、`created_by`(索引)、`status`、`data`(JSON) | 节点。整个 work 放在 `data` 里,另外把**要查的字段提出来当列**:按父列子 work、按建的人筛,走索引 |
-| `work_docs` | `pk`(主键,`<work_id>/<kind>`)、`work_id`(索引)、`kind`、`data`(JSON) | 所有 doc。一个 work 的一个 kind 一行;`put_doc` = 先 update,没更新到就 insert |
-| `work_logs` | `seq`(自增主键)、`key`(索引)、`line`(JSON) | 所有流,混在一张表里,用 `key` 区分:`<work_id>/<流名>`,带 sub 的 `<work_id>/<流名>/<sub>`,全局的 `unmanaged`。读 = 按 `key` 筛、按 `seq` 升序 |
+## 4. 列布局存在哪
 
-(同一个 sqlite 文件里还有 `users`、`auth_tokens` 两张表,不属于 work。)
+**存在 `works.db` 的 `canvases` 表里,一个 work 一行。** 布局本身放在 `columns` 这一列,是一个 JSON 数组;`version` 和 `next_column` 是单独的列:
 
-和 local 的对应关系是一一的:`work.json` ↔ `works` 一行;`<kind>.json` ↔ `work_docs` 一行;`<流>.jsonl` 的每一行 ↔ `work_logs` 的一行。**树在 db 里不靠目录,靠 `parent` 列**:子 work 就是 `parent = 父 id` 的行,没有 `subs/` 这层。
-
-## 5. 列布局存在哪
-
-**存在 `canvas` 这份 doc 里**:local 是 `works/<…>/<work_id>/canvas.json`,db 是 `work_docs` 里 `pk = "<work_id>/canvas"` 那一行的 `data`。内容就是 `Canvas` 模型:
-
-```json
-{
-  "version": 12,
-  "next_column": 4,
-  "columns": [
+```
+canvases
+  work_id      = "work_202609291002…"
+  version      = 12
+  next_column  = 4
+  columns      = [
     {"id": "c1", "alias": "",     "collapsed": false,
      "panels": [{"worklet": "work_…-w1", "collapsed": false},
                 {"worklet": "work_…-w3", "collapsed": true}]},
     {"id": "c3", "alias": "测试", "collapsed": false,
      "panels": [{"worklet": "work_…-w4", "collapsed": false}]}
   ]
-}
 ```
 
 | 字段 | 说明 |
 |---|---|
-| `columns` | 从左到右。**顺序就是列表顺序**,没有单独的位置字段 |
-| `columns[].id` | `c<编号>`,服务端发,永不改、不复用([work-events.md §3](work-events.md)) |
-| `columns[].alias` | 别名,可空。旧数据里叫 `name`,读的时候当 `alias` |
+| `columns` | 从左到右,**数组顺序就是列的顺序**;每列 `id`(`c<编号>`,永不改、不复用)、`alias`、`collapsed`、`panels` |
 | `columns[].panels` | 从上到下,每格只存 `worklet`(id)和 `collapsed` |
-| `columns[].collapsed` | 整列收起 |
 | `next_column` | 下一列的编号;删了列号也不还 |
-| `version` | 每次动作 +1,前端拿来判断缓存旧没旧 |
+| `version` | 每个动作 +1,前端拿来判断缓存旧没旧 |
+
+**为什么列不拆成表:** 布局很小(几列、十几格),每个动作都是读一整份、改、写回一整份;列的顺序、格子的顺序都是数组下标,拆成 `columns` / `panels` 两张表就得维护排序字段,换来的只是没人用的 SQL 可查性。所以版本号和计数器是列,形状本身是 JSON。
+
+规则沿用上一版:只有 `CanvasStore` 写它;每个动作在一个事务里读-改-写,`version + 1`;新 work 没有这一行时,读出来补一列 `c1`;画布是快照,不从轨迹重放出来,也不从它 diff 出轨迹。
+
+## 5. worktrace.db:work 的全部轨迹
+
+**原来的 `events` 流整个搬到这里,换成 work-trace.md 的「段 + 点」。** 字段按 OTel 的 span / log record **一对一**存:id 是十六进制字符串,时间是 Unix 纳秒整数,属性是 OTLP 的 `KeyValue` 列表(JSON)。所以任何一行都能无损拼回一个 OTLP/JSON 的 span 或 log record。落盘是按列存的,方便按 work、按时间查;对外(`GET /works/{id}/trace`、OTLP 导出)时再拼成标准的信封。
+
+| 表 | 主键 | 列 | 说明 |
+|---|---|---|---|
+| `spans` | `span_id` | `trace_id`(索引)、`parent_span_id`、`work_id`(索引)、`name`、`kind`、`start_time_unix_nano`、`end_time_unix_nano`、`status_code`、`attributes`(JSON)、`links`(JSON) | 段:`work` / `worklet` / `agent.turn`。**`end_time_unix_nano` 为空 = 还开着**。结束 = 在同一行填上终点和结束时的属性 |
+| `points` | `seq`(自增) | `trace_id`、`span_id`(索引)、`work_id`(索引)、`event_name`、`time_unix_nano`、`attributes`(JSON) | 点:`column.*`、`worklet.moved`、`plan.changed`……只追加 |
+| `rounds` | `seq`(自增) | `work_id`、`worklet_id`(索引)、`round_id`、`timestamp`、`role`、`text` | agent 工作单元的 round(原来的 `rounds.jsonl`)。`agent.turn` 段通过 round id 引用它 |
 
 几条规则:
 
-- **整份存、整份取**:画布是一个 doc,不拆成「列表」「格子表」。它小(几列、十几格),一次动作读-改-写一整份最简单,两种形态写法一样。
-- **只有 `CanvasStore` 写它**:每个动作(加列、改别名、删列、放 / 挪 / 拿掉工作单元、收起)一个方法,在进程内一把锁下读当前画布、改、`version + 1`、存回。没有 `PUT` 整份覆盖。
-- **读时规整,不回写**:没有画布(新 work)读出来补一列 `c1`;早期不是 `c<n>` 的列 id 接着发号;`next_column` 至少是最大编号 + 1。规整只在内存里做,下一次动作存回时才落盘。
-- **它是快照,不是真相来源**:画布是显示层,丢了、乱了都不伤 work。它**不从事件重放出来**,事件也不从它 diff 出来([work-events.md §5](work-events.md))。
+- **开着的段就是一行没有终点的记录。** work-trace.md §3 为这个问题另外开了一份 `spans` doc(因为 jsonl 只能追加一整条);到了表里,「开着」只是一列为空,不用再单独存一份状态。**只追加的是 `points` 和 `rounds`;`spans` 每行最多改一次**,就是结束那次。
+- **一个 work 的轨迹** = `work_id = ?` 的段和点;**一棵树的轨迹** = 同一个 `trace_id`(work-trace.md §4)。两个都有索引。
+- **round 放在这里**,是因为它和段、点的性质一样:只追加、量大、是「经过」。放进 `works.db` 会让状态库越长越大,备份也越来越慢。
+- 对外导出只发**已经结束**的段(OTLP 没有「开着的 span」),点随写随发。怎么导出见 work-trace.md §8。
 
-## 6. 事件存在哪
+## 6. 一个动作写了哪几处
 
-> [work-trace.md](work-trace.md)(设计中)会把这条 `events` 流换成 OTLP 格式的 `trace` 流,再加一份存开着的段的 `spans` doc。下面写的是现在的样子。
+以「在 列 3 打开一个终端」为例:
 
-**存在 `events` 这条流里**:local 是 `works/<…>/<work_id>/events.jsonl`,一行一条;db 是 `work_logs` 里 `key = "<work_id>/events"` 的那些行,按 `seq` 排。每条就是 `Event` 模型:
+1. 先验列在不在(读 `canvases`);不在直接 404,不建现场
+2. **建现场**(tmuxd);建不起来到此为止,什么都没写
+3. **`works.db` 一个事务**:`works.next_worklet + 1`,`worklets` 插一行,`canvases` 里 `c3` 的 `panels` 末尾加一格、`version + 1`
+4. **`worktrace.db`**:`spans` 插一行 `worklet` 段(开着,父是这个 work 的 work 段)
 
-```json
-{"ts": "2026-09-29T10:02:11Z", "type": "worklet.attached",
- "data": {"by": "alice", "worklet": "work_…-w4", "uri": "bash:///ws", "server": "bash",
-          "column": {"id": "c3", "alias": "测试"}}}
-```
+两步写要注意:
 
-- **只追加**:从不改、不删旧行。事件的顺序在 local 是文件里的行序,在 db 是 `seq`。两者都是写入顺序;`ts` 只给人看,不拿来排。
-- **一个 work 一条流**:子 work 的事件在子 work 自己那里(local 在 `subs/<child>/events.jsonl`,db 是 `key = "<child_id>/events"`),父 work 不汇总。
-- **类型和字段**见 [work-events.md](work-events.md) 的动作表和 [`../../structure/v5/work.md`](../../structure/v5/work.md#event):`created / status / frozen`、`column.added / renamed / removed`、`worklet.attached / moved / detached`,每条带 `by`,和列有关的带 `column: {id, alias}` 快照。
-- **谁读它**:时间线接口(`GET /works/{id}/events`);另外 `worklets.py` 给没有 `seq` 的旧 work 发编号时,会扫一遍事件里出现过的 `-w<n>`,保证关掉的号不再用。
-- **收件箱、round 同理**:`inbox.jsonl` / `key = "<work_id>/inbox"`;`worklets/<wid>/rounds.jsonl` / `key = "<work_id>/rounds/<wid>"`;没人管的变动在根上的 `unmanaged.jsonl` / `key = "unmanaged"`。
+- **两个库之间没有原子提交。** 两个库都是 WAL 模式,sqlite 在 WAL 下即使 `ATTACH` 在一起,跨库事务也只保证每个库各自原子,不保证两个库一起提交。所以顺序固定为**先 `works.db`,后 `worktrace.db`**。后一步失败的话,轨迹少一段,work 本身没问题。这和「轨迹丢了不伤 work」是同一个取舍。
+- **现场和登记之间也不是原子的。** 把建现场挪到写库之前,是为了失败时什么都不用回滚(上一版是先登记、建失败再删)。反过来,现场建起来了但库写失败,就会留下一个没有登记的 tmux 会话;这种会话启动时对一遍就能收掉,和 work-trace.md §5「现场没了的段」是同一个对账过程,方向相反。
 
-## 7. 一个动作写了哪几处
+## 7. 从上一版怎么过来
 
-以「在 列 3 打开一个终端」为例(`WorkService.attach`),依次:
+**不做兼容。** 上一版的 `works/` 目录树、`memory.sqlite` 里的 `works` / `work_docs` / `work_logs` 三张表,实施时都不再读。现有实例的 work 数据不迁移,重新开始(和切换到 tmuxd 3.0 时对待 8090 实例的做法一样)。
 
-1. `worklets` doc:登记里加一条(同时 `seq` doc 的计数 +1)
-2. (tmuxd 建现场;建不起来就把第 1 步的登记删掉,到此为止)
-3. `canvas` doc:`c3` 的 `panels` 末尾加一格,`version + 1`
-4. `events` 流:追加 `worklet.attached`
+要删掉的东西:`FsWorkRepo`、`DbWorkRepo` 里 doc / log 的通用写法、`MEMORY_TALK_STORE` 对 work 的作用、测试里 work 场景按 fs / sqlite 双跑的那一半参数。同时要改的文档:provider.md(work 不再用文件系统族)、`structure/v5/filesystem.md`(`works/` 目录没了,换成两个 db 文件)、`structure/v5/work.md`、work-trace.md §3(落盘改成 §5 的两张表)。
 
-**两种形态都没有跨记录的事务**:每一步是一次独立的整份替换或追加。顺序是有意的:先登记、再摆、最后记事件。中途出错的后果按严重程度往后排:登记在、画布没摆上,现场还在,重开页面能看到;画布摆上了、事件没写上,时间线少一条,不影响干活([work-events.md §5](work-events.md))。服务是这些记录的唯一写者,进程内的锁保证同一种记录的读-改-写不交错。
+## 8. 这篇有意不定的事
 
-## 8. 两种形态怎么选
-
-| | local(`fs`) | db(`sqlite`) |
-|---|---|---|
-| 默认 | 是 | 否 |
-| 人直接看 | `cat` / `grep` / `tail -f`,目录就是树 | 要开 sqlite |
-| 按父 / 建的人列 work | 扫目录、读每个 `work.json` 再过滤 | 走 `parent` / `created_by` 索引 |
-| 读一条流 | 读整个文件 | 按 `key` 索引筛 |
-| 备份 | 拷目录 | 拷一个文件(WAL 下先 checkpoint) |
-| 写者 | 单进程 | 单进程(进程内锁;多进程写不在 v5 范围) |
-
-两者在接口上完全等价,测试套件对每个用到存储的场景都 **fs 和 sqlite 各跑一遍**。选哪个只看运维习惯:想直接翻文件用 local,work 多了想要索引用 db。
-
-**切换不带数据**:改 `MEMORY_TALK_STORE` 之后,新介质里是空的;没有迁移工具。要迁的话按 §4 的一一对应关系逐条搬(节点 → `works`,doc → `work_docs`,每行流 → `work_logs`,流内顺序保持)。
-
-## 9. 这篇有意不定的事
-
-- **跨记录事务**:§7 的几步要不要在 db 形态下包成一个事务。local 形态做不到,两边行为会不一致;现在按「顺序写、后果可接受」统一处理。
-- **流分表**:所有流挤在 `work_logs` 一张表里,round 量大了会拖慢事件和收件箱的读。到时候再按流名拆表,或者按 [provider.md §5](provider.md) 的混搭,把 round 单独放到 local。
-- **MySQL / PostgreSQL / OSS / S3**:provider.md 里列了,还没实现。仓储按族写,接上以后 work 这一半不用改。
-- **迁移工具**:local ↔ db 之间搬数据,等真有人要换的时候再写。
+- **users / auth 放哪。** 它们现在跟着 `MEMORY_TALK_STORE` 走(fs 下是 `users/`、`auth/tokens/`,sqlite 下在 `memory.sqlite` 里)。它们不属于 work。倾向:同样只留 sqlite,单独一个 `users.db`,或者并进 `works.db`。放进 `works.db` 能少一个文件,但 users 本来就不是 work 的信息。到时候单独定。
+- **worktrace.db 怎么变老。** 轨迹会一直涨。可以按时间切(`worktrace-2026Q4.db`,查询时 `ATTACH`),也可以把已结束的 work 的轨迹导出成 OTLP/JSON 文件归档,再从库里删掉。先不做,等体量真大了再定。
+- **round 要不要再单独一个库。** agent 的 round 是三张表里最大的。如果它把 `spans` / `points` 的查询拖慢了,再拆成 `worktrace.db` + `rounds.db`。表结构不用变,只是换个文件。
+- **多进程。** 两个库都只由服务进程写。CLI 和 agent 都走 HTTP API,不直接开库。

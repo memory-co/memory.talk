@@ -6,11 +6,13 @@
 > 2. memory.talk 自己能画出类似 Chrome DevTools Network 那样的瀑布图;
 > 3. 同一张瀑布图拉到「天」的尺度就是甘特图,可观测和项目管理用的是同一份数据。
 >
+> **落盘位置已改**:轨迹存在 `worktrace.db`(见 [work-store.md §5](work-store.md)),表的列和 OTel 字段一对一。§3 的 OTLP/JSON 是**对外的格式和字段规范**:接口返回、导出文件、OTLP 推送都用它;库里不存信封本身。
+>
 > 实施以后,本篇取代 [work-events.md](work-events.md) 的存储部分(动作表、列标记、`by` 这些规则保留)和 [work-store.md §6](work-store.md)。
 
 相关:
 - 现在的事件:一个动作一个请求,每条带列标记和 `by`: [work-events.md](work-events.md)
-- 事件现在存在哪(`events` 流): [work-store.md](work-store.md)
+- 轨迹存在哪(`worktrace.db` 的 `spans` / `points` 表): [work-store.md §5](work-store.md)
 - work 树、worklet 的身份: [work.md](work.md) / [worklet.md](worklet.md)
 - agent 的 round(`rounds` 流,trace 只引用它): [work-server.md](work-server.md)
 - OTLP/JSON 编码: <https://opentelemetry.io/docs/specs/otlp/#json-protobuf-encoding>;Collector 的 `otlpjsonfile` receiver / `file` exporter 读写的就是这种一行一条的格式
@@ -59,7 +61,9 @@ trace 模型本来就有这些:span 有起点和终点;父子关系决定层级;
 
 收起 / 展开仍然不记(同 work-events.md §2)。收件箱和 round 不进 trace:收件箱是别的 work 打过来的消息,不是这个 work 自己的经过;round 是内容,trace 只记这一轮的起止和计数,正文仍在 `rounds` 流里,通过 `memorytalk.round.first` / `memorytalk.round.last` 引用。
 
-## 3. 落盘:trace.jsonl 就是 OTLP/JSON
+## 3. 格式:OTLP/JSON(落盘在 worktrace.db)
+
+> 下面讲的「一行一个信封」是**导出格式**(`trace.jsonl`):导出文件是这个样子,`GET /trace` 返回的也是这些信封。真相来源是 `worktrace.db`,见本节末尾。
 
 **一行一个完整的 OTLP 信封**,内容是 Collector `file` exporter 写出来的那种。行分两种,看顶层 key 就能区分:
 
@@ -122,23 +126,23 @@ trace 模型本来就有这些:span 有起点和终点;父子关系决定层级;
 
 **段在结束时才写,写的时候是整条。** OTLP 里的 span 是一条不可变的完整记录,没有「先写开头、再补结尾」这回事。所以:
 
-- `trace.jsonl` 只收**已经结束**的 span 和所有的点,真正做到只追加,Collector 的 `otlpjsonfile` receiver 能直接读;
-- **还开着的 span** 放在一份 doc 里:`spans`(local 是 `spans.json`,db 是 `work_docs` 里 `<work_id>/spans` 那一行)。里面是 span id → 这个 span 目前已知的一切(形状同 OTLP span,只是缺 `endTimeUnixNano`)。它很小:一个 work 最多一个开着的 work span,加上活着的工作单元各一个,再加上正在进行的 agent 轮次。span 一结束,就把它补上终点、追加进 `trace.jsonl`,再从 `spans` 里删掉。
+- 导出的 `trace.jsonl` 只收**已经结束**的 span 和所有的点,真正做到只追加,Collector 的 `otlpjsonfile` receiver 能直接读;
+- **还开着的 span** 不出现在导出里(OTLP 没有「开着的 span」),只在 memory.talk 自己的图里画出来。
 
-**存在哪**(承接 [work-store.md](work-store.md)):`events` 这条流换成 `trace` 流,再加一份 `spans` doc。
+**真相来源是 `worktrace.db`**([work-store.md §5](work-store.md)):
 
-| | local | db |
-|---|---|---|
-| 结束的段 + 所有的点 | `<work 目录>/trace.jsonl` | `work_logs`,`key = "<work_id>/trace"`,每行的 `line` 就是一个 OTLP 信封 |
-| 开着的段 | `<work 目录>/spans.json` | `work_docs`,`pk = "<work_id>/spans"` |
+| 表 | 装什么 |
+|---|---|
+| `spans` | 一行一个段,列和 OTLP span 一对一;**`end_time_unix_nano` 为空 = 还开着**,结束时在同一行补上终点。开着的段不用再另存一份状态 |
+| `points` | 一行一个点,列和 OTLP log record 一对一,只追加 |
 
-一条记录写在哪个 work 的文件里:worklet 和 agent 轮次的记录跟着它所在的 work;子 work 自己的 span 和点写在子 work 的文件里。整棵树的 trace,就是这棵子树里所有 `trace.jsonl` 和 `spans` 的并集。
+每行带 `work_id`(属于哪个 work)和 `trace_id`(属于哪棵树):一个 work 的轨迹按 `work_id` 查,整棵树按 `trace_id` 查。
 
 ## 4. id:一棵 work 树是一条 trace
 
 - **trace id = 根 work**:`traceId = sha256("memorytalk/trace/" + 根 work id)` 的前 16 字节。一棵 work 树从根到叶都在同一条 trace 里,所以不管在瀑布图还是甘特图上,一次就能看到整件事。子 work 不单独开 trace。
 - **span id 由身份算出来**:work span 是 `sha256("memorytalk/span/work/" + work id + "/" + 第几段)` 的前 8 字节(第几段见 §2 的「重新打开」);worklet span 同理,用 worklet id 算;agent 轮次用随机数。算得出来就不用查:子 work 知道自己的父 span id,打开工作单元时也知道它该挂在哪个 work span 下面。
-- **link = 依赖**:span 的 `links[]` 用来表示「这件事等着那件事」(§7 的依赖),以及「重新打开的这一段接的是上一段」。link 在 span 开着的时候放在 `spans` doc 里,可以随时加,span 结束时随整条一起写出。
+- **link = 依赖**:span 的 `links[]` 用来表示「这件事等着那件事」(§7 的依赖),以及「重新打开的这一段接的是上一段」。link 在 span 开着的时候写在 `spans` 表那一行的 `links` 列里,可以随时加,导出时随整条一起写出。
 - **不能挪树**:trace id 取决于根,所以 work 不能换父(现在本来也不能,local 形态的目录就是树)。
 
 **agent 轮次对上 GenAI 语义约定。** `agent.turn` span 的属性用 OTel GenAI 的标准名:`gen_ai.system`(`anthropic` / `openai` / …)、`gen_ai.operation.name`、`gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens`(adapter 能读到就填)。这样可观测那边现成的 LLM 看板能直接用。
@@ -148,16 +152,16 @@ trace 模型本来就有这些:span 有起点和终点;父子关系决定层级;
 原来的 `Events` 换成一个 `Trace` 服务,只有三个动作:
 
 ```
-start(work_id, name, span_id, parent_span_id, attributes, links=[])  → 写进 spans doc
-end(work_id, span_id, attributes={}, status=OK)                       → 补终点,追加进 trace.jsonl,从 spans doc 删掉
-point(work_id, span_id, event_name, attributes)                       → 追加一行 log record 进 trace.jsonl
+start(work_id, name, span_id, parent_span_id, attributes, links=[])  → spans 表插一行,终点为空
+end(work_id, span_id, attributes={}, status=OK)                       → spans 表那一行补上终点;导出一条完整的 span
+point(work_id, span_id, event_name, attributes)                       → points 表追加一行;导出一条 log record
 ```
 
 写入顺序沿用 [work-store.md §7](work-store.md):先改快照(登记、画布),再动 trace;trace 写失败不回滚快照。每条都带 `user.id`,取登录态里的人。结束一个 span 的人如果不是开它的人,另记 `memorytalk.end.user.id`。
 
 **现场自己没了的 span**:worklet span 开着,可是 tmux 会话已经不在了(命令跑完了、机器重启了)。这种情况在列清单或者服务启动的时候发现,就把 span 结束掉,记 `memorytalk.end.reason = "gone"`;终点取「最后一次确认还活着的时刻」,span 的 `status` 保持 Unset,不当成 Error。正常关掉的,`memorytalk.end.reason = "detached"`,`status` 为 OK。
 
-**服务重启**:`spans` doc 是落了盘的,重启后开着的 span 还是开着的。work span 本来就该一直开着;worklet span 按上一条对一遍现场。
+**服务重启**:`spans` 表里终点为空的行,重启后还是开着的。work span 本来就该一直开着;worklet span 按上一条对一遍现场。
 
 ## 6. 读:一份数据,三种视图
 
@@ -200,21 +204,15 @@ trace 记的是**实际发生了什么**,可甘特图还要**计划**。计划�
 
 ## 8. 对外:三种接法
 
-1. **什么都不接**:`trace.jsonl` 就是真相来源,memory.talk 自己画图。
-2. **Collector 读文件**:用 Collector 的 `otlpjsonfile` receiver 盯住 `<home>/works/**/trace.jsonl`,转发到 Jaeger、Tempo 或者任何 OTLP 后端。这个 receiver 一个 pipeline 只解析一种信号,而 `trace.jsonl` 里段和点混在一起:要配 traces、logs 两个 pipeline 读同一批文件,另一种信号的行能不能被安静地跳过,取决于 Collector 的版本,实施时要验证。不行的话,要么走第 3 种,要么落盘时把段和点分成 `trace.jsonl` / `trace.logs.jsonl` 两个文件(本篇倾向一个文件,先验证)。开着的段不在文件里,外面看到的是已经结束的段加上所有的点。
-3. **进程内直推**:设置了 `OTEL_EXPORTER_OTLP_ENDPOINT` 这些标准环境变量,memory.talk 在写 `trace.jsonl` 的同时,把同一条记录用 OTLP/HTTP 推出去(批量、失败只记日志,不影响写盘)。
+1. **什么都不接**:`worktrace.db` 就是真相来源,memory.talk 自己画图。
+2. **Collector 读文件**:memory.talk 把已结束的段和所有的点按 OTLP/JSON 一行一条导出到 `<home>/trace-export/*.jsonl`(可选,默认关),用 Collector 的 `otlpjsonfile` receiver 盯住这个目录,转发到 Jaeger、Tempo 或者任何 OTLP 后端。这个 receiver 一个 pipeline 只解析一种信号;导出既然由 memory.talk 自己写,就直接分成 `traces-*.jsonl` 和 `logs-*.jsonl` 两种文件,各配一个 pipeline,不用去赌混合文件里另一种信号的行能不能被跳过。开着的段不在文件里,外面看到的是已经结束的段加上所有的点。
+3. **进程内直推**:设置了 `OTEL_EXPORTER_OTLP_ENDPOINT` 这些标准环境变量,memory.talk 在写 `worktrace.db` 的同时,把同一条记录用 OTLP/HTTP 推出去(批量、失败只记日志,不影响写盘)。
 
 ## 9. 迁移
 
-- **旧的 `events.jsonl`**:写一个一次性的转换,不做兼容读。
-  - `created` 和对应的归档配成 work span,`worklet.attached` 和 `worklet.detached` 配成 worklet span;
-  - 配不上的开始事件,转换后放进 `spans`,当作还开着;配不上的结束事件丢掉;
-  - `column.*` 和 `worklet.moved` 转成点;
-  - 没有 `by` 的就不带 `user.id`。
-  
-  转完把 `events.jsonl` 改名成 `events.jsonl.migrated`,留着备查。
-- **给旧 worklet 发编号**:`worklets.py` 给没有 `seq` 的旧 work 发编号时,原来是扫 `events` 里出现过的 `-w<n>`,改成扫 `trace` 里出现过的 `memorytalk.worklet.id`。
-- **文档**:实施的时候同步改掉 work-events.md 的存储部分、work-store.md §2 和 §6,以及 structure 里的 filesystem.md 和 work.md。
+- **不迁移旧事件。** 跟着 [work-store.md §7](work-store.md) 一起不做兼容:旧的 `events.jsonl` / `work_logs` 不转换、不读,work 数据重新开始。
+- **工作单元编号**:原来给没有 `seq` 的旧 work 发号时要扫事件里出现过的 `-w<n>`;现在计数器是 `works.next_worklet` 列,新库里每个 work 从 1 开始,这段兜底逻辑删掉。
+- **文档**:实施的时候同步改掉 work-events.md 的存储部分,以及 structure 里的 filesystem.md 和 work.md。
 
 ## 10. 这篇有意不定的事
 
@@ -222,4 +220,4 @@ trace 记的是**实际发生了什么**,可甘特图还要**计划**。计划�
 - **把 TRACEPARENT 注入到现场里**。打开工作单元时,在 tmux 会话的环境里设上 W3C 的 `TRACEPARENT`,值指向这个 worklet 的 span;这样现场里任何一个接了 OTel 的工具(比如打开了遥测的 agent CLI、测试框架)产生的 span,都会自动挂到这个工作单元下面。瀑布图可以一直钻到 agent 调了哪个工具、跑了多久。这要 memory.talk 自己当 OTLP 接收端,或者从 Collector 读回来,工作量不小,留到后面。
 - **列要不要也做成 span**。列是布局,本篇只把它当点(加、改名、删)。如果以后想在甘特图上按列分泳道,用 worklet span 上的 `memorytalk.column.id` 属性分组就够了,用不着列 span。
 - **agent 轮次怎么切**。「一轮」从 adapter 读到的 round 里切出来,不同的 agent CLI 标记方式不一样。第一版只按「人的一条输入到下一条人的输入之前」来切。
-- **trace.jsonl 会越来越大**。点会越攒越多;是按大小滚动(`trace.1.jsonl`……)还是在 db 形态里分表,和 work-store.md §9 的「流分表」一起定。
+- **worktrace.db 会越来越大**。按时间切库还是把已结束的 work 导出归档后删掉,和 [work-store.md §8](work-store.md) 一起定。
