@@ -20,7 +20,7 @@
 
 **不要文件那套了。** 上一版为了两种形态,仓储写了两份(`FsWorkRepo` / `DbWorkRepo`),测试也按 fs、sqlite 各跑一遍;为了让两边长得一样,db 那边只能迁就文件的形状:一张 `work_docs` 装所有 JSON doc,一张 `work_logs` 装所有流。只留 sqlite 以后:
 
-- **仓储只有一份**,表可以按业务来设计。登记是一行一个工作单元,不再是一整个数组塞进一个 doc;要查的字段都是真的列。
+- **仓储只有一份**,表可以按业务来设计。登记是一行一个工作单元,画布的每一列、每一格也各是一行,不再把一整个数组塞进一个 JSON;要查的字段都是真的列。
 - **一个动作可以是一个事务**。「在列 3 打开终端」要改登记、计数器、画布三处,以前是三次独立的写,现在在 `works.db` 里一次提交(§6)。
 - **没有目录扫描**。按父列子 work、按建的人筛,都走索引。
 
@@ -28,7 +28,7 @@
 
 | | `works.db`(现在) | `worktrace.db`(经过) |
 |---|---|---|
-| 装什么 | work 节点、画布、登记、谁动过、manager、收件箱 | 段、点(work-trace.md)、agent 的 round |
+| 装什么 | work 节点、画布(列 / 格子)、登记、谁动过、manager、收件箱 | 段、点(work-trace.md)、agent 的 round |
 | 读写 | 读多写少,每次动作读-改-写几行 | 几乎只追加,量随时间一直涨 |
 | 体量 | 小,和 work 数、工作单元数成正比 | 大,和发生过多少事成正比;round 尤其大 |
 | 丢了会怎样 | 丢了就丢了 work | 丢了只是少了历史,work 照样能干活 |
@@ -49,46 +49,91 @@
 - `MEMORY_TALK_STORE` 不再决定 work 存在哪。users / auth 放在哪,见 §8。
 - 表结构启动时按仓储里的声明建(`provider.table(...)` / `ensure_table`),不手写迁移 SQL。
 
-## 3. works.db:work 的全部信息
+## 3. works.db 有哪些表
 
-| 表 | 主键 | 列 | 说明 |
+**原则:一张表一种东西,一行一个实体,要查的都是真的列,不存 JSON。** 画布拆成「列」「格子」两张表;收件箱的每个字段也拆成列。
+
+```
+works ──┬──< works               (parent:子 work)
+        ├──< canvas_columns      (这个 work 的列)
+        │        └──< canvas_panels >── worklets   (格子:哪个工作单元在哪一列第几个)
+        ├──< worklets            (工作单元登记)
+        ├──< work_users          (谁动过)
+        └──< inbox               (收件箱;work_id 为空 = 没人管)
+```
+
+| 表 | 一行是 | 主键 | 其余列 |
 |---|---|---|---|
-| `works` | `id` | `parent`(索引)、`goal`、`status`、`created_by`(索引)、`created_at`、`archived_at`、`manager`、`next_worklet` | work 节点。`manager` 是这棵子树的变动打给谁(空 = 用父 work 的);`next_worklet` 是下一个工作单元的编号,单调递增、不复用(原来的 `seq` doc)。**树就是 `parent` 列** |
-| `canvases` | `work_id` | `version`、`next_column`、`columns`(JSON) | 画布,一个 work 一行。见 §4 |
-| `worklets` | `id` | `work_id`(索引)、`uri`、`scheme`、`server`、`cwd`、`created_at`、`last_attached` | 工作单元登记,一个一行。**不含位置**,位置在画布里 |
-| `work_users` | (`work_id`, `user`) | `first_seen`、`last_seen`、`ops` | 谁动过,只做可见性 |
-| `inbox` | `seq`(自增) | `work_id`(索引,空 = 没人管)、`ts`、`item`(JSON) | 收件箱:manager 路由过来的变动。原来的 `unmanaged.jsonl` 就是 `work_id` 为空的那些行 |
+| `works` | 一个 work | `id` | `parent`(索引)、`goal`、`status`、`created_by`(索引)、`created_at`、`archived_at`、`manager`、`next_worklet`、`next_column`、`canvas_version` |
+| `canvas_columns` | 画布上的一列 | (`work_id`, `number`) | `alias`、`collapsed`、`position` |
+| `canvas_panels` | 画布上的一格 | `worklet_id` | `work_id`、`column_number`、`position`、`collapsed` |
+| `worklets` | 一个工作单元 | `id` | `work_id`(索引)、`number`、`uri`、`scheme`、`server`、`cwd`、`created_at`、`last_attached` |
+| `work_users` | 一个人和一个 work | (`work_id`, `user`) | `first_seen`、`last_seen`、`ops` |
+| `inbox` | 一条打过来的变动 | `seq`(自增) | `work_id`(索引,空 = 没人管)、`ts`、`layer`、`path`、`subject`、`sha`、`by`、`routed_by` |
 
-收件箱放在 `works.db` 而不是 `worktrace.db`:它是别的地方打给这个 work 的消息,等着被处理,属于这个 work 的「现在」;轨迹记的是这个 work 自己做过什么。
+各表说明:
 
-## 4. 列布局存在哪
+- **`works`**:树就是 `parent` 列。`manager` 是这棵子树的变动打给谁(空 = 用父 work 的)。有三个计数器:`next_worklet` 是下一个工作单元编号,`next_column` 是下一列编号,两个都单调递增、不复用;`canvas_version` 是画布版本号,每个画布动作 +1。画布除了列和格子,就只剩这两个数,所以不单开 `canvases` 表,直接放在 `works` 上。
+- **`worklets`**:登记,一个工作单元一行。**不含位置**,它在不在画布上、在哪,看 `canvas_panels`。`number` 就是 id 里 `-w<n>` 的 n,单独存一列方便排序。
+- **`work_users`**:只做可见性,一个人在一个 work 上一行。
+- **`inbox`**:字段就是 `InboxItem` 的字段。原来的 `unmanaged.jsonl` 就是 `work_id` 为空的那些行。它放在 `works.db` 而不是 `worktrace.db`:收件箱是别的地方打给这个 work、等着处理的消息,属于「现在」;轨迹记的是这个 work 自己做过什么。
+- **以后**:[work-trace.md §7](work-trace.md) 的计划会给 `works` 加 `plan_start` / `plan_due` 两列;依赖另开一张 `work_deps`(`work_id`, `depends_on`),主键是这两列的组合。
 
-**存在 `works.db` 的 `canvases` 表里,一个 work 一行。** 布局本身放在 `columns` 这一列,是一个 JSON 数组;`version` 和 `next_column` 是单独的列:
+## 4. 列布局存在哪:canvas_columns + canvas_panels
+
+**画布 = `canvas_columns`(有哪些列、什么顺序)+ `canvas_panels`(哪个工作单元在哪一列第几个)+ `works` 上的 `next_column` 和 `canvas_version`。**
 
 ```
-canvases
-  work_id      = "work_202609291002…"
-  version      = 12
-  next_column  = 4
-  columns      = [
-    {"id": "c1", "alias": "",     "collapsed": false,
-     "panels": [{"worklet": "work_…-w1", "collapsed": false},
-                {"worklet": "work_…-w3", "collapsed": true}]},
-    {"id": "c3", "alias": "测试", "collapsed": false,
-     "panels": [{"worklet": "work_…-w4", "collapsed": false}]}
-  ]
+canvas_columns
+ work_id   number  alias   collapsed  position
+ w…1002    1       ""      0          0
+ w…1002    3       "测试"  0          1
+
+canvas_panels
+ worklet_id   work_id  column_number  position  collapsed
+ w…1002-w1    w…1002   1              0         0
+ w…1002-w3    w…1002   1              1         1
+ w…1002-w4    w…1002   3              0         0
 ```
 
-| 字段 | 说明 |
+- **列的身份是 (`work_id`, `number`)**。对外的 id `c<number>` 是拼出来的,不存。`number` 由 `works.next_column` 发,永不改、不复用([work-events.md §3](work-events.md))。
+- **顺序用 `position`**:列从左到右是 0、1、2……;格子在一列里从上到下也是 0、1、2……。**同一个 work 的列、同一列的格子,position 始终是连续的**(没有空洞、不重复)。每个动作在同一个事务里把受影响的那几行挪一下,保持这一点。列和格子都很少(几列、十几格),每次挪几行没有负担;换来的好处是「第几个」就是 `position`,查询不用再算。
+- **一个工作单元最多出现在一格里**:这是由 `canvas_panels` 的主键是 `worklet_id` 保证的,不靠代码约定。
+- **至少一列**:新 work 建的时候就插一列 `number = 1`,不再靠「读的时候补」。
+
+每个动作在一个事务里做完,并且都把 `works.canvas_version` +1:
+
+| 动作 | 改哪些行 |
 |---|---|
-| `columns` | 从左到右,**数组顺序就是列的顺序**;每列 `id`(`c<编号>`,永不改、不复用)、`alias`、`collapsed`、`panels` |
-| `columns[].panels` | 从上到下,每格只存 `worklet`(id)和 `collapsed` |
-| `next_column` | 下一列的编号;删了列号也不还 |
-| `version` | 每个动作 +1,前端拿来判断缓存旧没旧 |
+| 加一列(在 `cX` 右边) | `works.next_column` 取号并 +1;`cX` 右边的列 `position + 1`;插一行新列 |
+| 改别名 / 收起列 | 改 `canvas_columns` 那一行 |
+| 删空列 | 先确认这列没有格子(有就 409);删掉这行;它右边的列 `position − 1` |
+| 打开工作单元(放进 `cX`) | 插一格,`position` = 这列现有格子数 |
+| 挪工作单元 | 原列里它下面的格子 `position − 1`;目标列里 `≥ index` 的格子 `position + 1`;改这一格的 `column_number` 和 `position` |
+| 收起工作单元 | 改这一格的 `collapsed` |
+| 关闭工作单元 | 删这一格;原列里它下面的格子 `position − 1` |
 
-**为什么列不拆成表:** 布局很小(几列、十几格),每个动作都是读一整份、改、写回一整份;列的顺序、格子的顺序都是数组下标,拆成 `columns` / `panels` 两张表就得维护排序字段,换来的只是没人用的 SQL 可查性。所以版本号和计数器是列,形状本身是 JSON。
+**现在能直接查了**,不用再把 JSON 拍平:
 
-规则沿用上一版:只有 `CanvasStore` 写它;每个动作在一个事务里读-改-写,`version + 1`;新 work 没有这一行时,读出来补一列 `c1`;画布是快照,不从轨迹重放出来,也不从它 diff 出轨迹。
+```sql
+-- 列 3 里有哪些工作单元,从上到下
+SELECT worklet_id FROM canvas_panels WHERE work_id = ? AND column_number = 3 ORDER BY position;
+
+-- 某个工作单元在哪一列、第几个
+SELECT column_number, position FROM canvas_panels WHERE worklet_id = ?;
+
+-- 每一列有几个工作单元(包括空列)
+SELECT c.number, c.alias, COUNT(p.worklet_id)
+  FROM canvas_columns c LEFT JOIN canvas_panels p
+    ON p.work_id = c.work_id AND p.column_number = c.number
+ WHERE c.work_id = ? GROUP BY c.number ORDER BY c.position;
+
+-- 登记了、但没摆在画布上的工作单元
+SELECT w.id FROM worklets w LEFT JOIN canvas_panels p ON p.worklet_id = w.id
+ WHERE w.work_id = ? AND p.worklet_id IS NULL;
+```
+
+对外的接口形状不变:`GET /works/{id}/canvas` 仍然返回 `{version, next_column, columns: [{id, alias, collapsed, panels: [...]}]}`,由两次查询(列按 `position` 排、格子按 `column_number, position` 排)拼出来。画布仍然是快照:不从轨迹重放出来,也不从它 diff 出轨迹。
 
 ## 5. worktrace.db:work 的全部轨迹
 
@@ -96,12 +141,13 @@ canvases
 
 | 表 | 主键 | 列 | 说明 |
 |---|---|---|---|
-| `spans` | `span_id` | `trace_id`(索引)、`parent_span_id`、`work_id`(索引)、`name`、`kind`、`start_time_unix_nano`、`end_time_unix_nano`、`status_code`、`attributes`(JSON)、`links`(JSON) | 段:`work` / `worklet` / `agent.turn`。**`end_time_unix_nano` 为空 = 还开着**。结束 = 在同一行填上终点和结束时的属性 |
-| `points` | `seq`(自增) | `trace_id`、`span_id`(索引)、`work_id`(索引)、`event_name`、`time_unix_nano`、`attributes`(JSON) | 点:`column.*`、`worklet.moved`、`plan.changed`……只追加 |
+| `spans` | `span_id` | `trace_id`(索引)、`parent_span_id`、`work_id`(索引)、`worklet_id`(索引)、`user_id`、`name`、`kind`、`start_time_unix_nano`、`end_time_unix_nano`、`status_code`、`attributes`(JSON)、`links`(JSON) | 段:`work` / `worklet` / `agent.turn`。**`end_time_unix_nano` 为空 = 还开着**。结束 = 在同一行填上终点和结束时的属性 |
+| `points` | `seq`(自增) | `trace_id`、`span_id`(索引)、`work_id`(索引)、`worklet_id`、`column_number`、`user_id`、`event_name`(索引)、`time_unix_nano`、`attributes`(JSON) | 点:`column.*`、`worklet.moved`、`plan.changed`……只追加 |
 | `rounds` | `seq`(自增) | `work_id`、`worklet_id`(索引)、`round_id`、`timestamp`、`role`、`text` | agent 工作单元的 round(原来的 `rounds.jsonl`)。`agent.turn` 段通过 round id 引用它 |
 
 几条规则:
 
+- **常用的属性提成列,完整的属性另存一份。** OTel 的属性是开放的键值,每种段、每种点带的都不一样,没法全部变成固定的列;所以 `attributes` 保留完整的 OTLP `KeyValue` 列表,只用来导出和拼回 OTLP,查询不碰它。平时要筛的维度(哪个工作单元、谁、哪一列、什么事件)都提成真的列:`worklet_id`、`user_id`、`column_number`、`event_name`。以后再冒出常查的属性,就再提一列。
 - **开着的段就是一行没有终点的记录。** work-trace.md §3 为这个问题另外开了一份 `spans` doc(因为 jsonl 只能追加一整条);到了表里,「开着」只是一列为空,不用再单独存一份状态。**只追加的是 `points` 和 `rounds`;`spans` 每行最多改一次**,就是结束那次。
 - **一个 work 的轨迹** = `work_id = ?` 的段和点;**一棵树的轨迹** = 同一个 `trace_id`(work-trace.md §4)。两个都有索引。
 - **round 放在这里**,是因为它和段、点的性质一样:只追加、量大、是「经过」。放进 `works.db` 会让状态库越长越大,备份也越来越慢。
@@ -111,9 +157,9 @@ canvases
 
 以「在 列 3 打开一个终端」为例:
 
-1. 先验列在不在(读 `canvases`);不在直接 404,不建现场
+1. 先验列在不在(查 `canvas_columns`);不在直接 404,不建现场
 2. **建现场**(tmuxd);建不起来到此为止,什么都没写
-3. **`works.db` 一个事务**:`works.next_worklet + 1`,`worklets` 插一行,`canvases` 里 `c3` 的 `panels` 末尾加一格、`version + 1`
+3. **`works.db` 一个事务**:`works.next_worklet` 取号 +1;`worklets` 插一行;`canvas_panels` 插一格(`column_number = 3`,`position` = 列 3 现有格子数);`works.canvas_version + 1`
 4. **`worktrace.db`**:`spans` 插一行 `worklet` 段(开着,父是这个 work 的 work 段)
 
 两步写要注意:
@@ -124,6 +170,8 @@ canvases
 ## 7. 从上一版怎么过来
 
 **不做兼容。** 上一版的 `works/` 目录树、`memory.sqlite` 里的 `works` / `work_docs` / `work_logs` 三张表,实施时都不再读。现有实例的 work 数据不迁移,重新开始(和切换到 tmuxd 3.0 时对待 8090 实例的做法一样)。
+
+provider 要补的能力:**组合主键**(`canvas_columns`、`work_users`)和**多列索引**(`canvas_panels` 的 (`work_id`, `column_number`, `position`))。现在的 `Column(primary=True)` 只支持单列主键。外键不加,由单写者和事务保证。
 
 要删掉的东西:`FsWorkRepo`、`DbWorkRepo` 里 doc / log 的通用写法、`MEMORY_TALK_STORE` 对 work 的作用、测试里 work 场景按 fs / sqlite 双跑的那一半参数。同时要改的文档:provider.md(work 不再用文件系统族)、`structure/v5/filesystem.md`(`works/` 目录没了,换成两个 db 文件)、`structure/v5/work.md`、work-trace.md §3(落盘改成 §5 的两张表)。
 
