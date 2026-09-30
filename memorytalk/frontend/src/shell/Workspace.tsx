@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen, Bot, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink, Globe, LoaderCircle, Minimize2, Plus, Sparkles, Terminal, Wand2, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen, Bot, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink, Globe, LoaderCircle, Maximize2, Minimize2, Plus, Sparkles, Terminal, Wand2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { queryClient } from '@/lib/query';
@@ -76,7 +76,7 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
       : <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:flex-row md:items-start md:overflow-x-auto md:overflow-y-hidden" aria-label={t('work.worklets')}>
         {columns.map((column, ci) => column.collapsed
           ? <button key={column.id} type="button" className="flex shrink-0 items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground hover:bg-accent md:h-full md:w-10 md:flex-col md:justify-start md:px-0 md:py-3" aria-label={t('work.expandColumn')} title={t('work.expandColumn')} aria-expanded={false} onClick={() => toggleColumn(column)}>
-            <ChevronsRight className="size-4" /><span className="md:[writing-mode:vertical-rl]">{columnLabel(t, column)} · {column.panels.length}</span>
+            <Maximize2 className="size-3.5" /><span className="md:[writing-mode:vertical-rl]">{columnLabel(t, column)} · {column.panels.length}</span>
           </button>
           : <section key={column.id} className={cn('flex min-w-0 flex-col gap-3 md:h-full md:min-w-[28rem] md:flex-1 md:overflow-y-auto md:pr-1', columns.length > 1 && 'md:basis-0')} aria-label={columnLabel(t, column)}>
           {columns.length > 1 && <div className="flex items-center gap-2 text-xs text-muted-foreground"><ColumnName column={column} onRename={alias => renameColumn(column.id, alias)} />
