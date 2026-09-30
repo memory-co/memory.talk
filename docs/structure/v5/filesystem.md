@@ -25,11 +25,13 @@
 │       ├── work.json                 ←   目标 / 父 / 状态
 │       ├── canvas.json               ←   画布(视图);不存在 = 空画布
 │       ├── worklets.json             ←   工作单元登记(数组,现场)
+│       ├── seq.json                  ←   编号计数器:下一个工作单元号,不复用
 │       ├── users.json                ←   user:谁动过,只做可见性
 │       ├── manager.json              ←   这棵子树的变动打给谁(可选;没有 → 父 work)
 │       ├── events.jsonl              ←   work 时间线,只追加
 │       ├── inbox.jsonl               ←   收件箱:manager.json 路由过来的变动,只追加
-│       └── worklets/<worklet_id>/rounds.jsonl   ← agent 工作单元痕迹,只追加
+│       ├── worklets/<worklet_id>/rounds.jsonl   ← agent 工作单元痕迹,只追加
+│       └── subs/<child_id>/          ←   子 work,结构同上
 └── unmanaged.jsonl                   ← 没人管的变动
 ```
 
@@ -45,9 +47,9 @@
 
 ## works/(裸文件;MEMORY_TALK_STORE=fs)
 
-介质可换:`MEMORY_TALK_STORE=sqlite` 时这一半(连同 users/、auth/)全在 `memory.sqlite`(`MEMORY_TALK_SQLITE` 可改路径)的五张表里(`users` / `auth_tokens` / `works` / `work_docs` / `work_logs`),业务层不感知(见 [designs provider.md](../../designs/v5/provider.md))。
+介质可换:`MEMORY_TALK_STORE=sqlite` 时这一半(连同 users/、auth/)全在 `memory.sqlite`(`MEMORY_TALK_SQLITE` 可改路径)的五张表里(`users` / `auth_tokens` / `works` / `work_docs` / `work_logs`),业务层不感知(见 [designs provider.md](../../designs/v5/provider.md);work 这一半每样记录在两种形态下各落在哪,见 [designs work-store.md](../../designs/v5/work-store.md))。
 
-- **原子写**:`work.json` / `canvas.json` / `worklets.json` / `members.json` / `manager.json` 写临时文件后 `os.replace`。
+- **原子写**:`work.json` / `canvas.json` / `worklets.json` / `seq.json` / `users.json` / `manager.json` 写临时文件后 `os.replace`。
 - **只追加**:`events.jsonl` / `inbox.jsonl` / `rounds.jsonl`,从不改既有行。
 - **单写者、无缓存直读**:服务进程是唯一写者;每次请求直接读盘。
 - **目录就是树**:子 work 住在父目录的 `subs/<child_id>/` 下,结构和父一样;`works/` 一层只有根 work。
