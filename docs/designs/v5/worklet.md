@@ -90,6 +90,7 @@ agent 类 worklet(claude / codex / kimi)的把手多一项 `rounds`:按 cwd + �
 
 - **worklet 能不能换 URI**:shellbase 的做法是「改 URI = 销毁重建」。v5 倾向同样——worklet 的 URI 是它身份的一部分,要换就 detach 再 attach 一个新的;但「同一个 agent 工作单元换个工作目录」这种需求真出现了再议。
 - **一个 worklet 能不能被多个 panel 装**:同一个 tmux 会话在画布上开两个格子镜像,shellbase 靠完整 URI 显式做到。v5 的 panel 记 `worklet`,技术上允许两个 panel 指同一个工作单元;要不要允许,看协作(多人看同一个 agent)是不是真需求。
+  → [work-store.md §4](work-store.md)(设计中)把位置做成 `worklets` 自己的列,一个工作单元只能在一格里;真要镜像再单开表。
 - **freeze 之后能不能「解冻」**:work 从归档改回运行中(已允许),工作单元要不要跟着能重新 attach。倾向能——登记还在,reattach 会按原 URI 重建;但 agent 的会话记录已经是新的一份,round 会接着追加还是另起,要定。
 - **rounds 的同步时机**:现在是读的时候顺手同步(pull)。要不要在 worklet 活着的时候后台盯着记录文件(watch),让标注流程能实时看到新 round——这跟「逐 round 标注是在 work 运行中做还是归档后再做」绑在一起。
 - **非 tmux 的现场怎么算活着**:http 类 worklet 永远 `alive`,因为没有进程。换成 webmuxd 之后有真的浏览器实例,alive 才有意义;现在是老实报「没有把手所以无从判断」还是报 `true`,本篇先按 `true`。
