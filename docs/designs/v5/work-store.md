@@ -122,6 +122,8 @@ work 的记录不管存在哪,都只有三种形状:
 
 ## 6. 事件存在哪
 
+> [work-trace.md](work-trace.md)(设计中)会把这条 `events` 流换成 OTLP 格式的 `trace` 流,再加一份存开着的段的 `spans` doc。下面写的是现在的样子。
+
 **存在 `events` 这条流里**:local 是 `works/<…>/<work_id>/events.jsonl`,一行一条;db 是 `work_logs` 里 `key = "<work_id>/events"` 的那些行,按 `seq` 排。每条就是 `Event` 模型:
 
 ```json
