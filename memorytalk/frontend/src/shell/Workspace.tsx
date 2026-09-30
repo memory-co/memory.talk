@@ -1,8 +1,8 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useMemo, useRef, useState } from 'react';
+import { Fragment, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen, Bot, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink, Globe, LoaderCircle, Maximize2, Minimize2, Plus, Sparkles, Terminal, Wand2, X } from 'lucide-react';
+import { ArrowRight, BookOpen, Bot, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink, Globe, LoaderCircle, Maximize2, Minimize2, Move, Plus, Sparkles, Terminal, Wand2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { queryClient } from '@/lib/query';
@@ -52,9 +52,22 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
   const move = (worklet: string, dir: 'left' | 'right' | 'up' | 'down') => {
     const at = find(worklet); if (!at) return;
     const [ci, pi] = at;
-    const body = dir === 'left' || dir === 'right' ? { column: columns[Math.max(0, Math.min(columns.length - 1, ci + (dir === 'left' ? -1 : 1)))].id }
-      : { column: columns[ci].id, index: Math.max(0, pi + (dir === 'up' ? -1 : 1)) };
+    const cj = ci + (dir === 'left' ? -1 : dir === 'right' ? 1 : 0), pj = pi + (dir === 'up' ? -1 : dir === 'down' ? 1 : 0);
+    if (cj < 0 || cj >= columns.length || pj < 0 || pj >= columns[ci].panels.length) return;     // 到边了就不动
+    const body = cj !== ci ? { column: columns[cj].id } : { column: columns[ci].id, index: pj };
     op.mutate({ path: `${worklet$(worklet)}/move`, method: 'POST', body });
+  };
+  // 拖动:抓住格子标题上的移动把手拖到任一列(收起的列也行);拖的时候显示落点线。同列往下挪时,落点要扣掉自己原来占的那一格
+  const [drag, setDrag] = useState<string | null>(null);
+  const [drop, setDrop] = useState<{ column: string; index: number } | null>(null);
+  const endDrag = () => { setDrag(null); setDrop(null); };
+  const dropAt = (column: string, index: number) => { if (drop?.column !== column || drop.index !== index) setDrop({ column, index }); };
+  const slotOf = (section: HTMLElement, y: number) => { const cards = [...section.querySelectorAll<HTMLElement>(':scope > [data-panel]')]; const i = cards.findIndex(c => { const r = c.getBoundingClientRect(); return y < r.top + r.height / 2; }); return i < 0 ? cards.length : i; };
+  const dropTo = (worklet: string, target: { column: string; index: number }) => {
+    const at = find(worklet); if (!at) return;
+    const [ci, pi] = at; let index = target.index;
+    if (columns[ci].id === target.column) { if (index > pi) index -= 1; if (index === pi) return; }
+    op.mutate({ path: `${worklet$(worklet)}/move`, method: 'POST', body: { column: target.column, index } });
   };
   const addColumn = (beside: string, side: 'left' | 'right') => op.mutate({ path: '/columns', method: 'POST', body: { beside, side } });
   const removeColumn = (colId: string) => op.mutate({ path: column$(colId), method: 'DELETE' });    // 只有空列能删(服务端也拦)
@@ -73,33 +86,38 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
         <p>{ended ? t('work.endedText') : t('work.readyText')}</p>
         <div className="flex flex-wrap justify-center gap-2">{!ended && <Button onClick={() => setAdding(columns[0].id)}><Plus />{t('work.addSession')}</Button>}<Button variant="outline" onClick={onMeta}><BookOpen />{t('work.viewMeta')}</Button></div>
       </Empty></div>
-      : <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:flex-row md:items-start md:overflow-x-auto md:overflow-y-hidden" aria-label={t('work.worklets')}>
+      : <div className={cn('flex min-h-0 flex-1 flex-col gap-4 overflow-auto p-4 md:flex-row md:items-start md:overflow-x-auto md:overflow-y-hidden', drag && '[&_iframe]:pointer-events-none')} aria-label={t('work.worklets')}>
         {columns.map((column, ci) => column.collapsed
-          ? <button key={column.id} type="button" className="flex shrink-0 items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground hover:bg-accent md:h-full md:w-10 md:flex-col md:justify-start md:px-0 md:py-3" aria-label={t('work.expandColumn')} title={t('work.expandColumn')} aria-expanded={false} onClick={() => toggleColumn(column)}>
+          ? <button key={column.id} type="button" className={cn('flex shrink-0 items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-xs text-muted-foreground hover:bg-accent md:h-full md:w-10 md:flex-col md:justify-start md:px-0 md:py-3', drop?.column === column.id && 'ring-2 ring-primary')} aria-label={t('work.expandColumn')} title={t('work.expandColumn')} aria-expanded={false} onClick={() => toggleColumn(column)}
+            onDragOver={e => { if (!drag) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; dropAt(column.id, column.panels.length); }} onDragLeave={() => setDrop(null)} onDrop={e => { e.preventDefault(); if (drag) dropTo(drag, { column: column.id, index: column.panels.length }); endDrag(); }}>
             <Maximize2 className="size-3.5" /><span className="md:[writing-mode:vertical-rl]">{columnLabel(t, column)} · {column.panels.length}</span>
           </button>
-          : <section key={column.id} className={cn('flex min-w-0 flex-col gap-3 md:h-full md:min-w-[28rem] md:flex-1 md:overflow-y-auto md:pr-1', columns.length > 1 && 'md:basis-0')} aria-label={columnLabel(t, column)}>
+          : <section key={column.id} className={cn('flex min-w-0 flex-col gap-3 md:h-full md:min-w-[28rem] md:flex-1 md:overflow-y-auto md:pr-1', columns.length > 1 && 'md:basis-0')} aria-label={columnLabel(t, column)}
+            onDragOver={e => { if (!drag) return; e.preventDefault(); e.dataTransfer.dropEffect = 'move'; dropAt(column.id, slotOf(e.currentTarget, e.clientY)); }}
+            onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDrop(null); }}
+            onDrop={e => { e.preventDefault(); if (drag && drop) dropTo(drag, drop); endDrag(); }}>
           {columns.length > 1 && <div className="flex items-center gap-2 text-xs text-muted-foreground"><ColumnName column={column} onRename={alias => renameColumn(column.id, alias)} />
             <div className="ml-auto flex items-center">
               {column.panels.length === 0 && <Button variant="ghost" size="icon" className="size-7" aria-label={t('work.removeColumn')} title={t('work.removeColumn')} onClick={() => removeColumn(column.id)}><X className="size-3.5" /></Button>}
               <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs font-normal text-muted-foreground" aria-label={`${t('work.collapseColumn')} · ${column.panels.length}`} title={t('work.collapseColumn')} aria-expanded onClick={() => toggleColumn(column)}>{column.panels.length}<Minimize2 className="size-3.5" /></Button>
             </div></div>}
-          {column.panels.map((panel, pi) => { const worklet = byId.get(panel.worklet); if (!worklet) return null; const index = (worklets.data || []).findIndex(s => s.id === worklet.id) + 1; return <div key={worklet.id} className="flex shrink-0 flex-col overflow-hidden rounded-lg border bg-card">
+          {column.panels.map((panel, pi) => { const worklet = byId.get(panel.worklet); if (!worklet) return null; const index = (worklets.data || []).findIndex(s => s.id === worklet.id) + 1; return <Fragment key={worklet.id}>
+            {drop?.column === column.id && drop.index === pi && <div className="-my-1.5 h-0.5 shrink-0 rounded-full bg-primary" />}
+            <div data-panel className={cn('flex shrink-0 flex-col overflow-hidden rounded-lg border bg-card', drag === worklet.id && 'opacity-50')}>
             <div className="flex items-center gap-1 border-b bg-muted/40 px-2 py-1">
               <Button variant="ghost" size="icon" className="size-7" aria-label={panel.collapsed ? t('work.expand') : t('work.collapse')} aria-expanded={!panel.collapsed} onClick={() => toggle(worklet.id)}>{panel.collapsed ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}</Button>
               {['http', 'https'].includes(worklet.scheme) ? <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" /> : <Terminal className="size-3.5 shrink-0 text-muted-foreground" />}
               <span className="text-sm font-medium">{workletLabel(t, worklet.scheme)}</span><span className="text-xs text-muted-foreground">{index}</span>
               <span className={cn('size-1.5 shrink-0 rounded-full', worklet.alive ? 'bg-emerald-500' : 'bg-muted-foreground/40')} title={worklet.alive ? t('worklet.alive') : t('worklet.dead')} />
               <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground" title={worklet.uri}>{worklet.cwd || worklet.uri}</span>
-              <div className="flex items-center">
-                {ci > 0 && <Button variant="ghost" size="icon" className="size-7" aria-label={t('work.moveLeft')} title={t('work.moveLeft')} onClick={() => move(worklet.id, 'left')}><ArrowLeft className="size-3.5" /></Button>}
-                {ci < columns.length - 1 && <Button variant="ghost" size="icon" className="size-7" aria-label={t('work.moveRight')} title={t('work.moveRight')} onClick={() => move(worklet.id, 'right')}><ArrowRight className="size-3.5" /></Button>}
-                {pi > 0 && <Button variant="ghost" size="icon" className="size-7" aria-label={t('work.moveUp')} title={t('work.moveUp')} onClick={() => move(worklet.id, 'up')}><ArrowUp className="size-3.5" /></Button>}
-                {pi < column.panels.length - 1 && <Button variant="ghost" size="icon" className="size-7" aria-label={t('work.moveDown')} title={t('work.moveDown')} onClick={() => move(worklet.id, 'down')}><ArrowDown className="size-3.5" /></Button>}
-              </div>
+              <button type="button" draggable className="flex size-7 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing" aria-label={t('work.moveHandle')} title={t('work.moveHandle')}
+                onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', worklet.id); const card = e.currentTarget.closest('[data-panel]'); if (card) e.dataTransfer.setDragImage(card, 24, 16); setDrag(worklet.id); }}
+                onDragEnd={endDrag}
+                onKeyDown={e => { const dir = ({ ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' } as const)[e.key as 'ArrowLeft']; if (dir) { e.preventDefault(); move(worklet.id, dir); } }}><Move className="size-3.5" /></button>
             </div>
             {!panel.collapsed && <div className="flex h-[60vh] min-h-64 resize-y flex-col overflow-hidden"><PanelView work={work.data} worklet={worklet} /></div>}
-          </div>; })}
+          </div></Fragment>; })}
+          {drop?.column === column.id && drop.index >= column.panels.length && <div className="-my-1.5 h-0.5 shrink-0 rounded-full bg-primary" />}
           {!column.panels.length && <p className="rounded-lg border border-dashed px-3 py-6 text-center text-xs text-muted-foreground">{t('work.emptyColumn')}</p>}
           <div className="flex items-center gap-1">
             <Button variant="ghost" size="sm" className="text-muted-foreground" disabled={op.isPending} onClick={() => addColumn(column.id, 'left')} title={t('work.addColumnLeft')}><ChevronsLeft />{t('work.addColumnLeft')}</Button>
