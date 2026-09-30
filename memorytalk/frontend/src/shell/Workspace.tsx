@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen, Bot, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink, Globe, LoaderCircle, Plus, Sparkles, Terminal, Wand2, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, BookOpen, Bot, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink, Globe, LoaderCircle, Minimize2, Plus, Sparkles, Terminal, Wand2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { queryClient } from '@/lib/query';
@@ -82,7 +82,7 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
           {columns.length > 1 && <div className="flex items-center gap-2 text-xs text-muted-foreground"><ColumnName column={column} onRename={alias => renameColumn(column.id, alias)} />
             <div className="ml-auto flex items-center">
               {column.panels.length === 0 && <Button variant="ghost" size="icon" className="size-7" aria-label={t('work.removeColumn')} title={t('work.removeColumn')} onClick={() => removeColumn(column.id)}><X className="size-3.5" /></Button>}
-              <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs font-normal text-muted-foreground" aria-label={`${t('work.collapseColumn')} · ${column.panels.length}`} title={t('work.collapseColumn')} aria-expanded onClick={() => toggleColumn(column)}>{column.panels.length}<ChevronsLeft className="size-3.5" /></Button>
+              <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs font-normal text-muted-foreground" aria-label={`${t('work.collapseColumn')} · ${column.panels.length}`} title={t('work.collapseColumn')} aria-expanded onClick={() => toggleColumn(column)}>{column.panels.length}<Minimize2 className="size-3.5" /></Button>
             </div></div>}
           {column.panels.map((panel, pi) => { const worklet = byId.get(panel.worklet); if (!worklet) return null; const index = (worklets.data || []).findIndex(s => s.id === worklet.id) + 1; return <div key={worklet.id} className="flex shrink-0 flex-col overflow-hidden rounded-lg border bg-card">
             <div className="flex items-center gap-1 border-b bg-muted/40 px-2 py-1">
