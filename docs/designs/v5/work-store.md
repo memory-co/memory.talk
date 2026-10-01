@@ -28,7 +28,7 @@
 
 | | `works.db`(现在) | `worktrace.db`(经过) |
 |---|---|---|
-| 装什么 | work 节点、画布(列 / 格子)、登记、谁动过、manager、收件箱 | 段、点(work-trace.md)、agent 的 round |
+| 装什么 | work 节点(含当前谁在看)、画布(列 / 格子)、登记、manager、收件箱 | 段、点(work-trace.md)、agent 的 round |
 | 读写 | 读多写少,每次动作读-改-写几行 | 几乎只追加,量随时间一直涨 |
 | 体量 | 小,和 work 数、工作单元数成正比 | 大,和发生过多少事成正比;round 尤其大 |
 | 丢了会怎样 | 丢了就丢了 work | 丢了只是少了历史,work 照样能干活 |
@@ -57,16 +57,14 @@
 works ──┬──< works          (parent:子 work)
         ├──< work_columns   (这个 work 的列)
         │        └──< worklets   (column_number + position:摆在哪一列第几个)
-        ├──< work_users     (谁动过)
         └──< inbox          (收件箱;work_id 为空 = 没人管)
 ```
 
 | 表 | 一行是 | 主键 | 其余列 |
 |---|---|---|---|
-| `works` | 一个 work | `id` | `parent`(索引)、`goal`、`status`、`created_by`(索引)、`created_at`、`archived_at`、`manager`、`next_worklet`、`next_column`、`canvas_version` |
+| `works` | 一个 work | `id` | `parent`(索引)、`goal`、`status`、`created_by`(索引)、`created_at`、`archived_at`、`manager`、`viewers`、`next_worklet`、`next_column`、`canvas_version` |
 | `work_columns` | 画布上的一列 | (`work_id`, `number`) | `alias`、`collapsed`、`position` |
 | `worklets` | 一个工作单元 | `id` | `work_id`(索引)、`number`、`uri`、`scheme`、`server`、`cwd`、`created_at`、`last_attached`,**加上位置**:`column_number`、`position`、`collapsed` |
-| `work_users` | 一个人和一个 work | (`work_id`, `user`) | `first_seen`、`last_seen`、`ops` |
 | `inbox` | 一条打过来的变动 | `seq`(自增) | `work_id`(索引,空 = 没人管)、`ts`、`layer`、`path`、`subject`、`sha`、`by`、`routed_by` |
 
 各表说明:
@@ -74,7 +72,10 @@ works ──┬──< works          (parent:子 work)
 - **`works`**:树就是 `parent` 列。`manager` 是这棵子树的变动打给谁(空 = 用父 work 的)。三个计数器:`next_worklet` 是下一个工作单元编号,`next_column` 是下一列编号,两个都单调递增、不复用;`canvas_version` 是画布版本号,每个画布动作 +1。
 - **`work_columns`**:一列一行,见 §4。
 - **`worklets`**:一个工作单元一行,既是登记,也记着它摆在画布的哪里。`number` 就是 id 里 `-w<n>` 的 n,单独存一列方便排序。位置那三列见 §4。
-- **`work_users`**:只做可见性,一个人在一个 work 上一行。
+- **`works.viewers`:现在谁在看这个 work。** 一个字段,值是当前在看的人名(`["alice","bob"]`,按名字排);没人看就是空数组。只记「现在」,一个人离开,就把他从这个字段里拿掉。
+  - **怎么算在看**:前端开着这个 work 时定时发心跳(沿用现在的 touch,120 秒一个窗口)。心跳时间只放在进程内存里(work → 人 → 最后一次心跳),**不进库**;超过窗口没心跳的人,由服务定时清出 `viewers`。前端关页面时主动发一次「离开」,就不用等超时。服务重启时把所有 work 的 `viewers` 清空:重启那一刻,谁也没在看。
+  - **不再有「谁动过」的历史名单。** 以前的 `work_users`(谁动过、第一次 / 最后一次、动了几次)去掉。这个问题交给轨迹回答:每个段、每个点都带 `user_id`(§5),「谁在这个 work 上做过什么、最近一次是什么时候」就是 `worktrace.db` 里按 `work_id` 查、按 `user_id` 聚合。
+  - **为什么这里允许一个字段装一组名字。** 这是 works.db 里唯一一个装列表的字段:人数很少,整份读、整份写,平时只在显示时用到。要查「alice 现在在看哪些 work」,用 sqlite 的 `json_each` 展开就行,不用单开一张表。
 - **`inbox`**:字段就是 `InboxItem` 的字段。原来的 `unmanaged.jsonl` 就是 `work_id` 为空的那些行。它放在 `works.db` 而不是 `worktrace.db`:收件箱是别的地方打给这个 work、等着处理的消息,属于「现在」;轨迹记的是这个 work 自己做过什么。
 - **以后**:[work-trace.md §7](work-trace.md) 的计划会给 `works` 加 `plan_start` / `plan_due` 两列;依赖另开一张 `work_deps`(`work_id`, `depends_on`),主键是这两列的组合。
 
@@ -173,9 +174,9 @@ SELECT w.id FROM worklets w JOIN work_columns c
 
 **不做兼容。** 上一版的 `works/` 目录树、`memory.sqlite` 里的 `works` / `work_docs` / `work_logs` 三张表,实施时都不再读。现有实例的 work 数据不迁移,重新开始(和切换到 tmuxd 3.0 时对待 8090 实例的做法一样)。
 
-provider 要补的能力:**组合主键**(`work_columns`、`work_users`)和**多列索引**(`worklets` 的 (`work_id`, `column_number`, `position`))。现在的 `Column(primary=True)` 只支持单列主键。外键不加,由单写者和事务保证。
+provider 要补的能力:**组合主键**(`work_columns`)和**多列索引**(`worklets` 的 (`work_id`, `column_number`, `position`))。现在的 `Column(primary=True)` 只支持单列主键。外键不加,由单写者和事务保证。
 
-要删掉的东西:`FsWorkRepo`、`DbWorkRepo` 里 doc / log 的通用写法、`MEMORY_TALK_STORE` 对 work 的作用、测试里 work 场景按 fs / sqlite 双跑的那一半参数。同时要改的文档:provider.md(work 不再用文件系统族)、`structure/v5/filesystem.md`(`works/` 目录没了,换成两个 db 文件)、`structure/v5/work.md`、work-trace.md §3(落盘改成 §5 的两张表)。
+要删掉的东西:`FsWorkRepo`、`DbWorkRepo` 里 doc / log 的通用写法、`MEMORY_TALK_STORE` 对 work 的作用、测试里 work 场景按 fs / sqlite 双跑的那一半参数。同时要改的文档:user.md §3(work 上的 `users` 名单变成只记现在的 `viewers`,历史改从轨迹查;`GET /works/{id}/users` 只剩 `current`)、provider.md(work 不再用文件系统族)、`structure/v5/filesystem.md`(`works/` 目录没了,换成两个 db 文件)、`structure/v5/work.md`、work-trace.md §3(落盘改成 §5 的两张表)。
 
 ## 8. 这篇有意不定的事
 
