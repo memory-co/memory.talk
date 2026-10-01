@@ -42,18 +42,20 @@ memory.talk work set $W --status archived
 
 ```
 ~/.memory.talk/
-├── metas/     分层 git 仓库:layer/origin、layer/issue、layer/card(+ 用户层)、stack
-├── works/           work 树、画布、工作单元、收件箱、round(MEMORY_TALK_STORE=fs 时)
-└── users/           user 档案
+├── metas/           分层 git 仓库:layer/origin、layer/issue、layer/card(+ 用户层)、stack
+├── works.db         work 的现在(sqlite):works / work_columns / worklets / inbox
+├── worktrace.db     work 的经过(sqlite):spans / points / rounds
+├── users/           user 档案(MEMORY_TALK_STORE=fs 时)
+└── auth/            登录态(MEMORY_TALK_STORE=fs 时)
 ```
 
-`MEMORY_TALK_STORE=sqlite` 时 works / users 进 `memory.sqlite`;metas 永远是 git。全部环境变量见 [`docs/structure/v5/filesystem.md`](docs/structure/v5/filesystem.md)。
+work 固定是这两个 sqlite,路径可用 `MEMORY_TALK_WORKS_DB` / `MEMORY_TALK_WORKTRACE_DB` 改;`MEMORY_TALK_STORE` 只管 users / auth(`fs` 是上面的 `users/` / `auth/`,`sqlite` 进 `memory.sqlite`);metas 永远是 git。全部环境变量见 [`docs/structure/v5/filesystem.md`](docs/structure/v5/filesystem.md)。
 
 ## 开发
 
 ```bash
 pip install -e ".[dev]"
-pytest                       # 每个场景在 fs 和 sqlite 两种 store 下各跑一遍
+pytest                       # 每个场景在 fs 和 sqlite 两种 users / auth store 下各跑一遍(work 两种下都是 works.db + worktrace.db)
 cd memorytalk/frontend && npm ci && npm run dev          # 前端(Vite + React;工作台 / 工作单元 / 认知库)
 ```
 

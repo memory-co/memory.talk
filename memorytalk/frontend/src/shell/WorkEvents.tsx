@@ -1,67 +1,140 @@
-import { useQuery } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, ArrowRightLeft, CirclePlus, Columns3, History, Pencil, Snowflake, SquareArrowOutUpRight, SquareX, Trash2, type LucideIcon } from 'lucide-react';
-import { api } from '@/lib/api';
+import { useMemo, useState } from 'react';
+import { Archive, ArchiveRestore, ArrowRightLeft, Bot, CircleOff, CirclePlus, Columns3, History, MessageSquare, Pencil, SquareArrowOutUpRight, SquareX, Trash2, type LucideIcon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { localeTag, useT, type T } from '@/lib/i18n';
+import { useTrace } from '@/lib/queries';
 import { usePreferences } from '@/lib/store';
-import { columnLabel, columnNumber, workletLabel, type WorkEvent } from '@/lib/types';
+import { attrValue, columnLabel, columnNumber, workletLabel, type KeyValue, type TraceLogRecord, type TraceSpan, type WorkTrace } from '@/lib/types';
 import { Empty, ErrorState, Loading } from '@/components/Shared';
 import { cn } from '@/lib/utils';
 
-/** 右侧面板:这个 work 的时间线(GET /works/{id}/events),新的在上。画布动作带列标记 `{id, alias}`(当时的别名),每条带 `by`(docs/designs/v5/work-events.md);
- *  旧事件没有这两样就少一截。认不出的 type 原样显示。 */
+/** 右侧面板「动态」= 这个 work 轨迹的列表视图(GET /works/{id}/trace,docs/designs/v5/work-trace.md §6),新的在上。
+ *  一行是一个段的开始、一个段的结束(开着的段只有开始)或一个点;按时间排(纳秒超出 Number 的精度,用 BigInt 比),同一时刻开始 < 点 < 结束,再按接口给的先后。
+ *  写法沿用 work-events.md §7:画布动作带列标记(当时的别名,没有就「列 n」),下面一行是 `谁 · 时间`;工作单元叫什么从它的 worklet 段上取(点按 spanId 找段)。
+ *  agent 的轮次(agent.turn)默认藏起来,不然一轮两行会把别的都挤走;认不出的段 / 点原样显示名字和属性。 */
 export function WorkEvents({ id }: { id: string }) {
   const t = useT();
   const locale = usePreferences(s => s.locale);
-  const events = useQuery({ queryKey: ['events', id], queryFn: ({ signal }) => api<WorkEvent[]>(`/works/${encodeURIComponent(id)}/events`, { signal }), refetchInterval: 5_000 });
-  if (events.isPending) return <Loading />;
-  if (events.isError) return <div className="p-4"><ErrorState error={events.error} retry={() => { void events.refetch(); }} /></div>;
-  const list = events.data;
-  if (!list.length) return <div className="flex flex-1 p-4"><Empty icon={<History className="size-5" />} title={t('events.empty')} /></div>;
-  const time = (ts: string) => new Date(ts).toLocaleString(localeTag(locale), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const trace = useTrace(id);
+  const [turns, setTurns] = useState(false);
+  const timeline = useMemo(() => (trace.data ? build(trace.data) : null), [trace.data]);
+  if (trace.isPending) return <Loading />;
+  if (trace.isError) return <div className="p-4"><ErrorState error={trace.error} retry={() => { void trace.refetch(); }} /></div>;
+  if (!timeline) return null;
+  const turnCount = timeline.spans.filter(s => s.name === TURN).length;
+  const rows = turns ? timeline.rows : timeline.rows.filter(r => r.span?.name !== TURN);
+  const toggle = turnCount > 0 && <Button variant="ghost" size="sm" className="mb-3 h-7 gap-1.5 px-2 text-xs font-normal text-muted-foreground" aria-pressed={turns} onClick={() => setTurns(v => !v)}>
+    <Bot className="size-3.5" />{turns ? t('events.hideTurns') : t('events.showTurns', { n: turnCount })}
+  </Button>;
+  if (!rows.length) return <div className="flex flex-1 flex-col p-4">{toggle}<Empty icon={<History className="size-5" />} title={t('events.empty')} /></div>;
+  const time = (date: Date) => date.toLocaleString(localeTag(locale), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   return <div className="min-h-0 flex-1 overflow-auto p-4">
-    <ol className="ml-1.5 space-y-4 border-l pl-5">{list.map((e, i) => ({ e, i })).reverse().map(({ e, i }) => {
-      const { icon: Icon, title, detail } = describe(t, e, list.slice(0, i));
-      return <li key={i} className="relative">
+    {toggle}
+    <ol className="ml-1.5 space-y-4 border-l pl-5">{rows.map(row => {
+      const { icon: Icon, title, detail, mono, by } = describe(t, row, timeline);
+      const date = new Date(Number(row.at / 1000000n));
+      return <li key={row.key} className="relative">
         <span className="absolute -left-[31px] top-0 flex size-5 items-center justify-center rounded-full border bg-background text-muted-foreground"><Icon className="size-3" /></span>
         <p className="text-sm font-medium">{title.replace(/\s*(「[^」]*」)\s*/g, '$1')}</p>
-        {detail && <p className={cn('mt-0.5 break-all text-xs text-muted-foreground', e.type.startsWith('worklet.') && 'font-mono')}>{detail}</p>}
-        <p className="mt-1 text-xs text-muted-foreground">{typeof e.data.by === 'string' && e.data.by && <>{e.data.by} · </>}<time dateTime={e.ts}>{time(e.ts)}</time></p>
+        {detail && <p className={cn('mt-0.5 break-all text-xs text-muted-foreground', mono && 'font-mono')}>{detail}</p>}
+        <p className="mt-1 text-xs text-muted-foreground">{by && <>{by} · </>}<time dateTime={date.toISOString()}>{time(date)}</time></p>
       </li>;
     })}</ol>
   </div>;
 }
 
-const statusName = (t: T, s: unknown) => (s === 'running' || s === 'archived' ? t(`status.${s}`) : String(s));
-const scheme = (uri: unknown) => String(uri || '').split(':')[0];
-type ColumnMark = { id: string; alias?: string };
-const isColumn = (c: unknown): c is ColumnMark => !!c && typeof c === 'object' && typeof (c as ColumnMark).id === 'string';
-const aliasOf = (t: T, a: unknown) => (typeof a === 'string' && a ? t('events.alias', { alias: a }) : '');
+const TURN = 'agent.turn';
+type Edge = 'start' | 'point' | 'end';
+const EDGE_ORDER: Record<Edge, number> = { start: 0, point: 1, end: 2 };
+/** 一行:段的开始 / 结束带着那个段,点带着那条 log record;seq 是它在接口里的先后(段按开始时间,点按写入顺序)。 */
+interface Row { at: bigint; edge: Edge; seq: number; key: string; span?: TraceSpan; point?: TraceLogRecord }
+interface Timeline { rows: Row[]; spans: TraceSpan[]; byId: Map<string, TraceSpan>; uris: Map<string, string> }
 
-function describe(t: T, e: WorkEvent, before: WorkEvent[]): { icon: LucideIcon; title: string; detail?: string } {
-  const d = e.data;
-  const col = (c: unknown) => (isColumn(c) ? (c.alias ? t('events.alias', { alias: c.alias }) : columnLabel(t, c)) : '');   // 有别名就用(当时的)别名,没有就「列 n」
-  // 工作单元叫什么:事件里有 uri 就用,没有(旧的关闭 / 挪动事件)就往前找最近一次打开它的事件
-  const uriOf = (): string => (typeof d.uri === 'string' ? d.uri : String([...before].reverse().find(x => x.type === 'worklet.attached' && x.data.worklet === d.worklet)?.data.uri ?? ''));
-  const name = () => { const uri = uriOf(); return uri ? workletLabel(t, scheme(uri)) : String(d.worklet ?? ''); };
-  const at = (key: 'events.attachedIn' | 'events.detachedIn', plain: 'events.attached' | 'events.detached') => (isColumn(d.column) ? t(key, { name: name(), column: col(d.column) }) : t(plain, { name: name() }));
-  switch (e.type) {
-    case 'created': return { icon: CirclePlus, title: t('events.created'), detail: String(d.goal ?? '') };
-    case 'status': return { icon: d.to === 'archived' ? Archive : ArchiveRestore, title: t('events.status', { from: statusName(t, d.from), to: statusName(t, d.to) }) };
-    case 'frozen': return { icon: Snowflake, title: t('events.frozen') };
-    case 'column.added': return { icon: Columns3, title: t('events.columnAdded', { column: col(d.column) }) };
-    case 'column.renamed': {
-      const number = isColumn(d.column) ? columnNumber(t, d.column) : '';
-      const to = isColumn(d.column) ? d.column.alias : '';
-      return { icon: Pencil, title: to ? t('events.columnRenamed', { column: number, alias: aliasOf(t, to) }) : t('events.columnUnnamed', { column: number }), detail: d.from ? t('events.columnWas', { alias: aliasOf(t, d.from) }) : undefined };
+const nanos = (value: string | undefined) => { try { return BigInt(value || 0); } catch { return 0n; } };
+
+function build(trace: WorkTrace): Timeline {
+  const spans = (trace.traces.resourceSpans ?? []).flatMap(r => r.scopeSpans ?? []).flatMap(s => s.spans ?? []);
+  const points = (trace.logs.resourceLogs ?? []).flatMap(r => r.scopeLogs ?? []).flatMap(s => s.logRecords ?? []);
+  const rows: Row[] = [];
+  spans.forEach((span, seq) => {
+    rows.push({ at: nanos(span.startTimeUnixNano), edge: 'start', seq, key: `${span.spanId}:start`, span });
+    if (span.endTimeUnixNano) rows.push({ at: nanos(span.endTimeUnixNano), edge: 'end', seq, key: `${span.spanId}:end`, span });
+  });
+  points.forEach((point, seq) => rows.push({ at: nanos(point.timeUnixNano), edge: 'point', seq, key: `${point.spanId}:${point.timeUnixNano}:${seq}`, point }));
+  rows.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : EDGE_ORDER[a.edge] - EDGE_ORDER[b.edge] || a.seq - b.seq));
+  rows.reverse();                                                     // 新的在上
+  const uris = new Map<string, string>();                             // worklet id → uri(agent 轮次按 id 找它的工作单元)
+  for (const span of spans) if (span.name === 'worklet') { const w = text(span.attributes, 'memorytalk.worklet.id'), uri = text(span.attributes, 'memorytalk.worklet.uri'); if (w && uri) uris.set(w, uri); }
+  return { rows, spans, byId: new Map(spans.map(s => [s.spanId, s])), uris };
+}
+
+const text = (attributes: KeyValue[] | undefined, key: string) => { const v = attrValue(attributes, key); return v === undefined ? '' : String(v); };
+const scheme = (uri: string) => uri.split(':')[0];
+type ColumnMark = { id: string; alias: string };
+/** 列标记是平的两个属性:`<prefix>column.id`(`c3`)和 `<prefix>column.alias`(当时的别名)。 */
+const columnOf = (attributes: KeyValue[] | undefined, prefix = 'memorytalk.'): ColumnMark | null => {
+  const id = text(attributes, `${prefix}column.id`);
+  return id ? { id, alias: text(attributes, `${prefix}column.alias`) } : null;
+};
+const aliasOf = (t: T, a: string) => (a ? t('events.alias', { alias: a }) : '');
+const raw = (attributes: KeyValue[] | undefined) => (attributes ?? []).filter(a => a.key !== 'user.id').map(a => `${a.key}=${String(attrValue(attributes, a.key) ?? '')}`).join(', ') || undefined;
+
+interface Described { icon: LucideIcon; title: string; detail?: string; mono?: boolean; by?: string }
+
+function describe(t: T, row: Row, { byId, uris }: Timeline): Described {
+  const col = (c: ColumnMark | null) => (c ? (c.alias ? t('events.alias', { alias: c.alias }) : columnLabel(t, c)) : '');   // 有别名就用(当时的)别名,没有就「列 n」
+  // 工作单元叫什么:worklet 段上有 uri;挪动的点挂在 worklet 段上(spanId),agent 轮次的父段是 worklet 段,再不行按 worklet id 找
+  const uriOf = (attributes: KeyValue[] | undefined, owner?: TraceSpan) => text(attributes, 'memorytalk.worklet.uri') || text(owner?.attributes, 'memorytalk.worklet.uri')
+    || uris.get(text(attributes, 'memorytalk.worklet.id') || text(owner?.attributes, 'memorytalk.worklet.id')) || '';
+  const nameOf = (uri: string, attributes: KeyValue[] | undefined) => (uri ? workletLabel(t, scheme(uri)) : text(attributes, 'memorytalk.worklet.id'));
+  if (row.point) {
+    const p = row.point, a = p.attributes, by = text(a, 'user.id') || undefined;
+    switch (p.eventName) {
+      case 'column.added': return { icon: Columns3, title: t('events.columnAdded', { column: col(columnOf(a)) }), by };
+      case 'column.removed': return { icon: Trash2, title: t('events.columnRemoved', { column: col(columnOf(a)) }), by };
+      case 'column.renamed': {
+        const c = columnOf(a), number = c ? columnNumber(t, c) : '', from = text(a, 'memorytalk.from');
+        return { icon: Pencil, title: c?.alias ? t('events.columnRenamed', { column: number, alias: aliasOf(t, c.alias) }) : t('events.columnUnnamed', { column: number }), detail: from ? t('events.was', { alias: aliasOf(t, from) }) : undefined, by };
+      }
+      case 'worklet.moved': {
+        const uri = uriOf(a, p.spanId ? byId.get(p.spanId) : undefined), name = nameOf(uri, a);
+        const from = columnOf(a, 'memorytalk.from.'), to = columnOf(a);
+        const title = from && to && from.id === to.id ? t('events.reordered', { name, column: col(to), n: Number(attrValue(a, 'memorytalk.index') ?? 0) + 1 }) : t('events.moved', { name, from: col(from), to: col(to) });
+        return { icon: ArrowRightLeft, title, detail: uri || undefined, mono: true, by };
+      }
+      case 'worklet.closed': {                                        // 关的时候已经没有开着的段了(现场没了 / 归档过),段不动,单记一个点
+        const uri = uriOf(a, p.spanId ? byId.get(p.spanId) : undefined), name = nameOf(uri, a), c = columnOf(a);
+        return { icon: SquareX, title: c ? t('events.detachedIn', { name, column: col(c) }) : t('events.detached', { name }), detail: uri || undefined, mono: true, by };
+      }
+      case 'work.renamed': {
+        const from = text(a, 'memorytalk.from');
+        return { icon: Pencil, title: t('events.workRenamed', { goal: aliasOf(t, text(a, 'memorytalk.work.goal')) }), detail: from ? t('events.was', { alias: aliasOf(t, from) }) : undefined, by };
+      }
+      default: return { icon: History, title: p.eventName, detail: raw(a), by };
     }
-    case 'column.removed': return { icon: Trash2, title: t('events.columnRemoved', { column: col(d.column) }) };
-    case 'worklet.attached': return { icon: SquareArrowOutUpRight, title: at('events.attachedIn', 'events.attached'), detail: uriOf() };
-    case 'worklet.detached': return { icon: SquareX, title: at('events.detachedIn', 'events.detached'), detail: uriOf() || undefined };
-    case 'worklet.moved': {
-      const from = d.from as { column?: unknown } | undefined, to = d.to as { column?: unknown; index?: number } | undefined;
-      const same = isColumn(from?.column) && isColumn(to?.column) && from.column.id === to.column.id;
-      return { icon: ArrowRightLeft, title: same ? t('events.reordered', { name: name(), column: col(to?.column), n: (to?.index ?? 0) + 1 }) : t('events.moved', { name: name(), from: col(from?.column), to: col(to?.column) }), detail: uriOf() || undefined };
+  }
+  const span = row.span!, a = span.attributes, end = row.edge === 'end';
+  const by = (end ? text(a, 'memorytalk.end.user.id') || text(a, 'user.id') : text(a, 'user.id')) || undefined;   // 关的人和开的人不同才另记 end.user.id
+  const reason = text(a, 'memorytalk.end.reason');
+  switch (span.name) {
+    case 'work':
+      if (end) return { icon: Archive, title: t('events.archived'), by };
+      return attrValue(a, 'memorytalk.work.reopened') === true || span.links?.length
+        ? { icon: ArchiveRestore, title: t('events.reopened'), by }
+        : { icon: CirclePlus, title: t('events.created'), detail: text(a, 'memorytalk.work.goal') || undefined, by };
+    case 'worklet': {
+      const uri = uriOf(a), name = nameOf(uri, a), detail = uri || undefined;
+      if (!end) { const c = columnOf(a); return { icon: SquareArrowOutUpRight, title: c ? t('events.attachedIn', { name, column: col(c) }) : t('events.attached', { name }), detail, mono: true, by }; }
+      if (reason === 'gone') return { icon: CircleOff, title: t('events.gone', { name }), detail, mono: true };   // 现场自己没了,不算谁关的
+      if (reason === 'archived') return { icon: SquareX, title: t('events.closedOnArchive', { name }), detail, mono: true, by };
+      const c = columnOf(a, 'memorytalk.end.');                       // 关的时候在哪一列(开的时候那列记在 memorytalk.column.*)
+      return { icon: SquareX, title: c ? t('events.detachedIn', { name, column: col(c) }) : t('events.detached', { name }), detail, mono: true, by };
     }
-    default: return { icon: History, title: e.type, detail: Object.keys(d).length ? JSON.stringify(d) : undefined };
+    case TURN: {
+      const uri = uriOf(a, span.parentSpanId ? byId.get(span.parentSpanId) : undefined), name = nameOf(uri, a);
+      return end ? { icon: Bot, title: t('events.turnEnded', { name, n: Number(attrValue(a, 'memorytalk.round.count') ?? 0) }) }
+        : { icon: MessageSquare, title: t('events.turnStarted', { name }) };    // 轮次不记是谁(user.id 为空)
+    }
+    default: return { icon: History, title: t(end ? 'events.ended' : 'events.started', { name: span.name }), detail: raw(a), by };
   }
 }

@@ -32,16 +32,16 @@ user 是**注册的**顶层对象:有自己的存储(fs `users/<name>.json` / db
 
 | 派生字段 | 说明 |
 |---|---|
-| `works_created` / `works_touched` | 建了几个 / 动过几个 work |
+| `works_created` / `works_touched` | 建了几个(`created_by`)/ 动过几个 work(轨迹里开过段、结束过段、打过点;读和心跳不算) |
 | `commits` | metas 里以它为 author 的提交数(stack 的 first-parent) |
-| `active_works` | 最近 120 秒内动过的 work(和 work 的 users `current` 同一口径) |
-| `last_seen` | 三处里最近的一次;从没动过 → 空 |
+| `active_works` | 现在在看的 work(`works.viewers` 里有他,和 work 的 users `current` 同一口径),按 work id 排 |
+| `last_seen` | 建 work、轨迹里最后一次出现、metas 提交三处里最近的一次,UTC 到秒(`…Z`);从没动过 → 空 |
 
-统计不落盘,读时从 work 和 metas 现算。
+统计不落盘,读时从 works.db、worktrace.db 和 metas 现算。
 
 ## GET /api/users/{name}
 
-档案 + 统计 + `works_created_ids` / `works_touched_ids` / `recent_commits`(最近 20 条,`{sha, date, subject}`)。不存在 → 404。
+档案 + 统计 + `works_created_ids` / `works_touched_ids`(按 work id 排)/ `recent_commits`(最近 20 条,`{sha, date, subject}`)。不存在 → 404。
 
 ## PUT /api/users/{name}
 

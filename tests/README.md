@@ -11,9 +11,11 @@ pytest tests/metas/layer_guard        # 单个场景
 
 | fixture | 给什么 |
 |---|---|
-| `home` | 临时 `MEMORY_TALK_HOME` / workspace / 各平台会话记录根 / 独立 tmux socket;**按 `fs` 和 `sqlite` 两种 store 各跑一遍**(参数化) |
+| `home` | 临时 `MEMORY_TALK_HOME` / workspace / 各平台会话记录根 / 独立 tmux socket;**按 `fs` 和 `sqlite` 两种 store 各跑一遍**(参数化;这个开关只管 users / auth,work 固定是 `<home>/works.db` + `<home>/worktrace.db`,`MEMORY_TALK_WORKS_DB` / `MEMORY_TALK_WORKTRACE_DB` / `MEMORY_TALK_SQLITE` 都清掉,不会写到真库里) |
 | `client` | 直连 ASGI 的 `TestClient`;已 setup 出 `admin`(**默认请求头就是 admin 的 token**),并建好 `alice` / `bob` / `carol`;`client.tokens` 是各人的 token;`.json()` 解掉响应信封(成功给 `data`,出错给整个信封) |
-| `svc` | `client.app.state`:`metas` / `works` / `users` / `work_servers` / `store`,给要直接碰服务层的场景 |
+| `svc` | `client.app.state`:`metas` / `works` / `users` / `work_servers` / `store`(`store.work_repo` / `store.trace_repo` 是 work 的两个库),给要直接碰服务层的场景 |
 | `H(user)` | 以某个人的身份请求:返回带他 `Authorization: Bearer` 的 headers;没登录过的注册用户会自动设密码登录一次,不存在的名字给一个无效 token(401) |
 
 需要 tmux 的场景标了 `needs_tmux`,机器上没有就跳过。
+
+`tests/_util.py`:`trace(client, work_id, subtree=False)` 把 `GET /works/{id}/trace` 的 OTLP/JSON 拍平成(段, 点)两张表,属性展开成键、`intValue` 解回 int。

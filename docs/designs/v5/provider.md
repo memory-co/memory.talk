@@ -1,6 +1,6 @@
 # provider —— 存储介质的两族基类:文件系统型、数据库型(v5 设计)
 
-> **状态:框架稿,未实施。** 本篇立 **provider** 这层抽象:它是**介质原语**,和业务无关。两族、两个基类——**文件系统型**(本地文件系统、OSS、S3……)和**数据库型**(SQLite、MySQL、PostgreSQL……)。具体介质各自实现自己那一族的基类;上层业务(work / user 的记录)按族写一份仓储,用 provider 的原语落地。provider 里**没有** work、user、document 这类词——那是业务,和底层无关。总定位见 [README.md](README.md)。
+> **状态:框架稿,部分实施。** 已有的实现只有 `LocalFS`(文件系统族)和 `SQLite`(数据库族),代码在 `memorytalk/backend/providers/`;OSS / S3 / MySQL / PostgreSQL 还没写,`MEMORY_TALK_STORE` 只认 `fs` / `sqlite`。work 只用数据库族(两个 sqlite,[work-store.md](work-store.md)),users / auth 两族都有。本篇立 **provider** 这层抽象:它是**介质原语**,和业务无关。两族、两个基类——**文件系统型**(本地文件系统、OSS、S3……)和**数据库型**(SQLite、MySQL、PostgreSQL……)。具体介质各自实现自己那一族的基类;上层业务(work / user 的记录)按族写一份仓储,用 provider 的原语落地。provider 里**没有** work、user、document 这类词——那是业务,和底层无关。总定位见 [README.md](README.md)。
 
 相关:
 - v5 metas store(认知层的介质就是 git,不在本篇范围): [metas/store.md](metas/store.md)
@@ -12,7 +12,7 @@
 
 ```
 业务层     WorkService / user 那套 / manager 投递          ← 只认业务仓储的接口,不知道介质
-仓储层     WorkRepo(fs 版)   WorkRepo(db 版)               ← 业务概念在这里:work.json、rounds.jsonl、works 表
+仓储层     UserRepo(fs 版 / db 版)   WorkRepo / TraceRepo(只有 db 版)  ← 业务概念在这里:users/<name>.json、works 表、spans 表
 provider   FileSystemProvider 基类   DatabaseProvider 基类  ← 介质原语:路径 + 字节 / 表 + 链式查询(方言在里面)
 介质       LocalFS / OSS / S3        SQLite / MySQL / PostgreSQL
 ```
@@ -45,7 +45,7 @@ class FileSystemProvider:
 
 | 实现 | `write` | `append` | `local_path` | 备注 |
 |---|---|---|---|---|
-| **LocalFS**(默认) | 临时文件 + rename | `open(a)` | 有 | 今天 `~/.memory.talk/works/` 的那套纪律就是它 |
+| **LocalFS**(默认) | 临时文件 + rename | `open(a)` | 有 | `MEMORY_TALK_STORE=fs` 时 `users/`、`auth/tokens/` 用的就是它 |
 | **S3 / OSS** | PutObject(天然整体替换) | **对象存储没有原生 append**:实现上要么读回 + 拼接 + 写回(小文件可以),要么一行一个对象再按前缀 list——由实现选,基类只要求语义 | 没有 | 适合把 rounds 这类只增的痕迹和 blob 放远端 |
 
 `local_path` 是这一族里唯一的能力差异:agent 的把手、attach 脚本、人 `cat` 需要一个本机路径;远端对象存储给不了。仓储层要用它时先问一句,没有就退回 `read`。
@@ -59,11 +59,13 @@ class FileSystemProvider:
 ```python
 class DatabaseProvider:
     # 表:仓储层用列声明表,provider 负责建 / 升级(幂等)
-    def table(self, name: str, *columns: Column) -> Table          # Column(name, type, primary=…, index=…, nullable=…)
+    def table(self, name: str, *columns: Column,                   # Column(name, type, primary=…, index=…, nullable=…)
+              primary_key: tuple[str, ...] = (),                   # 组合主键(这几列强制 NOT NULL);单列主键仍用 Column(primary=True)
+              indexes: list[tuple[str, ...]] = ()) -> Table       # 多列索引;单列索引仍用 Column(index=True)
     # 查询构造:链式,最后 .all() / .one() / .run() 才落地成方言 SQL 执行
-    def select(self, table: Table) -> Select      # .where(col == v, col.in_(…), …).order_by(col.desc()).limit(n).offset(m).all() / .one()
+    def select(self, table: Table) -> Select      # .where(col == v, col.in_(…), col.is_null() / .is_not_null(), …).order_by(a.asc(), b.desc()).limit(n).offset(m).all() / .one()
     def insert(self, table: Table) -> Insert      # .values(**row).run() → 主键
-    def update(self, table: Table) -> Update      # .where(…).set(**changes).run() → 受影响行数
+    def update(self, table: Table) -> Update      # .where(…).set(**changes).run() → 受影响行数;set(pos=t.c.pos + 1) = 原地加减
     def delete(self, table: Table) -> Delete      # .where(…).run()
     def transaction(self) -> ContextManager       # 一组操作要么全成要么全不成
 ```
@@ -84,7 +86,8 @@ db.update(works).where(works.c.id == wid, works.c.version == expect).set(status=
 
 要点:
 
-- **列类型是一小组抽象类型**(`str` / `int` / `bool` / `float` / `datetime` / `JSON` / `text`),每个实现映射成自己的原生类型;仓储层不见 `VARCHAR(255)` 这种东西。
+- **列类型是一小组抽象类型**(`str` / `int` / `bool` / `float` / `datetime` / `JSON` / `text`),每个实现映射成自己的原生类型,读回来还是那个 Python 类型(sqlite 里 bool 存成 0 / 1,读回 `True` / `False`);仓储层不见 `VARCHAR(255)` 这种东西。
+- **组合主键和多列索引在表上声明**(`primary_key=` / `indexes=`):work 的 `work_columns` 主键是 (`work_id`, `number`),`worklets` 有 (`work_id`, `column_number`, `position`) 的索引([work-store.md §7](work-store.md))。只做普通索引,不做 UNIQUE——要「同一列里位置不重复」由仓储在一个事务里挪位置来守,sqlite 在 `position = position + 1` 时逐行查重会误报。
 - **条件、排序、分页都是构造出来的对象**,不是拼字符串——所以没有注入问题,也没有方言问题。
 - **不做关系映射**(没有对象图、没有懒加载):它是查询构造器 + 表定义,够仓储层用;真要 ORM 的对象那一半,仓储层自己在上面包。
 - **底下用什么实现构造器**是实现细节:自己写一层薄的,或者包 SQLAlchemy Core——都行,基类的面不变。
@@ -93,17 +96,21 @@ db.update(works).where(works.c.id == wid, works.c.version == expect).set(status=
 
 ## 4. 仓储层:业务概念住在这里,按族各写一份
 
-work / user 的记录(work 节点、画布、工作单元登记、谁动过、事件、收件箱、round;user 的档案)是**业务**。业务层需要的操作定成一个接口——它长什么样是业务层的事,provider 不管;然后**按族各实现一份**:
+> **work 已经只留 db 版**([work-store.md](work-store.md)):`WorkRepo`(works.db:节点、画布的列、工作单元登记、收件箱)+ `TraceRepo`(worktrace.db:段、点、round),各用一个 `SQLite` provider,不看 `MEMORY_TALK_STORE`。现在按族各一份实现的只剩 user / auth(`UserRepo` / `TokenRepo`)。
+
+work / user 的记录(work 节点、画布、工作单元登记、收件箱、轨迹、round;user 的档案、登录态)是**业务**。业务层需要的操作定成一个接口——它长什么样是业务层的事,provider 不管;然后**按族各实现一份**(work 那几行只有 db 版):
 
 | | fs 版仓储(用 `FileSystemProvider`) | db 版仓储(用 `DatabaseProvider`) |
 |---|---|---|
-| work 节点 | `works/<id>/work.json`,`read` / `write` | `works` 表,一行 |
 | user 档案 | `users/<name>.json` | `users` 表,一行 |
-| 画布 | `works/<id>/canvas.json`,版本号在文件里 | `canvases` 表,版本列 |
-| 工作单元登记 / 谁动过 / manager | 各一个 JSON | 各一张表 |
-| 事件 / 收件箱 / round | JSONL,`append` / `read` | `events` / `inbox` / `rounds` 表,自增 `seq` |
-| 「按父列子」「按 created_by 列」 | `list` 前缀 + 读每个 `work.json` 在内存里过滤 | `select(works).where(works.c.parent == pid)`,走索引 |
-| 把路径交给外部进程(agent 读 rounds) | `local_path`(LocalFS 有;S3 没有 → 退回 `read`) | 没有路径;把手改成通过仓储读 |
+| 登录态(token 登记) | `auth/tokens/<sha256>.json` | `auth_tokens` 表,一行 |
+| work 节点 / manager / 谁在看 / 计数器 | —(上一版是 `works/<id>/work.json` 等文件,已删) | `works` 表,一行 |
+| 画布 | —(上一版是 `canvas.json`) | `work_columns` 表 + `worklets` 的位置列,版本在 `works.canvas_version` |
+| 工作单元登记 | —(上一版是 `worklets.json`) | `worklets` 表,一行 |
+| 收件箱 | —(上一版是 JSONL) | `inbox` 表,自增 `seq` |
+| 轨迹 / round | —(上一版是 `events` / `rounds` 的 JSONL) | worktrace.db 的 `spans` / `points` / `rounds` 表 |
+| 「按父列子」「按 created_by 列」 | —(上一版是 `list` 前缀 + 读每个 `work.json` 在内存里过滤) | `select(works).where(works.c.parent == pid)`,走索引 |
+| 把路径交给外部进程(agent 读 rounds) | `local_path`(LocalFS 有;S3 没有 → 退回 `read`) | 没有路径;把手改成通过仓储读(现在 round 就是这样:从平台记录文件读进 `rounds` 表,接口从表里读) |
 
 两点要说清:
 
@@ -116,14 +123,14 @@ work / user 的记录(work 节点、画布、工作单元登记、谁动过、�
 
 ```
 MEMORY_TALK_STORE=fs            (默认)  → LocalFS,根在 MEMORY_TALK_HOME
-MEMORY_TALK_STORE=s3   + bucket / 凭证  → S3
-MEMORY_TALK_STORE=sqlite + 文件路径     → SQLite
-MEMORY_TALK_STORE=mysql  + DSN          → MySQL
+MEMORY_TALK_STORE=s3   + bucket / 凭证  → S3(还没写)
+MEMORY_TALK_STORE=sqlite + 文件路径     → SQLite(路径 MEMORY_TALK_SQLITE,默认 <home>/memory.sqlite)
+MEMORY_TALK_STORE=mysql  + DSN          → MySQL(还没写)
 ```
 
-启动时按配置装配:选族 → 选实现 → 建对应的仓储 → 交给业务层。业务层拿到的是仓储接口,不知道底下是文件还是表。
+启动时按配置装配:选族 → 选实现 → 建对应的仓储 → 交给业务层。业务层拿到的是仓储接口,不知道底下是文件还是表。**这个开关现在只管 users / auth**;work 固定是两个 sqlite(`MEMORY_TALK_WORKS_DB` / `MEMORY_TALK_WORKTRACE_DB`,默认 `<home>/works.db` / `<home>/worktrace.db`)。
 
-**混搭**:某些流可以指定另一个 provider——典型是 rounds:主存储用 MySQL,rounds 仍用 LocalFS(大、只增、要给 agent 一个路径)。这是装配时的事,仓储层收到两个 provider,业务层仍只看到一份接口。
+**混搭**:某些流可以指定另一个 provider——典型是 rounds:主存储用 MySQL,rounds 仍用 LocalFS(大、只增、要给 agent 一个路径)。这是装配时的事,仓储层收到两个 provider,业务层仍只看到一份接口。(work 现在是另一种拆法:「现在」和「经过」各一个 sqlite,round 跟着轨迹进 `worktrace.db`,见 [work-store.md §1](work-store.md)。)
 
 ---
 

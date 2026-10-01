@@ -33,20 +33,26 @@ def test_get_and_patch_goal(client):
     assert client.get("/api/works/work_nope").status_code == 404
 
 
-def test_fs_layout_mirrors_the_tree(client, home):
-    """MEMORY_TALK_STORE=fs 时,子 work 住在父目录的 subs/ 下;sqlite 时不看磁盘。"""
-    import os
-    from pathlib import Path
-    if os.environ["MEMORY_TALK_STORE"] != "fs":
-        return
+def test_work_lives_in_two_sqlite_files_under_home(client, home):
+    """不管 MEMORY_TALK_STORE 是什么,work 只在 <home>/works.db(现在)和 <home>/worktrace.db(经过)里;没有 works/ 目录树。"""
     root = client.post("/api/works", json={"goal": "根"}).json()
     child = client.post("/api/works", json={"goal": "子", "parent": root["id"]}).json()
-    grand = client.post("/api/works", json={"goal": "孙", "parent": child["id"]}).json()
-    base = Path(os.environ["MEMORY_TALK_HOME"]) / "works"
-    assert (base / root["id"] / "work.json").is_file()
-    assert (base / root["id"] / "subs" / child["id"] / "work.json").is_file()
-    assert (base / root["id"] / "subs" / child["id"] / "subs" / grand["id"] / "work.json").is_file()
-    assert not (base / child["id"]).exists()
-    client.post(f"/api/works/{grand['id']}/worklets", json={"uri": "https://example.com"})
-    assert (base / root["id"] / "subs" / child["id"] / "subs" / grand["id"] / "worklets.json").is_file()
+    base = home / "home"
+    assert (base / "works.db").is_file() and (base / "worktrace.db").is_file()
+    assert not (base / "works").exists() and not (base / "unmanaged.jsonl").exists()
+    info = client.get("/api/system/info").json()
+    assert (info["works_db"], info["worktrace_db"]) == (str(base / "works.db"), str(base / "worktrace.db"))
     assert [w["goal"] for w in client.get("/api/works", params={"root": root["id"]}).json()[0]["children"]] == ["子"]
+    assert child["parent"] == root["id"]
+
+
+def test_db_paths_can_be_moved_by_env(home, monkeypatch):
+    from fastapi.testclient import TestClient
+    from memorytalk.backend.config import load_config, load_runtime_config
+    from memorytalk.backend.main import create_app
+    monkeypatch.setenv("MEMORY_TALK_WORKS_DB", str(home / "elsewhere" / "w.db"))
+    monkeypatch.setenv("MEMORY_TALK_WORKTRACE_DB", str(home / "big-disk" / "t.db"))
+    with TestClient(create_app(load_config(), load_runtime_config())):
+        pass
+    assert (home / "elsewhere" / "w.db").is_file() and (home / "big-disk" / "t.db").is_file()
+    assert not (home / "home" / "works.db").exists()

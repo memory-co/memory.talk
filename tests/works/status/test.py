@@ -24,14 +24,6 @@ def test_old_statuses_are_rejected_on_write(client):
     assert client.patch(f"/api/works/{w['id']}", json={"status": "done"}).status_code == 422
 
 
-def test_legacy_stored_statuses_read_as_two_states():
-    from memorytalk.backend.models.work import Work
-    base = {"id": "w", "goal": "g", "created_at": "t"}
-    assert Work(**base, status="todo").status == Work(**base, status="doing").status == "running"
-    old = Work(**base, status="abandoned", done_at="t2")
-    assert old.status == "archived" and old.archived_at == "t2"
-
-
 def test_archived_work_rejects_new_worklets(client):
     w = client.post("/api/works", json={"goal": "x"}).json()
     client.patch(f"/api/works/{w['id']}", json={"status": "archived"})

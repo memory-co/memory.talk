@@ -1,4 +1,5 @@
-"""运行配置:全部来自环境变量,没有配置文件。存储介质由 MEMORY_TALK_STORE 选(providers)。"""
+"""运行配置:全部来自环境变量,没有配置文件。work 固定存两个 sqlite(works.db / worktrace.db,docs/designs/v5/work-store.md);
+users / auth 的存储介质由 MEMORY_TALK_STORE 选(providers)。"""
 from __future__ import annotations
 
 import os
@@ -11,6 +12,8 @@ class Config:
     home: Path                 # ~/.memory.talk
     git_author_name: str
     git_author_email: str
+    works_db: Path             # work 的现在:节点、画布、登记、收件箱(MEMORY_TALK_WORKS_DB,默认 <home>/works.db)
+    worktrace_db: Path         # work 的经过:段、点、round(MEMORY_TALK_WORKTRACE_DB,默认 <home>/worktrace.db)
 
     @property
     def metas_dir(self) -> Path:   # 分层 git 仓库(metas)
@@ -28,6 +31,8 @@ def load_config() -> Config:
         home=home,
         git_author_name=os.environ.get("MEMORY_TALK_AUTHOR", "memory.talk"),
         git_author_email=os.environ.get("MEMORY_TALK_EMAIL", "memory.talk@localhost"),
+        works_db=Path(os.environ.get("MEMORY_TALK_WORKS_DB", str(home / "works.db"))).expanduser(),
+        worktrace_db=Path(os.environ.get("MEMORY_TALK_WORKTRACE_DB", str(home / "worktrace.db"))).expanduser(),
     )
 
 

@@ -2,20 +2,20 @@
 
 v5 的数据模型 —— 描述对象 schema、字段语义、磁盘布局。**是什么**;机制 / 为什么见 [`../../designs/v5/`](../../designs/v5/README.md),HTTP 契约见 [`../../api/v5/`](../../api/v5/README.md)。
 
-v5 的三层:**work**(做事,裸文件)、**issue**(议事,git)、**card**(记事,git),外加把块变成现场的 **server**。没有数据库、没有索引——磁盘上每个字节都是 canonical。
+v5 的三层:**work**(做事,两个 sqlite:`works.db` 管现在、`worktrace.db` 管经过)、**issue**(议事,git)、**card**(记事,git),外加把块变成现场的 **server**。认知层没有数据库、没有索引——git 里每个字节都是 canonical。
 
 ## 对象清单
 
 | 对象 | 形态 | 存哪 | 文档 |
 |---|---|---|---|
-| Work | 树上一个节点:目标、父、状态(没有 project) | `works/<id>/work.json` | [work.md](work.md) |
-| Canvas / Panel | work 的画布:24×16 网格上的块;**视图,可随时重排** | `works/<id>/canvas.json` | [work.md](work.md#canvas) |
-| Worklet | work 的工作单元 = 一个现场:URI + 建它的 server;**身份脱离布局** | `works/<id>/worklets.json` | [work.md](work.md#worklet) |
+| Work | 树上一个节点:目标、父、状态(没有 project) | `works.db` 的 `works` 表 | [work.md](work.md) |
+| Canvas / Panel | work 的画布:几列,每列从上到下摆工作单元;**视图,可随时重排** | `works.db` 的 `work_columns` 表 + `worklets` 的位置列 | [work.md](work.md#canvas) |
+| Worklet | work 的工作单元 = 一个现场:URI + 建它的 server;**身份脱离布局** | `works.db` 的 `worklets` 表 | [work.md](work.md#worklet) |
 | **User** | 注册的实体,和 work 平级:名字 / 显示名 / 邮箱 / 注册时间 / 角色(admin 只有一个);密码哈希存在记录里不出接口 | `users/<name>.json`(或 `users` 表) | [api users.md](../../api/v5/users.md) |
 | Token | 登录态:JWT(HS256,`<home>/jwt.key` 签);登记的是 jti 的 sha256 → 谁的、何时发、何时过期;logout / 改密码即删 | `auth/tokens/<sha256>.json`(或 `auth_tokens` 表) | [api auth.md](../../api/v5/auth.md) |
-| WorkUser | 谁动过这个 work;只做可见性;work 另有 `created_by` 归属(指向一个注册的 User) | `works/<id>/users.json` | [work.md](work.md#workuserusers) |
-| Round | agent 工作单元的工作单元痕迹,append-only | `works/<id>/worklets/<worklet>/rounds.jsonl` | [work.md](work.md#round) |
-| Event | work 自己的时间线,append-only | `works/<id>/events.jsonl` | [work.md](work.md#event) |
+| Viewers | 现在谁在看这个 work;只做可见性,心跳算出来、重启清空;work 另有 `created_by` 归属(指向一个注册的 User) | `works.viewers` 列 | [work.md](work.md#viewersusers) |
+| Round | agent 工作单元的工作单元痕迹,只追加 | `worktrace.db` 的 `rounds` 表 | [work.md](work.md#round) |
+| Trace | work 的经过:段(`work` / `worklet` / `agent.turn`)+ 点,字段和 OTel 一对一 | `worktrace.db` 的 `spans` / `points` 表 | [work.md](work.md#trace) |
 | **Metas**:层 / 对象 / 分层仓库 / manager.json | 认知层。origin / issue / card 三个内置 layer + 用户层;对象 = 带后缀的目录,放哪都行 | `memory/`(分层 git) | [metas.md](metas.md) |
 | ↳ issue 层:readme.md / positions/*.md | 问题(目录名;字段 links / summary + 正文)+ 立场(一个一文件;字段 links / rank / verdict + 正文,论证一行一条) | `<path>.issue/` 目录 | [metas.md](metas.md#issue-层内置) |
 | ↳ card 层:readme.md | 维基式事实条目:字段 context / links / issue + 正文;标题是目录名;可改可删,历史在 git | `<path>.card/` 目录 | [metas.md](metas.md#card-层内置) |
@@ -40,7 +40,7 @@ v5 的三层:**work**(做事,裸文件)、**issue**(议事,git)、**card**(记�
 ```
 Work ──(worklets)──▶ Worklet ──(server)──▶ 现场(tmux 会话 / 网页)
   ▲                    │
-  │ manager.json       └──(rounds.jsonl)──▶ Round  ◀── 论证那一行里的文字可以提到 (work_id#round),系统不解析
+  │ manager.json       └──(rounds 表)──▶ Round  ◀── 论证那一行里的文字可以提到 (work_id#round),系统不解析
   │
 Card  ──(issue)──▶ Issue                            ← 卡记讨论页;issue 不记卡(弱耦合)
 Issue ──(meta.links)──▶ Issue                       ← IBIS 边
@@ -56,12 +56,8 @@ Card  ──(links)──▶ Card                             ← 内链
 ├── metas/                    ← git 仓库(认知层 canonical,含全部历史)
 │   ├── cards/<dir>/<slug>.md
 │   └── issues/<issue_id>.json
-└── works/<work_id>/             ← 裸文件(现场 canonical,原子写,不进 git)
-    ├── work.json
-    ├── canvas.json
-    ├── worklets.json
-    ├── events.jsonl
-    └── worklets/<worklet_id>/rounds.jsonl
+├── works.db                  ← work 的现在(sqlite,不进 git):works / work_columns / worklets / inbox
+└── worktrace.db              ← work 的经过(sqlite,不进 git):spans / points / rounds
 ```
 
 完整清单见 [filesystem.md](filesystem.md)。
@@ -74,10 +70,10 @@ Card  ──(links)──▶ Card                             ← 内链
 | Issue 的 question / origin / created_at | 建后不改 | git log |
 | Issue 的 manager_work / card / links | 能改(换绑、写卡、连边) | git log |
 | Position / Argument | **只增不改不删** | git log(每条一个 commit) |
-| Work 的 goal / status | 能改 | events.jsonl(状态变化) |
-| Canvas | 能改(全量覆盖,version 乐观锁) | 不留(视图) |
-| Worklet | 建 / 删;`last_attached` 会更新 | events.jsonl |
-| Round / Event | **只追加** | 自身就是时间线 |
+| Work 的 goal / status | 能改 | 轨迹(`work.renamed` 点;归档 / 重新打开 = `work` 段的结束 / 新的一段) |
+| Canvas | 能改(一个动作一个请求,`version` +1) | 轨迹里的点(`column.*` / `worklet.moved`);收起不留 |
+| Worklet | 建 / 删;`last_attached` 会更新 | 轨迹(`worklet` 段的开始 / 结束) |
+| Round / 点 | **只追加** | 自身就是时间线 |
 
 ## 现算、不存的量
 
@@ -85,5 +81,5 @@ Card  ──(links)──▶ Card                             ← 内链
 |---|---|
 | issue 的立场顺序 | 读时按各立场自己的 `rank` 升序,没有 `rank` 的按文件名;不算分 |
 | Worklet 的 `alive` | 读工作单元时问 server(`tmux has-session`) |
-| Work 树(`children[]`) | 读时从各 `work.json` 的 `parent` 拼出来 |
+| Work 树(`children[]`) | 读时从 `works` 表的 `parent` 列拼出来 |
 | Card 目录 | 读时扫 `cards/` 目录树 |

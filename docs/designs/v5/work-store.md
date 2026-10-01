@@ -1,6 +1,6 @@
 # work-store —— work 存在两个 sqlite 里:works.db 管现在,worktrace.db 管经过(v5 设计)
 
-> **状态:设计中,未实施(改版)。** 上一版是两种形态可选:local 把 work 的记录散成目录树里的文件,db 用一个 sqlite。这一版**只留 sqlite**,并且拆成两个文件:
+> **状态:已实施。** 仓储是 `services/work/repo.py` 的 `WorkRepo`(works.db)和 `TraceRepo`(worktrace.db),由 `StoreService` 各开一个 `SQLite` provider,`WorkService` / `MetasService`(投递收件箱)/ `UserService`(统计)共用这一份;provider 补上了组合主键和多列索引(§7)。上一版是两种形态可选:local 把 work 的记录散成目录树里的文件,db 用一个 sqlite。这一版**只留 sqlite**,并且拆成两个文件:
 >
 > - **`works.db`**:work 的全部信息,也就是它**现在**是什么样;
 > - **`worktrace.db`**:work 的全部轨迹,也就是它**怎么走到现在**的。
@@ -45,7 +45,7 @@
 ```
 
 - 默认都在 `MEMORY_TALK_HOME` 下;`MEMORY_TALK_WORKS_DB` / `MEMORY_TALK_WORKTRACE_DB` 可以分别改路径,比如把轨迹放到更大的盘上。
-- 每个库一个 `SQLite` provider 实例,各自开 WAL,各自一把进程内锁。仓储构造时拿到两个 provider:`WorkRepo(works: DatabaseProvider, trace: DatabaseProvider)`。
+- 每个库一个 `SQLite` provider 实例,各自开 WAL,各自一把进程内锁。一个库一个仓储:`WorkRepo(works.db 的 provider)`、`TraceRepo(worktrace.db 的 provider)`,由 `StoreService` 建好交给各个服务。`GET /api/system/info` 带上两个路径(`works_db` / `worktrace_db`),`memory.talk server status` 打出来。
 - `MEMORY_TALK_STORE` 不再决定 work 存在哪。users / auth 放在哪,见 §8。
 - 表结构启动时按仓储里的声明建(`provider.table(...)` / `ensure_table`),不手写迁移 SQL。
 
@@ -65,8 +65,8 @@ works ──┬──< works          (parent:子 work)
 | 表 | 一行是 | 主键 | 其余列 |
 |---|---|---|---|
 | `works` | 一个 work | `id` | `parent`(索引)、`goal`、`status`、`created_by`(索引)、`created_at`、`archived_at`、`manager`、`viewers`、`next_worklet`、`next_column`、`canvas_version` |
-| `work_columns` | 画布上的一列 | (`work_id`, `number`) | `alias`、`collapsed`、`position` |
-| `worklets` | 一个工作单元 | `id` | `work_id`(索引)、`number`、`uri`、`scheme`、`server`、`cwd`、`created_at`、`last_attached`,**加上位置**:`column_number`、`position`、`collapsed` |
+| `work_columns` | 画布上的一列 | (`work_id`, `number`) | `alias`、`collapsed`、`position`;索引 (`work_id`, `position`) |
+| `worklets` | 一个工作单元 | `id` | `work_id`(索引)、`number`、`uri`、`scheme`、`server`、`cwd`、`created_at`、`last_attached`,**加上位置**:`column_number`、`position`、`collapsed`;索引 (`work_id`, `column_number`, `position`) |
 | `inbox` | 一条打过来的变动 | `seq`(自增) | `work_id`(索引,空 = 没人管)、`ts`、`layer`、`path`、`subject`、`sha`、`by`、`routed_by` |
 
 各表说明:
@@ -98,22 +98,22 @@ worklets(只列和位置有关的列)
  w…1002-w4    w…1002   3              0         0
 ```
 
-- **列的身份是 (`work_id`, `number`)**。对外的 id `c<number>` 是拼出来的,不存。`number` 由 `works.next_column` 发,永不改、不复用([work-events.md §3](work-events.md))。
+- **列的身份是 (`work_id`, `number`)**。对外的 id `c<number>` 是拼出来的,不存;只认这一种写法(`c(\d+)` 整串匹配,`c01` 这种也不算),别的一律 404。`number` 由 `works.next_column` 发,永不改、不复用([work-events.md §3](work-events.md))。
 - **位置是工作单元可以改的属性,不是它的身份。** [worklet.md §2](worklet.md) 要的是「换个格子还是它」:挪到别的列,改的是这一行的 `column_number` / `position`,`id` 不动,round 和出处都不断。把位置放在同一行,并不违背身份脱离布局。
 - **`column_number` 为空 = 登记了、但没摆在画布上**(worklet.md §3 允许这种情况)。正常流程是打开就摆上、关闭就连行一起删掉,所以平时不会为空。
 - **一个工作单元只能在一格里**:这是结构本身决定的,一行只有一组位置。worklet.md §7 留着的「一个工作单元能不能被多个格子装」(同一个终端在画布上镜像两份),到这里就定成了**不能**。真要镜像,再单开一张表。
 - **顺序用 `position`**:列从左到右是 0、1、2……;同一列的工作单元从上到下也是 0、1、2……。**同一个 work 的列、同一列的工作单元,position 始终是连续的**(没有空洞、不重复)。每个动作在同一个事务里把受影响的那几行挪一下,保持这一点。行数很少,每次挪几行没有负担;换来的是「第几个」就是 `position`,查询不用再算。
 - **至少一列**:新 work 建的时候就插一列 `number = 1`,不再靠「读的时候补」。
 
-每个动作在一个事务里做完,并且都把 `works.canvas_version` +1:
+每个动作在一个事务里做完,并且都把 `works.canvas_version` +1(什么都没改的改别名、原地挪也算;关掉一个没摆上画布的工作单元不算):
 
 | 动作 | 改哪些行 |
 |---|---|
 | 加一列(在 `cX` 右边) | `works.next_column` 取号并 +1;`cX` 右边的列 `position + 1`;插一行新列 |
 | 改别名 / 收起列 | 改 `work_columns` 那一行 |
-| 删空列 | 先确认没有工作单元的 `column_number` 是它(有就 409);删掉这行;它右边的列 `position − 1` |
-| 打开工作单元(放进 `cX`) | 插一行 worklet,`column_number = X`,`position` = 这列现有的个数 |
-| 挪工作单元 | 原列里它下面的 `position − 1`;目标列里 `≥ index` 的 `position + 1`;改它自己的 `column_number` 和 `position` |
+| 删空列 | 先确认没有工作单元的 `column_number` 是它(有就 409),也不是最后一列(是就 409);删掉这行;它右边的列 `position − 1` |
+| 打开工作单元(放进 `cX`) | 插一行 worklet,`column_number = X`(不给列 = `position` 为 0 的那列),`position` = 这列现有的个数 |
+| 挪工作单元 | 原列里它下面的 `position − 1`;目标列里 `≥ index` 的 `position + 1`(`index` 按先从原列拿掉之后数,超出 / 不给 = 末尾);改它自己的 `column_number` 和 `position` |
 | 收起工作单元 | 改它的 `collapsed` |
 | 关闭工作单元 | 删这一行 worklet;原列里它下面的 `position − 1` |
 
@@ -146,39 +146,42 @@ SELECT w.id FROM worklets w JOIN work_columns c
 
 | 表 | 主键 | 列 | 说明 |
 |---|---|---|---|
-| `spans` | `span_id` | `trace_id`(索引)、`parent_span_id`、`work_id`(索引)、`worklet_id`(索引)、`user_id`、`name`、`kind`、`start_time_unix_nano`、`end_time_unix_nano`、`status_code`、`attributes`(JSON)、`links`(JSON) | 段:`work` / `worklet` / `agent.turn`。**`end_time_unix_nano` 为空 = 还开着**。结束 = 在同一行填上终点和结束时的属性 |
-| `points` | `seq`(自增) | `trace_id`、`span_id`(索引)、`work_id`(索引)、`worklet_id`、`column_number`、`user_id`、`event_name`(索引)、`time_unix_nano`、`attributes`(JSON) | 点:`column.*`、`worklet.moved`、`plan.changed`……只追加 |
-| `rounds` | `seq`(自增) | `work_id`、`worklet_id`(索引)、`round_id`、`timestamp`、`role`、`text` | agent 工作单元的 round(原来的 `rounds.jsonl`)。`agent.turn` 段通过 round id 引用它 |
+| `spans` | `span_id` | `trace_id`(索引)、`parent_span_id`、`work_id`(索引)、`worklet_id`(索引)、`user_id`(索引,开段的人)、`end_user_id`(索引,结束它的人)、`name`、`kind`、`start_time_unix_nano`、`end_time_unix_nano`、`status_code`、`attributes`(JSON)、`links`(JSON)、`first_round_id`(只有 `agent.turn` 有) | 段:`work` / `worklet` / `agent.turn`。**`end_time_unix_nano` 为空 = 还开着**。结束 = 在同一行填上终点和结束时的属性;`agent.turn` 按 `first_round_id` 幂等改(work-trace.md §2) |
+| `points` | `seq`(自增) | `trace_id`、`span_id`(索引)、`work_id`(索引)、`worklet_id`、`column_number`、`user_id`(索引)、`event_name`(索引)、`time_unix_nano`、`attributes`(JSON) | 点:`column.*`、`worklet.moved`、`worklet.closed`、`work.renamed`(以后还有 `plan.changed`),只追加 |
+| `rounds` | `seq`(自增) | `work_id`、`worklet_id`(索引)、`round_id`、`timestamp`、`role`、`text` | agent 工作单元的 round(原来的 `rounds.jsonl`),按 (`worklet_id`, `round_id`) 去重(进程内一把锁),按 `seq` 读。`agent.turn` 段通过 round id 引用它 |
 
 几条规则:
 
 - **常用的属性提成列,完整的属性另存一份。** OTel 的属性是开放的键值,每种段、每种点带的都不一样,没法全部变成固定的列;所以 `attributes` 保留完整的 OTLP `KeyValue` 列表,只用来导出和拼回 OTLP,查询不碰它。平时要筛的维度(哪个工作单元、谁、哪一列、什么事件)都提成真的列:`worklet_id`、`user_id`、`column_number`、`event_name`。以后再冒出常查的属性,就再提一列。
-- **开着的段就是一行没有终点的记录。** work-trace.md §3 为这个问题另外开了一份 `spans` doc(因为 jsonl 只能追加一整条);到了表里,「开着」只是一列为空,不用再单独存一份状态。**只追加的是 `points` 和 `rounds`;`spans` 每行最多改一次**,就是结束那次。
+- **开着的段就是一行没有终点的记录。** work-trace.md §3 为这个问题另外开了一份 `spans` doc(因为 jsonl 只能追加一整条);到了表里,「开着」只是一列为空,不用再单独存一份状态。**只追加的是 `points` 和 `rounds`;`work` / `worklet` 段每行最多改一次**,就是结束那次;`agent.turn` 段随着新 round 同步进来原地改(最后一条 round、条数、终点)。
+- **user 的统计也从这里来**:「动过哪些 work、最近一次什么时候」= `spans.user_id` / `spans.end_user_id` / `points.user_id` 按人查(都有索引),见 user.md §3。
 - **一个 work 的轨迹** = `work_id = ?` 的段和点;**一棵树的轨迹** = 同一个 `trace_id`(work-trace.md §4)。两个都有索引。
 - **round 放在这里**,是因为它和段、点的性质一样:只追加、量大、是「经过」。放进 `works.db` 会让状态库越长越大,备份也越来越慢。
-- 对外导出只发**已经结束**的段(OTLP 没有「开着的 span」),点随写随发。怎么导出见 work-trace.md §8。
+- `GET /works/{id}/trace` 开着的段也给(没有终点,带 `memorytalk.open = true`)。往外导出(还没做)只发**已经结束**的段(OTLP 没有「开着的 span」),点随写随发,见 work-trace.md §8。
 
 ## 6. 一个动作写了哪几处
 
 以「在 列 3 打开一个终端」为例:
 
-1. 先验列在不在(查 `work_columns`);不在直接 404,不建现场
-2. **建现场**(tmuxd);建不起来到此为止,什么都没写
-3. **`works.db` 一个事务**:`works.next_worklet` 取号 +1;`worklets` 插一行,顺带定好位置(`column_number = 3`,`position` = 列 3 现有的个数);`works.canvas_version + 1`
-4. **`worktrace.db`**:`spans` 插一行 `worklet` 段(开着,父是这个 work 的 work 段)
+1. 先验:work 没归档(归档了 409),列在不在(查 `work_columns`;不在直接 404,不建现场),URI 解析得出协议(解析不了 400,号也不取)
+2. **`works.db` 一个短事务:取号**。`works.next_worklet` 取出 n 并 +1,工作单元 id = `<work_id>-w<n>`,`created_at` = 此刻。现场要拿这个 id 当名字(tmux 会话名),所以号得在建现场之前取
+3. **建现场**(tmuxd,id 就是上一步的 id,`since_mtime` = `created_at` 的 Unix 秒);建不起来到此为止,除了那个号什么都没写——**号不还**,下一个工作单元接着往后发(编号本来就允许有空洞)
+4. **`works.db` 一个事务**:先再看一眼 work 有没有在建现场的这会儿被归档(归档了就 409,现场销毁掉,什么都不写;不然归档时还没登记的它躲过了冻结,会在归档的 work 里留一个活的现场);`worklets` 插一行(`uri` 是原样的 uri,`cwd` 取现场报回来的),顺带定好位置(`column_number = 3`,`position` = 列 3 现有的个数;没给列就放 `position` 为 0 的那列);`works.canvas_version + 1`
+5. **`worktrace.db`**:`spans` 插一行 `worklet` 段(开着,父是这个 work 最新的 `work` 段;带 uri / scheme / server 和放进的列)。失败只记日志,工作单元照样开好
 
 两步写要注意:
 
 - **两个库之间没有原子提交。** 两个库都是 WAL 模式,sqlite 在 WAL 下即使 `ATTACH` 在一起,跨库事务也只保证每个库各自原子,不保证两个库一起提交。所以顺序固定为**先 `works.db`,后 `worktrace.db`**。后一步失败的话,轨迹少一段,work 本身没问题。这和「轨迹丢了不伤 work」是同一个取舍。
-- **现场和登记之间也不是原子的。** 把建现场挪到写库之前,是为了失败时什么都不用回滚(上一版是先登记、建失败再删)。反过来,现场建起来了但库写失败,就会留下一个没有登记的 tmux 会话;这种会话启动时对一遍就能收掉,和 work-trace.md §5「现场没了的段」是同一个对账过程,方向相反。
+- **同一个 work 的生命周期动作排队。** 归档要先收 round、逐个销毁现场,最后才结束段;这中间 `works.db` 里已经是 `archived`,段却还开着。要是这时有人把它重新打开,归档最后会去结束重新打开后的那一段,原来那段永远开着;刚登记、还没开段的工作单元也会在归档后才开出一段。所以归档 / 重新打开(从改状态的事务到收尾做完)、打开工作单元(第 4 步到第 5 步)、重入,在服务里按 work 拿一把进程内的锁一个一个来;打开和重入都在锁里再看一眼 work 是不是已归档(归档了 409),等着归档做完的那个醒来就不会在归档的 work 里起现场、开段。这是 Python 的锁,不是 `works.db` 的事务:建现场、销毁现场、写 `worktrace.db` 照样不在事务里。兜底:归档结束这个 work 所有还开着的 work 段;重新打开时上一段还开着(那次轨迹没写进去),先按归档补上终点(work-trace.md §5)。
+- **现场和登记之间也不是原子的。** 把建现场挪到登记之前,是为了失败时什么都不用回滚(上一版是先登记、建失败再删),代价只是烧掉一个号。反过来,现场建起来了但第 4 步失败(比如列刚好被删了、work 刚好被归档了),就顺手把现场销毁再报错;连销毁也失败的,会留下一个没有登记的 tmux 会话,这种会话启动时对一遍就能收掉,和 work-trace.md §5「现场没了的段」是同一个对账过程,方向相反(启动时的对账还没做:现在「现场没了」只在列清单时发现)。
 
 ## 7. 从上一版怎么过来
 
 **不做兼容。** 上一版的 `works/` 目录树、`memory.sqlite` 里的 `works` / `work_docs` / `work_logs` 三张表,实施时都不再读。现有实例的 work 数据不迁移,重新开始(和切换到 tmuxd 3.0 时对待 8090 实例的做法一样)。
 
-provider 要补的能力:**组合主键**(`work_columns`)和**多列索引**(`worklets` 的 (`work_id`, `column_number`, `position`))。现在的 `Column(primary=True)` 只支持单列主键。外键不加,由单写者和事务保证。
+provider 补上的能力(provider.md):**组合主键**(`db.table(..., primary_key=("work_id", "number"))`,`work_columns`)和**多列索引**(`indexes=[("work_id", "column_number", "position")]`,`worklets`);另外 `is_not_null()`、bool 列读回 Python 的 bool、`ORDER BY` 多列、`SET col = col + n`(挪位置、计数器取号)。position 上**不加** UNIQUE 索引:sqlite 在 `position = position + 1` 的过程中逐行查重,会撞上还没挪的那一行。外键不加,由单写者和事务保证。
 
-要删掉的东西:`FsWorkRepo`、`DbWorkRepo` 里 doc / log 的通用写法、`MEMORY_TALK_STORE` 对 work 的作用、测试里 work 场景按 fs / sqlite 双跑的那一半参数。同时要改的文档:user.md §3(work 上的 `users` 名单变成只记现在的 `viewers`,历史改从轨迹查;`GET /works/{id}/users` 只剩 `current`)、provider.md(work 不再用文件系统族)、`structure/v5/filesystem.md`(`works/` 目录没了,换成两个 db 文件)、`structure/v5/work.md`、work-trace.md §3(落盘改成 §5 的两张表)。
+已经删掉的东西:`FsWorkRepo`、`DbWorkRepo` 和 doc / log 的通用写法(`get_doc` / `put_doc` / `append` / `read`)、`MEMORY_TALK_STORE` 对 work 的作用、旧状态值和 `done_at` 的兼容、列的 `name` 别名、画布读时补列 / 重排、扫事件补工作单元编号、`seq` doc、`frozen` 事件。测试的 `home` 仍按 fs / sqlite 双跑,那个开关现在只管 users / auth。同步改了的文档:user.md §3(work 上的 `users` 名单变成只记现在的 `viewers`,历史改从轨迹查;`GET /works/{id}/users` 只剩 `current`)、provider.md(work 不再用文件系统族)、`structure/v5/filesystem.md`(`works/` 目录没了,换成两个 db 文件)、`structure/v5/work.md`、work-trace.md §3(落盘改成 §5 的 `spans` / `points` / `rounds`)。
 
 ## 8. 这篇有意不定的事
 

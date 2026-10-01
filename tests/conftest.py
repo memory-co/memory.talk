@@ -38,6 +38,8 @@ def home(tmp_path, monkeypatch, request):
     monkeypatch.setenv("MEMORY_TALK_KIMI_SESSIONS", str(tmp_path / "kimi"))
     monkeypatch.setenv("MEMORY_TALK_TMUX_SOCKET", f"mt-test-{uuid.uuid4().hex[:8]}")
     monkeypatch.delenv("MEMORY_TALK_TTYD_URL", raising=False)
+    for name in ("MEMORY_TALK_WORKS_DB", "MEMORY_TALK_WORKTRACE_DB", "MEMORY_TALK_SQLITE"):   # work 的两个库、sqlite store 都落在临时 home 里
+        monkeypatch.delenv(name, raising=False)
     yield tmp_path
     subprocess.run(["tmux", "-L", f"tmuxd-{os.environ['MEMORY_TALK_TMUX_SOCKET']}", "kill-server"], capture_output=True)   # tmuxd 的 socket 是 tmuxd-<名>
 

@@ -108,7 +108,7 @@ collectbase 的层是有序的:**事实在最下,推论在上;上层改不动下
 
 origin 在最底、issue 在中、card 在上:issue 从 origin 消化出来,card 从 issue 争出来;改 card 不能顺手改 issue 的记录,改 issue 不能碰 origin 的原文。origin 就是 collectbase 意义上的**事实层**——「智能体够不着的地板」。两点说明:
 
-- **work 的痕迹(rounds)仍不在 Metas 里**——它是本实例自己的过程,裸文件([metas-store.md §4](store.md));值得长期当证据的那几轮,摘录一份进 origin([origin.md §6](origin.md))。
+- **work 的痕迹(rounds)仍不在 Metas 里**——它是本实例自己的过程,在 work 自己的 sqlite 里([work-store.md](../work-store.md));值得长期当证据的那几轮,摘录一份进 origin([origin.md §6](origin.md))。
 - **用户自定义的 layer 排在哪**,按 [metas-layer.md §2](layer.md):引用谁就排在谁上面;所有层都引用 origin,所以都在它之上。
 
 ---
@@ -150,7 +150,7 @@ git log --first-parent stack
 | 加一种新对象 | 改代码 | `~/.memory.talk/layers/` 放一个 `.py`(一个 `Layer` 子类),重启 |
 | 谁改不动谁 | 靠代码纪律 | hook 守着:上层改不动下层,跨层提交被拒 |
 
-metas-store.md 的两条原则不变:**认知层进 git,现场层用裸文件**。Metas 只是把「进 git」这一半做成了有层语义的。
+metas-store.md 的两条原则不变:**认知层进 git,现场层不进 git**(现场层当初是裸文件,work 那一半后来改成两个 sqlite,见 [work-store.md](../work-store.md))。Metas 只是把「进 git」这一半做成了有层语义的。
 
 ---
 

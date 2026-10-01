@@ -27,12 +27,13 @@ work_servers/  每个协议一个 server,把现场建出来              → wor
 
 `main.py` 的 `create_app(config, runtime)`:
 
-- `config.py`:`Config`(`MEMORY_TALK_HOME`、git author 默认名)和 `RuntimeConfig`(workspace、tmuxd 的 socket 名和 state 目录、各平台会话记录根)。全部来自环境变量,没有配置文件。
-- `StoreService` 按 `MEMORY_TALK_STORE` 选 provider、建仓储;`MetasService` 自己开 git 仓库;`WorkServerService` 装载 `work_servers/`;`WorkService`、`UserService`、`AuthService`、`SearchService` 依次注入。全部挂在 `app.state`,测试直接 `create_app()` 起一个。
+- `config.py`:`Config`(`MEMORY_TALK_HOME`、git author 默认名、`works_db` / `worktrace_db` 两个库的路径)和 `RuntimeConfig`(workspace、tmuxd 的 socket 名和 state 目录、各平台会话记录根)。全部来自环境变量,没有配置文件。
+- `StoreService` 开 work 的两个 sqlite(`works.db` / `worktrace.db`,各一个 provider 实例),按 `MEMORY_TALK_STORE` 给 users / auth 选 provider;`MetasService` 自己开 git 仓库;`WorkServerService` 装载 `work_servers/`;`WorkService`、`UserService`、`AuthService`、`SearchService` 依次注入。全部挂在 `app.state`,测试直接 `create_app()` 起一个。
+- `lifespan`:起一个后台任务,每 30 秒把心跳超时的人清出 `works.viewers`;退出时取消它、收掉 ttyd。
 
 ## 边界
 
-- 存储两半:work / user / token 的记录走 provider(fs 或 sqlite,测试两种都跑);metas 是一个 git 仓库,服务进程是唯一写者。
+- 存储三处:work 固定是两个 sqlite——`works.db` 管现在(节点、画布、登记、收件箱),`worktrace.db` 管经过(段、点、round);user / token 的记录走 provider(fs 或 sqlite,测试两种都跑);metas 是一个 git 仓库。服务进程是唯一写者。
 - 现场(tmux 会话)不由这里持有状态:活没活着每次问 server。
 - 未做:ttyd 反代托管(挂公网时窗要么 0.0.0.0 + token,要么自己反代)、逐 round 标注、二进制 blob 外置、给人手工 `git commit` 用的 hook。
 

@@ -44,7 +44,7 @@ admin 能做而 member 不能做的,只有三件:**建账号**(`POST /api/users`
 
 验证分两步:**先验签名和过期**——伪造的、过期的、换了 alg 的,不碰存储就拒掉;**再查 `jti` 还登记着**。`jti` 的 sha256 登记在 fs `auth/tokens/<sha256>.json` / db `auth_tokens` 表(记着是谁的、什么时候发的、何时过期);`POST /api/auth/logout` 删掉它,换密码删掉这个人的全部——**作废立即生效**,这一条是登记存在的理由。纯无状态(只验签名、不查登记)会丢掉它:签出去的 token 在过期前收不回来。以后真有别的进程要自己验人(比如独立跑的 webmuxd),它可以只验签名,接受「最多晚 30 天知道被撤销」;memory.talk 自己的门两步都做。
 
-**身份从 token 来,不再从请求头 `X-Memory-Talk-User` 来。** 这个头现在被忽略:名字由中间件解析 token 得到,塞进 `request.state.user`,controller 从那里取。user.md 里三处记「谁」的地方(work 的 `created_by` / `users`、metas 的 commit author、收件箱的 `by`)一行没改,只是名字的来源换了。匿名不再存在:能进门的都有名字。
+**身份从 token 来,不再从请求头 `X-Memory-Talk-User` 来。** 这个头现在被忽略:名字由中间件解析 token 得到,塞进 `request.state.user`,controller 从那里取。user.md 里三处记「谁」的地方(work 的 `created_by` / 在看的人和轨迹里的 `user.id`、metas 的 commit author、收件箱的 `by`)一行没改,只是名字的来源换了。匿名不再存在:能进门的都有名字。
 
 ## 4. 客户端
 

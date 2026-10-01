@@ -6,3 +6,4 @@ build/
 *.egg-info/
 memorytalk/frontend/node_modules/
 memorytalk/frontend/dist/
+*.tsbuildinfo

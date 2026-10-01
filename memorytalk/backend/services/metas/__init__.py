@@ -46,7 +46,7 @@ def _bytes(v: str | bytes) -> bytes:
 class MetasService:
     def __init__(self, config: Config, work_repo: WorkRepo) -> None:
         self.config = config
-        self.inbox = Inbox(work_repo)
+        self.inbox = Inbox(work_repo)          # 和 WorkService 同一个 works.db 仓储(同一个 provider 实例、同一把锁)
         self.author_of = lambda name: (name, f"{name}@memory.talk") if name else None   # 由 UserService 接管
         self.repo = Repo(config.metas_dir, config.git_author_name, config.git_author_email)
         self.layers: dict[str, Layer] = {}
@@ -468,7 +468,7 @@ class MetasService:
         return out
 
     def _deliver(self, layer: str, files: list[str], subject: str, sha: str, ctx: Ctx) -> None:
-        """变动打到 manager work 的收件箱;没人管 → home/unmanaged.jsonl;自己造成的不投给自己。"""
+        """变动打到 manager work 的收件箱;没人管 → inbox 里 work_id 为空的一行;自己造成的不投给自己。"""
         seen = set()
         for f in files:
             if f == MANAGER_FILE or f.endswith("/" + MANAGER_FILE) or f == CONFIG_FILE:

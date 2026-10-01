@@ -24,7 +24,9 @@ def cli(tmp_path):
     env = {**os.environ, "MEMORY_TALK_HOME": str(tmp_path / "home"), "MEMORY_TALK_WORKSPACE": str(tmp_path / "ws"),
            "MEMORY_TALK_TMUX_SOCKET": f"mt-cli-{uuid.uuid4().hex[:6]}", "MEMORY_TALK_SERVER": f"http://127.0.0.1:{port}",
            "PYTHONPATH": str(ROOT)}
-    env.pop("MEMORY_TALK_USER", None); env.pop("MEMORY_TALK_TTYD_URL", None)
+    for name in ("MEMORY_TALK_USER", "MEMORY_TALK_TTYD_URL", "MEMORY_TALK_STORE", "MEMORY_TALK_SQLITE",
+                 "MEMORY_TALK_WORKS_DB", "MEMORY_TALK_WORKTRACE_DB"):          # 存储全落在临时 home 里,别碰真库
+        env.pop(name, None)
 
     def run(*args, user=None, check=True, inp=None):
         e = {**env, **({"MEMORY_TALK_USER": user} if user else {})}
@@ -43,7 +45,7 @@ def cli(tmp_path):
         subprocess.run(["tmux", "-L", f"tmuxd-{env['MEMORY_TALK_TMUX_SOCKET']}", "kill-server"], capture_output=True)
 
 
-def test_cli_end_to_end(cli):
+def test_cli_end_to_end(cli, tmp_path):
     assert "运行中" in cli("server", "status").stdout
     assert "已在跑" in cli("server", "start").stdout                      # 幂等
 
@@ -61,6 +63,8 @@ def test_cli_end_to_end(cli):
     assert "alice@example.com" in cli("user", "whoami", user="alice").stdout
     assert "admin" in cli("user", "whoami", user="admin").stdout
     assert cli("user", "add", "eve", user="alice", check=False).returncode == 1          # member 不能建账号
+    st = cli("server", "status").stdout                                                  # 登录后看得到 work 的两个库(在临时 home 里)
+    assert str(tmp_path / "home" / "works.db") in st and str(tmp_path / "home" / "worktrace.db") in st
 
     # work
     w = json.loads(cli("--json", "work", "create", "--goal", "把配置改成环境变量", user="alice").stdout)
@@ -72,7 +76,10 @@ def test_cli_end_to_end(cli):
     assert s["alive"] and "?arg=" in cli("work", "attach", w["id"], "bash://").stdout            # 窗:tmuxd 自带的 ttyd
     assert s["id"] in cli("work", "worklets", w["id"]).stdout
     cli("work", "detach", w["id"], s["id"])
-    assert "在动 alice" in cli("work", "show", w["id"]).stdout
+    assert "在看 alice" in cli("work", "show", w["id"]).stdout                           # 建它、打开它都算心跳
+    assert cli("work", "users", w["id"], user="alice").stdout.split() == ["alice"]
+    cli("work", "leave", w["id"], user="alice")
+    assert "现在没人在看" in cli("work", "users", w["id"], user="admin").stdout
     assert "bash" in cli("work", "servers").stdout and "default" in cli("work", "servers").stdout
 
     # meta:建 issue → 立场 → 论证 → 排序 → 卡;--put / @- / --subject、log、search(manager / inbox 暂时注释,等 work 实现后一起启用)

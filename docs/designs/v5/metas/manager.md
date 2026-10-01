@@ -6,7 +6,7 @@
 - v5 work 树(manager 绑的是 work;父子本身就是一条隐式的 manager 链): [work.md](../work.md)
 - v5 issue(原来的 `manager_work` 字段由本篇取代): [issue.md](issue.md)
 - v5 metas(认知层的目录在 git 里,「变动」= 触碰这些路径的 commit): [README.md](README.md)
-- v5 user(manager 是 work 不是人;谁在那个 work 里干活看它的 users): [user.md](../user.md)
+- v5 user(manager 是 work 不是人;谁在那个 work 里干活看它的 viewers 和轨迹): [user.md](../user.md)
 
 ---
 
@@ -41,7 +41,7 @@ issue.md 原来的做法是每个 issue 记一个 `manager_work`。它有三个�
 | 可见性 | 要读对象 | `ls` 就看见;`git log manager.json` 就是换 manager 的历史 |
 | 继承 | 无 | 子目录没有就往上找(§3) |
 
-而且它和被管的东西**同处一地**:在 Metas 里它跟着 issue / card 进 git、进那一层;在 work 目录里它是裸文件。不另立一张「谁管谁」的表——**规则和事实是同一份数据**(这句是 collectbase 的原话,在这里同样成立)。
+而且它和被管的东西**同处一地**:在 Metas 里它跟着 issue / card 进 git、进那一层;在 work 上它是 `works.db` 里 `works` 表的 `manager` 列([work-store.md §3](../work-store.md))。不另立一张「谁管谁」的表——**规则和事实是同一份数据**(这句是 collectbase 的原话,在这里同样成立)。
 
 ---
 
@@ -72,11 +72,11 @@ memory.talk/配置/旧的 settings 方案.md             ← origin 变了(新�
 | 在哪 | 变动 = | 谁产生 |
 |---|---|---|
 | Metas(git) | 一个 commit 触碰了这个目录下的路径 | collectbase 的 post-commit 就是天然的信号源;一个 commit 一条变动,带 `[层名]`、动词、路径、trailer |
-| work 目录(裸文件) | work 的事件:状态变了(含归档)、新 worklet、新 round | work 层的 events.jsonl 就是信号源 |
+| work(`works.db` / `worktrace.db`) | work 的事件:状态变了(含归档)、新 worklet、新 round | work 层的动作本身就是信号源:建 work、改状态在改 `works.db` 的同一个事务里投递(今天只投这两样);同一件事的经过记在 `worktrace.db` 的轨迹里([work-trace.md](../work-trace.md)) |
 
-**打过去**:变动**投递**到 manager work 的**收件箱**——work 目录下一个 append-only 的 `inbox.jsonl`。每条:什么时候、哪个路径、什么变动、谁干的、以及**它是被哪个 `manager.json` 路由过来的**(便于回答「为什么这事到我这」)。
+**打过去**:变动**投递**到 manager work 的**收件箱**——`works.db` 的 `inbox` 表,一条变动一行,只追加,`work_id` 是收件的 work([work-store.md §3](../work-store.md))。每条:什么时候、哪个路径、什么变动、谁干的、以及**它是被哪个 `manager.json` 路由过来的**(便于回答「为什么这事到我这」)。
 
-- 收件箱是 work 的痕迹的一部分,跟 rounds / events 一样只追加、不进 git。
+- 收件箱只追加、不进 git。它放在 `works.db` 而不是 `worktrace.db`:是别处打给这个 work、等着处理的消息,属于「现在」;轨迹记的是这个 work 自己做过什么。
 - work 里的 agent 怎么消费收件箱——开工时读一遍、干活中轮询、还是直接推进工作单元——是 [work-server.md §8](../work-server.md) 那条「把手要不要开驱动」的问题,本篇不定;**最小形态是收件箱 + agent 自己去读**。
 - **manager work 自己造成的变动不投递给自己**:它写了一张卡,这张卡的变动路由回它自己——跳过,否则自激。变动记「谁干的」(git author / work 的 worklet)就能判。
 
@@ -117,5 +117,5 @@ manager 机制不规定动作。但把它接到 v5 已有的几条线上,会自�
 - **投递形式**:收件箱(拉)还是推进工作单元(推)。§4 按收件箱写;推的那半等把手开驱动再说。
 - **变动粒度**:一个 commit 一条,还是一个「决定」(两个相邻提交)合成一条。倾向按 commit,由消费方自己合并——投递侧不做聪明事。
 - **`manager.json` 里还要不要别的**:现在只有 `work`。要不要 `only: ["argue", "write"]` 这类过滤、要不要 `until`(临时代管)——先不要,一个字段起步。
-- **无人管的变动放哪**:一份全局的 `unmanaged.jsonl`,还是根 `manager.json` 缺省指向一个「收容 work」。倾向前者——「没人管」应该显眼,不该被一个默认 work 吞掉。
+- ~~无人管的变动放哪~~:已定——不设「收容 work」,没人管的变动就是 `inbox` 表里 `work_id` 为空的那些行([work-store.md §3](../work-store.md));「没人管」应该显眼,不该被一个默认 work 吞掉。
 - **循环**:A 目录绑 work X,X 的目录绑 work Y,Y 的目录绑 X……变动会不会在两个 work 之间弹。§4 的「自己造成的不投给自己」挡一层;两个 work 互相投的情况要不要限跳数,等真出现。

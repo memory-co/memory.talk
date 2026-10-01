@@ -1,7 +1,9 @@
 """FastAPI 实例:装配 services、挂路由、错误映射。"""
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
+import asyncio
+import logging
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -19,6 +21,19 @@ from memorytalk.backend.services.work_servers import WorkServerService
 from memorytalk.backend.services.store import StoreService
 from memorytalk.backend.services.users import UserExists, UserNotFound, UserService
 from memorytalk.backend.services.work import ColumnNotFound, PanelNotFound, WorkletNotFound, WorkConflict, WorkNotFound, WorkService
+from memorytalk.backend.services.work.viewers import SWEEP_EVERY, Viewers
+
+log = logging.getLogger(__name__)
+
+
+async def _sweep_viewers(viewers: Viewers) -> None:
+    """心跳只在内存里:没人来请求也得定时把超时的人清出 works.viewers。"""
+    while True:
+        await asyncio.sleep(SWEEP_EVERY)
+        try:
+            viewers.sweep()
+        except Exception:
+            log.exception("清 viewers 失败")
 
 
 def create_app(config: Config | None = None, runtime: RuntimeConfig | None = None) -> FastAPI:
@@ -26,7 +41,11 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
     runtime = runtime or load_runtime_config()
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        sweeper = asyncio.create_task(_sweep_viewers(app.state.works.viewers))
         yield
+        sweeper.cancel()
+        with suppress(asyncio.CancelledError):
+            await sweeper
         app.state.work_servers.close()                 # 退出:收掉自己起的 ttyd;tmux 会话照跑
 
     app = FastAPI(title="memory.talk v5", version="5.0.0a0", lifespan=lifespan,
@@ -36,7 +55,7 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
     collect_svc = MetasService(config, store.work_repo)
     work_server_svc = WorkServerService(runtime, SURFACE_PATH)   # 窗都挂在 /surface 下;下面有哪些窗由它自己定
     work_svc = WorkService(store, work_server_svc)
-    user_svc = UserService(store.user_repo, store.work_repo, collect_svc)
+    user_svc = UserService(store.user_repo, store.work_repo, store.trace_repo, collect_svc)
     collect_svc.author_of = user_svc.author
     app.state.config, app.state.runtime = config, runtime
     app.state.store, app.state.metas = store, collect_svc

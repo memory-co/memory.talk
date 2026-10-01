@@ -13,7 +13,7 @@ memory.talk
 ├── setup | login [<name>] | logout                   # 门:首次建 admin;密码换 token 存本地;退出
 ├── work     create | list | show | set               # work 树
 │            attach | worklets | detach | rounds   # 工作单元(现场)
-│            inbox | manager | users | touch           # 收件箱 / manager / user
+│            inbox | manager | users | touch | leave   # 收件箱 / manager / 谁在看
 │            servers                                    # 有哪些 work server(bash / claude / codex / kimi / http / default)及各自响应的协议
 ├── user     add | list | show | set | whoami | passwd  # 人:注册的实体,和 work 平级;admin 建账号 / 设密码
 ├── search   <query> [--limit 20]                       # 综合搜索:工作 / 元认知 / 成员
@@ -33,7 +33,7 @@ memory.talk
 | 全局 flag | 环境变量 | 默认 | 说明 |
 |---|---|---|---|
 | `--server <url>` | `MEMORY_TALK_SERVER` | `http://127.0.0.1:8000` | API 在哪 |
-| `--user <名字>` | `MEMORY_TALK_USER` | 最近登录的 | **用谁的登录态**:`login` 过的人的 token 存在 `<home>/credentials.json`(按服务地址分开,一个地址可存几个人),这个 flag 挑其中一个。身份从 token 来:建 work 时写进 `created_by`,动 work 时记进 users,meta 的提交以它为 author。没登录 → exit 1 并提示 `memory.talk login` |
+| `--user <名字>` | `MEMORY_TALK_USER` | 最近登录的 | **用谁的登录态**:`login` 过的人的 token 存在 `<home>/credentials.json`(按服务地址分开,一个地址可存几个人),这个 flag 挑其中一个。身份从 token 来:建 work 时写进 `created_by`,看 / 动 work 时算在它的 viewers 里,进轨迹的动作记成 `user.id`,meta 的提交以它为 author。没登录 → exit 1 并提示 `memory.talk login` |
 | `--token <串>` | `MEMORY_TALK_TOKEN` | 无 | 直接给 token,不走 credentials.json(agent 工作单元里用:把某个人 login 拿到的 token 放进环境) |
 | `--work <id>` | `MEMORY_TALK_WORK` | 无 | **在哪个 work 里操作**:进 `X-Memory-Talk-Work`。自己造成的变动不投给自己的收件箱。agent 工作单元由 work 拉起时,这个变量已经在它的环境里 |
 | `--json` | — | 关 | 结构化输出(机器 / LLM 用);默认 Markdown,TTY 下用 rich 渲染 |

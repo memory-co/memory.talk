@@ -1,13 +1,14 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Fragment, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { ArrowRight, BookOpen, Bot, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink, Globe, LoaderCircle, Maximize2, Minimize2, Move, Plus, Sparkles, Terminal, Wand2, X } from 'lucide-react';
+import { ArrowRight, BookOpen, Bot, ChevronDown, ChevronRight, ChevronsLeft, ChevronsRight, ExternalLink, Eye, Globe, LoaderCircle, Maximize2, Minimize2, Move, Plus, Sparkles, Terminal, Wand2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { queryClient } from '@/lib/query';
-import { useServers, useSystem, useWork } from '@/lib/queries';
+import { useServers, useSystem, useUsers, useWork } from '@/lib/queries';
 import { useT } from '@/lib/i18n';
+import { usePreferences } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { columnLabel, columnNumber, workletLabel, type Canvas, type Column, type Worklet } from '@/lib/types';
 import { Empty, ErrorState, Loading, Modal } from '@/components/Shared';
@@ -31,18 +32,56 @@ function ColumnName({ column, onRename }: { column: Column; onRename: (alias: st
   return <button type="button" className={cn('min-w-0 truncate rounded px-1 py-0.5 text-left hover:bg-accent hover:text-foreground', column.alias && 'text-foreground')} title={t('work.renameColumn')} onClick={() => setDraft(column.alias)}>{columnLabel(t, column)}</button>;
 }
 
+/** 在看(works.viewers,docs/designs/v5/work-store.md):心跳就是 useWork 每 15 秒一次的 GET /works/{id}(后台标签页不发,超过 120 秒服务端清掉)。
+ *  关页面(pagehide)、换到别的 work、离开工作页时发一次「离开」,不用等超时;走 fetch keepalive——要带 Bearer,sendBeacon 带不了。
+ *  StrictMode 开发时会「卸载 → 立刻再挂上」一次:卸载时的离开推到下一拍,同一个 work 马上又挂上就撤掉。 */
+const leaving = new Map<string, number>();
+function usePresence(id: string) {
+  useEffect(() => {
+    const pending = leaving.get(id);
+    if (pending !== undefined) { window.clearTimeout(pending); leaving.delete(id); }
+    const leave = () => { if (!usePreferences.getState().token) return; void api(`/works/${encodeURIComponent(id)}/users/leave`, { method: 'POST', keepalive: true }).catch(() => undefined); };
+    const back = (e: PageTransitionEvent) => { if (e.persisted) void queryClient.invalidateQueries({ queryKey: ['work', id] }); };   // 从往返缓存回来:马上补一次心跳
+    window.addEventListener('pagehide', leave);
+    window.addEventListener('pageshow', back);
+    return () => {
+      window.removeEventListener('pagehide', leave);
+      window.removeEventListener('pageshow', back);
+      leaving.set(id, window.setTimeout(() => {
+        leaving.delete(id); leave();
+        void queryClient.invalidateQueries({ queryKey: ['work', id] });   // 已经不在看了:缓存标旧,下次回来先 GET 一次补上心跳
+      }, 0));
+    };
+  }, [id]);
+}
+
+/** 头部右边:除了自己还有谁在看这个 work(显示名,悬停看全部)。 */
+function Viewers({ names }: { names: string[] }) {
+  const t = useT();
+  const me = usePreferences(s => s.user);
+  const users = useUsers();
+  const label = (name: string) => users.data?.find(u => u.name === name)?.display_name || name;
+  const others = names.filter(n => n !== me);
+  if (!others.length) return null;
+  const list = others.map(label).join(', ');
+  return <span className="flex min-w-0 max-w-[50%] items-center gap-1.5 text-xs text-muted-foreground" title={t('work.viewers', { names: list })}>
+    <Eye className="size-3.5 shrink-0" /><span className="truncate">{list}</span>
+  </span>;
+}
+
 export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
   const t = useT();
   const work = useWork(id);
+  usePresence(id);
   const base = `/works/${encodeURIComponent(id)}`;
   const worklets = useQuery({ queryKey: ['worklets', id], queryFn: ({ signal }) => api<Worklet[]>(`${base}/worklets`, { signal }), refetchInterval: 8_000 });
   const canvas = useQuery({ queryKey: ['canvas', id], queryFn: ({ signal }) => api<Canvas>(`${base}/canvas`, { signal }) });
   const [adding, setAdding] = useState<string | null>(null);          // 往哪一列加工作单元
   const columns = useMemo(() => layout(canvas.data, worklets.data || []), [canvas.data, worklets.data]);
   const byId = useMemo(() => new Map((worklets.data || []).map(s => [s.id, s])), [worklets.data]);
-  // 布局改动:一个动作一个请求(work-events.md),服务端在当前画布上做、记事件,交回新画布
+  // 布局改动:一个动作一个请求(work-events.md),服务端在当前画布上做、记进轨迹(work-trace.md),交回新画布
   const op = useMutation({ mutationFn: ({ path, method, body }: { path: string; method: 'POST' | 'PATCH' | 'DELETE'; body?: unknown }) => api<Canvas>(`${base}${path}`, { method, body }),
-    onSuccess: data => { queryClient.setQueryData(['canvas', id], data); void queryClient.invalidateQueries({ queryKey: ['events', id] }); },
+    onSuccess: data => { queryClient.setQueryData(['canvas', id], data); void queryClient.invalidateQueries({ queryKey: ['trace', id] }); },
     onError: (error: Error) => { toast.error(error.message); void queryClient.invalidateQueries({ queryKey: ['canvas', id] }); },
   });
   const worklet$ = (w: string) => `/worklets/${encodeURIComponent(w)}`;
@@ -80,6 +119,7 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
   return <div className="flex min-h-0 flex-1 flex-col">
     <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
       <h1 className="min-w-0 flex-1 truncate text-base font-semibold" title={work.data.goal}>{work.data.goal}</h1>
+      <Viewers names={work.data.viewers ?? []} />
     </div>
     {worklets.isPending || canvas.isPending ? <Loading /> : worklets.isError ? <div className="p-4"><ErrorState error={worklets.error} retry={() => { void worklets.refetch(); }} /></div>
       : total === 0 && columns.length === 1 ? <div className="flex flex-1 p-4"><Empty icon={<Terminal className="size-5" />} title={ended ? t('work.endedTitle') : t('work.readyTitle')}>
@@ -145,7 +185,7 @@ function NewWorklet({ id, column, onCreated }: { id: string; column: string; onC
   const mutation = useMutation({ mutationFn: (raw: string) => api<Worklet>(`/works/${encodeURIComponent(id)}/worklets`, { method: 'POST', body: { uri: raw, column } }),
     onSuccess: async worklet => {
       queryClient.setQueryData(['live', id, worklet.id], worklet);
-      await Promise.all(['worklets', 'canvas', 'events'].map(key => queryClient.invalidateQueries({ queryKey: [key, id] })));
+      await Promise.all(['worklets', 'canvas', 'trace'].map(key => queryClient.invalidateQueries({ queryKey: [key, id] })));
       onCreated(worklet); setUri(''); toast.success(t('attach.added'));
     } });
   const valid = /^[a-z][a-z0-9+.-]*:\/\//i.test(uri.trim());

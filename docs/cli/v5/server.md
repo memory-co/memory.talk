@@ -46,12 +46,15 @@ memory.talk 已启动(pid 12345)
 ```
 memory.talk 运行中(pid 12345)
   地址     http://127.0.0.1:8000
-  存储     fs  ~/.memory.talk       ← 或 sqlite ~/.memory.talk/memory.sqlite
-  work     3 在做 / 12 总计
-  工作单元     2 活着
-  已运行   1小时2分
+  存储     LocalFS  ~/.memory.talk          ← users / auth 的;sqlite 时是 SQLite
+  work     ~/.memory.talk/works.db          ← work 固定是这两个 sqlite(/api/system/info 的 works_db / worktrace_db)
+  轨迹     ~/.memory.talk/worktrace.db
+  启动于   2026-09-05T10:00:00Z
   健康     ok
+  停止     memory.talk server stop
 ```
+
+存储和两个库的路径来自 `/api/system/info`,要登录态;没 setup / 没 login 时那一行提示先做,两个库的行不打。
 
 没在跑 → 退出码 1(脚本可判);`--json` 给机器读。
 
@@ -61,4 +64,4 @@ memory.talk 运行中(pid 12345)
 
 ## 环境变量
 
-服务读的全部环境变量见 [`../../structure/v5/filesystem.md`](../../structure/v5/filesystem.md#环境变量):`MEMORY_TALK_HOME` / `MEMORY_TALK_STORE` / `MEMORY_TALK_TMUX_SOCKET` / `MEMORY_TALK_TMUXD_*` / 各平台会话记录根。`start` 把当时的环境记进 `instance.json`,`restart` 复用。
+服务读的全部环境变量见 [`../../structure/v5/filesystem.md`](../../structure/v5/filesystem.md#环境变量):`MEMORY_TALK_HOME` / `MEMORY_TALK_STORE`(只管 users / auth)/ `MEMORY_TALK_WORKS_DB` / `MEMORY_TALK_WORKTRACE_DB` / `MEMORY_TALK_TMUX_SOCKET` / `MEMORY_TALK_TMUXD_*` / 各平台会话记录根。`start` 把当时的环境记进 `instance.json`,`restart` 复用。

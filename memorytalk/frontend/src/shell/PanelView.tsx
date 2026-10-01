@@ -26,7 +26,7 @@ export function PanelView({ work, worklet }: { work: Work; worklet: Worklet }) {
   const agent = ['codex', 'claude', 'kimi'].includes(worklet.scheme);
   const live = useQuery<Worklet>({ queryKey: ['live', work.id, worklet.id], enabled: false });
   const connect = useMutation({ mutationFn: () => api<Worklet>(`${base}/attach`, { method: 'POST' }),
-    onSuccess: data => { queryClient.setQueryData(['live', work.id, worklet.id], data); void queryClient.invalidateQueries({ queryKey: ['worklets', work.id] }); },
+    onSuccess: data => { queryClient.setQueryData(['live', work.id, worklet.id], data); for (const key of ['worklets', 'trace']) void queryClient.invalidateQueries({ queryKey: [key, work.id] }); },   // 重入可能开了新的一段
     onError: (error: Error) => toast.error(error.message),
   });
   const url = safeWindowUrl(web ? worklet.uri : live.data?.window?.embed || worklet.window?.embed || null);   // 窗:tmuxd 自带的 ttyd 地址
@@ -35,7 +35,8 @@ export function PanelView({ work, worklet }: { work: Work; worklet: Worklet }) {
   });
   const remove = useMutation({ mutationFn: () => api(`${base}`, { method: 'DELETE' }), onSuccess: () => {
     for (const key of ['live', 'rounds']) queryClient.removeQueries({ queryKey: [key, work.id, worklet.id] });
-    void queryClient.invalidateQueries({ queryKey: ['worklets', work.id] }); setConfirm(false); toast.success(t('worklet.closed'));
+    for (const key of ['worklets', 'canvas', 'trace']) void queryClient.invalidateQueries({ queryKey: [key, work.id] });
+    setConfirm(false); toast.success(t('worklet.closed'));
   }, onError: (error: Error) => toast.error(error.message) });
   const copy = async () => {
     try { await navigator.clipboard.writeText(worklet.uri); setCopied(true); setTimeout(() => setCopied(false), 1500); }

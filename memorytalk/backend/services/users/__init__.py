@@ -1,5 +1,6 @@
 """UserService:user 是注册的顶层对象——有自己的存储(fs / db 仓储),和 work 平级;不做权限(docs/designs/v5/user.md)。
-档案是存的;活动统计(建了几个 work、动过几个、提交数)是从 work 与 metas 现算的派生信息。"""
+档案是存的;活动统计是现算的派生信息:建了几个 work 看 works.db,动过哪些看 worktrace.db(开过 / 关过段、打过点),
+现在在看哪些看 works.viewers,提交数看 metas 的 git。"""
 from __future__ import annotations
 
 from memorytalk.backend.models.search import SearchHit
@@ -13,19 +14,27 @@ from memorytalk.backend.models.users import User, UserCreate, UserProfile, UserU
 
 if TYPE_CHECKING:   # 只做类型:避免 store → users → metas → work → store 的循环导入
     from memorytalk.backend.services.metas import MetasService
-    from memorytalk.backend.services.work.repo import WorkRepo
-
-ACTIVE_WINDOW = 120  # 秒(与 services.work.users 同一口径)
+    from memorytalk.backend.services.work.repo import TraceRepo, WorkRepo
 
 from .repo import UserRepo
 
 
+def _z(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return _z(datetime.now(timezone.utc))
 
 
-def _epoch(iso: str) -> float:
-    return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
+def _iso(nanos: int) -> str:
+    """轨迹里的 Unix 纳秒 → 和 created_at 同一种写法(UTC 到秒,Z 结尾),好放在一起比大小。"""
+    return _z(datetime.fromtimestamp(nanos // 1_000_000_000, timezone.utc))
+
+
+def _git_date(iso: str) -> str:
+    """git 的 %aI 带的是提交人当地的时区 → 换成 UTC 同一种写法(只截前 19 位会把当地时间当成 UTC)。"""
+    return _z(datetime.fromisoformat(iso.replace("Z", "+00:00"))) if iso else ""
 
 
 class UserNotFound(LookupError):
@@ -37,9 +46,10 @@ class UserExists(ValueError):
 
 
 class UserService:
-    def __init__(self, repo: UserRepo, work_repo: "WorkRepo", metas: "MetasService") -> None:
+    def __init__(self, repo: UserRepo, work_repo: "WorkRepo", trace_repo: "TraceRepo", metas: "MetasService") -> None:
         self.repo = repo
         self.works = work_repo
+        self.trace = trace_repo
         self.metas = metas
 
     # ---- 注册 / 档案(存的)----
@@ -83,24 +93,29 @@ class UserService:
 
     # ---- 活动统计(派生,现算)----
 
+    def _touched(self, name: str) -> dict[str, int]:
+        """这个人在轨迹里出现过的 work → 最后一次的时刻(纳秒)。只看开过 / 关过段、打过点,读和心跳不算。"""
+        return self.trace.touched_by(name)
+
     def _activity(self) -> dict[str, dict]:
-        now = datetime.now(timezone.utc).timestamp()
         agg: dict[str, dict] = {}
 
         def bucket(n: str) -> dict:
             return agg.setdefault(n, {"works_created": 0, "works_touched": 0, "commits": 0, "active_works": [], "last_seen": ""})
 
-        for w in self.works.list_works():
-            if w.get("created_by"):
+        for w in self.works.list_works():                     # 按 id 排
+            if w["created_by"]:
                 b = bucket(w["created_by"])
                 b["works_created"] += 1
-                b["last_seen"] = max(b["last_seen"], w.get("created_at", ""))
-            for m in self.works.get_doc(w["id"], "users") or []:
-                b = bucket(m["user"])
-                b["works_touched"] += 1
-                b["last_seen"] = max(b["last_seen"], m["last_seen"])
-                if now - _epoch(m["last_seen"]) <= ACTIVE_WINDOW:
-                    b["active_works"].append(w["id"])
+                b["last_seen"] = max(b["last_seen"], w["created_at"] or "")
+            for name in w["viewers"] or []:
+                bucket(name)["active_works"].append(w["id"])
+        for u in self.repo.list():
+            touched = self._touched(u["name"])
+            if touched:
+                b = bucket(u["name"])
+                b["works_touched"] = len(touched)
+                b["last_seen"] = max(b["last_seen"], _iso(max(touched.values())))
         out = subprocess.run(["git", "log", "--first-parent", "--format=%an%x1f%aI", "refs/heads/stack"],
                              cwd=self.metas.repo.root, capture_output=True, text=True).stdout
         for line in out.splitlines():
@@ -108,7 +123,7 @@ class UserService:
             if name in agg or self.repo.get(name):
                 b = bucket(name)
                 b["commits"] += 1
-                b["last_seen"] = max(b["last_seen"], date[:19] + "Z" if date else "")
+                b["last_seen"] = max(b["last_seen"], _git_date(date))
         return agg
 
     def search(self, q: str, limit: int = 20) -> list[SearchHit]:
@@ -126,8 +141,7 @@ class UserService:
         u = self.get(name)
         act = self._activity().get(name, {})
         created = [w["id"] for w in self.works.list_works(created_by=name)]
-        touched = [w["id"] for w in self.works.list_works()
-                   if any(m["user"] == name for m in (self.works.get_doc(w["id"], "users") or []))]
+        touched = sorted(self._touched(name))
         out = subprocess.run(["git", "log", "--first-parent", f"--author=^{name} <", "--format=%H%x1f%aI%x1f%s", "-20", "refs/heads/stack"],
                              cwd=self.metas.repo.root, capture_output=True, text=True).stdout
         commits = [{"sha": a, "date": b, "subject": c} for a, b, c in (l.split("\x1f") for l in out.splitlines() if l)]

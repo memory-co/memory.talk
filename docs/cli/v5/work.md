@@ -16,8 +16,9 @@ memory.talk work
 │
 ├── inbox    <work_id>
 ├── manager  <work_id> [--set <work_id> | --unset]
-├── users    <work_id>
+├── users    <work_id>                            # 现在谁在看
 ├── touch    <work_id>
+├── leave    <work_id>
 └── servers                                       # 有哪些 work server、各自响应哪些协议
 ```
 
@@ -47,11 +48,11 @@ work_…2f2f  running   alice    把 v5 做出来
 
 ## work show
 
-一个 work 的全貌:目标 / 状态 / 父 / 建者;工作单元(活没活着、窗地址);users(current / history);收件箱最近几条;manager。`--json` 时是各端点的合集。
+一个 work 的全貌:目标 / 状态 / 父 / 建者;工作单元(活没活着、窗地址);现在谁在看(`在看 alice, bob`);收件箱最近几条;manager。`--json` 时是各端点的合集(`users` 是 `{"current": [名字]}`)。
 
 ## work set
 
-改目标 / 状态。`--status archived` 归档:不看子 work,父子各归各的;归档后工作单元冻结(现场销毁、登记留着)。`--status running` 取消归档。
+改目标 / 状态。`--status archived` 归档:不看子 work,父子各归各的;归档后工作单元冻结(先最后收一次 round,再销毁现场、登记留着)。`--status running` 取消归档(轨迹上是 work 的新一段)。
 
 ## work attach
 
@@ -86,14 +87,14 @@ memory.talk work attach work_…2f2f https://localhost:5173/ --column 3
 ## work manager
 
 ```bash
-memory.talk work manager work_…            # 这个 work 的变动打给谁(manager.json,没有则父)
+memory.talk work manager work_…            # 这个 work 的变动打给谁(works.manager,没有则父)
 memory.talk work manager work_… --set work_…root
 memory.talk work manager work_… --unset    # 回到父
 ```
 
-## work users / touch
+## work users / touch / leave
 
-`users`:谁当前在动(current)、谁动过(history),只做可见性不做权限。`touch`:心跳(`--user` 必须有)。
+`users`:现在谁在看(一行一个名字;没人 → `(现在没人在看)`),只做可见性不做权限;谁做过什么在轨迹里(`GET /api/works/{id}/trace`)。`touch`:心跳(`--user` 必须有;120 秒不再心跳就不算在看)。`leave`:不看了,立刻拿掉。
 
 ## work servers
 

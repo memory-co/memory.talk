@@ -1,6 +1,6 @@
 # Filesystem (v5)
 
-`~/.memory.talk/` 下只有两样:一个分层 git 仓库,一堆裸文件。**没有数据库,没有索引**;每个字节都是 canonical。为什么见 [`../../designs/v5/metas/store.md`](../../designs/v5/metas/store.md)。
+`~/.memory.talk/` 下主要是三样:一个分层 git 仓库(认知层,每个字节都是 canonical,为什么见 [`../../designs/v5/metas/store.md`](../../designs/v5/metas/store.md));work 的两个 sqlite——`works.db`(现在)和 `worktrace.db`(经过),见 [`../../designs/v5/work-store.md`](../../designs/v5/work-store.md);users / auth 的记录(按 `MEMORY_TALK_STORE` 是裸文件或 `memory.sqlite`)。
 
 ```
 ~/.memory.talk/                       ← MEMORY_TALK_HOME
@@ -20,19 +20,9 @@
 ├── auth/tokens/<sha256>.json         ← 登录态登记:JWT 里 jti 的哈希 → {user, created_at, exp}(logout / 改密码即删)
 ├── tmuxd/                            ← tmuxd 的 state(会话记录、ttyd 记录、tmux.conf、ttyd.sock——窗经它挂到 /surface/tmuxd);tmux 会话本身不落盘
 ├── credentials.json                  ← CLI 的登录态(客户端的事,按服务地址分开;memory.talk login 写)
-├── works/                            ← 裸文件(现场层)
-│   └── <work_id>/
-│       ├── work.json                 ←   目标 / 父 / 状态
-│       ├── canvas.json               ←   画布(视图);不存在 = 空画布
-│       ├── worklets.json             ←   工作单元登记(数组,现场)
-│       ├── seq.json                  ←   编号计数器:下一个工作单元号,不复用
-│       ├── users.json                ←   user:谁动过,只做可见性
-│       ├── manager.json              ←   这棵子树的变动打给谁(可选;没有 → 父 work)
-│       ├── events.jsonl              ←   work 时间线,只追加
-│       ├── inbox.jsonl               ←   收件箱:manager.json 路由过来的变动,只追加
-│       ├── worklets/<worklet_id>/rounds.jsonl   ← agent 工作单元痕迹,只追加
-│       └── subs/<child_id>/          ←   子 work,结构同上
-└── unmanaged.jsonl                   ← 没人管的变动
+├── works.db                          ← work 的现在(sqlite,+ -wal / -shm):works / work_columns / worklets / inbox 四张表
+├── worktrace.db                      ← work 的经过(sqlite,+ -wal / -shm):spans / points / rounds 三张表
+└── memory.sqlite                     ← users / auth(只在 MEMORY_TALK_STORE=sqlite 时)
 ```
 
 ## metas/(分层 git)
@@ -43,17 +33,26 @@
 - **author** 来自 `MEMORY_TALK_AUTHOR` / `MEMORY_TALK_EMAIL`,写进仓库 config。
 - **历史** = `git log layer/<层>` / `git log --first-parent stack` / `git log -- <路径>`;**检索** = `git grep` stack;**旧版本** = `git show <sha>:<路径>`。只用 git 命令行。
 - **并发**:进程内一把锁串行化提交。多进程写同一仓库不在 v5 范围内。
-- **不进 git 的**:works/ 的一切。
+- **不进 git 的**:works.db / worktrace.db 的一切。
 
-## works/(裸文件;MEMORY_TALK_STORE=fs)
+## works.db / worktrace.db(work 固定是 sqlite)
 
-介质可换:`MEMORY_TALK_STORE=sqlite` 时这一半(连同 users/、auth/)全在 `memory.sqlite`(`MEMORY_TALK_SQLITE` 可改路径)的五张表里(`users` / `auth_tokens` / `works` / `work_docs` / `work_logs`),业务层不感知(见 [designs provider.md](../../designs/v5/provider.md))。这是现在的实现;设计已改成 work 只用 sqlite、拆成 works.db / worktrace.db,见 [designs work-store.md](../../designs/v5/work-store.md)(未实施)。
+表和列见 [work.md](work.md) 和 [designs work-store.md §3–§5](../../designs/v5/work-store.md)。
 
-- **原子写**:`work.json` / `canvas.json` / `worklets.json` / `seq.json` / `users.json` / `manager.json` 写临时文件后 `os.replace`。
-- **只追加**:`events.jsonl` / `inbox.jsonl` / `rounds.jsonl`,从不改既有行。
-- **单写者、无缓存直读**:服务进程是唯一写者;每次请求直接读盘。
-- **目录就是树**:子 work 住在父目录的 `subs/<child_id>/` 下,结构和父一样;`works/` 一层只有根 work。
-- **work 结束不删目录**:现场(tmux 会话)销毁,文件留着,可回去看痕迹。
+| 库 | 表 | 一行是 |
+|---|---|---|
+| `works.db` | `works` | 一个 work:`parent` 就是树;`manager`(这棵子树的变动打给谁,空 = 父 work)、`viewers`(现在谁在看,心跳算出来整份写,重启清空)、计数器 `next_worklet` / `next_column` / `canvas_version` |
+| | `work_columns` | 画布的一列,主键 (`work_id`, `number`),`position` 从左到右 0..n-1 |
+| | `worklets` | 一个工作单元:登记 + 摆在哪(`column_number` / `position` / `collapsed`) |
+| | `inbox` | 一条打过来的变动;`work_id` 为空 = 没人管 |
+| `worktrace.db` | `spans` | 一个段(`work` / `worklet` / `agent.turn`),终点为空 = 还开着 |
+| | `points` | 一个点(`column.*` / `worklet.moved` / `worklet.closed` / `work.renamed`),只追加 |
+| | `rounds` | agent 工作单元的一条 round,只追加,按 (`worklet_id`, `round_id`) 去重 |
+
+- **一个动作一个事务**:一个动作在 `works.db` 里的读-改-写在一个事务里做完;建 / 销毁现场不在事务里;最后写 `worktrace.db`。两个库之间没有原子提交,轨迹写失败只记日志,不回滚 work。
+- **单写者**:服务进程是唯一写者,每个库一个 provider 实例、一把进程内锁;CLI 和 agent 都走 HTTP。
+- **work 归档不删记录**:现场(tmux 会话)销毁,登记和画布留着,可回去看痕迹。
+- users / auth 仍按 `MEMORY_TALK_STORE`:`fs` 时是上面的 `users/` / `auth/tokens/`,`sqlite` 时在 `memory.sqlite`(`MEMORY_TALK_SQLITE` 可改路径)的 `users` / `auth_tokens` 表里,业务层不感知(见 [designs provider.md](../../designs/v5/provider.md))。
 
 ## 运行时(不落盘)
 
@@ -67,8 +66,10 @@
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `MEMORY_TALK_HOME` | `~/.memory.talk` | 根 |
-| `MEMORY_TALK_STORE` | `fs` | work / user 记录的介质:`fs` / `sqlite` |
-| `MEMORY_TALK_SQLITE` | `<HOME>/memory.sqlite` | sqlite 文件路径 |
+| `MEMORY_TALK_STORE` | `fs` | users / auth 记录的介质:`fs` / `sqlite`(work 不看它) |
+| `MEMORY_TALK_SQLITE` | `<HOME>/memory.sqlite` | users / auth 的 sqlite 文件路径 |
+| `MEMORY_TALK_WORKS_DB` | `<HOME>/works.db` | work 的现在 |
+| `MEMORY_TALK_WORKTRACE_DB` | `<HOME>/worktrace.db` | work 的经过(段、点、round) |
 | `MEMORY_TALK_AUTHOR` / `MEMORY_TALK_EMAIL` | `memory.talk` / `memory.talk@localhost` | git author |
 | `MEMORY_TALK_WORKSPACE` | `~/workspace` | 终端类 URI 省略 path 时的 cwd |
 | `MEMORY_TALK_TMUX_SOCKET` | `memorytalk` | tmuxd 的 socket 名(实际 tmux socket 是 `tmuxd-<名>`),和你自己的 tmux 隔离 |

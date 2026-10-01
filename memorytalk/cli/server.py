@@ -109,9 +109,11 @@ def server_status(a) -> None:
         _, token = saved_token(inst["url"], os.environ.get("MEMORY_TALK_USER"))
         r = httpx.get(f"{inst['url']}/api/system/info", timeout=2, headers={"Authorization": f"Bearer {token}"} if token else {})
         body = r.json()
-        store = f"{body['data']['store']['backend']}  {body['data']['home']}" if r.status_code == 200 else \
+        info = body["data"] if r.status_code == 200 else None
+        store = f"{info['store']['backend']}  {info['home']}" if info else \
             "(先 memory.talk setup)" if body.get("error") == "setup_required" else "(先 memory.talk login)"
-        print(f"memory.talk 运行中(pid {inst['pid']})\n  地址     {inst['url']}\n  存储     {store}\n"
+        dbs = f"  work     {info['works_db']}\n  轨迹     {info['worktrace_db']}\n" if info else ""     # work 固定是这两个 sqlite
+        print(f"memory.talk 运行中(pid {inst['pid']})\n  地址     {inst['url']}\n  存储     {store}\n{dbs}"
               f"  启动于   {inst['started_at']}\n  健康     ok\n  停止     memory.talk server stop")
     if not ok:
         raise SystemExit(1)

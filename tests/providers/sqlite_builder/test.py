@@ -67,3 +67,53 @@ def test_transaction_rolls_back_on_error(people, db):
 def test_values_are_bound_not_interpolated(people, db):
     db.insert(people).values(id="a'; DROP TABLE people; --", age=1, team="t", meta=None).run()
     assert db.select(people).where(people.c.id == "a'; DROP TABLE people; --").one()["age"] == 1
+
+
+# ---- 表级选项:组合主键、多列索引 ----
+
+@pytest.fixture
+def cells(db):
+    return db.table("cells", Column("work_id", str), Column("number", int), Column("alias", str),
+                    Column("open", bool), Column("position", int),
+                    primary_key=("work_id", "number"), indexes=[("work_id", "position")])
+
+
+def test_composite_primary_key_rejects_duplicates(cells, db):
+    import sqlite3
+    db.insert(cells).values(work_id="w", number=1, alias="", open=True, position=0).run()
+    db.insert(cells).values(work_id="w", number=2, alias="", open=True, position=1).run()
+    db.insert(cells).values(work_id="v", number=1, alias="", open=True, position=0).run()      # 别的 work 同号可以
+    with pytest.raises(sqlite3.IntegrityError):
+        db.insert(cells).values(work_id="w", number=1, alias="dup", open=False, position=2).run()
+
+
+def test_composite_primary_key_columns_are_not_null(cells, db):
+    import sqlite3
+    with pytest.raises(sqlite3.IntegrityError):
+        db.insert(cells).values(work_id=None, number=1, alias="", open=True, position=0).run()
+
+
+def test_multi_column_index_is_created(cells, db):
+    rows = db._execute("SELECT name, sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'cells'", [], fetch=True)
+    assert any(r["name"] == "idx_cells_work_id_position" and "work_id, position" in r["sql"] for r in rows)
+
+
+def test_bool_columns_read_back_as_bool(cells, db):
+    db.insert(cells).values(work_id="w", number=1, alias="", open=False, position=0).run()
+    assert db.select(cells).one()["open"] is False
+
+
+def test_is_not_null_and_several_orders(people, db):
+    for i, (age, team) in enumerate([(2, "b"), (1, None), (2, "a"), (1, "c")]):
+        db.insert(people).values(id=f"p{i}", age=age, team=team, meta=None).run()
+    rows = db.select(people).where(people.c.team.is_not_null()).order_by(people.c.age.asc(), people.c.team.desc()).all()
+    assert [r["id"] for r in rows] == ["p3", "p0", "p2"]
+
+
+def test_set_accepts_column_arithmetic(cells, db):
+    for n in range(3):
+        db.insert(cells).values(work_id="w", number=n + 1, alias="", open=True, position=n).run()
+    assert db.update(cells).where(cells.c.work_id == "w", cells.c.position >= 1).set(position=cells.c.position + 1).run() == 2
+    db.update(cells).where(cells.c.number == 1).set(position=cells.c.position - 0, alias="x").run()
+    rows = db.select(cells).order_by(cells.c.number.asc()).all()
+    assert [(r["position"], r["alias"]) for r in rows] == [(0, "x"), (2, ""), (3, "")]

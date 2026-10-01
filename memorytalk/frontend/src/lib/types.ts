@@ -5,6 +5,7 @@ export type WorkStatus = 'running' | 'archived';
 export interface Work {
   id: string; goal: string; parent: string | null; status: WorkStatus;
   created_by: string | null; created_at: string; archived_at: string | null; children?: Work[];
+  viewers: string[];                                                  // 现在谁在看(按名字排;心跳算出来的,docs/designs/v5/work-store.md)
 }
 export interface Worklet {
   id: string; uri: string; scheme: string; cwd: string | null; alive: boolean;
@@ -45,7 +46,24 @@ export interface MetaObject {
 export interface Revision { sha: string; author: string; date: string; subject: string; body: string }
 export interface SearchHit { kind: 'work' | 'meta' | 'user'; id: string; title: string; snippet: string; layer: string | null; file: string | null; line: number | null; status: string | null }
 export interface SearchResult { query: string; hits: SearchHit[]; counts: Record<string, number> }
-export interface WorkEvent { ts: string; type: string; data: Record<string, unknown> }
+/** 轨迹(GET /works/{id}/trace):OTLP/JSON 的 TracesData + LogsData(docs/designs/v5/work-trace.md §3)。id 是十六进制,时间和 intValue 是十进制字符串。 */
+export interface AnyValue {
+  stringValue?: string; intValue?: string; boolValue?: boolean; doubleValue?: number;
+  arrayValue?: { values?: AnyValue[] }; kvlistValue?: { values?: KeyValue[] };
+}
+export interface KeyValue { key: string; value: AnyValue }
+export interface TraceSpan {
+  traceId: string; spanId: string; parentSpanId?: string; name: string; kind: number;
+  startTimeUnixNano: string; endTimeUnixNano?: string;              // 没有终点 = 还开着(另带 memorytalk.open = true)
+  attributes?: KeyValue[]; links?: { traceId: string; spanId: string; attributes?: KeyValue[] }[]; status?: { code?: number };
+}
+export interface TraceLogRecord {
+  timeUnixNano: string; observedTimeUnixNano?: string; eventName: string; traceId?: string; spanId?: string; attributes?: KeyValue[];
+}
+export interface WorkTrace {
+  traces: { resourceSpans?: { scopeSpans?: { spans?: TraceSpan[] }[] }[] };
+  logs: { resourceLogs?: { scopeLogs?: { logRecords?: TraceLogRecord[] }[] }[] };
+}
 export interface InboxItem { ts: string; layer: string; path: string; subject: string; by: string | null }
 export const workStatuses: WorkStatus[] = ['running', 'archived'];
 export const statusLabel = (t: T, status: WorkStatus) => t(`status.${status}`);
@@ -55,6 +73,16 @@ const schemeNames: Record<string, string> = { codex: 'Codex', claude: 'Claude Co
 export const columnNumber = (t: T, column: { id: string }) => t('work.column', { n: column.id.replace(/^c/, '') });
 export const columnLabel = (t: T, column: { id: string; alias?: string | null }) => column.alias || columnNumber(t, column);
 export const workletLabel = (t: T, scheme: string) => schemeNames[scheme] || (['bash', 'http', 'https'].includes(scheme) ? t(`scheme.${scheme}` as Key) : scheme);
+/** 从 OTLP 属性里取一个标量:intValue 是十进制字符串,这里转成 number(不然 +1 会变成拼字符串);数组 / kvlist 这里用不到,不取。 */
+export function attrValue(attributes: KeyValue[] | undefined, key: string): string | number | boolean | undefined {
+  const v = attributes?.find(a => a.key === key)?.value;
+  if (!v) return undefined;
+  if (v.stringValue !== undefined) return v.stringValue;
+  if (v.intValue !== undefined) return Number(v.intValue);
+  if (v.boolValue !== undefined) return v.boolValue;
+  if (v.doubleValue !== undefined) return v.doubleValue;
+  return undefined;
+}
 export function flattenWorks(works: Work[]): Work[] {
   return works.flatMap(w => [w, ...flattenWorks(w.children || [])]);
 }

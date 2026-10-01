@@ -1,13 +1,13 @@
-"""/api/works —— 树、画布、工作单元(attach = 经 server 建现场)、痕迹、事件、召回。"""
+"""/api/works —— 树、画布、工作单元(attach = 经 server 建现场)、痕迹(round)、轨迹(trace)、谁在看。"""
 from __future__ import annotations
 
 from memorytalk.backend.models.result import Result, ok
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Request
 
 from memorytalk.backend.models.metas import InboxItem
 from memorytalk.backend.models.work_server import WorkServerInfo
-from memorytalk.backend.models.work import (Canvas, ColumnCreate, ColumnUpdate, Event, Round, Worklet, WorkletCreate, WorkletMove,
-                         WorkletUpdate, WorkletView, Work, WorkCreate, WorkNode, WorkUpdate, WorkUsers)
+from memorytalk.backend.models.work import (Canvas, ColumnCreate, ColumnUpdate, Round, WorkletCreate, WorkletMove,
+                         WorkletUpdate, WorkletView, Work, WorkCreate, WorkNode, WorkTrace, WorkUpdate, WorkUsers)
 from memorytalk.backend.services.metas import MetasService
 from memorytalk.backend.services.work import WorkService
 
@@ -43,22 +43,23 @@ def create(req: WorkCreate, svc: WorkService = Depends(works), who: str | None =
     return ok(svc.create(req, created_by=who))
 
 
-@router.get("/{work_id}", response_model=Result[Work], summary="读一个 work(带身份 = 打开它,记一笔在操作)")
+@router.get("/{work_id}", response_model=Result[Work], summary="读一个 work(带身份 = 打开它,算一次心跳:在看)")
 def get(work_id: str, svc: WorkService = Depends(works), who: str | None = Depends(user)):
     svc.touch(work_id, who)
     return ok(svc.get(work_id))
 
 
 @router.patch("/{work_id}", response_model=Result[Work],
-              summary="改目标 / 状态(running / archived);归档后工作单元冻结")
+              summary="改目标 / 状态(running / archived);归档后工作单元冻结,重新打开 = 轨迹上新的一段")
 def update(work_id: str, req: WorkUpdate, svc: WorkService = Depends(works), who: str | None = Depends(user)):
     svc.touch(work_id, who)
     return ok(svc.update(work_id, req, by=who))
 
 
-@router.get("/{work_id}/events", response_model=Result[list[Event]], summary="work 自己的时间线")
-def events(work_id: str, svc: WorkService = Depends(works)):
-    return ok(svc.history(work_id))
+@router.get("/{work_id}/trace", response_model=Result[WorkTrace],
+            summary="轨迹:OTLP/JSON 的段(开着的没有终点、带 memorytalk.open)+ 点;subtree = 连同所有子 work")
+def trace(work_id: str, subtree: bool = False, svc: WorkService = Depends(works)):
+    return ok(svc.trace_of(work_id, subtree))
 
 
 @router.get("/{work_id}/inbox", response_model=Result[list[InboxItem]],
@@ -67,7 +68,7 @@ def inbox(work_id: str, svc: WorkService = Depends(works)):
     return ok(svc.read_inbox(work_id))
 
 
-@router.get("/{work_id}/manager", summary="这个 work 的变动打给谁:manager.json,没有则父 work", response_model=Result[dict])
+@router.get("/{work_id}/manager", summary="这个 work 的变动打给谁:设了 manager 就是它,没有则父 work", response_model=Result[dict])
 def get_manager(work_id: str, svc: WorkService = Depends(works)) -> dict:
     return ok({"work": svc.manager_of(work_id)})
 
@@ -78,15 +79,20 @@ def put_manager(work_id: str, req: dict, svc: WorkService = Depends(works)) -> d
 
 
 @router.get("/{work_id}/users", response_model=Result[WorkUsers],
-            summary="user:谁当前正在操作(current)、谁历史操作过(history)。只做可见性,不做权限")
+            summary="现在谁在看这个 work(current,按名字排)。只做可见性,不做权限;谁做过什么看 /trace")
 def users(work_id: str, svc: WorkService = Depends(works)):
     return ok(svc.list_users(work_id))
 
 
-@router.post("/{work_id}/users/touch", response_model=Result[WorkUsers], summary="我在操作这个 work(心跳;身份来自登录态)")
+@router.post("/{work_id}/users/touch", response_model=Result[WorkUsers], summary="我在看这个 work(心跳;身份来自登录态)")
 def touch(work_id: str, svc: WorkService = Depends(works), who: str | None = Depends(user)):
     svc.touch(work_id, who)
     return ok(svc.list_users(work_id))
+
+
+@router.post("/{work_id}/users/leave", response_model=Result[WorkUsers], summary="我不看了(关页面 / 切走时发;不用等心跳超时)")
+def leave(work_id: str, svc: WorkService = Depends(works), who: str | None = Depends(user)):
+    return ok(svc.leave(work_id, who))
 
 
 @router.get("/{work_id}/canvas", response_model=Result[Canvas], summary="画布(视图,随时可重排)")
@@ -129,7 +135,7 @@ def attach(work_id: str, req: WorkletCreate, svc: WorkService = Depends(works), 
              summary="重入:幂等取回同一个现场")
 def reattach(work_id: str, worklet_id: str, svc: WorkService = Depends(works), who: str | None = Depends(user)):
     svc.touch(work_id, who)
-    return ok(svc.reattach(work_id, worklet_id))
+    return ok(svc.reattach(work_id, worklet_id, by=who))
 
 
 @router.delete("/{work_id}/worklets/{worklet_id}", summary="关闭即回收:销毁现场 + 删登记")
@@ -146,13 +152,13 @@ def move_worklet(work_id: str, worklet_id: str, req: WorkletMove, svc: WorkServi
     return ok(svc.move_worklet(work_id, worklet_id, req, by=who))
 
 
-@router.patch("/{work_id}/worklets/{worklet_id}", response_model=Result[Canvas], summary="收起 / 展开工作单元(不记事件)")
+@router.patch("/{work_id}/worklets/{worklet_id}", response_model=Result[Canvas], summary="收起 / 展开工作单元(不进轨迹)")
 def update_worklet(work_id: str, worklet_id: str, req: WorkletUpdate, svc: WorkService = Depends(works), who: str | None = Depends(user)):
     svc.touch(work_id, who)
     return ok(svc.update_worklet(work_id, worklet_id, req))
 
 
 @router.get("/{work_id}/worklets/{worklet_id}/rounds", response_model=Result[list[Round]],
-            summary="痕迹:agent 工作单元的 round(先从把手同步新 round,再读 rounds.jsonl)")
+            summary="痕迹:agent 工作单元的 round(先从把手同步新 round,再按顺序读 worktrace.db 的 rounds)")
 def rounds(work_id: str, worklet_id: str, svc: WorkService = Depends(works)):
     return ok(svc.rounds(work_id, worklet_id))

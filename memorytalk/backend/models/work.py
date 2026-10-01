@@ -1,16 +1,13 @@
-"""work —— 把一件事做下去的载体,复杂的事是一棵树(docs/designs/v5/work.md)。全部是裸文件。"""
+"""work —— 把一件事做下去的载体,复杂的事是一棵树(docs/designs/v5/work.md)。存在 works.db / worktrace.db(work-store.md)。"""
 from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import AliasChoices, BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 from .work_server import HandleInfo, Window
 
 WorkStatus = Literal["running", "archived"]
-
-# 旧的四档状态读进来时折成两档:还在做的都是 running,做完 / 放下的都是 archived。
-_LEGACY_STATUS = {"todo": "running", "doing": "running", "done": "archived", "abandoned": "archived"}
 
 
 class Work(BaseModel):
@@ -20,12 +17,8 @@ class Work(BaseModel):
     parent: str | None = Field(None, description="属于哪件更大的事")
     status: WorkStatus = "running"
     created_at: str
-    archived_at: str | None = Field(None, validation_alias=AliasChoices("archived_at", "done_at"))
-
-    @field_validator("status", mode="before")
-    @classmethod
-    def _legacy_status(cls, v):
-        return _LEGACY_STATUS.get(v, v)
+    archived_at: str | None = None
+    viewers: list[str] = Field(default_factory=list, description="现在谁在看(心跳算出来的,按名字排;重启清空)")
 
 
 class WorkCreate(BaseModel):
@@ -52,8 +45,7 @@ class Panel(BaseModel):
 class Column(BaseModel):
     """一列 = 固定编号 + 别名(work-events.md §3):id 写成 c<编号>,服务端发、永不改不复用;别名随便改、可空可重名。"""
     id: str = Field(description="c<编号>;服务端发,永不改、不复用")
-    alias: str = Field("", max_length=80, validation_alias=AliasChoices("alias", "name"),
-                       description="别名;空 = 前端显示「列 <编号>」。旧数据里叫 name")
+    alias: str = Field("", max_length=80, description="别名;空 = 前端显示「列 <编号>」")
     panels: list[Panel] = Field(default_factory=list, description="从上到下")
     collapsed: bool = Field(False, description="整列收起 = 缩成一条窄边")
 
@@ -119,28 +111,16 @@ class Round(BaseModel):
     text: str
 
 
-class Event(BaseModel):
-    ts: str
-    type: str
-    data: dict = Field(default_factory=dict)
+class WorkTrace(BaseModel):
+    """轨迹(work-trace.md §6):OTLP/JSON 的 TracesData(段,开着的没有终点、带 memorytalk.open)+ LogsData(点)。"""
+    traces: dict = Field(description='{"resourceSpans": [...]}')
+    logs: dict = Field(description='{"resourceLogs": [...]}')
 
 
 WorkNode.model_rebuild()
 
 
-# ---- user ↔ work:谁动过。只做可见性,不做权限(整个实例给一个团队用) ----
-
-class WorkUser(BaseModel):
-    user: str = Field(description="团队里的一个人,由客户端在请求头 X-Memory-Talk-User 里自报")
-    first_seen: str
-    last_seen: str
-    ops: int = Field(0, description="对这个 work 的操作次数")
-
-
-class WorkUserView(WorkUser):
-    active: bool = Field(False, description="最近一段时间内操作过 = 当前正在操作(现算)")
-
+# ---- user ↔ work:现在谁在看。只做可见性,不做权限(整个实例给一个团队用);谁做过什么查轨迹 ----
 
 class WorkUsers(BaseModel):
-    current: list[WorkUserView] = Field(default_factory=list, description="当前正在操作的人")
-    history: list[WorkUserView] = Field(default_factory=list, description="历史操作过的人(含当前),按最近活动倒序")
+    current: list[str] = Field(default_factory=list, description="现在在看这个 work 的人(心跳 120 秒一窗;按名字排)")

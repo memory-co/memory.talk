@@ -1,4 +1,5 @@
 """users/work_ownership -- created_by. See README.md."""
+from tests._util import trace
 
 
 def test_created_by_comes_from_the_header(client, H):
@@ -19,9 +20,11 @@ def test_child_has_its_own_creator(client, H):
     assert c["created_by"] == "bob"
 
 
-def test_creator_is_first_in_users_list(client, H):
+def test_creator_opens_the_work_span_and_is_looking_at_it(client, H):
     a = client.post("/api/works", json={"goal": "A"}, headers=H("alice")).json()
-    assert [u["user"] for u in client.get(f"/api/works/{a['id']}/users").json()["history"]] == ["alice"]
+    [s], _ = trace(client, a["id"])
+    assert (s["name"], s["user.id"]) == ("work", "alice")
+    assert client.get(f"/api/works/{a['id']}/users").json()["current"] == ["alice"]
 
 
 def test_created_by_does_not_change_on_update(client, H):

@@ -27,8 +27,7 @@ def w_show(api, a):
     print(f"{w['id']}  {w['status']}  建者 {w.get('created_by') or '-'}  父 {w.get('parent') or '-'}\n  {w['goal']}")
     for s in api.call("GET", f"/api/works/{a.work_id}/worklets"):
         print(f"  工作单元 {s['id']}  {s['uri']}  {'活着' if s['alive'] else '死了'}")
-    u = api.call("GET", f"/api/works/{a.work_id}/users")
-    print(f"  在动 {', '.join(x['user'] for x in u['current']) or '-'};动过 {', '.join(x['user'] for x in u['history']) or '-'}")
+    print(f"  在看 {', '.join(api.call('GET', f'/api/works/{a.work_id}/users')['current']) or '-'}")
     print(f"  manager {api.call('GET', f'/api/works/{a.work_id}/manager')['work'] or '-'}")
     for i in api.call("GET", f"/api/works/{a.work_id}/inbox")[-5:]:
         print(f"  收件 {i['ts']}  [{i['layer']}] {i['path']}  {i['subject']}")
@@ -61,10 +60,11 @@ def w_manager(api, a):
     else:
         r = api.call("GET", f"/api/works/{a.work_id}/manager")
     out(r, a.json, f"manager: {r['work'] or '-(根)'}")
-def w_users(api, a):
+def w_users(api, a):                       # 现在谁在看(心跳 120 秒一窗);谁做过什么在轨迹里
     u = api.call("GET", f"/api/works/{a.work_id}/users")
-    out(u, a.json, "\n".join(f"{x['user']:<10} {'在动' if x['active'] else '    '}  {x['ops']} 次  最近 {x['last_seen']}" for x in u["history"]) or "(还没人动过)")
+    out(u, a.json, "\n".join(u["current"]) or "(现在没人在看)")
 def w_touch(api, a): out(api.call("POST", f"/api/works/{a.work_id}/users/touch"), a.json, "ok")
+def w_leave(api, a): out(api.call("POST", f"/api/works/{a.work_id}/users/leave"), a.json, "ok")
 def w_servers(api, a):
     ss = api.call("GET", "/api/works/servers")
     out(ss, a.json, "\n".join(f"{s['name']:<8} {', '.join(s['protocols']) or '(兜底)':<14} {s['description']}" for s in ss))
@@ -96,4 +96,5 @@ def register(top) -> None:
     wp("manager", w_manager, (["--set"], {}), (["--unset"], {"action": "store_true"}))
     wp("users", w_users)
     wp("touch", w_touch)
+    wp("leave", w_leave)
     wp("servers", w_servers, wid=False)

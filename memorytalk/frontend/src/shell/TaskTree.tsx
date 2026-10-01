@@ -30,7 +30,7 @@ function RowActions({ work, onSplit, className }: { work: Work; onSplit: (id: st
   const t = useT();
   const ended = work.status === 'archived';
   const setStatus = useMutation({ mutationFn: (status: WorkStatus) => api<Work>(`/works/${encodeURIComponent(work.id)}`, { method: 'PATCH', body: { status } }),
-    onSuccess: () => { for (const key of [['work', work.id], ['works'], ['worklets', work.id], ['events', work.id]]) void queryClient.invalidateQueries({ queryKey: key }); },
+    onSuccess: () => { for (const key of [['work', work.id], ['works'], ['worklets', work.id], ['trace', work.id]]) void queryClient.invalidateQueries({ queryKey: key }); },
     onError: (error: Error) => toast.error(error.message),
   });
   return <DropdownMenu>

@@ -8,7 +8,7 @@
 | 方法 | 端点 | 说明 |
 |---|---|---|
 | `GET` | `/api/system/health` | 健康检查 |
-| `GET` | `/api/system/info` | 运行信息:路径、存储 provider、tmux socket、有没有窗 |
+| `GET` | `/api/system/info` | 运行信息:路径、存储(work 的两个库 + users / auth 的 provider)、tmux socket、有没有窗 |
 | `GET` | `/api/auth/status` | 门的状态:要不要先 setup;这次带的 token 有效吗、是谁(不拦) |
 | `POST` | `/api/auth/setup` | 首次:建 admin 账号并登录;admin 已存在 → 404(不拦) |
 | `POST` | `/api/auth/login` | 密码换 token;之后 Authorization: Bearer <token>(不拦) |
@@ -16,25 +16,26 @@
 | `GET` | `/api/works` | work 树(森林;root= 只看一棵;created_by= 只看某人建的) |
 | `POST` | `/api/works` | 开工:建一个 work(parent= 挂到树上) |
 | `GET` | `/api/works/servers` | 有哪些 work server(bash / claude / codex / kimi / http / default)及各自响应的协议;attach 时按协议去找它们 |
-| `GET` | `/api/works/{work_id}` | 读一个 work(带身份 = 打开它,记一笔在操作) |
-| `PATCH` | `/api/works/{work_id}` | 改目标 / 状态(`running` / `archived`);归档后工作单元冻结 |
+| `GET` | `/api/works/{work_id}` | 读一个 work(带身份 = 打开它,算一次心跳:在看) |
+| `PATCH` | `/api/works/{work_id}` | 改目标 / 状态(`running` / `archived`);归档后工作单元冻结,重新打开 = 轨迹上新的一段 |
 | `GET` | `/api/works/{work_id}/canvas` | 画布:几列(编号 + 别名)、每列从上到下摆哪些工作单元、哪些收起(视图;没有整份写口,每个动作一个请求) |
 | `POST` | `/api/works/{work_id}/columns` | 加一列(服务端发编号 c<n>,永不复用;beside + side 定位置,不给 = 最右) |
 | `PATCH` | `/api/works/{work_id}/columns/{column_id}` | 改别名(编号不动)/ 收起展开 |
 | `DELETE` | `/api/works/{work_id}/columns/{column_id}` | 删一列:只有空列能删,最后一列不能删 |
-| `GET` | `/api/works/{work_id}/events` | work 自己的时间线 |
+| `GET` | `/api/works/{work_id}/trace` | 轨迹:OTLP/JSON 的段(开着的没有终点、带 memorytalk.open)+ 点;`subtree=true` 连同所有子孙 work |
 | `GET` | `/api/works/{work_id}/inbox` | 收件箱:被 manager.json 路由过来的变动(Metas 的对象、子 work 的状态) |
-| `GET` | `/api/works/{work_id}/manager` | 这个 work 的变动打给谁:manager.json,没有则父 work |
+| `GET` | `/api/works/{work_id}/manager` | 这个 work 的变动打给谁:设了 manager(`works.manager`)就是它,没有则父 work |
 | `PUT` | `/api/works/{work_id}/manager` | 改写默认:这棵子树的变动打给指定 work(null = 删掉,回到父) |
 | `GET` | `/api/works/{work_id}/worklets` | 工作单元清单(含活没活着) |
-| `POST` | `/api/works/{work_id}/worklets` | 在 work 里打开一个块:协议 → server 建现场,登记工作单元,放进指定列(column=,不给 = 最左),交回窗 + 把手 |
-| `GET` | `/api/works/{work_id}/users` | user:谁当前正在操作(current)、谁历史操作过(history)。只做可见性,不做权限 |
+| `POST` | `/api/works/{work_id}/worklets` | 在 work 里打开一个块:协议 → server 建现场,登记工作单元,放进指定列(column=,不给 = 最左),开 worklet 段,交回窗 + 把手 |
+| `GET` | `/api/works/{work_id}/users` | 现在谁在看(`current`,名字列表)。只做可见性,不做权限;谁做过什么看 `/trace` |
 | `DELETE` | `/api/works/{work_id}/worklets/{worklet_id}` | 关闭即回收:销毁现场 + 删登记 |
-| `POST` | `/api/works/{work_id}/users/touch` | 我在操作这个 work(心跳;身份来自登录态) |
+| `POST` | `/api/works/{work_id}/users/touch` | 我在看这个 work(心跳;身份来自登录态) |
+| `POST` | `/api/works/{work_id}/users/leave` | 我不看了(关页面 / 切走时发;立刻拿掉,不等心跳超时) |
 | `POST` | `/api/works/{work_id}/worklets/{worklet_id}/attach` | 重入:幂等取回同一个现场 |
 | `POST` | `/api/works/{work_id}/worklets/{worklet_id}/move` | 挪工作单元:到哪一列、列里第几个(不给 = 末尾) |
-| `PATCH` | `/api/works/{work_id}/worklets/{worklet_id}` | 收起 / 展开工作单元(不记事件) |
-| `GET` | `/api/works/{work_id}/worklets/{worklet_id}/rounds` | 痕迹:agent 工作单元的 round(先从把手同步新 round,再读 rounds.jsonl) |
+| `PATCH` | `/api/works/{work_id}/worklets/{worklet_id}` | 收起 / 展开工作单元(不进轨迹) |
+| `GET` | `/api/works/{work_id}/worklets/{worklet_id}/rounds` | 痕迹:agent 工作单元的 round(先从把手同步新 round,再按顺序读 worktrace.db 的 rounds) |
 | `GET` | `/api/users` | 所有注册的 user,带活动统计,按最近活动倒序 |
 | `POST` | `/api/users` | 建一个账号(admin;name 唯一;可带初始密码) |
 | `GET` | `/api/users/me` | 我是谁:token 对应的档案 |
@@ -75,7 +76,7 @@
   | 422 | `invalid` | 对象不符合层的 schema(或 FastAPI 默认校验) |
   | 502 | `platform` | tmux 起不来 |
 
-- **先立 admin,再进门;身份来自 token,权限只有一档**:没有 `admin` 账号时除 `/api/auth/{status,setup}` 外一律 409 `setup_required`;有了之后每个请求 `Authorization: Bearer <token>`(`POST /api/auth/login` 换来的),否则 401。token 对应的名字就是谁在操作——建 work 时写进 `created_by`,动 work 时记进它的 users,metas 的每个 commit 以它为 **author**(档案里的邮箱,没填则 `<名字>@memory.talk`)。admin 只多三件事:建账号、给人设密码、改别人档案;其余谁都能动。整个实例给一个团队用。见 [auth.md](auth.md)。
+- **先立 admin,再进门;身份来自 token,权限只有一档**:没有 `admin` 账号时除 `/api/auth/{status,setup}` 外一律 409 `setup_required`;有了之后每个请求 `Authorization: Bearer <token>`(`POST /api/auth/login` 换来的),否则 401。token 对应的名字就是谁在操作——建 work 时写进 `created_by`,看 / 动 work 时算它的 viewers,进轨迹的动作记成段 / 点的 `user.id`,metas 的每个 commit 以它为 **author**(档案里的邮箱,没填则 `<名字>@memory.talk`)。admin 只多三件事:建账号、给人设密码、改别人档案;其余谁都能动。整个实例给一个团队用。见 [auth.md](auth.md)。
 - **Metas 的每个写动作一个 `[层名]` 提交**,写请求可带 `reason`(进 `Reason:`)。跨层的决定是两个相邻提交 + 同一个 `Decision:` / `Discussion:` trailer。
 - **时间**:ISO 8601 UTC。**无分页**。鉴权只有上面那道门,没有网关、没有 HTTPS(挂公网自己放反代)。
 
@@ -91,9 +92,9 @@
 
 ```
 ~/.memory.talk/metas/   分层 git 仓库(Metas):layer/origin、layer/issue、layer/card(+ 用户层)、stack;工作树跟着 stack
-~/.memory.talk/works/    work 的记录(MEMORY_TALK_STORE=fs 时):<work_id>/{work,canvas,worklets,seq,users,manager}.json,子 work 在 <work_id>/subs/<child_id>/ 下 + events/inbox.jsonl + worklets/<wid>/rounds.jsonl
-~/.memory.talk/unmanaged.jsonl   没人管的变动
-~/.memory.talk/memory.sqlite     MEMORY_TALK_STORE=sqlite 时,上面两样都在这里(works / work_docs / work_logs 三张表)
+~/.memory.talk/works.db         work 的现在:works / work_columns / worklets / inbox(含没人管的变动)
+~/.memory.talk/worktrace.db     work 的经过:spans / points / rounds
+~/.memory.talk/users/、auth/     users / auth(MEMORY_TALK_STORE=fs 时);sqlite 时在 memory.sqlite 的 users / auth_tokens 表
 ```
 
 环境变量见 [`../../structure/v5/filesystem.md`](../../structure/v5/filesystem.md)。

@@ -6,7 +6,7 @@
 
 ## 不在这测什么
 - S3 / OSS(没有实现)
-- 仓储怎么用它(`works/`、`users/`)→ `works/`、`users/` 各场景
+- 仓储怎么用它(fs store 下的 `users/`、`auth/`)→ `users/`、`auth/` 各场景
 
 ## fixture 来源
 `tmp_path`(pytest 自带);不起服务。

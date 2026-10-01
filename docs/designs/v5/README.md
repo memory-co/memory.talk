@@ -2,7 +2,7 @@
 
 > **状态:定位稿,未实施。** 这篇只回答三件事:memory.talk 是什么、它由哪几层抽象组成、这几层怎么咬合。字段、表、命令、端点一概不在这里——那些等定位敲定后再分篇立(同 [v4](../v4/README.md) 的 works / cli / api / structure 四目录分工)。
 >
-> 分篇:[work.md](work.md)(做事层:work 树)、**[metas/](metas/README.md)**(认知层:容器、层协议、存储、issue、card、origin、manager 全在这个目录)——[issue.md](metas/issue.md)(议事层:树上节点管、派活取证)、[card.md](metas/card.md)(记事层:维基式事实条目,issue 是它的讨论页)、[metas/store.md](metas/store.md)(存储:git 存 card / issue,裸文件存 work,没有数据库)、[work-server.md](work-server.md)(每个协议背后把现场建出来的 server)、[worklet.md](worklet.md)(work 里的一个现场:身份脱离布局)、[work-trace.md](work-trace.md)(设计中:events 换成 OTel 格式的 trace,分段和点;瀑布图和甘特图是同一份数据)、[work-store.md](work-store.md)(设计中:work 只用 sqlite,works.db 管现在、worktrace.db 管经过;列布局在 work_columns 表加 worklets 的位置列、轨迹在 spans / points 表)、[work-events.md](work-events.md)(画布上的每个动作一个请求、进时间线,带列标记和操作人;列 = 固定编号 + 别名;撤掉整份覆盖的 PUT canvas)、[user.md](user.md)(人:work 谁建的、谁在动 / 动过,metas 的提交是谁做的)、[auth.md](auth.md)(门:没有 admin 先 setup,之后登录换 token,每个请求都带;权限只有 admin 管账号这一档)、[provider.md](provider.md)(存储介质的两族基类:文件系统型 LocalFS / OSS / S3、数据库型 SQLite / MySQL / PostgreSQL;业务仓储按族各一份)、[metas/README.md](metas/README.md)(认知层的容器:collectbase 仓库,issue / card 各是一层,layer 由 schema 定义、可自定义)、[metas/layer.md](metas/layer.md)(怎么设计一个自己的层:四个问题、两个文件、系统替你做什么 / 不做什么)、[origin.md](metas/origin.md)(最底层:外部来的、未消化的原文,上层改不动的地板)、[manager.md](metas/manager.md)(目录下的 manager.json 把变动打给绑定的 work,work 干活往下推;取代 issue 上的 manager_work 字段)。
+> 分篇:[work.md](work.md)(做事层:work 树)、**[metas/](metas/README.md)**(认知层:容器、层协议、存储、issue、card、origin、manager 全在这个目录)——[issue.md](metas/issue.md)(议事层:树上节点管、派活取证)、[card.md](metas/card.md)(记事层:维基式事实条目,issue 是它的讨论页)、[metas/store.md](metas/store.md)(存储:git 存 card / issue,裸文件存 work,没有数据库;work 那一半后来改成两个 sqlite,见 work-store.md)、[work-server.md](work-server.md)(每个协议背后把现场建出来的 server)、[worklet.md](worklet.md)(work 里的一个现场:身份脱离布局)、[work-trace.md](work-trace.md)(部分实施:events 换成 OTel 格式的 trace,分段和点,`GET /works/{id}/trace`;瀑布图和甘特图是同一份数据,图还没做)、[work-store.md](work-store.md)(已实施:work 只用 sqlite,works.db 管现在、worktrace.db 管经过;列布局在 work_columns 表加 worklets 的位置列、轨迹在 spans / points 表)、[work-events.md](work-events.md)(画布上的每个动作一个请求、进时间线,带列标记和操作人;列 = 固定编号 + 别名;撤掉整份覆盖的 PUT canvas)、[user.md](user.md)(人:work 谁建的、现在谁在看、谁做过什么,metas 的提交是谁做的)、[auth.md](auth.md)(门:没有 admin 先 setup,之后登录换 token,每个请求都带;权限只有 admin 管账号这一档)、[provider.md](provider.md)(存储介质的两族基类:文件系统型 LocalFS / OSS / S3、数据库型 SQLite / MySQL / PostgreSQL;业务仓储按族各一份)、[metas/README.md](metas/README.md)(认知层的容器:collectbase 仓库,issue / card 各是一层,layer 由 schema 定义、可自定义)、[metas/layer.md](metas/layer.md)(怎么设计一个自己的层:四个问题、两个文件、系统替你做什么 / 不做什么)、[origin.md](metas/origin.md)(最底层:外部来的、未消化的原文,上层改不动的地板)、[manager.md](metas/manager.md)(目录下的 manager.json 把变动打给绑定的 work,work 干活往下推;取代 issue 上的 manager_work 字段)。
 >
 > 读法:先 §1 看定位怎么变,再 §2 看三层各是什么,§3 看它们之间的循环。§4 是跟 v3 / v4 / shellbase 的继承关系,§5 是留待后续分篇敲定的问题。
 
@@ -78,7 +78,7 @@ card 是记事层:**一条事实,像维基百科的一个词条**。一个事实
 
 work、issue、card 说的都是**事**;user 说的是**人**,和它们平级,不是谁的附属。一个 memory.talk 实例给一个团队用,团队里的每个人是一个 user——**注册的实体**,有自己的存储(fs 或数据库,走 provider)和档案;请求头里的名字必须是注册过的。它出现在三处:
 
-- **work 有归属**:`created_by`,建时定下不改;另有一份 `users` 名单记谁动过、最近什么时候。
+- **work 有归属**:`created_by`,建时定下不改;`viewers` 记现在谁在看(心跳,重启清空);谁做过什么看轨迹里段 / 点的 `user.id`([work-trace.md](work-trace.md))。
 - **metas 的每个提交以它为 author**:立场谁提的、卡谁改的,`git log` 里有,对象里不另存。
 - **收件箱里每条变动记着是谁造成的**。
 
@@ -125,7 +125,7 @@ work、issue、card 说的都是**事**;user 说的是**人**,和它们平级,�
 |---|---|---|
 | 画布 / 块即 URI / 终端 attach / window 状态 | shellbase v1 | **在 memory.talk 里原生实现,底层逻辑完全一致**;shellbase 不再作为独立项目继续,它的设计文档是 work 运行时的蓝本 |
 | session / round(append-only)、file-canonical | v3 | round 沿用,session 变成 work 里的 worklet;file-canonical 延伸成「git 是 canonical(含历史)」;worklet 的上游从 sync 变成 work |
-| SQLite(派生索引 + 运行态计数)、searchbase(向量 + FTS)、events.jsonl、migration 框架 | v3 / v4 | **全部去掉**:运行态在 v5 不存在;召回改成目录 + 链接 + grep,不建索引;历史归 git(见 [metas/store.md](metas/store.md));存储只有 git 和裸文件,没有派生物 |
+| SQLite(派生索引 + 运行态计数)、searchbase(向量 + FTS)、events.jsonl、migration 框架 | v3 / v4 | **全部去掉**:运行态在 v5 不存在;召回改成目录 + 链接 + grep,不建索引;历史归 git(见 [metas/store.md](metas/store.md));存储只有 git 和裸文件,没有派生物(work 后来改存两个 sqlite,轨迹换成 OTel 的段和点,见 [work-store.md](work-store.md)) |
 | explore(先验 / 后验工作区) | v3 设计 | **并入 work**,不再独立 |
 | insight(v3 的陈述卡) | v3 → v4 改名 | 继续只读可搜,慢慢下掉,不变 |
 | 问题图(issue / position / argument、IBIS 边、credence 现算) | v4 card | 成为 **issue 层**;机制不变,名字归位 |

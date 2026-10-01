@@ -8,6 +8,7 @@ export const pathPart = (path: string) => path.split('/').map(encodeURIComponent
 
 export async function api<T>(path: string, options: {
   method?: string; body?: unknown; work?: string; signal?: AbortSignal;
+  keepalive?: boolean;                                               // 关页面时也要发出去(离开):sendBeacon 带不了 Bearer,只能 fetch keepalive
 } = {}): Promise<T> {
   const token = usePreferences.getState().token;
   const headers: Record<string, string> = { Accept: 'application/json' };
@@ -18,7 +19,7 @@ export async function api<T>(path: string, options: {
   try {
     response = await fetch(`/api${path}`, {
       method: options.method || 'GET', headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body), signal: options.signal,
+      body: options.body === undefined ? undefined : JSON.stringify(options.body), signal: options.signal, keepalive: options.keepalive,
     });
   } catch (e) {
     if (e instanceof Error && e.name === 'AbortError') throw e;

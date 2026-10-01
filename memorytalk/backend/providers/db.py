@@ -34,8 +34,12 @@ class Column:
     def __ge__(self, v):  return Cond(self.name, ">=", v)
     def in_(self, vs):    return Cond(self.name, "IN", list(vs))
     def is_null(self):    return Cond(self.name, "IS NULL", None)
+    def is_not_null(self): return Cond(self.name, "IS NOT NULL", None)
     def asc(self):        return Order(self.name, "ASC")
     def desc(self):       return Order(self.name, "DESC")
+    # ---- SET 里的表达式:update().set(position=t.c.position + 1)(挪位置、计数器 +1 用) ----
+    def __add__(self, v): return Expr(self.name, "+", v)
+    def __sub__(self, v): return Expr(self.name, "-", v)
     __hash__ = object.__hash__
 
 
@@ -52,12 +56,26 @@ class Order:
     dir: str
 
 
+@dataclass(frozen=True)
+class Expr:
+    """「这一列 ± 一个值」,只用在 SET 里。"""
+    col: str
+    op: str
+    value: Any
+
+
 class Table:
-    def __init__(self, name: str, columns: Sequence[Column]) -> None:
+    """表 = 列声明 + 表级选项:primary_key 是组合主键(单列主键照旧用 Column(primary=True)),indexes 是多列索引。"""
+
+    def __init__(self, name: str, columns: Sequence[Column], primary_key: Sequence[str] = (),
+                 indexes: Sequence[Sequence[str]] = ()) -> None:
         self.name = name
         self.columns = list(columns)
         self.c = _Cols(self.columns)
+        self.primary_key = tuple(primary_key)
+        self.indexes = [tuple(ix) for ix in indexes]
         self.json_cols = {c.name for c in columns if c.type == JSON}
+        self.bool_cols = {c.name for c in columns if c.type is bool}
 
 
 class _Cols:
@@ -134,8 +152,9 @@ class DatabaseProvider:
     family = "db"
     dialect = "?"
 
-    def table(self, name: str, *columns: Column) -> Table:
-        t = Table(name, columns)
+    def table(self, name: str, *columns: Column, primary_key: Sequence[str] = (),
+              indexes: Sequence[Sequence[str]] = ()) -> Table:
+        t = Table(name, columns, primary_key, indexes)
         self.ensure_table(t)
         return t
 
@@ -156,8 +175,8 @@ class DatabaseProvider:
     def _compile_where(self, conds: list[Cond], params: list) -> str:
         parts = []
         for c in conds:
-            if c.op == "IS NULL":
-                parts.append(f"{c.col} IS NULL")
+            if c.op in ("IS NULL", "IS NOT NULL"):
+                parts.append(f"{c.col} {c.op}")
             elif c.op == "IN":
                 if not c.value:
                     parts.append("1 = 0")
@@ -171,10 +190,18 @@ class DatabaseProvider:
         return (" WHERE " + " AND ".join(parts)) if parts else ""
 
     def _encode(self, t: Table, row: dict) -> dict:
-        return {k: (json.dumps(v, ensure_ascii=False) if k in t.json_cols and v is not None else v) for k, v in row.items()}
+        return {k: (json.dumps(v, ensure_ascii=False) if k in t.json_cols and v is not None and not isinstance(v, Expr) else v)
+                for k, v in row.items()}
 
     def _decode(self, t: Table, row: dict) -> dict:
-        return {k: (json.loads(v) if k in t.json_cols and isinstance(v, str) else v) for k, v in row.items()}
+        out = {}
+        for k, v in row.items():
+            if k in t.json_cols and isinstance(v, str):
+                v = json.loads(v)
+            elif k in t.bool_cols and v is not None:
+                v = bool(v)                                   # 库里是 0 / 1,读回 bool
+            out[k] = v
+        return out
 
     def _select(self, q: Select) -> list[dict]:
         params: list = []
@@ -196,9 +223,13 @@ class DatabaseProvider:
 
     def _update(self, q: Update) -> int:
         changes = self._encode(q.table, q._set)
-        params = list(changes.values())
-        sets = ", ".join(f"{k} = {self._placeholder(i + 1)}" for i, k in enumerate(changes))
-        sql = f"UPDATE {q.table.name} SET {sets}" + self._compile_where(q._where, params)
+        params: list = []
+        sets = []
+        for k, v in changes.items():
+            params.append(v.value if isinstance(v, Expr) else v)
+            ph = self._placeholder(len(params))
+            sets.append(f"{k} = {v.col} {v.op} {ph}" if isinstance(v, Expr) else f"{k} = {ph}")
+        sql = f"UPDATE {q.table.name} SET {', '.join(sets)}" + self._compile_where(q._where, params)
         return self._execute(sql, params, fetch=False)
 
     def _delete(self, q: Delete) -> int:
@@ -235,14 +266,16 @@ class SQLite(DatabaseProvider):
             d = f"{c.name} {self._type(c)}"
             if c.primary:
                 d += " PRIMARY KEY" + (" AUTOINCREMENT" if c.autoincrement else "")
-            elif not c.nullable:
+            elif not c.nullable or c.name in t.primary_key:     # sqlite 的组合主键列允许 NULL,这里显式拦住
                 d += " NOT NULL"
             defs.append(d)
+        if t.primary_key:
+            defs.append(f"PRIMARY KEY ({', '.join(t.primary_key)})")
+        indexes = [(c.name,) for c in t.columns if c.index and not c.primary] + t.indexes
         with self._lock:
             self._conn.execute(f"CREATE TABLE IF NOT EXISTS {t.name} ({', '.join(defs)})")
-            for c in t.columns:
-                if c.index and not c.primary:
-                    self._conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{t.name}_{c.name} ON {t.name}({c.name})")
+            for cols in indexes:
+                self._conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{t.name}_{'_'.join(cols)} ON {t.name}({', '.join(cols)})")
 
     @contextmanager
     def transaction(self) -> Iterator[None]:

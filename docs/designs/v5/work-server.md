@@ -4,7 +4,7 @@
 
 相关:
 - v5 work 树(块住在 work 的画布上;work 是现场登记的唯一权威): [work.md](work.md)
-- v5 store(work 的登记是裸文件;server 不存 work 状态): [metas/store.md](metas/store.md)
+- v5 work 存储(work 的登记是 `works.db` 里 `worklets` 表的一行;server 不存 work 状态): [work-store.md](work-store.md)
 - shellbase 块即 URI 与四分流(本篇要把「其余一切转发终端」那条显式化): [uri.md](https://github.com/memory-co/shellbase/blob/main/docs/v1/works/uri.md)
 - shellbase「一扇窗 + 一个把手」与 `*muxd` 规范(server 的形状就是它): [new-interface.md](https://github.com/memory-co/shellbase/blob/main/docs/v1/new-interface.md) / [muxd-spec.md](https://github.com/memory-co/shellbase/blob/main/docs/v1/muxd-spec.md)
 - v3 平台 adapter(读 Claude Code / Codex 会话记录——在 v5 归入 agent server 的把手): [../v3/sync-pipeline.md](../v3/sync-pipeline.md)
@@ -47,7 +47,7 @@ v5 给它一个名字:**server**,寻址规则只有两条:**server 自己声明�
 
 外加三条它必须守的性质,全部来自 `*muxd` 规范,这里只点名:**现场活得比连接久**(关掉页面里面照常跑);**不代理那扇窗**(只报 URL,怎么摆是 work 画布的事);**状态不许撒谎**(建不出来就说建不出来,不给一个连不上的地址)。
 
-server **不做**的事同样重要:它**不记 work**——哪个块属于哪个 work、块在画布哪个位置、什么时候开的,这些全在 work 层的裸文件里([metas-store.md §4](metas/store.md));server 只管「这个 id 的现场活没活着」。它**不做认知**——round 怎么标注、问题怎么建,跟它无关。
+server **不做**的事同样重要:它**不记 work**——哪个块属于哪个 work、块在画布哪个位置、什么时候开的,这些全在 work 层的 `works.db` 里(`worklets` 表,[work-store.md §3](work-store.md));server 只管「这个 id 的现场活没活着」。它**不做认知**——round 怎么标注、问题怎么建,跟它无关。
 
 ---
 
@@ -57,7 +57,7 @@ server **不做**的事同样重要:它**不记 work**——哪个块属于哪�
 2. **memory.talk 拿协议名去 server 那里寻址**:哪个 server 声明了它就是哪个;没人声明 → **default**。default 也建不起来(PATH 里没这个命令)→ 明确报错。
 3. **server 拿(工作单元 id,URI)幂等地建 / 取现场**。第一次:建(起 tmux 会话、开浏览器 tab、定位目录);之后:取回同一个。
 4. **server 交回窗和把手**。窗的 URL 给画布 iframe 嵌进去;把手留给 work 层——观测(这个工作单元跑到哪了、新的 round)、驱动(往里发一句话)、销毁(块关闭时)。
-5. **work 层记登记**:工作单元 id ↔ URI ↔ 这个 server ↔ 现场是否活着。这份登记是 work 目录里的裸文件,是唯一权威;server 重启后,work 层拿登记去 server 那里把现场一个个取回来。
+5. **work 层记登记**:工作单元 id ↔ URI ↔ 这个 server ↔ 现场是否活着。这份登记是 `works.db` 里 `worklets` 表的一行([work-store.md §3](work-store.md)),是唯一权威;server 重启后,work 层拿登记去 server 那里把现场一个个取回来。
 
 块关闭 = work 层通过把手让 server 销毁现场 + 删登记;不是只从画布上摘掉(沿用 shellbase「关闭即回收」)。
 

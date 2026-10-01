@@ -129,4 +129,4 @@
 
 ### 投递
 
-Metas 里每个提交触碰的路径 → 解析 manager → 一条写进 `works/<work>/inbox.jsonl`(`GET /api/works/{id}/inbox`);没人管 → `~/.memory.talk/unmanaged.jsonl`;请求带的 `X-Memory-Talk-Work` 等于 manager work 时不投(自己造成的)。
+Metas 里每个提交触碰的路径 → 解析 manager → 一条写进那个 work 的收件箱(`works.db` 的 `inbox` 表;`GET /api/works/{id}/inbox`);没人管 → 同一张表里 `work_id` 为空的一行;请求带的 `X-Memory-Talk-Work` 等于 manager work 时不投(自己造成的)。

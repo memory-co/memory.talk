@@ -1,196 +1,281 @@
-"""work / user 记录的仓储:业务接口一份,按 provider 的族各实现一份(docs/designs/v5/provider.md §4)。
+"""work 的仓储:两个 sqlite——works.db 管现在,worktrace.db 管经过(docs/designs/v5/work-store.md)。
 
-业务概念(work 节点、画布、工作单元登记、谁动过、manager、事件、收件箱、round、没人管的变动)住在这里;
-provider 只见字节 / 表。
+一张表一种东西,一行一个实体,要查、要单独改的都是真的列。这里每个方法就是一两条语句;
+一个动作要改的几处,由上面的 helper(tree / canvas / worklets / inbox)包在一个 `tx()` 里。不写 SQL,走 provider 的链式查询。
 """
 from __future__ import annotations
 
-import json
-from typing import Any, Protocol
+from typing import Sequence
 
-from memorytalk.backend.providers import Column, DatabaseProvider, FileSystemProvider, Table
+from memorytalk.backend.providers import Column, DatabaseProvider
 from memorytalk.backend.providers.db import JSON
 
 
-class WorkRepo(Protocol):
-    # work 节点(可按父 / created_by 列)
-    def get_work(self, work_id: str) -> dict | None: ...
-    def put_work(self, work_id: str, data: dict) -> None: ...
-    def list_works(self, *, parent: str | None = ..., created_by: str | None = None) -> list[dict]: ...
-    # 每个 work 下的一份份小记录:canvas / worklets / users / manager
-    def get_doc(self, work_id: str, kind: str) -> Any: ...
-    def put_doc(self, work_id: str, kind: str, data: Any) -> None: ...
-    def del_doc(self, work_id: str, kind: str) -> None: ...
-    # 只追加的流:events / inbox;rounds 带 sub = worklet_id
-    def append(self, work_id: str, stream: str, line: dict, sub: str | None = None) -> None: ...
-    def read(self, work_id: str, stream: str, sub: str | None = None) -> list[dict]: ...
-    # 没人管的变动
-    def append_unmanaged(self, line: dict) -> None: ...
+# ================================================================ works.db:现在
 
-
-_MISSING = object()
-
-
-# ================================================================ fs 版
-
-class FsWorkRepo:
-    """目录就是树:works/<id>/…,子 work 在父目录的 subs/ 下——works/<父>/subs/<子>/…。每个 work 目录里:<kind>.json、<stream>.jsonl、worklets/<wid>/rounds.jsonl;根上 unmanaged.jsonl。"""
-
-    def __init__(self, fs: FileSystemProvider) -> None:
-        self.fs = fs
-        self._dirs: dict[str, str] = {}                 # id → 目录;懒扫,建 work 时登记
-
-    # ---- 目录 ----
-
-    def _scan(self) -> None:
-        self._dirs = {}
-        for path in self.fs.list("works"):
-            if path.endswith("/work.json"):
-                d = path[: -len("/work.json")]
-                self._dirs[d.rsplit("/", 1)[-1]] = d
-
-    def _dir(self, work_id: str) -> str | None:
-        if work_id not in self._dirs:
-            self._scan()
-        return self._dirs.get(work_id)
-
-    def _doc(self, work_id: str, kind: str) -> str | None:
-        d = self._dir(work_id)
-        return None if d is None else f"{d}/{kind}.json"
-
-    def _log(self, work_id: str, stream: str, sub: str | None) -> str | None:
-        d = self._dir(work_id)
-        if d is None:
-            return None
-        return f"{d}/worklets/{sub}/{stream}.jsonl" if sub else f"{d}/{stream}.jsonl"
-
-    def _read_json(self, path: str | None) -> Any:
-        data = None if path is None else self.fs.read(path)
-        return None if data is None else json.loads(data)
-
-    def _write_json(self, path: str, data: Any) -> None:
-        self.fs.write(path, (json.dumps(data, ensure_ascii=False, indent=2) + "\n").encode())
-
-    # ---- work ----
-
-    def get_work(self, work_id: str) -> dict | None:
-        return self._read_json(self._doc(work_id, "work"))
-
-    def put_work(self, work_id: str, data: dict) -> None:
-        d = self._dir(work_id)
-        if d is None:                                    # 新建:挂在父目录的 subs/ 下,没父就在根上
-            parent = data.get("parent")
-            pd = self._dir(parent) if parent else None
-            d = f"{pd}/subs/{work_id}" if pd else f"works/{work_id}"
-            self._dirs[work_id] = d
-        self._write_json(f"{d}/work.json", data)
-
-    def list_works(self, *, parent=_MISSING, created_by: str | None = None) -> list[dict]:
-        self._scan()
-        out = []
-        for d in self._dirs.values():
-            w = self._read_json(f"{d}/work.json")
-            if w is None:
-                continue
-            if parent is not _MISSING and w.get("parent") != parent:
-                continue
-            if created_by is not None and w.get("created_by") != created_by:
-                continue
-            out.append(w)
-        return sorted(out, key=lambda w: w["id"])
-
-    # ---- work 下的小记录 / 流 ----
-
-    def get_doc(self, work_id: str, kind: str) -> Any:
-        return self._read_json(self._doc(work_id, kind))
-
-    def put_doc(self, work_id: str, kind: str, data: Any) -> None:
-        path = self._doc(work_id, kind)
-        if path is None:
-            raise KeyError(work_id)
-        self._write_json(path, data)
-
-    def del_doc(self, work_id: str, kind: str) -> None:
-        path = self._doc(work_id, kind)
-        if path is not None:
-            self.fs.delete(path)
-
-    def append(self, work_id: str, stream: str, line: dict, sub: str | None = None) -> None:
-        path = self._log(work_id, stream, sub)
-        if path is None:
-            raise KeyError(work_id)
-        self.fs.append(path, (json.dumps(line, ensure_ascii=False) + "\n").encode())
-
-    def read(self, work_id: str, stream: str, sub: str | None = None) -> list[dict]:
-        path = self._log(work_id, stream, sub)
-        data = None if path is None else self.fs.read(path)
-        if not data:
-            return []
-        return [json.loads(l) for l in data.decode().splitlines() if l.strip()]
-
-    def append_unmanaged(self, line: dict) -> None:
-        self.fs.append("unmanaged.jsonl", (json.dumps(line, ensure_ascii=False) + "\n").encode())
-
-
-# ================================================================ db 版
-
-class DbWorkRepo:
-    """works 表(可查)+ docs 表(每个 work 下的小记录)+ logs 表(只追加,自增 seq)。不写一行 SQL。"""
+class WorkRepo:
+    """works(节点 + 计数器 + 谁在看)/ work_columns(画布的列)/ worklets(登记 + 摆在哪)/ inbox(收件箱)。"""
 
     def __init__(self, db: DatabaseProvider) -> None:
         self.db = db
-        self.works = db.table("works", Column("id", str, primary=True), Column("parent", str, index=True),
-                              Column("created_by", str, index=True), Column("status", str), Column("data", JSON))
-        self.docs = db.table("work_docs", Column("pk", str, primary=True), Column("work_id", str, index=True),
-                             Column("kind", str), Column("data", JSON))
-        self.logs = db.table("work_logs", Column("seq", int, primary=True, autoincrement=True),
-                             Column("key", str, index=True), Column("line", JSON))
+        self.works = db.table(
+            "works",
+            Column("id", str, primary=True), Column("parent", str, index=True), Column("goal", str), Column("status", str),
+            Column("created_by", str, index=True), Column("created_at", str), Column("archived_at", str),
+            Column("manager", str), Column("viewers", JSON),
+            Column("next_worklet", int), Column("next_column", int), Column("canvas_version", int))
+        self.work_columns = db.table(
+            "work_columns",
+            Column("work_id", str), Column("number", int), Column("alias", str), Column("collapsed", bool), Column("position", int),
+            primary_key=("work_id", "number"), indexes=[("work_id", "position")])
+        self.worklets = db.table(
+            "worklets",
+            Column("id", str, primary=True), Column("work_id", str, index=True), Column("number", int),
+            Column("uri", str), Column("scheme", str), Column("server", str), Column("cwd", str),
+            Column("created_at", str), Column("last_attached", str),
+            Column("column_number", int), Column("position", int), Column("collapsed", bool),
+            indexes=[("work_id", "column_number", "position")])       # 不做 UNIQUE:sqlite 在 position + 1 的过程中逐行查重
+        self.inbox = db.table(
+            "inbox",
+            Column("seq", int, primary=True, autoincrement=True), Column("work_id", str, index=True),
+            Column("ts", str), Column("layer", str), Column("path", str), Column("subject", str),
+            Column("sha", str), Column("by", str), Column("routed_by", str))
+
+    def tx(self):
+        """一个动作 = 一个事务(持着 provider 的锁)。里面不做建现场 / 销毁现场,也不写 worktrace.db。"""
+        return self.db.transaction()
+
+    # ---- works ----
 
     def get_work(self, work_id: str) -> dict | None:
-        r = self.db.select(self.works).where(self.works.c.id == work_id).one()
-        return r["data"] if r else None
+        return self.db.select(self.works).where(self.works.c.id == work_id).one()
 
-    def put_work(self, work_id: str, data: dict) -> None:
-        cols = dict(parent=data.get("parent"), created_by=data.get("created_by"), status=data.get("status"), data=data)
-        if self.db.update(self.works).where(self.works.c.id == work_id).set(**cols).run() == 0:
-            self.db.insert(self.works).values(id=work_id, **cols).run()
-
-    def list_works(self, *, parent=_MISSING, created_by: str | None = None) -> list[dict]:
+    def list_works(self, *, created_by: str | None = None) -> list[dict]:
         q = self.db.select(self.works)
-        if parent is not _MISSING:
-            q = q.where(self.works.c.parent.is_null() if parent is None else self.works.c.parent == parent)
         if created_by is not None:
             q = q.where(self.works.c.created_by == created_by)
-        return [r["data"] for r in q.order_by(self.works.c.id.asc()).all()]
+        return q.order_by(self.works.c.id.asc()).all()
 
-    def get_doc(self, work_id: str, kind: str) -> Any:
-        r = self.db.select(self.docs).where(self.docs.c.pk == f"{work_id}/{kind}").one()
-        return r["data"] if r else None
+    def children(self, work_id: str) -> list[dict]:
+        return self.db.select(self.works).where(self.works.c.parent == work_id).order_by(self.works.c.id.asc()).all()
 
-    def put_doc(self, work_id: str, kind: str, data: Any) -> None:
-        pk = f"{work_id}/{kind}"
-        if self.db.update(self.docs).where(self.docs.c.pk == pk).set(data=data).run() == 0:
-            self.db.insert(self.docs).values(pk=pk, work_id=work_id, kind=kind, data=data).run()
+    def insert_work(self, row: dict) -> None:
+        """新 work:节点一行 + 第一列(编号 1);计数器从头开始。建 work 不算画布动作,version 还是 0。"""
+        with self.tx():
+            self.db.insert(self.works).values(**row, manager=None, viewers=[], next_worklet=1, next_column=2, canvas_version=0).run()
+            self.db.insert(self.work_columns).values(work_id=row["id"], number=1, alias="", collapsed=False, position=0).run()
 
-    def del_doc(self, work_id: str, kind: str) -> None:
-        self.db.delete(self.docs).where(self.docs.c.pk == f"{work_id}/{kind}").run()
+    def update_work(self, work_id: str, **changes) -> None:
+        """只改给的那几列(goal / status / archived_at / manager),计数器和 viewers 不碰。"""
+        self.db.update(self.works).where(self.works.c.id == work_id).set(**changes).run()
 
-    @staticmethod
-    def _key(work_id: str, stream: str, sub: str | None) -> str:
-        return f"{work_id}/{stream}" + (f"/{sub}" if sub else "")
+    def _take(self, work_id: str, counter: str) -> int:
+        with self.tx():
+            n = self.get_work(work_id)[counter]
+            self.db.update(self.works).where(self.works.c.id == work_id).set(**{counter: getattr(self.works.c, counter) + 1}).run()
+            return n
 
-    def append(self, work_id: str, stream: str, line: dict, sub: str | None = None) -> None:
-        self.db.insert(self.logs).values(key=self._key(work_id, stream, sub), line=line).run()
+    def take_worklet_number(self, work_id: str) -> int:
+        """取下一个工作单元编号并 +1:单调递增,建现场失败这个号也不还。"""
+        return self._take(work_id, "next_worklet")
 
-    def read(self, work_id: str, stream: str, sub: str | None = None) -> list[dict]:
-        rows = self.db.select(self.logs).where(self.logs.c.key == self._key(work_id, stream, sub)).order_by(self.logs.c.seq.asc()).all()
-        return [r["line"] for r in rows]
+    def take_column_number(self, work_id: str) -> int:
+        return self._take(work_id, "next_column")
 
-    def append_unmanaged(self, line: dict) -> None:
-        self.db.insert(self.logs).values(key="unmanaged", line=line).run()
+    def bump_canvas(self, work_id: str) -> None:
+        self.db.update(self.works).where(self.works.c.id == work_id).set(canvas_version=self.works.c.canvas_version + 1).run()
 
-def make_work_repo(store) -> WorkRepo:
-    """按 provider 的族选仓储。"""
-    if store.family == "fs":
-        return FsWorkRepo(store)
-    return DbWorkRepo(store)
+    def set_viewers(self, work_id: str, names: list[str]) -> None:
+        """viewers 只整份写(由内存里的心跳表算出来),不读出来追加。"""
+        self.db.update(self.works).where(self.works.c.id == work_id).set(viewers=names).run()
+
+    def clear_viewers(self) -> None:
+        """重启那一刻谁也没在看。"""
+        with self.tx():
+            for w in self.db.select(self.works).all():
+                if w["viewers"]:
+                    self.set_viewers(w["id"], [])
+
+    # ---- work_columns:画布的列,position 从左到右 0..n-1 ----
+
+    def list_columns(self, work_id: str) -> list[dict]:
+        t = self.work_columns
+        return self.db.select(t).where(t.c.work_id == work_id).order_by(t.c.position.asc()).all()
+
+    def get_column(self, work_id: str, number: int) -> dict | None:
+        t = self.work_columns
+        return self.db.select(t).where(t.c.work_id == work_id, t.c.number == number).one()
+
+    def insert_column(self, work_id: str, number: int, alias: str, position: int) -> None:
+        self.db.insert(self.work_columns).values(work_id=work_id, number=number, alias=alias, collapsed=False, position=position).run()
+
+    def update_column(self, work_id: str, number: int, **changes) -> None:
+        t = self.work_columns
+        self.db.update(t).where(t.c.work_id == work_id, t.c.number == number).set(**changes).run()
+
+    def delete_column(self, work_id: str, number: int) -> None:
+        t = self.work_columns
+        self.db.delete(t).where(t.c.work_id == work_id, t.c.number == number).run()
+
+    def shift_columns(self, work_id: str, from_position: int, delta: int) -> None:
+        """position ≥ from_position 的列整体挪 delta(插列 +1,删列 −1)。"""
+        t = self.work_columns
+        self.db.update(t).where(t.c.work_id == work_id, t.c.position >= from_position).set(position=t.c.position + delta).run()
+
+    # ---- worklets:登记 + 摆在哪(column_number 为空 = 没摆上画布)----
+
+    def list_worklets(self, work_id: str) -> list[dict]:
+        """按开的先后(编号)排。"""
+        t = self.worklets
+        return self.db.select(t).where(t.c.work_id == work_id).order_by(t.c.number.asc()).all()
+
+    def get_worklet(self, work_id: str, worklet_id: str) -> dict | None:
+        t = self.worklets
+        return self.db.select(t).where(t.c.id == worklet_id, t.c.work_id == work_id).one()
+
+    def placed_worklets(self, work_id: str) -> list[dict]:
+        t = self.worklets
+        return (self.db.select(t).where(t.c.work_id == work_id, t.c.column_number.is_not_null())
+                .order_by(t.c.column_number.asc(), t.c.position.asc()).all())
+
+    def column_worklets(self, work_id: str, number: int) -> list[dict]:
+        t = self.worklets
+        return self.db.select(t).where(t.c.work_id == work_id, t.c.column_number == number).order_by(t.c.position.asc()).all()
+
+    def insert_worklet(self, row: dict) -> None:
+        self.db.insert(self.worklets).values(**row).run()
+
+    def update_worklet(self, worklet_id: str, **changes) -> None:
+        self.db.update(self.worklets).where(self.worklets.c.id == worklet_id).set(**changes).run()
+
+    def delete_worklet(self, worklet_id: str) -> None:
+        self.db.delete(self.worklets).where(self.worklets.c.id == worklet_id).run()
+
+    def shift_worklets(self, work_id: str, number: int, from_position: int, delta: int, *, skip: str | None = None) -> None:
+        """某一列里 position ≥ from_position 的工作单元整体挪 delta;skip = 正在挪的那个自己不动。"""
+        t = self.worklets
+        conds = [t.c.work_id == work_id, t.c.column_number == number, t.c.position >= from_position]
+        if skip is not None:
+            conds.append(t.c.id != skip)
+        self.db.update(t).where(*conds).set(position=t.c.position + delta).run()
+
+    # ---- inbox:work_id 为空 = 没人管 ----
+
+    def put_inbox(self, work_id: str | None, item: dict) -> None:
+        self.db.insert(self.inbox).values(work_id=work_id, **item).run()
+
+    def read_inbox(self, work_id: str) -> list[dict]:
+        t = self.inbox
+        return [_item(r) for r in self.db.select(t).where(t.c.work_id == work_id).order_by(t.c.seq.asc()).all()]
+
+    def read_unmanaged(self) -> list[dict]:
+        t = self.inbox
+        return [_item(r) for r in self.db.select(t).where(t.c.work_id.is_null()).order_by(t.c.seq.asc()).all()]
+
+
+def _item(row: dict) -> dict:
+    return {k: v for k, v in row.items() if k not in ("seq", "work_id")}
+
+
+# ================================================================ worktrace.db:经过
+
+class TraceRepo:
+    """spans(段;end_time_unix_nano 为空 = 还开着)/ points(点,只追加)/ rounds(agent 的 round,只追加)。
+    列和 OTLP 字段一对一:id 是十六进制串,时间是 Unix 纳秒整数,attributes / links 是 OTLP 的 JSON。"""
+
+    def __init__(self, db: DatabaseProvider) -> None:
+        self.db = db
+        self.spans = db.table(
+            "spans",
+            Column("span_id", str, primary=True), Column("trace_id", str, index=True), Column("parent_span_id", str),
+            Column("work_id", str, index=True), Column("worklet_id", str, index=True),
+            Column("user_id", str, index=True), Column("end_user_id", str, index=True),
+            Column("name", str), Column("kind", int),
+            Column("start_time_unix_nano", int), Column("end_time_unix_nano", int), Column("status_code", int),
+            Column("attributes", JSON), Column("links", JSON), Column("first_round_id", str))
+        self.points = db.table(
+            "points",
+            Column("seq", int, primary=True, autoincrement=True), Column("trace_id", str), Column("span_id", str, index=True),
+            Column("work_id", str, index=True), Column("worklet_id", str), Column("column_number", int),
+            Column("user_id", str, index=True), Column("event_name", str, index=True),
+            Column("time_unix_nano", int), Column("attributes", JSON))
+        self.rounds = db.table(
+            "rounds",
+            Column("seq", int, primary=True, autoincrement=True), Column("work_id", str), Column("worklet_id", str, index=True),
+            Column("round_id", str), Column("timestamp", str), Column("role", str), Column("text", str))
+
+    def tx(self):
+        return self.db.transaction()
+
+    # ---- spans ----
+
+    def insert_span(self, row: dict) -> None:
+        self.db.insert(self.spans).values(**row).run()
+
+    def get_span(self, span_id: str) -> dict | None:
+        return self.db.select(self.spans).where(self.spans.c.span_id == span_id).one()
+
+    def update_span(self, span_id: str, **changes) -> None:
+        self.db.update(self.spans).where(self.spans.c.span_id == span_id).set(**changes).run()
+
+    def _ordered(self, *conds) -> list[dict]:
+        t = self.spans
+        return self.db.select(t).where(*conds).order_by(t.c.start_time_unix_nano.asc(), t.c.span_id.asc()).all()
+
+    def work_spans(self, work_id: str) -> list[dict]:
+        """一个 work 的 work 段,一段一段按开始排(重新打开一次多一段)。"""
+        return self._ordered(self.spans.c.work_id == work_id, self.spans.c.name == "work")
+
+    def worklet_spans(self, worklet_id: str) -> list[dict]:
+        return self._ordered(self.spans.c.worklet_id == worklet_id, self.spans.c.name == "worklet")
+
+    def turn_spans(self, worklet_id: str) -> list[dict]:
+        """一个工作单元的 agent 轮次(各段 first_round_id 不同,按它幂等写)。"""
+        return self._ordered(self.spans.c.worklet_id == worklet_id, self.spans.c.name == "agent.turn")
+
+    def open_spans(self, work_id: str, name: str) -> list[dict]:
+        t = self.spans
+        return self._ordered(t.c.work_id == work_id, t.c.name == name, t.c.end_time_unix_nano.is_null())
+
+    def spans_of(self, work_ids: Sequence[str]) -> list[dict]:
+        return self._ordered(self.spans.c.work_id.in_(work_ids))
+
+    # ---- points ----
+
+    def insert_point(self, row: dict) -> int:
+        return self.db.insert(self.points).values(**row).run()
+
+    def points_of(self, work_ids: Sequence[str]) -> list[dict]:
+        t = self.points
+        return self.db.select(t).where(t.c.work_id.in_(work_ids)).order_by(t.c.seq.asc()).all()
+
+    # ---- 某人在轨迹里出现过的地方:开过段、关过段、打过点(按 user 走索引)----
+
+    def touched_by(self, user: str) -> dict[str, int]:
+        """work_id → 这个人在它上面最后一次出现的时间(Unix 纳秒)。"""
+        out: dict[str, int] = {}
+
+        def seen(work_id: str | None, t: int | None) -> None:
+            if work_id and t is not None:
+                out[work_id] = max(out.get(work_id, 0), t)
+
+        s, p = self.spans, self.points
+        for r in self.db.select(s).where(s.c.user_id == user).all():
+            seen(r["work_id"], r["start_time_unix_nano"])
+        for r in self.db.select(s).where(s.c.end_user_id == user).all():
+            seen(r["work_id"], r["end_time_unix_nano"])
+        for r in self.db.select(p).where(p.c.user_id == user).all():
+            seen(r["work_id"], r["time_unix_nano"])
+        return out
+
+    # ---- rounds ----
+
+    def read_rounds(self, worklet_id: str) -> list[dict]:
+        t = self.rounds
+        return self.db.select(t).where(t.c.worklet_id == worklet_id).order_by(t.c.seq.asc()).all()
+
+    def insert_round(self, row: dict) -> None:
+        self.db.insert(self.rounds).values(**row).run()
+
+
+__all__ = ["WorkRepo", "TraceRepo"]

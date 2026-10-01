@@ -6,7 +6,7 @@
 - v5 metas(层即 layer;本篇补上此前缺的那块「地板」): [README.md](README.md)
 - v5 metas layer(层怎么定义——origin 也照这套,只是它是内置的、最底的): [layer.md](layer.md)
 - v5 issue / card(消化 origin 的去处;它们的出处指回 origin): [issue.md](issue.md) / [card.md](card.md)
-- v5 store(work 的痕迹是裸文件,不在 Metas——它和 origin 的边界见 §6): [store.md](store.md)
+- v5 work 存储(work 的痕迹在 `works.db` / `worktrace.db` 两个 sqlite 里,不在 Metas——它和 origin 的边界见 §6): [work-store.md](../work-store.md)
 - collectbase 的事实层(只读、`chmod a-w`、智能体不写): [DESIGN.md §1](https://github.com/memory-co/collectbase/blob/main/docs/v2/DESIGN.md)
 
 ---
@@ -31,7 +31,7 @@
 
 三个理由:
 
-- **认知要有地板。** issue 的论证说「证据在这」,card 说「这是事实」——「这」得指向一个不会被上层改掉的东西。没有 origin,它们只能指向 work 的 rounds(裸文件,不在 git 里、没有层的保护)或者互相指(推论指推论,正是 collectbase 说的「记忆腐烂」那条回路)。
+- **认知要有地板。** issue 的论证说「证据在这」,card 说「这是事实」——「这」得指向一个不会被上层改掉的东西。没有 origin,它们只能指向 work 的 rounds(在 `worktrace.db` 里,不在 git 里、没有层的保护)或者互相指(推论指推论,正是 collectbase 说的「记忆腐烂」那条回路)。
 - **外部材料得有地方放。** 现在一份外来的文档要么被塞成一张卡(那就把「材料」当成了「断言」),要么丢在 work 目录里(不进 git、没人管、做完就冻结)。都不对。它该有自己的位置,而且是最底的位置。
 - **collectbase 的分层语义才完整。** 有了事实层,「上层改不动下层」才真正保护到东西:改 card 碰不到 issue,改 issue 碰不到 origin——推论怎么改,原文都在。
 
@@ -49,7 +49,7 @@
 
 三条判据,缺一不进:**外部来的**(不是本实例的推论)、**原样的**(不改写)、**还没消化的**(或者消化了也留着——见 §5)。
 
-不进 origin 的:memory.talk 自己产生的任何东西(issue、card、决定、摘要)——那些是上层;work 的过程痕迹(rounds、屏幕、事件)——那些是裸文件(§6)。
+不进 origin 的:memory.talk 自己产生的任何东西(issue、card、决定、摘要)——那些是上层;work 的过程痕迹(rounds、屏幕、事件)——那些在 work 自己的库里(§6)。
 
 ---
 
@@ -81,9 +81,9 @@ origin(原文)──逐段标注、#问题──▶ issue(问题 + 立场 + 论�
 
 ## 6. 边界:origin 和 work 的痕迹
 
-work 的 rounds、屏幕、事件是**本实例自己的过程**,它们是裸文件、不进 git([metas-store.md §4](store.md))。origin 收的是**外部来的**。两者都是「事实」,但一个是过程、一个是材料,分开放:
+work 的 rounds、屏幕、事件是**本实例自己的过程**,它们在 `works.db` / `worktrace.db` 里、不进 git([work-store.md](../work-store.md))。origin 收的是**外部来的**。两者都是「事实」,但一个是过程、一个是材料,分开放:
 
-| | work 的痕迹(`works/<id>/…`) | origin(Metas 里不带层后缀的一切) |
+| | work 的痕迹(`worktrace.db` 的 rounds / 段 / 点) | origin(Metas 里不带层后缀的一切) |
 |---|---|---|
 | 从哪来 | 本实例的 agent 工作单元跑出来的 | 外面来的 |
 | 体量 | 大、持续增长、每一轮都记 | 一份一份的,进来就定 |

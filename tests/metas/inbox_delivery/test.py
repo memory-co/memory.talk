@@ -33,12 +33,8 @@ def test_manager_json_changes_are_mechanism_not_content(client):
     assert client.get(f"/api/works/{w['id']}/inbox").json() == []          # 绑定本身没投
 
 
-def test_unmanaged_changes_go_to_the_unmanaged_log(client, svc):
+def test_unmanaged_changes_go_to_the_unmanaged_rows(client, svc):
     client.post("/api/metas/card/孤儿/一张卡", json={"files": {"readme.md": "一张卡"}})
-    from memorytalk.backend.providers import LocalFS
-    store = svc.store.provider                                    # 两种 store 落点不同,各看各的
-    if isinstance(store, LocalFS):
-        assert "孤儿/一张卡" in store.read("unmanaged.jsonl").decode()
-    else:
-        rows = store.select(svc.store.work_repo.logs).where(svc.store.work_repo.logs.c.key == "unmanaged").all()
-        assert any("孤儿/一张卡" in r["line"]["path"] for r in rows)
+    rows = svc.store.work_repo.read_unmanaged()                   # works.db 的 inbox 里 work_id 为空的行
+    assert any("孤儿/一张卡" in r["path"] and r["routed_by"] == "" for r in rows)
+    assert svc.metas.inbox.repo is svc.works.repo                 # 和 work 那边是同一个仓储

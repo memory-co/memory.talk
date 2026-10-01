@@ -121,10 +121,10 @@ issue: memory.talk/配置/该走文件还是环境变量
 {"work": "work_…"}
 ```
 
-放在任何目录(含对象目录)下。解析:路径往上找最近的一个。变动投递到那个 work 的 `works/<work>/inbox.jsonl`:
+放在任何目录(含对象目录)下。解析:路径往上找最近的一个。变动投递到那个 work 的收件箱(`works.db` 的 `inbox` 表,`work_id` = 那个 work):
 
 ```json
 {"ts": "…", "layer": "issue", "path": "<对象 path>", "subject": "position …", "sha": "…", "by": "alice", "routed_by": "memory.talk"}
 ```
 
-`routed_by` 是哪个目录的 `manager.json`('' = 根);work 层过来的是 `"parent"` 或那个 work 的 id。没人管 → `~/.memory.talk/unmanaged.jsonl`。
+`routed_by` 是哪个目录的 `manager.json`('' = 根);work 层过来的是 `"parent"` 或那个 work 的 id。没人管 → 同一张 `inbox` 表里 `work_id` 为空的一行。

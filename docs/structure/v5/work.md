@@ -1,6 +1,6 @@
-# Work + Canvas + Worklet + WorkUser + Round + Event
+# Work + Canvas + Worklet + Viewers + Round + Trace
 
-做事层的六个对象,全部住在 work 自己的目录下(根 work 在 `works/<work_id>/`,子 work 在父目录的 `subs/<child_id>/`),裸文件。机制见 [`../../designs/v5/work.md`](../../designs/v5/work.md)。
+做事层的六个对象,存在两个 sqlite 里:`works.db` 管现在(Work / Canvas / Worklet / Viewers / 收件箱),`worktrace.db` 管经过(Trace 的段和点、Round)。机制见 [`../../designs/v5/work.md`](../../designs/v5/work.md),存储见 [`../../designs/v5/work-store.md`](../../designs/v5/work-store.md)。
 
 ## Work
 
@@ -14,7 +14,8 @@
   "parent": null,
   "status": "running",
   "created_at": "2026-09-05T23:02:07Z",
-  "archived_at": null
+  "archived_at": null,
+  "viewers": ["alice"]
 }
 ```
 
@@ -27,13 +28,14 @@
 | `status` | `running` \| `archived` | 三层里只有 work 有状态;新建即 `running` |
 | `created_at` | ISO 8601 | |
 | `archived_at` | ISO 8601 \| null | 进入 `archived` 时写(已是 `archived` 则保留);回到 `running` 清空 |
+| `viewers` | string[] | 现在谁在看(心跳算出来的,按名字排;重启清空),见 [Viewers](#viewersusers);只读 |
 
 **状态规则**:
 - 只有两档:`running`(还在这里干活)/ `archived`(不再在这里干活——做成了还是放下了,对系统没有区别)。
 - 归档**不看子 work**:父子各归各的,没有「子 work 全完才能归档」的约束。
 - 进入 `archived` 即**冻结**:所有工作单元的现场销毁、登记留着、不能再 attach;`rounds` 不再从把手同步,只读已记的。
 - 可以从 `archived` 改回 `running`(取消归档)。
-- 写入只收 `running` / `archived`,别的值 `422`。旧的 `work.json` 里的 `todo` / `doing` / `done` / `abandoned` 与 `done_at` 读时透明折算:`todo` / `doing` → `running`,`done` / `abandoned` → `archived`,`done_at` → `archived_at`。
+- 写入只收 `running` / `archived`,别的值 `422`。
 - 没有自动归档——由人或 agent 标。
 
 **读视图 `WorkNode`** = Work + `children: WorkNode[]`(读时拼出来,不存)。
@@ -64,8 +66,6 @@ work 的画布:**几列,每列从上到下摆工作单元**,每个工作单元�
 | `panels[].worklet` | 装的是哪个工作单元;一个工作单元最多出现在一个格子里 |
 | `panels[].collapsed` | 收起 = 只剩标题行 |
 
-**旧数据读时规整**(不回写,下一次动作才存):`name` 当 `alias` 读;不是 `c<n>` 形式的列 id(早期的 `left` / `right`)按从左到右接着发新号;没有列就补一列;`next_column` 至少是最大编号 + 1。
-
 **跟 shellbase 唯一有意不同的地方**:格子的身份不在 `(window, block)` 位置参数里,而在 `worklet`——把工作单元挪到别的列,工作单元不变。开出来的工作单元进指定列末尾(不指定 = 最左一列),关掉的自动从格子里拿掉;画布里没提到的工作单元前端补在第一列。
 
 ## Worklet
@@ -85,39 +85,31 @@ work 的一个工作单元 = 一个现场。**在 work 里打开就是它的**,�
 
 | 字段 | 说明 |
 |---|---|
-| `id` | `<work_id>-w<n>`,work 内**单调递增、不复用**(关掉 `-w1` 再开一个是 `-w2`;计数在 `seq.json` 的 `worklet`,没有计数的旧 work 从现有登记和事件里出现过的最大号之后接着发);**就是 tmux 会话名**(终端类) |
+| `id` | `<work_id>-w<n>`,work 内**单调递增、不复用**(关掉 `-w1` 再开一个是 `-w2`;计数是 `works.next_worklet`,建现场失败这个号也不还);**就是 tmux 会话名**(终端类) |
 | `uri` | 打开它用的 URI(原样) |
 | `scheme` | URI 的协议 |
-| (`server`) | 建它的 server 名,**只在登记文件里、不对外**——销毁 / 取把手时内部用(`https` → `http`,`vim` → `default`,调用方不感知) |
+| (`server`) | 建它的 server 名,**只在登记(`worklets` 表)里、不对外**——销毁 / 取把手时内部用(`https` → `http`,`vim` → `default`,调用方不感知) |
 | `cwd` | server 解析出的工作目录(终端类);浏览器类为 `null` |
 | `created_at` | 工作单元诞生时刻;agent 类 server 用它找「之后新出现的那份会话记录」 |
 | `last_attached` | 最近一次重入 |
 
-**读视图 `WorkletView`** = Worklet + `alive`(问 server 现算)+ `window` / `handle`(attach / reattach 时返回,list 时不带)。
+**读视图 `WorkletView`** = Worklet + `alive`(问 server 现算)+ `window` / `handle`(attach / reattach 时返回;list 时活着的也带,死了的是 `null`)。
 
 一个工作单元只属于一个 work、一个确定节点。要在别的事里用它的结论,走 issue / card,不搬工作单元。
 
-## WorkUser(users)
+## Viewers(users)
 
-**人**,不是现场。谁动过这个 work;只做可见性,**不做权限**(整个实例给一个团队用)。机制见 [`../../designs/v5/user.md`](../../designs/v5/user.md)。建 work 的人自动是名单第一个。
+**人**,不是现场。现在谁在看这个 work;只做可见性,**不做权限**(整个实例给一个团队用)。机制见 [`../../designs/v5/user.md`](../../designs/v5/user.md) §3。
 
-```json
-{"user": "alice", "first_seen": "2026-09-06T08:00:00Z", "last_seen": "2026-09-06T09:12:40Z", "ops": 7}
-```
+- 存在 `works.viewers`(名字数组,按名字排),对外是 `Work.viewers`;**只记现在**,由服务进程内存里的心跳表(work → 人 → 最后一次心跳)整份算出来再写。
+- 心跳:建 work、打开 work(`GET /works/{id}`)、带身份的会动这个 work 的请求、`POST /works/{id}/users/touch`;超过 120 秒没心跳清出去;`POST /works/{id}/users/leave` 立刻拿掉;服务重启全部清空。
+- **读视图 `WorkUsers`**:`{"current": ["alice", "bob"]}`。
 
-| 字段 | 说明 |
-|---|---|
-| `user` | 团队里的一个人;来自登录态(token),见 [designs auth.md](../../designs/v5/auth.md) |
-| `first_seen` / `last_seen` | 第一次 / 最近一次操作这个 work |
-| `ops` | 操作次数(带身份的、会动这个 work 的请求 + 打开 + 心跳) |
-
-**读视图 `WorkUsers`**:`{"current": [WorkUserView], "history": [WorkUserView]}`,`WorkUserView` = WorkUser + `active`(最近 120 秒内动过,现算)。`current` 是 `history` 里 `active` 的子集;`history` 按最近活动倒序。
-
-不带身份的请求照样能操作,只是不记名。
+不再有「谁动过」的名单:谁做过什么看 [Trace](#trace) 里每个段、每个点的 `user.id`。不带身份的请求照样能操作,只是不记名、不算在看。
 
 ## Round
 
-agent 工作单元的工作单元痕迹:从各平台的记录文件读出来、append-only 追加进 `rounds.jsonl`。
+agent 工作单元的工作单元痕迹:从各平台的记录文件读出来、只追加进 `worktrace.db` 的 `rounds` 表(按 `(worklet_id, round_id)` 去重,按追加的先后读)。
 
 ```json
 {"id": "8b1e…", "timestamp": "2026-09-05T23:05:12Z", "role": "human", "text": "把配置改成环境变量"}
@@ -126,52 +118,47 @@ agent 工作单元的工作单元痕迹:从各平台的记录文件读出来、a
 | 字段 | 说明 |
 |---|---|
 | `id` | 平台自己的消息 id(Claude Code 的 `uuid`、Kimi 的事件 `uuid`;Codex 用 `<文件名>:<行号>`);同步时按它去重 |
-| `timestamp` | 平台原样透传(可能为空、格式异构;**不要拿它排序**,文件顺序就是时间顺序) |
+| `timestamp` | 平台原样透传(可能为空、格式异构:Claude Code / Codex 是 ISO 串,Kimi 是 Unix 秒;**不要拿它排序**,文件顺序就是时间顺序)。切 `agent.turn` 时才统一成 Unix 纳秒 |
 | `role` | `human` / `assistant` / `tool` / `system` |
 | `text` | 扁平化文本:工具调用写成 `[Name] args`,结果写成 `[result] …`,思考写成 `[thinking] …` |
 
 只记这四项——round 是 issue 的原料(逐 round 标注、`#问题`),不是检索单元。
 
-## Event
+## Trace
 
-work 自己的时间线,append-only。v3 `events.jsonl` 在 v5 唯一保留的地方。
+work 的经过:有起止的记成**段**(span),一个时刻的事记成**点**(log record),字段和 OTel 一对一,存在 `worktrace.db` 的 `spans` / `points` 表;`GET /works/{id}/trace` 拼成 OTLP/JSON(`{"traces": TracesData, "logs": LogsData}`,见 [api works.md](../../api/v5/works.md#get-apiworkswork_idtrace))。机制见 [designs work-trace.md](../../designs/v5/work-trace.md)。
 
-```json
-{"ts": "2026-09-05T23:02:07Z", "type": "created", "data": {"goal": "把 v5 做出来", "parent": null, "by": "alice"}}
-{"ts": "2026-09-05T23:02:09Z", "type": "column.renamed", "data": {"by": "alice", "column": {"id": "c1", "alias": "调研"}, "from": ""}}
-{"ts": "2026-09-05T23:02:10Z", "type": "worklet.attached", "data": {"by": "alice", "worklet": "…-w1", "uri": "codex:///…", "server": "codex", "column": {"id": "c1", "alias": "调研"}}}
-{"ts": "2026-09-06T01:00:00Z", "type": "status", "data": {"by": "alice", "from": "running", "to": "archived"}}
-{"ts": "2026-09-06T01:00:00Z", "type": "frozen", "data": {"by": "alice"}}
-```
+- **trace id** = `sha256("memorytalk/trace/" + 根 work id)` 前 16 字节:一棵 work 树一条 trace。
+- **span id**:`work` 段 = `sha256("memorytalk/span/work/<work id>/<第几段>")` 前 8 字节(第几段 = 这个 work 已有几段,第一段是 0;重新打开一次多一段);`worklet` 段同理用 worklet id(`memorytalk/span/worklet/…`);`agent.turn` = `sha256("memorytalk/span/turn/<worklet id>/<这一轮第一条 round 的 id>")` 前 8 字节,同一轮再同步一次还是同一个 id(`spans.first_round_id` 存这条 round 的 id)。
+- 父子:子 work 的 `work` 段挂在父 work 最新的 `work` 段下,`worklet` 段挂在它 work 最新的 `work` 段下,`agent.turn` 挂在它工作单元最新的 `worklet` 段下。
+- 时间是 Unix 纳秒(对外是十进制字符串);开着的段没有 `endTimeUnixNano`,另带 `memorytalk.open = true`。`kind` 都是 1(INTERNAL);`status.code` 开着时 0,正常结束 1(OK),`gone` 保持 0(Unset;跟着它结束的 `agent.turn` 也是 0)。
 
-**每条都带 `by`**:登录态里的人,没有则 `null`(归档连带的 `frozen` 记触发归档的人)。**列标记** = `{"id": "c<n>", "alias": "<当时的别名>"}`:`id` 是身份,`alias` 是事件发生时的快照,只为时间线好读,后来改名不回改。
+| 段 `name` | 开 | 结束 | 属性(`user.id` = 开它的人;结束时另记 `memorytalk.end.reason` 和 `memorytalk.end.user.id`——`gone` 没有人,不记) |
+|---|---|---|---|
+| `work` | 建 work;重新打开(新的一段,`links` 指向上一段,`memorytalk.work.reopened = true`) | 归档(`archived`) | `memorytalk.work.id`、`memorytalk.work.goal` |
+| `worklet` | 打开工作单元;重入时没有开着的段才开新的一段;work 重新打开时现场还活着的(网页的)也开新的一段 | 关掉(`detached`)、归档(`archived`)、现场没了(`gone`,status Unset) | `memorytalk.work.id`、`memorytalk.worklet.id` / `.uri`(原样)/ `.scheme` / `.server`、`memorytalk.column.id` / `.alias`(开的时候在哪一列);结束时 `memorytalk.end.column.id` / `.alias` |
+| `agent.turn` | 同步 round 时切出来:人的一条输入起 | 下一条人的输入之前的最后一条 round;没有就开着,worklet 段结束时跟着结束 | `memorytalk.worklet.id`、`memorytalk.round.first` / `.last` / `.count`、`gen_ai.system`;**不记人** |
 
-| `type` | `data`(除 `by` 外) |
-|---|---|
-| `created` | `goal`, `parent` |
-| `status` | `from`, `to` |
-| `frozen` | — (归档时现场已销毁) |
-| `column.added` | `column`(列标记) |
-| `column.renamed` | `column`(新别名), `from`(旧别名) |
-| `column.removed` | `column` |
-| `worklet.attached` | `worklet`, `uri`, `server`, `column`(放进哪一列) |
-| `worklet.moved` | `worklet`, `from: {column, index}`, `to: {column, index}`(位置没变不记) |
-| `worklet.detached` | `worklet`, `uri`, `column`(原来在哪一列;不在画布上 = `null`) |
+| 点 `eventName` | 挂在 | 属性(除 `user.id` 外) |
+|---|---|---|
+| `work.renamed` | `work` 段 | `memorytalk.work.goal`、`memorytalk.from`(旧目标) |
+| `column.added` / `column.removed` | `work` 段 | `memorytalk.column.id` / `.alias` |
+| `column.renamed` | `work` 段 | `memorytalk.column.id` / `.alias`(新别名)、`memorytalk.from`(旧别名);只有别名真变了才记 |
+| `worklet.moved` | 这个工作单元最新的 `worklet` 段 | `memorytalk.worklet.id`、`memorytalk.column.id` / `.alias` + `memorytalk.index`(去哪)、`memorytalk.from.column.id` / `.alias` + `memorytalk.from.index`(从哪);位置没变不记 |
+| `worklet.closed` | 这个工作单元最新的 `worklet` 段 | `memorytalk.worklet.id`、`memorytalk.column.id` / `.alias`(关的时候在哪一列);关掉时已经没有开着的段才记(现场没了 / 归档过、重新打开后没重入),段不再动 |
 
-收起 / 展开(列或工作单元)**不记**。旧事件没有 `by` / `column` 的原样保留,不回填。
+**列标记**:`memorytalk.column.id` 是身份(`c<n>`),`.alias` 是当时的别名快照,后来改名不回改。收起 / 展开(列或工作单元)、读、心跳**不记**。收件箱和 round 的正文不进轨迹。
 
 ## 存储
 
-```
-works/<work_id>/                      根 work 一个目录
-├── work.json         原子写(临时文件 + rename)
-├── canvas.json       原子写;不存在 = version 0、一列 c1
-├── worklets.json     原子写;数组(现场)
-├── seq.json          原子写;{"worklet": <下一个工作单元编号>},单调不复用
-├── users.json        原子写;数组(人)
-├── events.jsonl      只追加
-├── worklets/<worklet_id>/rounds.jsonl   只追加
-└── subs/<child_id>/  子 work 就在父目录下,同样的结构,再往下还是 subs/——目录就是树
-```
+| 库 | 表 | 主键 | 列 |
+|---|---|---|---|
+| `works.db` | `works` | `id` | `parent`(索引)、`goal`、`status`、`created_by`(索引)、`created_at`、`archived_at`、`manager`、`viewers`(JSON 数组)、`next_worklet`、`next_column`、`canvas_version` |
+| | `work_columns` | (`work_id`, `number`) | `alias`、`collapsed`、`position`;索引 (`work_id`, `position`) |
+| | `worklets` | `id` | `work_id`(索引)、`number`、`uri`、`scheme`、`server`、`cwd`、`created_at`、`last_attached`、`column_number`(空 = 没摆上画布)、`position`、`collapsed`;索引 (`work_id`, `column_number`, `position`) |
+| | `inbox` | `seq` | `work_id`(索引,空 = 没人管)、`ts`、`layer`、`path`、`subject`、`sha`、`by`、`routed_by` |
+| `worktrace.db` | `spans` | `span_id` | `trace_id` / `work_id` / `worklet_id` / `user_id` / `end_user_id`(都有索引)、`parent_span_id`、`name`、`kind`、`start_time_unix_nano`、`end_time_unix_nano`(空 = 开着)、`status_code`、`attributes` / `links`(OTLP JSON)、`first_round_id`(`agent.turn`) |
+| | `points` | `seq` | `trace_id`、`span_id`(索引)、`work_id`(索引)、`worklet_id`、`column_number`、`user_id`(索引)、`event_name`(索引)、`time_unix_nano`、`attributes` |
+| | `rounds` | `seq` | `work_id`、`worklet_id`(索引)、`round_id`、`timestamp`、`role`、`text` |
 
-以上是 `MEMORY_TALK_STORE=fs` 时的形态;`sqlite` 时同样的记录在 `works` / `work_docs` / `work_logs` 三张表里,业务层不感知(见 [designs provider.md](../../designs/v5/provider.md))。读写纪律照 shellbase:单写者(服务进程)、无缓存直读、任何时刻磁盘上都是完整 JSON。**不进 git**——work 记的是过程,git 记的是决定(见 [`../../designs/v5/metas/store.md`](../../designs/v5/metas/store.md) §4)。
+画布没有自己的表:`GET /works/{id}/canvas` 由 `work_columns`(按 `position`)和 `worklets` 的位置列(按 `column_number, position`)拼出来。一个动作在 `works.db` 里一个事务,然后写 `worktrace.db`;轨迹写失败不回滚 work。读写纪律:单写者(服务进程)、无缓存直读。**不进 git**——work 记的是过程,git 记的是决定(见 [`../../designs/v5/metas/store.md`](../../designs/v5/metas/store.md) §4)。

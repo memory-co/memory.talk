@@ -13,12 +13,14 @@
 ```json
 {
   "home": "/home/me/.memory.talk",
-  "memory": "/home/me/.memory.talk/memory",
-  "works": "/home/me/.memory.talk/works",
+  "metas": "/home/me/.memory.talk/metas",
+  "store": {"family": "fs", "backend": "LocalFS"},
+  "works_db": "/home/me/.memory.talk/works.db",
+  "worktrace_db": "/home/me/.memory.talk/worktrace.db",
   "workspace": "/home/me/workspace",
   "tmux_socket": "tmuxd-memorytalk",
-  "tmuxd": {"port": 43179, "bind": "127.0.0.1", "url_host": null}
+  "tmuxd": {"listen": "unix", "socket": "/home/me/.memory.talk/tmuxd/ttyd.sock", "mount": "/surface/tmuxd"}
 }
 ```
 
-`tmux_socket` 是 tmuxd 实际用的 tmux socket(`tmuxd-<MEMORY_TALK_TMUX_SOCKET>`);`tmuxd` 是那扇窗在哪(ttyd 端口、绑哪、对外写什么 host)。
+`store` 是 users / auth 的存储(按 `MEMORY_TALK_STORE`);work 固定是两个 sqlite:`works_db`(现在)和 `worktrace_db`(经过),路径来自 `MEMORY_TALK_WORKS_DB` / `MEMORY_TALK_WORKTRACE_DB`(默认在 home 下),`memory.talk server status` 打出来。`tmux_socket` 是 tmuxd 实际用的 tmux socket(`tmuxd-<MEMORY_TALK_TMUX_SOCKET>`);`tmuxd` 是那扇窗在哪(ttyd 听的 unix socket、挂在哪个路径下)。

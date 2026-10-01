@@ -1,13 +1,7 @@
-"""works/events_and_inbox -- timeline + implicit manager chain. See README.md."""
+"""works/inbox -- a work's own changes go up the tree to whoever manages it. See README.md."""
 
 
-def test_event_order_created_status_frozen(client):
-    w = client.post("/api/works", json={"goal": "x"}).json()
-    client.patch(f"/api/works/{w['id']}", json={"status": "archived"})
-    assert [e["type"] for e in client.get(f"/api/works/{w['id']}/events").json()] == ["created", "status", "frozen"]
-
-
-def test_child_events_go_to_parent_inbox(client):
+def test_child_changes_go_to_parent_inbox(client):
     root = client.post("/api/works", json={"goal": "根"}).json()
     c = client.post("/api/works", json={"goal": "子", "parent": root["id"]}).json()
     last = client.get(f"/api/works/{root['id']}/inbox").json()[-1]
@@ -15,7 +9,7 @@ def test_child_events_go_to_parent_inbox(client):
     assert last["subject"].startswith("created")
 
 
-def test_manager_json_overrides_the_parent(client):
+def test_manager_overrides_the_parent(client):
     root = client.post("/api/works", json={"goal": "根"}).json()
     c = client.post("/api/works", json={"goal": "子", "parent": root["id"]}).json()
     other = client.post("/api/works", json={"goal": "别处"}).json()
@@ -36,3 +30,19 @@ def test_root_has_no_manager(client):
     root = client.post("/api/works", json={"goal": "根"}).json()
     assert client.get(f"/api/works/{root['id']}/manager").json()["work"] is None
     assert client.get(f"/api/works/{root['id']}/inbox").json() == []
+
+
+def test_inbox_is_oldest_first(client):
+    root = client.post("/api/works", json={"goal": "根"}).json()
+    c = client.post("/api/works", json={"goal": "子", "parent": root["id"]}).json()
+    client.patch(f"/api/works/{c['id']}", json={"status": "archived"})
+    client.patch(f"/api/works/{c['id']}", json={"status": "running"})
+    assert [i["subject"] for i in client.get(f"/api/works/{root['id']}/inbox").json()] == \
+        ["created: 子", "status running -> archived", "status archived -> running"]
+
+
+def test_goal_change_is_not_delivered(client):
+    root = client.post("/api/works", json={"goal": "根"}).json()
+    c = client.post("/api/works", json={"goal": "子", "parent": root["id"]}).json()
+    client.patch(f"/api/works/{c['id']}", json={"goal": "新子"})
+    assert len(client.get(f"/api/works/{root['id']}/inbox").json()) == 1
