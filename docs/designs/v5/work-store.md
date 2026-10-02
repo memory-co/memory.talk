@@ -9,7 +9,7 @@
 
 相关:
 - provider 的两族基类: [provider.md](provider.md)。work 这一半以后只用数据库型
-- 轨迹的模型(段 / 点、OTel 字段): [work-trace.md](work-trace.md)
+- 轨迹的模型(段 / 点、OTel 字段): [work-trace.md](work-trace.md);agent 的记录由节点推进来: [work-node.md](work-node.md)
 - 画布是显示层;快照和轨迹各存各的: [work.md](work.md) / [work-events.md](work-events.md)
 - worklet 的身份脱离布局(登记和画布分开存): [worklet.md](worklet.md)
 - 认知层在 git 里,不在本篇: [metas/store.md](metas/store.md)
@@ -28,9 +28,9 @@
 
 | | `works.db`(现在) | `worktrace.db`(经过) |
 |---|---|---|
-| 装什么 | work 节点(含当前谁在看)、画布(列 / 格子)、登记、manager、收件箱 | 段、点(work-trace.md)、agent 的 round |
+| 装什么 | work 节点(含当前谁在看)、画布(列 / 格子)、登记、manager、收件箱 | 段、点(work-trace.md;agent 的会话、轮次、工具调用和消息也在这里) |
 | 读写 | 读多写少,每次动作读-改-写几行 | 几乎只追加,量随时间一直涨 |
-| 体量 | 小,和 work 数、工作单元数成正比 | 大,和发生过多少事成正比;round 尤其大 |
+| 体量 | 小,和 work 数、工作单元数成正比 | 大,和发生过多少事成正比;agent 的消息正文尤其大 |
 | 丢了会怎样 | 丢了就丢了 work | 丢了只是少了历史,work 照样能干活 |
 | 运维 | 要好好备份 | 可以归档、截断、单独拷给可观测那边分析 |
 
@@ -99,7 +99,7 @@ worklets(只列和位置有关的列)
 ```
 
 - **列的身份是 (`work_id`, `number`)**。对外的 id `c<number>` 是拼出来的,不存;只认这一种写法(`c(\d+)` 整串匹配,`c01` 这种也不算),别的一律 404。`number` 由 `works.next_column` 发,永不改、不复用([work-events.md §3](work-events.md))。
-- **位置是工作单元可以改的属性,不是它的身份。** [worklet.md §2](worklet.md) 要的是「换个格子还是它」:挪到别的列,改的是这一行的 `column_number` / `position`,`id` 不动,round 和出处都不断。把位置放在同一行,并不违背身份脱离布局。
+- **位置是工作单元可以改的属性,不是它的身份。** [worklet.md §2](worklet.md) 要的是「换个格子还是它」:挪到别的列,改的是这一行的 `column_number` / `position`,`id` 不动,轨迹和出处都不断。把位置放在同一行,并不违背身份脱离布局。
 - **`column_number` 为空 = 登记了、但没摆在画布上**(worklet.md §3 允许这种情况)。正常流程是打开就摆上、关闭就连行一起删掉,所以平时不会为空。
 - **一个工作单元只能在一格里**:这是结构本身决定的,一行只有一组位置。worklet.md §7 留着的「一个工作单元能不能被多个格子装」(同一个终端在画布上镜像两份),到这里就定成了**不能**。真要镜像,再单开一张表。
 - **顺序用 `position`**:列从左到右是 0、1、2……;同一列的工作单元从上到下也是 0、1、2……。**同一个 work 的列、同一列的工作单元,position 始终是连续的**(没有空洞、不重复)。每个动作在同一个事务里把受影响的那几行挪一下,保持这一点。行数很少,每次挪几行没有负担;换来的是「第几个」就是 `position`,查询不用再算。
@@ -148,15 +148,17 @@ SELECT w.id FROM worklets w JOIN work_columns c
 |---|---|---|---|
 | `spans` | `span_id` | `trace_id`(索引)、`parent_span_id`、`work_id`(索引)、`worklet_id`(索引)、`user_id`(索引,开段的人)、`end_user_id`(索引,结束它的人)、`name`、`kind`、`start_time_unix_nano`、`end_time_unix_nano`、`status_code`、`attributes`(JSON)、`links`(JSON)、`first_round_id`(只有 `agent.turn` 有) | 段:`work` / `worklet` / `agent.turn`。**`end_time_unix_nano` 为空 = 还开着**。结束 = 在同一行填上终点和结束时的属性;`agent.turn` 按 `first_round_id` 幂等改(work-trace.md §2) |
 | `points` | `seq`(自增) | `trace_id`、`span_id`(索引)、`work_id`(索引)、`worklet_id`、`column_number`、`user_id`(索引)、`event_name`(索引)、`time_unix_nano`、`attributes`(JSON) | 点:`column.*`、`worklet.moved`、`worklet.closed`、`work.renamed`(以后还有 `plan.changed`),只追加 |
-| `rounds` | `seq`(自增) | `work_id`、`worklet_id`(索引)、`round_id`、`timestamp`、`role`、`text` | agent 工作单元的 round(原来的 `rounds.jsonl`),按 (`worklet_id`, `round_id`) 去重(进程内一把锁),按 `seq` 读。`agent.turn` 段通过 round id 引用它 |
+| `rounds` | `seq`(自增) | `work_id`、`worklet_id`(索引)、`round_id`、`timestamp`、`role`、`text` | agent 工作单元的 round(原来的 `rounds.jsonl`),按 (`worklet_id`, `round_id`) 去重(进程内一把锁),按 `seq` 读。`agent.turn` 段通过 round id 引用它(现在;改完去掉,见下) |
+
+> **按 [work-node.md](work-node.md) 改完的样子(未实施)**:`rounds` 表和 `spans.first_round_id` 去掉——agent 的每条消息是一个点(`agent.message` / `agent.tool.input` / `agent.tool.output`),正文进 `points.body`,带 `uid`(按它去重)和 `observed_time_unix_nano`;段多了 `agent.session` / `agent.tool`,`agent.*` 都由节点推、结束即定稿;另加一张 `ingest_cursors`(每个工作单元每份来源推到哪了)。逐列见 [structure worktrace.md](../../structure/v5/worktrace.md)。
 
 几条规则:
 
 - **常用的属性提成列,完整的属性另存一份。** OTel 的属性是开放的键值,每种段、每种点带的都不一样,没法全部变成固定的列;所以 `attributes` 保留完整的 OTLP `KeyValue` 列表,只用来导出和拼回 OTLP,查询不碰它。平时要筛的维度(哪个工作单元、谁、哪一列、什么事件)都提成真的列:`worklet_id`、`user_id`、`column_number`、`event_name`。以后再冒出常查的属性,就再提一列。
-- **开着的段就是一行没有终点的记录。** work-trace.md §3 为这个问题另外开了一份 `spans` doc(因为 jsonl 只能追加一整条);到了表里,「开着」只是一列为空,不用再单独存一份状态。**只追加的是 `points` 和 `rounds`;`work` / `worklet` 段每行最多改一次**,就是结束那次;`agent.turn` 段随着新 round 同步进来原地改(最后一条 round、条数、终点)。
+- **开着的段就是一行没有终点的记录。** work-trace.md §3 为这个问题另外开了一份 `spans` doc(因为 jsonl 只能追加一整条);到了表里,「开着」只是一列为空,不用再单独存一份状态。**只追加的是 `points` 和 `rounds`;`work` / `worklet` 段每行最多改一次**,就是结束那次;`agent.turn` 段随着新 round 同步进来原地改(最后一条 round、条数、终点)——这是现在;按 work-node.md 改完,`agent.*` 段由节点按收尾标记结束,结束即定稿。
 - **user 的统计也从这里来**:「动过哪些 work、最近一次什么时候」= `spans.user_id` / `spans.end_user_id` / `points.user_id` 按人查(都有索引),见 user.md §3。
 - **一个 work 的轨迹** = `work_id = ?` 的段和点;**一棵树的轨迹** = 同一个 `trace_id`(work-trace.md §4)。两个都有索引。
-- **round 放在这里**,是因为它和段、点的性质一样:只追加、量大、是「经过」。放进 `works.db` 会让状态库越长越大,备份也越来越慢。
+- **agent 的对话放在这里**,是因为它和段、点的性质一样:只追加、量大、是「经过」。放进 `works.db` 会让状态库越长越大,备份也越来越慢。
 - `GET /works/{id}/trace` 开着的段也给(没有终点,带 `memorytalk.open = true`)。往外导出(还没做)只发**已经结束**的段(OTLP 没有「开着的 span」),点随写随发,见 work-trace.md §8。
 
 ## 6. 一个动作写了哪几处
@@ -172,7 +174,7 @@ SELECT w.id FROM worklets w JOIN work_columns c
 两步写要注意:
 
 - **两个库之间没有原子提交。** 两个库都是 WAL 模式,sqlite 在 WAL 下即使 `ATTACH` 在一起,跨库事务也只保证每个库各自原子,不保证两个库一起提交。所以顺序固定为**先 `works.db`,后 `worktrace.db`**。后一步失败的话,轨迹少一段,work 本身没问题。这和「轨迹丢了不伤 work」是同一个取舍。
-- **同一个 work 的生命周期动作排队。** 归档要先收 round、逐个销毁现场,最后才结束段;这中间 `works.db` 里已经是 `archived`,段却还开着。要是这时有人把它重新打开,归档最后会去结束重新打开后的那一段,原来那段永远开着;刚登记、还没开段的工作单元也会在归档后才开出一段。所以归档 / 重新打开(从改状态的事务到收尾做完)、打开工作单元(第 4 步到第 5 步)、重入,在服务里按 work 拿一把进程内的锁一个一个来;打开和重入都在锁里再看一眼 work 是不是已归档(归档了 409),等着归档做完的那个醒来就不会在归档的 work 里起现场、开段。这是 Python 的锁,不是 `works.db` 的事务:建现场、销毁现场、写 `worktrace.db` 照样不在事务里。兜底:归档结束这个 work 所有还开着的 work 段;重新打开时上一段还开着(那次轨迹没写进去),先按归档补上终点(work-trace.md §5)。
+- **同一个 work 的生命周期动作排队。** 归档要先让节点把记录推完、逐个销毁现场,最后才结束段;这中间 `works.db` 里已经是 `archived`,段却还开着。要是这时有人把它重新打开,归档最后会去结束重新打开后的那一段,原来那段永远开着;刚登记、还没开段的工作单元也会在归档后才开出一段。所以归档 / 重新打开(从改状态的事务到收尾做完)、打开工作单元(第 4 步到第 5 步)、重入,在服务里按 work 拿一把进程内的锁一个一个来;打开和重入都在锁里再看一眼 work 是不是已归档(归档了 409),等着归档做完的那个醒来就不会在归档的 work 里起现场、开段。这是 Python 的锁,不是 `works.db` 的事务:建现场、销毁现场、写 `worktrace.db` 照样不在事务里。兜底:归档结束这个 work 所有还开着的 work 段;重新打开时上一段还开着(那次轨迹没写进去),先按归档补上终点(work-trace.md §5)。
 - **现场和登记之间也不是原子的。** 把建现场挪到登记之前,是为了失败时什么都不用回滚(上一版是先登记、建失败再删),代价只是烧掉一个号。反过来,现场建起来了但第 4 步失败(比如列刚好被删了、work 刚好被归档了),就顺手把现场销毁再报错;连销毁也失败的,会留下一个没有登记的 tmux 会话,这种会话启动时对一遍就能收掉,和 work-trace.md §5「现场没了的段」是同一个对账过程,方向相反(启动时的对账还没做:现在「现场没了」只在列清单时发现)。
 
 ## 7. 从上一版怎么过来
@@ -187,5 +189,5 @@ provider 补上的能力(provider.md):**组合主键**(`db.table(..., primary_ke
 
 - **users / auth 放哪。** 它们现在跟着 `MEMORY_TALK_STORE` 走(fs 下是 `users/`、`auth/tokens/`,sqlite 下在 `memory.sqlite` 里)。它们不属于 work。倾向:同样只留 sqlite,单独一个 `users.db`,或者并进 `works.db`。放进 `works.db` 能少一个文件,但 users 本来就不是 work 的信息。到时候单独定。
 - **worktrace.db 怎么变老。** 轨迹会一直涨。可以按时间切(`worktrace-2026Q4.db`,查询时 `ATTACH`),也可以把已结束的 work 的轨迹导出成 OTLP/JSON 文件归档,再从库里删掉。先不做,等体量真大了再定。
-- **round 要不要再单独一个库。** agent 的 round 是三张表里最大的。如果它把 `spans` / `points` 的查询拖慢了,再拆成 `worktrace.db` + `rounds.db`。表结构不用变,只是换个文件。
+- **agent 的消息要不要再单独一个库。** 消息正文是轨迹里最大的一块。如果它把段和动作点的查询拖慢了,再把 `agent.*` 点拆到单独的表或库。列不用变,只是换个地方(work-trace.md §10)。
 - **多进程。** 两个库都只由服务进程写。CLI 和 agent 都走 HTTP API,不直接开库。

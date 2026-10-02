@@ -7,7 +7,8 @@
 - v5 issue(work 树上冒出的问题、由树上节点管、可派 work 取证): [issue.md](metas/issue.md)
 - shellbase window 与块即 URI(work 运行时的蓝本,底层逻辑完全一致): [shellbase design.md](https://github.com/memory-co/shellbase/blob/main/docs/v1/works/design.md) / [uri.md](https://github.com/memory-co/shellbase/blob/main/docs/v1/works/uri.md)
 - v3 explore(先验 / 后验工作区,被 work 并入): [../v3/explore.md](../v3/explore.md)
-- v4 逐 round 标注(work → issue 的入口): [../v4/worklet-annotation.md](../v4/worklet-annotation.md)
+- v4 逐 round 标注(work → issue 的入口;v5 里 round 并进 trace,是逐条消息标注): [../v4/worklet-annotation.md](../v4/session-annotation.md)
+- v5 节点(agent 的对话由现场所在机器上的节点推进 trace): [work-node.md](work-node.md)
 - v5 work-events(画布动作逐个进时间线,带列标记): [work-events.md](work-events.md)
 
 ---
@@ -78,7 +79,7 @@ work 的工作单元是**现场**(一个活着的、可以回去看的东西),�
 
 | 工作单元类型 | 例子 | 它对 work 的意义 |
 |---|---|---|
-| **agent 工作单元** | `claude:///proj`、`codex:///proj` | 干活的主力;它们的 round 是 work 留下的主要痕迹 |
+| **agent 工作单元** | `claude:///proj`、`codex:///proj` | 干活的主力;它们的对话(会话、轮次、工具调用、每条消息)是 work 留下的主要痕迹 |
 | **终端** | `bash:///proj` | 人自己动手的地方;跑测试、看日志 |
 | **浏览器窗口** | `https://…` 的文档、issue 页、dev server 预览 | 为了这件事**看过什么**——也是上下文的一部分 |
 | **文件视图** | `file:///proj/src` | 事情落在哪个目录 |
@@ -95,7 +96,7 @@ work 本身还有一点自己的东西,不多:**它是什么事**(一句话目�
 
 这是 work 相对 v3 / v4 最实在的一个改变。以前 memory.talk 认 worklet 归属靠**事后推断**:sync 从平台目录把工作单元抄进来,再拿 `cwd` 这类物理信号猜它属于哪个 explore。v5 里不用猜——
 
-- **在 work 里开一个 agent 块,这个工作单元从诞生那一刻就是 work 的工作单元。** memory.talk 拉起它、看着它跑、记它的 round,归属是原生的。
+- **在 work 里开一个 agent 块,这个工作单元从诞生那一刻就是 work 的工作单元。** memory.talk 拉起它、看着它跑、把它的对话记进 trace,归属是原生的。
 - 同一个目录,可以在不同 work 里各开各的工作单元,它们互不相干——归属看 work,不看目录。
 - **一个工作单元只属于一个 work,而且是树上的一个确定节点**,不属于「整棵树」。要在别的事里用到它的结论,走 issue / card,不是把工作单元搬家。
 - 从外部平台导入的历史工作单元(v3 的 sync 路径)继续保留,作为没有 work 归属的工作单元存在;要不要给它们补一个 work、怎么补,是兼容问题,后面再说。
@@ -108,8 +109,8 @@ work 本身还有一点自己的东西,不多:**它是什么事**(一句话目�
 
 1. **开工**:说清要做什么事、属于哪件更大的事;memory.talk 拿这句目标去撞 card,把相关的认知先注入进来——这是 recall 在 v5 的落点:**recall 的对象是 work,不再是零散的工作单元**。
 2. **干活**:往 work 里加现场,agent 跑、人看、网页翻。这段时间 work 就是一块画布,怎么排随便。事情大了就**拆**成子 work;碰到没定的事就**议**——提一个 issue,由这个 work 来管;议出「得去做 X 才知道」就**派**——为那条论证开一个 work(见 [issue.md §4](metas/issue.md))。
-3. **归档**:事成了也好、放下了也好,不再在这里干活,就把 work 归档。归档以后工作单元冻结:现场销毁、登记留着,不再追加 round,现场可以回去看,但不再是干活的地方。每个 work 自己归档,父子互不牵动;要接着干,改回运行中。
-4. **留下痕迹**:work 留下的是它所有工作单元的记录——agent 工作单元的 round、看过的网页、动过的目录;树留下的是这些痕迹加上**它是怎么拆的、每步怎么定的**。这堆痕迹是 **issue 层的原料**:逐 round 标注在这上面做,`#问题` 从这里冒出来。
+3. **归档**:事成了也好、放下了也好,不再在这里干活,就把 work 归档。归档以后工作单元冻结:现场销毁、登记留着,不再追加记录,现场可以回去看,但不再是干活的地方。每个 work 自己归档,父子互不牵动;要接着干,改回运行中。
+4. **留下痕迹**:work 留下的是它所有工作单元的记录——agent 工作单元的对话、看过的网页、动过的目录;树留下的是这些痕迹加上**它是怎么拆的、每步怎么定的**。这堆痕迹是 **issue 层的原料**:逐条消息标注在这上面做,`#问题` 从这里冒出来。
 
 第 4 段就是 v3 explore 想要的东西,在 work 里天然成立:**一个 work 的工作单元是它自己提出的问题的先验素材;后面的 work 是这些问题的后验证据**。不用再画一条时间分割线——work 的边界就是那条线。
 
@@ -119,7 +120,7 @@ work 本身还有一点自己的东西,不多:**它是什么事**(一句话目�
 
 work 是三层里最「实」的一层,它跟另外两层有三个接口:
 
-- **往上:work → issue**。work 的痕迹被逐 round 标注,标注里的问题建 / 挂到 issue。一个 issue 记得它是从哪个 work 的哪些 round 冒出来的;一个 work 也能反过来列出「这件事引出了哪些问题、对哪些老问题给了新论证」。
+- **往上:work → issue**。work 的痕迹被逐条消息标注,标注里的问题建 / 挂到 issue。一个 issue 记得它是从哪个 work 的哪些消息冒出来的;一个 work 也能反过来列出「这件事引出了哪些问题、对哪些老问题给了新论证」。
 - **往回:issue → work**。每个 issue 由树上一个 work **管**(manager)——通常就是正卡在这个问题上的那个节点;issue 也可以为某条论证的取证**派出**一个新 work,派出去的 work 干完,结果落回 issue 当论证。派出的 work 挂在树上哪里,由派它的 manager 决定,通常就是 manager 的子节点。work 本身不因此变成另一种东西——它只是多知道一件事:「我是为哪个问题开的」。见 [issue.md §3–§4](metas/issue.md)。
 - **往下:card → work**。work 开工时,recall 把命中的 card 注入到 work 里的 agent 工作单元中。注入的是 card,不是 issue,也不是别的 work 的工作单元原文。
 

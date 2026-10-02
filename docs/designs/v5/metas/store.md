@@ -25,7 +25,7 @@
 三条原则:
 
 - **card 和 issue 在 git 里**。它们是「认知」——会被改、会被争、要问「为什么变成这样」;git 天生就是回答这个问题的工具。
-- **work 不进 git**(当初是裸文件,后来改成两个 sqlite,见 [work-store.md](../work-store.md))。它是「现场」——画布状态、终端登记、工作单元 round;变化频繁、体量大、要的是原子写和唯一权威,不是历史叙事。这正是 shellbase 的状态模型([work.md §3](../work.md)),原样继承。
+- **work 不进 git**(当初是裸文件,后来改成两个 sqlite,见 [work-store.md](../work-store.md))。它是「现场」——画布状态、终端登记、agent 的对话;变化频繁、体量大、要的是原子写和唯一权威,不是历史叙事。这正是 shellbase 的状态模型([work.md §3](../work.md)),原样继承。
 - **没有数据库,也没有索引**。v3 / v4 的 SQLite 干两件事:派生索引、可变运行态(顶踩计数、read / recall 计数);LanceDB 干一件事:向量 + FTS 检索。v5 的 card 没有计数([card.md](card.md)),issue 的论证是 append-only 的文件,work 当初是裸文件——**可变运行态消失了**(这说的是认知层;现场层的 work 后来改存两个 sqlite,见 [work-store.md](../work-store.md));而检索改成查目录、顺链接、grep(§5),**派生索引也不需要了**。两样都没剩下非它不可的事。
 
 ---
@@ -54,21 +54,21 @@ commit 的粒度是**一个认知层的动作**,不是一次文件保存:
 
 | 动作 | 动了什么 | 谁提交 |
 |---|---|---|
-| 标注里冒出新问题 | 新建一个 issue | 标注流程(以 work + round 为出处) |
+| 标注里冒出新问题 | 新建一个 issue | 标注流程(以 work + 消息为出处) |
 | 加立场 / 加论证 / 换 manager / 派出论证 work | 那个 issue 追加一条 | manager work 里的人或 agent |
 | 争出结果,写卡或改卡 | issue 记结论 + card 改正文,**同一个 commit** | manager work 里的人或 agent |
 | 直接写一张没什么可争的卡 | 新建一个 card | 人或 agent |
 | 废弃一张卡 | card 标废弃(文件留着) | 人或 agent |
 
-message 里带**理由**和**出处**(哪个 work、哪些 round),author 区分人和 agent(agent 带上它所在的 work)。这些不是装饰——它们就是「时间线里的因果」本身;没有理由和出处的 commit,时间线退化成流水账。
+message 里带**理由**和**出处**(哪个 work、哪些消息),author 区分人和 agent(agent 带上它所在的 work)。这些不是装饰——它们就是「时间线里的因果」本身;没有理由和出处的 commit,时间线退化成流水账。
 
-work 那边的动作(开工、拆子 work、状态变化、做完)**不进 git**,但 work 会被 commit 引用(出处、manager、派出),引用跨过 git 边界没问题——work id 是稳定的,round 是 append-only 的。
+work 那边的动作(开工、拆子 work、状态变化、做完)**不进 git**,但 work 会被 commit 引用(出处、manager、派出),引用跨过 git 边界没问题——work id 是稳定的,消息的 uid 也是稳定的、只追加的。
 
 ---
 
 ## 4. 另一半:work / user 的记录不在这里
 
-work 树、画布、工作单元登记、谁动过、事件、收件箱、round——这些是**现场层**的记录,不进 git。work 的这些今天在两个 sqlite 里:`works.db` 管现在(work 树、画布、工作单元登记、谁在看、收件箱),`worktrace.db` 管经过(段、点、round),见 [work-store.md](../work-store.md);user / auth 的记录按 `MEMORY_TALK_STORE` 是裸文件或 sqlite。介质由 [provider.md](../provider.md) 抽象:文件系统型和数据库型两族基类。本篇只说一句为什么它们不进 git:**git 记的是决定,现场记的是过程**——把画布每次重排、终端每次 attach、agent 每一轮输出都提交进 git,时间线会被淹没,真正的因果反而找不到。
+work 树、画布、工作单元登记、谁动过、事件、收件箱、agent 的对话——这些是**现场层**的记录,不进 git。work 的这些今天在两个 sqlite 里:`works.db` 管现在(work 树、画布、工作单元登记、谁在看、收件箱),`worktrace.db` 管经过(段、点,agent 的对话也在里面),见 [work-store.md](../work-store.md);user / auth 的记录按 `MEMORY_TALK_STORE` 是裸文件或 sqlite。介质由 [provider.md](../provider.md) 抽象:文件系统型和数据库型两族基类。本篇只说一句为什么它们不进 git:**git 记的是决定,现场记的是过程**——把画布每次重排、终端每次 attach、agent 每一轮输出都提交进 git,时间线会被淹没,真正的因果反而找不到。
 
 ---
 

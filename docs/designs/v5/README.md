@@ -2,7 +2,7 @@
 
 > **状态:定位稿,未实施。** 这篇只回答三件事:memory.talk 是什么、它由哪几层抽象组成、这几层怎么咬合。字段、表、命令、端点一概不在这里——那些等定位敲定后再分篇立(同 [v4](../v4/README.md) 的 works / cli / api / structure 四目录分工)。
 >
-> 分篇:[work.md](work.md)(做事层:work 树)、**[metas/](metas/README.md)**(认知层:容器、层协议、存储、issue、card、origin、manager 全在这个目录)——[issue.md](metas/issue.md)(议事层:树上节点管、派活取证)、[card.md](metas/card.md)(记事层:维基式事实条目,issue 是它的讨论页)、[metas/store.md](metas/store.md)(存储:git 存 card / issue,裸文件存 work,没有数据库;work 那一半后来改成两个 sqlite,见 work-store.md)、[work-server.md](work-server.md)(每个协议背后把现场建出来的 server)、[work-server-io.md](work-server-io.md)(每个 server 一对口子:input 各自实现,output 走 trace;能力声明、状态门控、input 进 trace 并连上它引起的那一轮)、[worklet.md](worklet.md)(work 里的一个现场:身份脱离位置)、[work-trace.md](work-trace.md)(部分实施:events 换成 OTel 格式的 trace,分段和点,`GET /works/{id}/trace`;瀑布图和甘特图是同一份数据,图还没做)、[work-store.md](work-store.md)(已实施:work 只用 sqlite,works.db 管现在、worktrace.db 管经过;列在 work_columns 表、工作单元在哪一列第几个是 worklets 自己的列,轨迹在 spans / points 表)、[work-events.md](work-events.md)(列和工作单元上的每个动作一个请求、进时间线,带列标记和操作人;列 = 固定编号 + 别名;撤掉整份覆盖)、[user.md](user.md)(人:work 谁建的、现在谁在看、谁做过什么,metas 的提交是谁做的)、[auth.md](auth.md)(门:没有 admin 先 setup,之后登录换 token,每个请求都带;权限只有 admin 管账号这一档)、[provider.md](provider.md)(存储介质的两族基类:文件系统型 LocalFS / OSS / S3、数据库型 SQLite / MySQL / PostgreSQL;业务仓储按族各一份)、[metas/README.md](metas/README.md)(认知层的容器:collectbase 仓库,issue / card 各是一层,layer 由 schema 定义、可自定义)、[metas/layer.md](metas/layer.md)(怎么设计一个自己的层:四个问题、两个文件、系统替你做什么 / 不做什么)、[origin.md](metas/origin.md)(最底层:外部来的、未消化的原文,上层改不动的地板)、[manager.md](metas/manager.md)(目录下的 manager.json 把变动打给绑定的 work,work 干活往下推;取代 issue 上的 manager_work 字段)。
+> 分篇:[work.md](work.md)(做事层:work 树)、**[metas/](metas/README.md)**(认知层:容器、层协议、存储、issue、card、origin、manager 全在这个目录)——[issue.md](metas/issue.md)(议事层:树上节点管、派活取证)、[card.md](metas/card.md)(记事层:维基式事实条目,issue 是它的讨论页)、[metas/store.md](metas/store.md)(存储:git 存 card / issue,裸文件存 work,没有数据库;work 那一半后来改成两个 sqlite,见 work-store.md)、[work-server.md](work-server.md)(每个协议背后把现场建出来的 server)、[work-server-io.md](work-server-io.md)(每个 server 一对口子:input 各自实现,output 走 trace;能力声明、状态门控、input 进 trace 并连上它引起的那一轮)、[work-node.md](work-node.md)(节点:每台机器一个,读 agent 的会话记录、收 hooks、看现场,把会话 / 轮次 / 工具调用和每条消息推给中心;中心只存只查)、[worklet.md](worklet.md)(work 里的一个现场:身份脱离位置)、[work-trace.md](work-trace.md)(部分实施:events 换成 OTel 格式的 trace,分段和点,`GET /works/{id}/trace`;瀑布图和甘特图是同一份数据,图还没做)、[work-store.md](work-store.md)(已实施:work 只用 sqlite,works.db 管现在、worktrace.db 管经过;列在 work_columns 表、工作单元在哪一列第几个是 worklets 自己的列,轨迹在 spans / points 表)、[work-events.md](work-events.md)(列和工作单元上的每个动作一个请求、进时间线,带列标记和操作人;列 = 固定编号 + 别名;撤掉整份覆盖)、[user.md](user.md)(人:work 谁建的、现在谁在看、谁做过什么,metas 的提交是谁做的)、[auth.md](auth.md)(门:没有 admin 先 setup,之后登录换 token,每个请求都带;权限只有 admin 管账号这一档)、[provider.md](provider.md)(存储介质的两族基类:文件系统型 LocalFS / OSS / S3、数据库型 SQLite / MySQL / PostgreSQL;业务仓储按族各一份)、[metas/README.md](metas/README.md)(认知层的容器:collectbase 仓库,issue / card 各是一层,layer 由 schema 定义、可自定义)、[metas/layer.md](metas/layer.md)(怎么设计一个自己的层:四个问题、两个文件、系统替你做什么 / 不做什么)、[origin.md](metas/origin.md)(最底层:外部来的、未消化的原文,上层改不动的地板)、[manager.md](metas/manager.md)(目录下的 manager.json 把变动打给绑定的 work,work 干活往下推;取代 issue 上的 manager_work 字段)。
 >
 > 读法:先 §1 看定位怎么变,再 §2 看三层各是什么,§3 看它们之间的循环。§4 是跟 v3 / v4 / shellbase 的继承关系,§5 是留待后续分篇敲定的问题。
 
@@ -58,7 +58,7 @@ work 是 v5 的顶层对象,**取代 v1–v4 的 session 成为 memory.talk 的�
 
 issue 是「一个问题」,以及围绕它的 **position(立场 / 候选答案)** 和 **argument(支持 / 反对的论证)**。这就是 IBIS(Issue-Based Information System)那套本体,v4 已经把它推导出来了([v4 card.md §4](../v4/card.md));v5 把它从「卡」里独立出来,成为 work 和 card 之间的一层。
 
-- **issue 从 work 里冒出来**。做事过程中的每个「为什么」「该不该」「哪个更好」都是一个 issue;v4 设计的逐 round 标注 + `#问题` 自动建问题([worklet-annotation.md](../v4/worklet-annotation.md))就是 issue 的主要入口。
+- **issue 从 work 里冒出来**。做事过程中的每个「为什么」「该不该」「哪个更好」都是一个 issue;v4 设计的逐 round 标注(v5 里是逐条消息标注)+ `#问题` 自动建问题([worklet-annotation.md](../v4/session-annotation.md))就是 issue 的主要入口。
 - **issue 是跨 work 的,但有人管**。一个问题可以在 work A 里提出、在 work B 里得到新立场、在 work C 里被反驳;每个 issue 由 work 树上一个节点(manager)负责推,推不动时可以派出新 work 去取证。issue 之间用 IBIS 的边连成图(细化、引出、质疑、取代)。
 - **issue 不需要「关闭」**。IBIS 允许多个 position 长期竞争,哪个当下占优靠论证的多寡(v4 的 credence 现算)决定,不钉成已解决状态。
 - issue 的作用是**把争论结构化地留住**——它是可讨论的对象,但不是召回的单元。召回的单元是 card。
@@ -105,8 +105,8 @@ work、issue、card 说的都是**事**;user 说的是**人**,和它们平级,�
 
 顺着走一遍:
 
-1. **work 里干活**:若干 agent worklet 在 work 里跑,过程按 round 留下。
-2. **work → issue**:对 worklet 逐 round 标注(以写代读),标注里 `#` 出来的问题经检索判定——新问题建 issue,老问题挂到既有 issue;标注里给出的回答落成 position,后续证据落成 argument。
+1. **work 里干活**:若干 agent worklet 在 work 里跑,过程(会话、轮次、工具调用、每条消息)留在 trace 里。
+2. **work → issue**:对 worklet 的对话逐条消息标注(以写代读),标注里 `#` 出来的问题经检索判定——新问题建 issue,老问题挂到既有 issue;标注里给出的回答落成 position,后续证据落成 argument。
 3. **issue → card**:争出结果的 issue 写成 / 改一张 card;没什么可争的事实直接写卡。
 4. **card → work**:下一个 work 开工,recall 拿语境撞 card,把命中的卡注入 agent 的上下文。
 5. **work → issue(回流)**:新 work 里发生的事,对老 issue 的 position 构成新的支持或反对——这就是 explore 想做的「后验验证」,在 v5 里是每个 work 天然具备的能力。
@@ -124,13 +124,13 @@ work、issue、card 说的都是**事**;user 说的是**人**,和它们平级,�
 | | 来源 | v5 怎么处理 |
 |---|---|---|
 | 块即 URI / 终端 attach / window 状态 | shellbase v1 | **在 memory.talk 里原生实现,底层逻辑完全一致**;window 的布局不跟过来,work 只留列这一层弱编排([work.md §3](work.md));shellbase 不再作为独立项目继续,它的设计文档是 work 运行时的蓝本 |
-| session / round(append-only)、file-canonical | v3 | round 沿用,session 变成 work 里的 worklet;file-canonical 延伸成「git 是 canonical(含历史)」;worklet 的上游从 sync 变成 work |
+| session / round(append-only)、file-canonical | v3 | round 不再单独存,并进 work 的 trace(一条消息一个点,一轮一段);session 变成 work 里的 worklet;file-canonical 延伸成「git 是 canonical(含历史)」;worklet 的上游从 sync 变成 work |
 | SQLite(派生索引 + 运行态计数)、searchbase(向量 + FTS)、events.jsonl、migration 框架 | v3 / v4 | **全部去掉**:运行态在 v5 不存在;召回改成目录 + 链接 + grep,不建索引;历史归 git(见 [metas/store.md](metas/store.md));存储只有 git 和裸文件,没有派生物(work 后来改存两个 sqlite,轨迹换成 OTel 的段和点,见 [work-store.md](work-store.md)) |
 | explore(先验 / 后验工作区) | v3 设计 | **并入 work**,不再独立 |
 | insight(v3 的陈述卡) | v3 → v4 改名 | 继续只读可搜,慢慢下掉,不变 |
 | 问题图(issue / position / argument、IBIS 边、credence 现算) | v4 card | 成为 **issue 层**;机制不变,名字归位 |
 | 位(scope)/ 变(append-only + fork) | v4 card 治理 | 位不再是字段,事实陈述自带语境;变不再适用于 card——卡是可编辑 + 有历史的词条(issue 里的立场仍只增不改) |
-| 逐 round 标注 + `#问题` | v4 session-annotation | 成为 work → issue 的主入口 |
+| 逐 round 标注 + `#问题` | v4 session-annotation | 成为 work → issue 的主入口(v5 里按消息标注) |
 | 召回(撞问题 + 答案、credence 排序、scope 随注入) | v4 读路径 | 召回单元改成 card,**只按相关性排**,credence 那一轴去掉(对立候选还在 issue 里,不进卡) |
 
 一句话概括 v5 相对 v4 的改动:**往上加了 work 这一层把工作装进来,往下把 v4 的 card 拆成 issue(争论)和 card(维基式事实条目),card 上不再有任何沉浮。**

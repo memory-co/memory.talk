@@ -72,7 +72,7 @@ memory.talk/配置/旧的 settings 方案.md             ← origin 变了(新�
 | 在哪 | 变动 = | 谁产生 |
 |---|---|---|
 | Metas(git) | 一个 commit 触碰了这个目录下的路径 | collectbase 的 post-commit 就是天然的信号源;一个 commit 一条变动,带 `[层名]`、动词、路径、trailer |
-| work(`works.db` / `worktrace.db`) | work 的事件:状态变了(含归档)、新 worklet、新 round | work 层的动作本身就是信号源:建 work、改状态在改 `works.db` 的同一个事务里投递(今天只投这两样);同一件事的经过记在 `worktrace.db` 的轨迹里([work-trace.md](../work-trace.md)) |
+| work(`works.db` / `worktrace.db`) | work 的事件:状态变了(含归档)、新 worklet、新的一轮对话 | work 层的动作本身就是信号源:建 work、改状态在改 `works.db` 的同一个事务里投递(今天只投这两样);同一件事的经过记在 `worktrace.db` 的轨迹里([work-trace.md](../work-trace.md)) |
 
 **打过去**:变动**投递**到 manager work 的**收件箱**——`works.db` 的 `inbox` 表,一条变动一行,只追加,`work_id` 是收件的 work([work-store.md §3](../work-store.md))。每条:什么时候、哪个路径、什么变动、谁干的、以及**它是被哪个 `manager.json` 路由过来的**(便于回答「为什么这事到我这」)。
 

@@ -46,7 +46,7 @@ class FileSystemProvider:
 | 实现 | `write` | `append` | `local_path` | 备注 |
 |---|---|---|---|---|
 | **LocalFS**(默认) | 临时文件 + rename | `open(a)` | 有 | `MEMORY_TALK_STORE=fs` 时 `users/`、`auth/tokens/` 用的就是它 |
-| **S3 / OSS** | PutObject(天然整体替换) | **对象存储没有原生 append**:实现上要么读回 + 拼接 + 写回(小文件可以),要么一行一个对象再按前缀 list——由实现选,基类只要求语义 | 没有 | 适合把 rounds 这类只增的痕迹和 blob 放远端 |
+| **S3 / OSS** | PutObject(天然整体替换) | **对象存储没有原生 append**:实现上要么读回 + 拼接 + 写回(小文件可以),要么一行一个对象再按前缀 list——由实现选,基类只要求语义 | 没有 | 适合把只增的痕迹(轨迹、对话)和 blob 放远端 |
 
 `local_path` 是这一族里唯一的能力差异:agent 的把手、attach 脚本、人 `cat` 需要一个本机路径;远端对象存储给不了。仓储层要用它时先问一句,没有就退回 `read`。
 
@@ -96,9 +96,9 @@ db.update(works).where(works.c.id == wid, works.c.version == expect).set(status=
 
 ## 4. 仓储层:业务概念住在这里,按族各写一份
 
-> **work 已经只留 db 版**([work-store.md](work-store.md)):`WorkRepo`(works.db:节点、画布的列、工作单元登记、收件箱)+ `TraceRepo`(worktrace.db:段、点、round),各用一个 `SQLite` provider,不看 `MEMORY_TALK_STORE`。现在按族各一份实现的只剩 user / auth(`UserRepo` / `TokenRepo`)。
+> **work 已经只留 db 版**([work-store.md](work-store.md)):`WorkRepo`(works.db:节点、画布的列、工作单元登记、收件箱)+ `TraceRepo`(worktrace.db:段、点、agent 的对话),各用一个 `SQLite` provider,不看 `MEMORY_TALK_STORE`。现在按族各一份实现的只剩 user / auth(`UserRepo` / `TokenRepo`)。
 
-work / user 的记录(work 节点、画布、工作单元登记、收件箱、轨迹、round;user 的档案、登录态)是**业务**。业务层需要的操作定成一个接口——它长什么样是业务层的事,provider 不管;然后**按族各实现一份**(work 那几行只有 db 版):
+work / user 的记录(work 节点、画布、工作单元登记、收件箱、轨迹(含 agent 的对话);user 的档案、登录态)是**业务**。业务层需要的操作定成一个接口——它长什么样是业务层的事,provider 不管;然后**按族各实现一份**(work 那几行只有 db 版):
 
 | | fs 版仓储(用 `FileSystemProvider`) | db 版仓储(用 `DatabaseProvider`) |
 |---|---|---|
@@ -108,9 +108,9 @@ work / user 的记录(work 节点、画布、工作单元登记、收件箱、�
 | 画布 | —(上一版是 `canvas.json`) | `work_columns` 表 + `worklets` 的位置列,版本在 `works.canvas_version` |
 | 工作单元登记 | —(上一版是 `worklets.json`) | `worklets` 表,一行 |
 | 收件箱 | —(上一版是 JSONL) | `inbox` 表,自增 `seq` |
-| 轨迹 / round | —(上一版是 `events` / `rounds` 的 JSONL) | worktrace.db 的 `spans` / `points` / `rounds` 表 |
+| 轨迹(含 agent 的对话) | —(上一版是 `events` / `rounds` 的 JSONL) | worktrace.db 的 `spans` / `points` 表(现在另有 `rounds` 表,按 [work-node.md](work-node.md) 改完并进 `points`) |
 | 「按父列子」「按 created_by 列」 | —(上一版是 `list` 前缀 + 读每个 `work.json` 在内存里过滤) | `select(works).where(works.c.parent == pid)`,走索引 |
-| 把路径交给外部进程(agent 读 rounds) | `local_path`(LocalFS 有;S3 没有 → 退回 `read`) | 没有路径;把手改成通过仓储读(现在 round 就是这样:从平台记录文件读进 `rounds` 表,接口从表里读) |
+| 把路径交给外部进程(agent 读自己的对话) | `local_path`(LocalFS 有;S3 没有 → 退回 `read`) | 没有路径;通过仓储读(agent 的对话就是这样:从平台记录文件读出来进 `worktrace.db`,接口从表里读) |
 
 两点要说清:
 
@@ -130,7 +130,7 @@ MEMORY_TALK_STORE=mysql  + DSN          → MySQL(还没写)
 
 启动时按配置装配:选族 → 选实现 → 建对应的仓储 → 交给业务层。业务层拿到的是仓储接口,不知道底下是文件还是表。**这个开关现在只管 users / auth**;work 固定是两个 sqlite(`MEMORY_TALK_WORKS_DB` / `MEMORY_TALK_WORKTRACE_DB`,默认 `<home>/works.db` / `<home>/worktrace.db`)。
 
-**混搭**:某些流可以指定另一个 provider——典型是 rounds:主存储用 MySQL,rounds 仍用 LocalFS(大、只增、要给 agent 一个路径)。这是装配时的事,仓储层收到两个 provider,业务层仍只看到一份接口。(work 现在是另一种拆法:「现在」和「经过」各一个 sqlite,round 跟着轨迹进 `worktrace.db`,见 [work-store.md §1](work-store.md)。)
+**混搭**:某些流可以指定另一个 provider——典型是大的只增流(比如 agent 的对话):主存储用 MySQL,它仍用 LocalFS(大、只增、要给 agent 一个路径)。这是装配时的事,仓储层收到两个 provider,业务层仍只看到一份接口。(work 现在是另一种拆法:「现在」和「经过」各一个 sqlite,agent 的对话跟着轨迹进 `worktrace.db`,见 [work-store.md §1](work-store.md)。)
 
 ---
 
@@ -146,7 +146,7 @@ metas 的介质就是 git([metas/store.md](metas/store.md)),**不走 provider**�
 
 - ~~user 资料放哪~~:已定——user 是注册的实体,档案走仓储(fs `users/<name>.json` / db `users` 表),和 work 一样按族各一份实现。
 
-- **对象存储的 `append` 怎么做**:读回拼接(简单,小文件够用)还是一行一对象(可扩展,list 成本高)。先按前者;rounds 这种大流本来就建议留 LocalFS。
+- **对象存储的 `append` 怎么做**:读回拼接(简单,小文件够用)还是一行一对象(可扩展,list 成本高)。先按前者;agent 对话这种大流本来就建议留 LocalFS。
 - **`watch` 要不要进基类**:前端实时性会要;LocalFS 用 inotify,S3 没有,数据库看实现。先作为能力,不进必须项。
 - **db 版仓储的表结构**:一张宽表省事,每类一张表查询好;倾向每类一张表——既然选了数据库就把它的长处用上。
 - **查询构造器自己写还是包 SQLAlchemy Core**:自己写面最小、零依赖,但要自己吸收三种方言;包 SQLAlchemy 省事、方言现成,多一个依赖。倾向先包,面收在基类里,将来想换随时换。

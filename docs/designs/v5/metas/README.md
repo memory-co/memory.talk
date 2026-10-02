@@ -108,7 +108,7 @@ collectbase 的层是有序的:**事实在最下,推论在上;上层改不动下
 
 origin 在最底、issue 在中、card 在上:issue 从 origin 消化出来,card 从 issue 争出来;改 card 不能顺手改 issue 的记录,改 issue 不能碰 origin 的原文。origin 就是 collectbase 意义上的**事实层**——「智能体够不着的地板」。两点说明:
 
-- **work 的痕迹(rounds)仍不在 Metas 里**——它是本实例自己的过程,在 work 自己的 sqlite 里([work-store.md](../work-store.md));值得长期当证据的那几轮,摘录一份进 origin([origin.md §6](origin.md))。
+- **work 的痕迹(轨迹里的对话)仍不在 Metas 里**——它是本实例自己的过程,在 work 自己的 sqlite 里([work-store.md](../work-store.md));值得长期当证据的那几轮,摘录一份进 origin([origin.md §6](origin.md))。
 - **用户自定义的 layer 排在哪**,按 [metas-layer.md §2](layer.md):引用谁就排在谁上面;所有层都引用 origin,所以都在它之上。
 
 ---
@@ -158,7 +158,7 @@ metas-store.md 的两条原则不变:**认知层进 git,现场层不进 git**(�
 
 - ~~schema 用什么写~~:已定——不用 schema,用户层就是一个 `Layer` 子类的 `.py`,和内置层一样写 `check`([layer.md](layer.md))。
 - **通用 API 的形状**:`/api/metas/<class>/...` 一套 CRUD + 历史 + 检索,内置 layer 的专用端点(`/api/issues/...` `/api/cards/...`)是不是它上面的别名。
-- ~~要不要把 rounds 纳入 Metas 当事实层~~:已定——地板是 [origin](origin.md)(外部材料),rounds 整体仍不进 git;要留的几轮摘录进 origin。
+- ~~要不要把 work 的对话纳入 Metas 当事实层~~:已定——地板是 [origin](origin.md)(外部材料),对话整体仍不进 git;要留的几轮摘录进 origin。
 - **跨 layer 引用要不要校验**:card.issue 指向的 issue 必须存在吗;删时要不要检查反向引用。collectbase 明确「不管文件之间的关系」,这是 memory.talk 自己的事;倾向只在写时校验存在、不做级联。
 - **两个提交的事务**(§6):第一个成、第二个败时的回退,是 `reset` 权威分支(需要绕过「只进不退」)还是补一个反向提交。倾向后者,历史更诚实。
 - **`stack` 之外要不要给每个 layer 一条工作分支**:collectbase 说站在 `stack` 上声明哪层都行;memory.talk 的服务进程是唯一写者,站 `stack` 就够。

@@ -2,7 +2,7 @@
 
 `<HOME>/worktrace.db`(`MEMORY_TALK_WORKTRACE_DB` 可改),sqlite,WAL。装 work 的**经过**:段、点、agent 的 round;**现在**(work、列、工作单元登记)在 `works.db`,见 [work.md](work.md#存储)。为什么这么分、为什么是 OTel 的形状,见 [designs work-trace.md](../../designs/v5/work-trace.md) 和 [work-store.md §5](../../designs/v5/work-store.md);对外的 OTLP/JSON 见 [api works.md](../../api/v5/works.md)。
 
-§1–§5 是**已实施**的样子(和 `services/work/repo.py` 的 `TraceRepo` 一致);§6 是已知问题和待改,**未实施**。
+§1–§5 是**已实施**的样子(和 `services/work/repo.py` 的 `TraceRepo` 一致);§6 是按 [designs work-node.md](../../designs/v5/work-node.md) / [work-trace.md](../../designs/v5/work-trace.md) 改完的目标表设计——agent 的记录改由节点推、`rounds` 表并进点——**未实施**。
 
 ---
 
@@ -183,15 +183,86 @@ CREATE INDEX idx_rounds_worklet_id ON rounds(worklet_id);
 
 ---
 
-## 6. 已知问题和待改(未实施)
+## 6. 改完的样子(未实施)
 
-前四条是现状的毛病;后几条是 work server 改成「边上推、中心收」之后表上要加的,推的设计稿写的时候以这里为起点一起定。
+按 [designs work-node.md](../../designs/v5/work-node.md):agent 的记录不再由中心去拉、从 round 里切轮次,而是现场所在机器上的节点读会话记录、收 hooks,推成段和点。**没有 round 这个单独的概念了**:一个会话、一轮、一次工具调用都是段,每条消息是一个点,正文在点的 `body` 里(模型见 [designs work-trace.md §2](../../designs/v5/work-trace.md))。
 
-1. **`rounds` 没有唯一约束**。去重靠进程内的锁 + 每次全量读出已有的 `round_id`:多一个写者(比如边上的节点直接推)就守不住。要加 `UNIQUE(worklet_id, round_id)`,写改成 `INSERT … ON CONFLICT DO NOTHING`——这也是推的模式「至少一次投递、接收口幂等」的前提。
-2. **每次同步都把这个工作单元的 round 全读一遍**(去重),有新 round 时再全读一遍(重切轮次),`GET …/rounds` 再读一次,会话越长越慢。改成按游标读:`WHERE worklet_id = ? AND seq > ?`,换成 (`worklet_id`, `seq`) 的复合索引;轮次只从变化的地方往后切。
-3. **时间没在写入时统一**。`rounds.timestamp` 存原样文本,切轮次时才猜格式;Kimi 的数字其实是**毫秒**,现在被当成秒,换算出来是几万年后。改成写入时由懂格式的一方(adapter / 边上的上报者)换算好,另存一列 `time_unix_nano INTEGER`,原文留着备查。
-4. **`agent.turn` 结束后还会被改**(终点往后挪、属性整份换),和「段结束了就不再变、导出时整条写出」的约定不一致。轮次改用平台记录里明确的收尾标记来结束之后(Claude Code 的 `stop_reason`、Codex 的 `task_complete` / `turn_aborted`、Kimi 的 `turn.ended` / `turn.cancel`),可以做到结束即定稿;同时加 `memorytalk.end.reason`(正常结束 / 打断 / 现场没了)。
-5. **推的游标**:中心是「收到哪了」的权威,边上重连时来问。要一张表记每个工作单元每份来源收到的位置,形如 `ingest_cursors(worklet_id, source, position, updated_at)`,`source` = 哪一份会话记录(会话 id 或文件),`position` = 读到的偏移或最后一条的序号。放在这个库里,因为它跟着 `rounds` 走。
-6. **round 来自哪一份会话**:一个工作单元一生可能对应几份会话记录(Claude Code 里 `/clear` 就换一份),`rounds` 要加 `source`,对得上游标、也说得清是哪次会话。
-7. **新的点**:`worklet.state`(空闲 / 忙 / 等确认 / 不在了)、`worklet.input`(谁送了什么,不存原文)——见 [designs work-server-io.md](../../designs/v5/work-server-io.md)。`points` 的列够用,不用改表;按工作单元查状态时再给 `worklet_id` 加索引。
-8. **只增不减**:三张表没有清理路径,`worktrace.db` 会一直长;按时间切库还是导出后删,和 [work-store.md §8](../../designs/v5/work-store.md) 一起定。
+### 6.1 表
+
+```sql
+-- spans:去掉 first_round_id;name 多了 agent.session / agent.tool
+CREATE TABLE spans (
+  span_id              TEXT PRIMARY KEY,
+  trace_id             TEXT,
+  parent_span_id       TEXT,
+  work_id              TEXT,
+  worklet_id           TEXT,
+  user_id              TEXT,
+  end_user_id          TEXT,
+  name                 TEXT,      -- work / worklet / agent.session / agent.turn / agent.tool
+  kind                 INTEGER,
+  start_time_unix_nano INTEGER,
+  end_time_unix_nano   INTEGER,
+  status_code          INTEGER,   -- 0 Unset / 1 OK / 2 Error(只有出错的工具调用)
+  attributes           TEXT,
+  links                TEXT
+);
+-- 索引同 §2
+
+-- points:多了 uid / observed_time_unix_nano / body
+CREATE TABLE points (
+  seq                     INTEGER PRIMARY KEY AUTOINCREMENT,
+  uid                     TEXT UNIQUE,      -- log.record.uid;节点推的点都有,中心写的动作点为空(sqlite 的 UNIQUE 允许多个空)
+  trace_id                TEXT,
+  span_id                 TEXT,
+  work_id                 TEXT,
+  worklet_id              TEXT,
+  column_number           INTEGER,
+  user_id                 TEXT,
+  event_name              TEXT,
+  time_unix_nano          INTEGER,          -- 事情发生的时刻:agent 点取记录里的时刻(节点换算好)
+  observed_time_unix_nano INTEGER,          -- 中心收到的时刻;中心自己写的点和上一列相同
+  body                    TEXT,             -- 正文:agent.message / agent.tool.input / agent.tool.output 才有
+  attributes              TEXT
+);
+CREATE INDEX idx_points_span_id     ON points(span_id);           -- 一轮 / 一次工具调用下面的点
+CREATE INDEX idx_points_worklet_seq ON points(worklet_id, seq);   -- 一个工作单元的对话,按游标往后读
+CREATE INDEX idx_points_work_id     ON points(work_id);
+CREATE INDEX idx_points_user_id     ON points(user_id);
+CREATE INDEX idx_points_event_name  ON points(event_name);
+
+-- 推到哪了:中心说了算,节点重连时来问
+CREATE TABLE ingest_cursors (
+  worklet_id TEXT,
+  source     TEXT,     -- 哪一份来源:agent 的会话 id,或 hooks
+  position   TEXT,     -- 读到哪了:文件偏移或最后一条的 id,由节点解释
+  updated_at TEXT,
+  PRIMARY KEY (worklet_id, source)
+);
+
+-- rounds:删掉
+```
+
+- **两个写的人**:`work` / `worklet` 段和动作点只由中心写(人做动作时);`agent.*` 段和点、`agent.state`、`worklet` 段的 `gone` 结束只由节点推(`POST /api/ingest`,一批一个事务)。
+- **幂等**:段按 `span_id` 插,有了就跳过;结束只在还开着时生效;点按 `uid` 插(`INSERT … ON CONFLICT(uid) DO NOTHING`)。所以节点「至少一次」投递就够。
+- **所有段结束即定稿**,包括 `agent.turn`(节点按 agent 的收尾标记结束,不再被后来的记录往后挪)。
+- **新的点**:`agent.message` / `agent.tool.input` / `agent.tool.output`(带正文)、`agent.state`(空闲 / 忙 / 等确认)、`worklet.input`(谁送了什么,不存原文);列都是现成的。
+- **读**:列表和图(`GET …/trace`)不取 `body`;看对话(`GET …/worklets/{w}/messages`、`…/output`)按 (`worklet_id`, `seq`) 往后读,一轮内按 `span_id` 取。
+
+### 6.2 现在的毛病,改完怎么样
+
+| 现在 | 改完 |
+|---|---|
+| `rounds` 没有唯一约束,去重靠进程里的锁和全量读出已有 id | `points.uid` 唯一,冲突就跳过;多一个写者(节点)也不会重 |
+| 每次同步把一个工作单元的 round 全读一两遍,`GET …/rounds` 再读一遍 | 中心不读 agent 记录、不切轮次;节点只推新增的;看对话按 (`worklet_id`, `seq`) 游标读 |
+| `rounds.timestamp` 存原样文本,切轮次时才猜格式,Kimi 的毫秒被当成秒 | 节点按各家格式换算好,`time_unix_nano` 是整数;另有 `observed_time_unix_nano` 记收到的时刻 |
+| `agent.turn` 结束后还会被改(终点往后挪、属性整份换) | 按收尾标记结束,结束即定稿;中途插话是这一轮里的一个点 |
+| round 不知道来自哪份会话(一个工作单元一生可以有几份) | 每条消息挂在它那一轮下面,轮次挂在 `agent.session` 段下面,会话段带 `gen_ai.conversation.id` |
+| 推的模式没有游标 | `ingest_cursors`,中心说了算 |
+| `idx_points_span_id` / `idx_points_event_name` 没有查询用到 | 一轮 / 一次工具调用下的点按 `span_id` 取;按类型筛 agent 点用 `event_name`。`idx_spans_trace_id` 仍留给按整棵树查 |
+
+### 6.3 还开着的
+
+- **正文会让 `points` 大很多**。拖慢了列表和图的查询,就把 `agent.*` 点拆到单独的表或库,列不变([designs work-trace.md §10](../../designs/v5/work-trace.md))。
+- **只增不减**:三张表没有清理路径,`worktrace.db` 会一直长;按时间切库还是导出后删,和 [designs work-store.md §8](../../designs/v5/work-store.md) 一起定。
+- **迁移**:不迁移。`rounds` 表和 `spans.first_round_id` 直接去掉,已有的 round 不转成点,已有的 `agent.turn` 段留着不动。

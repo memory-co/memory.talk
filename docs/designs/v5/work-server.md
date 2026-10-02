@@ -1,13 +1,14 @@
 # protocol server —— 每个协议背后,把现场建出来的那个东西(v5 设计)
 
-> **状态:定稿,已有实现。** 本篇立 server 这一层的框架:一个块由 URI 定位,URI 的协议(`://` 前面那个)决定去找哪个 server——**每个 server 自己声明它响应哪些协议**,一个 server 可以响应多个;没人声明的协议去 **default**。server 负责把那个现场建出来、交回一扇窗和一个把手。这是 shellbase 里最核心、但当时没有完全定名的那一层;v5 原生实现时把它叫 **server**。接口、注册方式、各 server 的契约后续分篇。总定位见 [README.md](README.md)。
+> **状态:定稿,已有实现;读 agent 记录那部分按 [work-node.md](work-node.md) 改(未实施)。** 本篇立 server 这一层的框架:一个块由 URI 定位,URI 的协议(`://` 前面那个)决定去找哪个 server——**每个 server 自己声明它响应哪些协议**,一个 server 可以响应多个;没人声明的协议去 **default**。server 负责把那个现场建出来、交回一扇窗和一个把手。这是 shellbase 里最核心、但当时没有完全定名的那一层;v5 原生实现时把它叫 **server**。接口、注册方式、各 server 的契约后续分篇。总定位见 [README.md](README.md)。
 
 相关:
 - v5 work 树(块住在 work 里,摆在它的某一列;work 是现场登记的唯一权威): [work.md](work.md)
 - v5 work 存储(work 的登记是 `works.db` 里 `worklets` 表的一行;server 不存 work 状态): [work-store.md](work-store.md)
 - shellbase 块即 URI 与四分流(本篇要把「其余一切转发终端」那条显式化): [uri.md](https://github.com/memory-co/shellbase/blob/main/docs/v1/works/uri.md)
 - shellbase「一扇窗 + 一个把手」与 `*muxd` 规范(server 的形状就是它): [new-interface.md](https://github.com/memory-co/shellbase/blob/main/docs/v1/new-interface.md) / [muxd-spec.md](https://github.com/memory-co/shellbase/blob/main/docs/v1/muxd-spec.md)
-- v3 平台 adapter(读 Claude Code / Codex 会话记录——在 v5 归入 agent server 的把手): [../v3/sync-pipeline.md](../v3/sync-pipeline.md)
+- v3 平台 adapter(读 Claude Code / Codex 会话记录——在 v5 搬进节点的上报任务,见 [work-node.md](work-node.md)): [../v3/sync-pipeline.md](../v3/sync-pipeline.md)
+- 每个 server 的 input / output 口子: [work-server-io.md](work-server-io.md)
 
 ---
 
@@ -18,7 +19,7 @@ work 里每个块由一个 URI 定位:`codex:///workspace/proj`、`bash://`、`h
 ```
 块的 URI ──▶ 协议名 ──▶ 哪个 server 声明了它?没有就 default ──▶ server 建 / 取现场 ──▶ 交回:一扇窗 + 一个把手
                                                                       窗:给人,iframe 嵌进页面
-                                                                      把手:给程序,work 层拿它观测和驱动
+                                                                      把手:给程序,work 层拿它驱动(观测由节点往上推)
 ```
 
 一个 server 只回答一个问题:**「给我一个这类协议的 URI,我把它变成一个活着的现场,并告诉你怎么看、怎么驱动它。」** 不多。
@@ -47,7 +48,7 @@ v5 给它一个名字:**server**,寻址规则只有两条:**server 自己声明�
 
 外加三条它必须守的性质,全部来自 `*muxd` 规范,这里只点名:**现场活得比连接久**(关掉页面里面照常跑);**不代理那扇窗**(只报 URL,摆在哪是 work 的列的事);**状态不许撒谎**(建不出来就说建不出来,不给一个连不上的地址)。
 
-server **不做**的事同样重要:它**不记 work**——哪个块属于哪个 work、块在哪一列哪个位置、什么时候开的,这些全在 work 层的 `works.db` 里(`worklets` 表,[work-store.md §3](work-store.md));server 只管「这个 id 的现场活没活着」。它**不做认知**——round 怎么标注、问题怎么建,跟它无关。
+server **不做**的事同样重要:它**不记 work**——哪个块属于哪个 work、块在哪一列哪个位置、什么时候开的,这些全在 work 层的 `works.db` 里(`worklets` 表,[work-store.md §3](work-store.md));server 只管「这个 id 的现场活没活着」。它**不做认知**——消息怎么标注、问题怎么建,跟它无关。
 
 ---
 
@@ -56,7 +57,7 @@ server **不做**的事同样重要:它**不记 work**——哪个块属于哪�
 1. **work 里放一个块**,块有一个 URI。work 层给这个块一个**稳定的工作单元 id**——脱离位置的那个([work.md §3](work.md)),不是块序号。
 2. **memory.talk 拿协议名去 server 那里寻址**:哪个 server 声明了它就是哪个;没人声明 → **default**。default 也建不起来(PATH 里没这个命令)→ 明确报错。
 3. **server 拿(工作单元 id,URI)幂等地建 / 取现场**。第一次:建(起 tmux 会话、开浏览器 tab、定位目录);之后:取回同一个。
-4. **server 交回窗和把手**。窗的 URL 给前端 iframe 嵌进去;把手留给 work 层——观测(这个工作单元跑到哪了、新的 round)、驱动(往里发一句话)、销毁(块关闭时)。
+4. **server 交回窗和把手**。窗的 URL 给前端 iframe 嵌进去;把手留给 work 层——驱动(往里发一句话)、销毁(块关闭时)。观测不走把手:现场在跑,现场所在机器上的节点读它的会话记录、收 hooks,往中心推([work-node.md](work-node.md))。
 5. **work 层记登记**:工作单元 id ↔ URI ↔ 这个 server ↔ 现场是否活着。这份登记是 `works.db` 里 `worklets` 表的一行([work-store.md §3](work-store.md)),是唯一权威;server 重启后,work 层拿登记去 server 那里把现场一个个取回来。
 
 块关闭 = work 层通过把手让 server 销毁现场 + 删登记;不是只从列里摘掉(沿用 shellbase「关闭即回收」)。
@@ -70,7 +71,7 @@ server **不做**的事同样重要:它**不记 work**——哪个块属于哪�
 | server | 响应的协议 | 现场 | 窗 | 把手 | 实现面 |
 |---|---|---|---|---|---|
 | **bash** | `bash` | tmux 会话里的 bash | ttyd(tmuxd 自带)挂到 tmux 会话 | `send` | **tmuxd** |
-| **claude / codex / kimi** | 各自同名 | 同 bash——就是一个跑着 agent 的 tmux 会话 | 同上 | `send` **+ 读它的会话记录**(`rounds`) | **tmuxd** + v3 adapter |
+| **claude / codex / kimi** | 各自同名 | 同 bash——就是一个跑着 agent 的 tmux 会话 | 同上 | `send`;开现场时另外定下会话 id、注入 hooks,由节点读会话记录、推成会话 / 轮次 / 工具段和消息点(`output.messages`) | **tmuxd** + 节点里的 adapter |
 | **http** | `http`、`https` | 无(纯 iframe);将来换成真浏览器实例 | URL 本身 | 现在为空;换成 webmuxd 后有 CDP | 将来 **webmuxd**(先不做) |
 | **default** | (不声明)没人要的都来 | tmux 会话里跑「协议名」这个命令 | 同 bash | 同 bash | **tmuxd** |
 
@@ -78,7 +79,7 @@ server **不做**的事同样重要:它**不记 work**——哪个块属于哪�
 
 两点值得单说:
 
-- **agent 类 server 和 bash 的关系**。在 shellbase 里 `codex://` 和 `bash://` 完全同构——都是「到某目录跑某命令」。v5 里它们的**现场**仍然同构(都是 tmux 会话),差别只在**把手**:memory.talk 关心 agent 的 **round**——那是 work 留下的主要痕迹、issue 的原料。所以 claude / codex / kimi = bash 的把手 **再加一项「读会话记录」**(代码上是同样的 open,把手换成带 adapter 的 AgentHandle)。v3 的平台 adapter(从 Claude Code / Codex 的记录文件里读 round)在 v5 就住在这里:它不再是「事后 sync 的读取器」,而是 agent server 把手的一部分——现场在跑,round 就在流出来。
+- **agent 类 server 和 bash 的关系**。在 shellbase 里 `codex://` 和 `bash://` 完全同构——都是「到某目录跑某命令」。v5 里它们的**现场**仍然同构(都是 tmux 会话),差别在两处。**开现场时多做一点**:定下 agent 的会话 id(Claude Code 的 `--session-id`)、注入 hooks,这样记录是谁的不用事后猜。**留下的记录**:memory.talk 关心 agent 说了什么——那是 work 留下的主要痕迹、issue 的原料。读记录的不是把手,而是现场所在机器上的节点([work-node.md](work-node.md)):v3 的平台 adapter(从 Claude Code / Codex 的记录文件里读对话)在 v5 住在节点的上报任务里,它不再是「事后 sync 的读取器」,也不是「有人看才去拉」——现场在跑,会话、轮次、工具调用和每条消息就推进 trace([work-trace.md §2](work-trace.md))。
 - **http server 现在是最薄的**。shellbase v1 的浏览器面板是纯 iframe,没有把手;这不妨碍它是一个 server——窗就是那个 URL,把手为空,状态老实报「只有画面没有把手」(M13)。将来换成 webmuxd 一类的真浏览器实例,窗和把手都变强,协议不变,work 层无感——**这正是把它立成 server 的意义:实现面可以整个换掉,契约面不动**。
 
 ---
@@ -89,11 +90,11 @@ server 这个概念**不新造一套规范**,它的形状就是 shellbase 已经
 
 「形状是 `*muxd` 规范」这句话只有一种兑现方式:**server 的实现面就是一个 `*muxd` 库**。自己再写一遍 `tmux new-session` / `has-session` / `kill-session`,然后说「照 tmuxd 的规范」,是空话——规范里的每一条(id 幂等、ttyd 那扇窗、活得比连接久、不碰用户自己的 tmux、失败说清楚)都是库里已经做完的事,自己实现一遍只会做出一个更差的、没被验证过的 tmuxd。所以:
 
-- **终端这一族(bash / claude / codex / kimi / default)全部跑在 [tmuxd](https://github.com/memory-co/tmuxd)(pip `tmuxd`)上。** memory.talk 进程里持有一个 `Tmuxd` 实例(自己的 socket、自己的 ttyd、自己的 state 目录,都在 `~/.memory.talk/tmuxd/` 下),每个终端类 server 拿着它:建 / 取现场 = `t.session(id=worklet_id, cwd=…, cmd=…)`;窗 = `s.url`(ttyd 跟着 tmuxd 自带,**不再需要自己配一个 ttyd**);把手 = `s`(`alive` / `send` / `send_key` / `kill`)。server 自己只剩两件事:**决定 cwd 和命令**(协议名当命令名、path 当工作目录),以及 agent 类**多一项把手**——从平台的会话记录里读 round(v3 adapter)。
-- **tmuxd 只写不读,所以 server 也只写不读。** 原来的 `capture`(抓屏)去掉:读终端归人(打开那扇窗),不归 API。agent 的 round 不是抓屏,是读平台自己落的记录文件,那是 adapter 的事。
+- **终端这一族(bash / claude / codex / kimi / default)全部跑在 [tmuxd](https://github.com/memory-co/tmuxd)(pip `tmuxd`)上。** memory.talk 进程里持有一个 `Tmuxd` 实例(自己的 socket、自己的 ttyd、自己的 state 目录,都在 `~/.memory.talk/tmuxd/` 下),每个终端类 server 拿着它:建 / 取现场 = `t.session(id=worklet_id, cwd=…, cmd=…)`;窗 = `s.url`(ttyd 跟着 tmuxd 自带,**不再需要自己配一个 ttyd**);把手 = `s`(`alive` / `send` / `send_key` / `kill`)。server 自己只剩两件事:**决定 cwd 和命令**(协议名当命令名、path 当工作目录),以及 agent 类**开现场时多做一点**——定下会话 id、注入 hooks(读记录的是节点,不是 server)。
+- **tmuxd 只写不读,所以 server 也只写不读。** 原来的 `capture`(抓屏)去掉:读终端归人(打开那扇窗),不归 API。agent 的对话不是抓屏,是读平台自己落的记录文件和 hooks,那是节点的事。
 - **http server 将来跑在 webmuxd 上。** 浏览器那一块比终端复杂(真浏览器实例、CDP 把手),先不做;现在的 http server 就是最薄的那个——窗 = URL,把手为空。换成 webmuxd 时协议不变,work 层无感。
 
-所以 v5 里「server」和「`*muxd` 组件」的关系是:`*muxd` 库是**实现面**,server 是包在外面的**契约面**——多说一句它响应哪些协议、在 memory.talk 里怎么被请求到,再多一项 memory.talk 自己关心的把手能力(round)。
+所以 v5 里「server」和「`*muxd` 组件」的关系是:`*muxd` 库是**实现面**,server 是包在外面的**契约面**——多说一句它响应哪些协议、在 memory.talk 里怎么被请求到,再多一点 memory.talk 自己关心的事(开现场时定下 agent 的身份,让节点读得准)。
 
 窗的地址由 tmuxd 决定:ttyd 听 state 目录里的 unix socket,`tmuxd.asgi()` 挂在 memory.talk 主路由的 `/surface/tmuxd`,窗 = `/surface/tmuxd/?arg=<worklet_id>`,和 API 同一个端口、同一扇门(§7)。再往外的反代归网关那一层,不归 server。
 
@@ -179,9 +180,9 @@ M11 说组件只报 URL,「要不要套一层网关是上层的事」。这条�
 
 ## 8. 这篇有意不定的事
 
-- ~~server 是进程内的库,还是独立进程~~:已定——**库**。tmuxd 在 memory.talk 进程内被 `import`,ttyd 是它的子进程,tmux server 谁的都不是(关掉 memory.talk 现场照跑)。真要跨机器时再议远程 server。
+- ~~server 是进程内的库,还是独立进程~~:先是**库**——tmuxd 在 memory.talk 进程内被 `import`,ttyd 是它的子进程,tmux server 谁的都不是(关掉 memory.talk 现场照跑)。往后按 [work-node.md](work-node.md) 分步搬到每台机器一个的节点进程里:先搬读 agent 记录、往上推这件事,再搬 tmuxd / ttyd,最后才是远程节点。
 - ~~协议认领是注册还是约定~~:已定——**server 声明协议(注册)+ default 兜底(约定)**,两者都要,声明优先。
 - ~~agent server 是不是终端 server 的一个特例~~:已定——各自独立成文件,**不共用基类**:每个 server 自己写 `__init__`(收注入的 tmuxd)和 `open`(调 `tmuxd.session`),像 controller 一样一眼看全;共用的只有几个小件(解析命令、开 session、把手)。
 - ~~纯外链、纯静态页这类没有把手的块要不要也算 server~~:已定——算,`http.py` / `https.py` 就是最薄的 server。
-- **把手在 work 层暴露到什么程度**:现在只给观测(读 round)和销毁;`send` 在把手上有,API 不露。给驱动就打开了「memory.talk 编排 agent」这扇门——那是另一个话题,本篇不碰。口子本身(input / output、状态、能力声明)见 [work-server-io.md](work-server-io.md);编排仍不在那篇。
-- **远程现场**:块背后的现场在另一台机器上(server 在别处跑)——窗天然是 URL 所以没问题,把手怎么跨机器,留给需要时。
+- **把手在 work 层暴露到什么程度**:现在只给销毁(观测改由节点推);`send` 在把手上有,API 不露。给驱动就打开了「memory.talk 编排 agent」这扇门——那是另一个话题,本篇不碰。口子本身(input / output、状态、能力声明)见 [work-server-io.md](work-server-io.md);编排仍不在那篇。
+- **远程现场**:块背后的现场在另一台机器上(server 在别处跑)——窗天然是 URL 所以没问题,把手怎么跨机器,和 [work-node.md](work-node.md) 的远程节点一起定。
