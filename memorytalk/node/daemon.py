@@ -16,7 +16,7 @@ from pathlib import Path
 
 import httpx
 
-from .node import Node, Rejected
+from .node import Node, Rejected, Unreachable
 
 INTERVAL = 0.5                 # 秒;只 stat,变了才读
 
@@ -30,15 +30,21 @@ class HttpCenter:
         self.client = httpx.Client(transport=httpx.HTTPTransport(uds=str(center_socket)), base_url="http://center",
                                    timeout=timeout)
 
+    def _send(self, method: str, path: str, **kw) -> httpx.Response:
+        try:
+            return self.client.request(method, path, **kw)
+        except httpx.TransportError as e:              # socket 不在 / 拒绝连接 / 超时:中心没起来或正在重启
+            raise Unreachable(str(e) or type(e).__name__) from e
+
     def push(self, work_id: str, body: dict) -> dict:
-        r = self.client.post(f"/api/works/{work_id}/trace", json=body)
+        r = self._send("POST", f"/api/works/{work_id}/trace", json=body)
         if 400 <= r.status_code < 500:
             raise Rejected(f"{r.status_code} {r.text[:300]}")
         r.raise_for_status()
         return r.json().get("data") or {}
 
     def cursors(self, work_id: str, worklet_id: str) -> list[dict]:
-        r = self.client.get(f"/api/works/{work_id}/trace", params={"worklet": worklet_id, "fields": "cursors"})
+        r = self._send("GET", f"/api/works/{work_id}/trace", params={"worklet": worklet_id, "fields": "cursors"})
         if r.status_code == 404:                       # work 没了:从头读(推上去也会被拒)
             return []
         r.raise_for_status()

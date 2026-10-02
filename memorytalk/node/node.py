@@ -24,11 +24,16 @@ from .claude import Batch, ClaudeReader, Spec, restore
 log = logging.getLogger(__name__)
 
 STEPS_PER_POLL = 8             # 一轮里一个工作单元最多推几批(大的会话记录分几轮追上,别的工作单元不用等)
+RETRY_AFTER = 3.0              # 秒;中心连不上时隔多久再试
 READERS = {"claude": ClaudeReader}
 
 
 class Rejected(Exception):
     """中心不收这一批(4xx):重推也没用。"""
+
+
+class Unreachable(Exception):
+    """中心连不上(没起来 / 正在重启):过一会儿再推,游标不动。"""
 
 
 class Center(Protocol):
@@ -50,6 +55,7 @@ class Node:
         self.center = center
         self.watching: dict[str, Watch] = {}
         self._lock = threading.RLock()
+        self._down_until = 0.0                             # 中心连不上:这之前不再试(只记一次日志)
 
     # ================================================================ 中心说
 
@@ -106,6 +112,8 @@ class Node:
 
     def poll(self) -> None:
         with self._lock:
+            if time.monotonic() < self._down_until:
+                return
             sessions = self._sessions()
             for w in list(self.watching.values()):
                 try:
@@ -118,8 +126,16 @@ class Node:
                     for _ in range(STEPS_PER_POLL):
                         if not self._step(w):
                             break
+                except Unreachable as e:                   # 中心没起来 / 正在重启:这一轮都不推了,过一会儿再试
+                    if not self._down_until:
+                        log.warning("中心连不上,等它回来再推(游标不动):%s", e)
+                    self._down_until = time.monotonic() + RETRY_AFTER
+                    return
                 except Exception:
                     log.exception("上报出错:%s", w.spec.worklet_id)
+            if self._down_until:
+                log.info("中心回来了,接着推")
+                self._down_until = 0.0
 
     def _step(self, w: Watch, finish: tuple[str, int] | None = None, extra: list[dict] = ()) -> bool:
         """读一步、推一批;交回「还有没读完的」。推不成功就抛出去,游标不动。"""
@@ -180,4 +196,4 @@ class Node:
         return out
 
 
-__all__ = ["Node", "Center", "Rejected"]
+__all__ = ["Node", "Center", "Rejected", "Unreachable"]

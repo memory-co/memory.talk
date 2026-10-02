@@ -1,6 +1,7 @@
 """memory.talk node —— 本机节点的生命周期:start / stop / status / daemon(docs/designs/v5/work-node.md)。
 
-节点不是中心的子进程:重启中心不动它(agent 照跑、记录照读,中心回来了接着推);`server start` 顺手把它起来。
+节点不是中心的子进程:重启中心不动它(agent 照跑、记录照读,中心回来了接着推);`server start` 顺手把它起来,
+`server stop` 连它一起停。
 """
 from __future__ import annotations
 
@@ -88,10 +89,11 @@ def node_start(a=None, *, quiet: bool = False) -> None:
         print(f"节点已启动(pid {proc.pid})\n  目录    {d}\n  日志    {d / 'node.log'}\n  停止    memory.talk node stop")
 
 
-def node_stop(a) -> None:
+def node_stop(a, quiet: bool = False) -> None:
     inst = _read_instance()
     if not inst or not _alive(inst["pid"]):
-        print("节点没在跑")
+        if not quiet:
+            print("节点没在跑")
         return
     os.kill(inst["pid"], signal.SIGTERM)
     for _ in range(25):

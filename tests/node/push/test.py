@@ -4,7 +4,8 @@ import json
 import pytest
 
 from memorytalk.node import claude, layout
-from memorytalk.node.node import Node, Rejected
+from memorytalk.node import node as node_mod
+from memorytalk.node.node import Node, Rejected, Unreachable
 
 W, WORK, SID = "work_x-w1", "work_x", "11111111-2222-3333-4444-555555555555"
 TRACE, PARENT, SOCK = "ab" * 16, "cd" * 8, "tmuxd-test"
@@ -19,7 +20,7 @@ class FakeCenter:
     def push(self, work_id, body):
         if self.fail:
             self.fail -= 1
-            raise ConnectionError("中心没起来")
+            raise Unreachable("中心没起来")
         if self.reject:
             self.reject -= 1
             raise Rejected("422 不成形")
@@ -49,6 +50,7 @@ def env(tmp_path, monkeypatch):
     alive = {SOCK: {W}}
     monkeypatch.setattr(Node, "_sessions", lambda self: alive)          # 不碰真 tmux:活着的会话由测试说了算
     monkeypatch.setattr(claude, "FIND_EVERY", 0)                         # 会话记录后出现:下一轮就找
+    monkeypatch.setattr(node_mod, "RETRY_AFTER", 0)                      # 中心连不上:下一轮就再试
     spec = {"work_id": WORK, "worklet_id": W, "trace_id": TRACE, "parent": PARENT, "server": "claude", "session_id": SID,
             "hooks": str(layout.hooks_file(node_dir, W)), "transcripts": str(projects), "tmux_socket": SOCK, "since": 1}
     transcript = projects / "-proj" / f"{SID}.jsonl"
@@ -87,6 +89,18 @@ def test_a_push_that_fails_is_read_again_next_time(env):
     assert center.uids() == []
     node.poll()
     assert center.uids() == [f"{W}:u1", f"{W}:u1:state"]                 # 同样的字节,同样的 uid
+
+
+def test_an_unreachable_center_is_logged_once_until_it_is_back(env, caplog):
+    node, center, spec, write, _, _ = env
+    node.watch(spec)
+    write(human("u1", "你好"))
+    center.fail = 3
+    for _ in range(4):
+        node.poll()
+    warnings = [r.message for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warnings) == 1 and "连不上" in warnings[0] and not [r for r in caplog.records if r.levelname == "ERROR"]
+    assert center.uids() == [f"{W}:u1", f"{W}:u1:state"]                 # 回来了:游标没动过,一条不少
 
 
 def test_a_rejected_batch_is_skipped_not_retried_forever(env):

@@ -34,11 +34,11 @@ memory.talk 已启动(pid 12345)
 
 ## stop
 
-按 `server.pid` 发 SIGTERM,等 5 秒不退再 SIGKILL。没在跑 → 提示,退出码 0。**不动 tmux 会话,也不动节点**——现场活得比服务久,下次 `start` 后按登记重入;节点照读 agent 的记录,中心回来了接着推。
+按 `instance.json` 里的 pid 发 SIGTERM,等 5 秒不退再 SIGKILL;**本机节点一起停**([node.md](node.md))。没在跑 → 提示,退出码 0。**不动 tmux 会话**——现场活得比服务久,下次 `start` 后按登记重入。
 
 ## restart
 
-`stop` + `start`,参数沿用 `instance.json` 里记的那份。
+只重启中心(停 + `start`),参数沿用 `instance.json` 里记的那份。**不动节点**:这几秒里节点照读 agent 的记录,连不上中心就等着(游标不动),中心回来了接着推。
 
 ## status
 

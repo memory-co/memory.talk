@@ -9,7 +9,7 @@ memory.talk node status     [--json]
 memory.talk node daemon     # 前台阻塞,日志走 stdout
 ```
 
-**节点不是中心的子进程**:重启中心不动它(agent 照跑、记录照读,中心回来了接着推);节点重启也不动 agent——它记着在盯谁(`<home>/node/worklets/<id>/watch.json`),推到哪了存在中心,起来以后从那里接着读。
+**节点不是中心的子进程**:`server start` 顺手起它、`server stop` 连它一起停;`server restart` 只重启中心,不动它(agent 照跑、记录照读,中心回来了接着推);节点重启也不动 agent——它记着在盯谁(`<home>/node/worklets/<id>/watch.json`),推到哪了存在中心,起来以后从那里接着读。
 
 ## start
 

@@ -76,7 +76,7 @@ def server_start(a) -> None:
           f"  日志    {home / 'server.log'}\n  节点    memory.talk node status\n  停止    memory.talk server stop")
 
 
-def server_stop(a) -> None:
+def _stop_center() -> None:
     inst = _read_instance()
     if not inst or not _alive(inst["pid"]):
         print("memory.talk 没在跑")
@@ -91,9 +91,17 @@ def server_stop(a) -> None:
     print(f"memory.talk 已停止(pid {inst['pid']})。tmux 会话不动,下次 start 后按登记重入")
 
 
+def server_stop(a) -> None:
+    """停中心,本机节点也一起停(restart 只重启中心,不动节点)。"""
+    from .node import node_stop
+    _stop_center()
+    node_stop(a, quiet=True)
+
+
 def server_restart(a) -> None:
+    """只重启中心:节点照读 agent 的记录,中心回来了接着推。"""
     inst = _read_instance() or {}
-    server_stop(a)
+    _stop_center()
     a.host = inst.get("host", a.host)
     a.port = inst.get("port", a.port)
     server_start(a)
