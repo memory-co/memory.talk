@@ -109,7 +109,7 @@ work 的一个工作单元 = 一个现场。**在 work 里打开就是它的**,�
 
 ## Round
 
-agent 工作单元的工作单元痕迹:从各平台的记录文件读出来、只追加进 `worktrace.db` 的 `rounds` 表(按 `(worklet_id, round_id)` 去重,按追加的先后读)。
+agent 工作单元的工作单元痕迹:从各平台的记录文件读出来、只追加进 `worktrace.db` 的 `rounds` 表([表设计](worktrace.md);按 `(worklet_id, round_id)` 去重,按追加的先后读)。
 
 ```json
 {"id": "8b1e…", "timestamp": "2026-09-05T23:05:12Z", "role": "human", "text": "把配置改成环境变量"}
@@ -126,7 +126,7 @@ agent 工作单元的工作单元痕迹:从各平台的记录文件读出来、�
 
 ## Trace
 
-work 的经过:有起止的记成**段**(span),一个时刻的事记成**点**(log record),字段和 OTel 一对一,存在 `worktrace.db` 的 `spans` / `points` 表;`GET /works/{id}/trace` 拼成 OTLP/JSON(`{"traces": TracesData, "logs": LogsData}`,见 [api works.md](../../api/v5/works.md#get-apiworkswork_idtrace))。机制见 [designs work-trace.md](../../designs/v5/work-trace.md)。
+work 的经过:有起止的记成**段**(span),一个时刻的事记成**点**(log record),字段和 OTel 一对一,存在 `worktrace.db` 的 `spans` / `points` 表(逐列的表设计见 [worktrace.md](worktrace.md));`GET /works/{id}/trace` 拼成 OTLP/JSON(`{"traces": TracesData, "logs": LogsData}`,见 [api works.md](../../api/v5/works.md#get-apiworkswork_idtrace))。机制见 [designs work-trace.md](../../designs/v5/work-trace.md)。
 
 - **trace id** = `sha256("memorytalk/trace/" + 根 work id)` 前 16 字节:一棵 work 树一条 trace。
 - **span id**:`work` 段 = `sha256("memorytalk/span/work/<work id>/<第几段>")` 前 8 字节(第几段 = 这个 work 已有几段,第一段是 0;重新打开一次多一段);`worklet` 段同理用 worklet id(`memorytalk/span/worklet/…`);`agent.turn` = `sha256("memorytalk/span/turn/<worklet id>/<这一轮第一条 round 的 id>")` 前 8 字节,同一轮再同步一次还是同一个 id(`spans.first_round_id` 存这条 round 的 id)。

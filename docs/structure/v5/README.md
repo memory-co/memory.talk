@@ -14,8 +14,8 @@ v5 的三层:**work**(做事,两个 sqlite:`works.db` 管现在、`worktrace.db`
 | **User** | 注册的实体,和 work 平级:名字 / 显示名 / 邮箱 / 注册时间 / 角色(admin 只有一个);密码哈希存在记录里不出接口 | `users/<name>.json`(或 `users` 表) | [api users.md](../../api/v5/users.md) |
 | Token | 登录态:JWT(HS256,`<home>/jwt.key` 签);登记的是 jti 的 sha256 → 谁的、何时发、何时过期;logout / 改密码即删 | `auth/tokens/<sha256>.json`(或 `auth_tokens` 表) | [api auth.md](../../api/v5/auth.md) |
 | Viewers | 现在谁在看这个 work;只做可见性,心跳算出来、重启清空;work 另有 `created_by` 归属(指向一个注册的 User) | `works.viewers` 列 | [work.md](work.md#viewersusers) |
-| Round | agent 工作单元的工作单元痕迹,只追加 | `worktrace.db` 的 `rounds` 表 | [work.md](work.md#round) |
-| Trace | work 的经过:段(`work` / `worklet` / `agent.turn`)+ 点,字段和 OTel 一对一 | `worktrace.db` 的 `spans` / `points` 表 | [work.md](work.md#trace) |
+| Round | agent 工作单元的工作单元痕迹,只追加 | `worktrace.db` 的 `rounds` 表 | [work.md](work.md#round) · 表:[worktrace.md](worktrace.md) |
+| Trace | work 的经过:段(`work` / `worklet` / `agent.turn`)+ 点,字段和 OTel 一对一 | `worktrace.db` 的 `spans` / `points` 表 | [work.md](work.md#trace) · 表:[worktrace.md](worktrace.md) |
 | **Metas**:层 / 对象 / 分层仓库 / manager.json | 认知层。origin / issue / card 三个内置 layer + 用户层;对象 = 带后缀的目录,放哪都行 | `memory/`(分层 git) | [metas.md](metas.md) |
 | ↳ issue 层:readme.md / positions/*.md | 问题(目录名;字段 links / summary + 正文)+ 立场(一个一文件;字段 links / rank / verdict + 正文,论证一行一条) | `<path>.issue/` 目录 | [metas.md](metas.md#issue-层内置) |
 | ↳ card 层:readme.md | 维基式事实条目:字段 context / links / issue + 正文;标题是目录名;可改可删,历史在 git | `<path>.card/` 目录 | [metas.md](metas.md#card-层内置) |

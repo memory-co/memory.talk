@@ -37,7 +37,7 @@
 
 ## works.db / worktrace.db(work 固定是 sqlite)
 
-表和列见 [work.md](work.md) 和 [designs work-store.md §3–§5](../../designs/v5/work-store.md)。
+表和列见 [work.md](work.md) 和 [designs work-store.md §3–§5](../../designs/v5/work-store.md);`worktrace.db` 三张表的逐列设计见 [worktrace.md](worktrace.md)。
 
 | 库 | 表 | 一行是 |
 |---|---|---|
