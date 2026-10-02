@@ -20,7 +20,7 @@ from memorytalk.backend.services.search import SearchService
 from memorytalk.backend.services.work_servers import WorkServerService
 from memorytalk.backend.services.store import StoreService
 from memorytalk.backend.services.users import UserExists, UserNotFound, UserService
-from memorytalk.backend.services.work import ColumnNotFound, PanelNotFound, WorkletNotFound, WorkConflict, WorkNotFound, WorkService
+from memorytalk.backend.services.work import ColumnNotFound, WorkletNotFound, WorkConflict, WorkNotFound, WorkService
 from memorytalk.backend.services.work.viewers import SWEEP_EVERY, Viewers
 
 log = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
             return JSONResponse(fail(code, str(exc)), status_code=status)
         return handler
 
-    for exc_type in (WorkNotFound, WorkletNotFound, ColumnNotFound, PanelNotFound, UserNotFound):
+    for exc_type in (WorkNotFound, WorkletNotFound, ColumnNotFound, UserNotFound):
         app.add_exception_handler(exc_type, _err(404, "not_found"))
     app.add_exception_handler(WorkConflict, _err(409, "conflict"))
     app.add_exception_handler(UserExists, _err(409, "exists"))

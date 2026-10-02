@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 
 /** 右侧面板「动态」= 这个 work 轨迹的列表视图(GET /works/{id}/trace,docs/designs/v5/work-trace.md §6),新的在上。
  *  一行是一个段的开始、一个段的结束(开着的段只有开始)或一个点;按时间排(纳秒超出 Number 的精度,用 BigInt 比),同一时刻开始 < 点 < 结束,再按接口给的先后。
- *  写法沿用 work-events.md §7:画布动作带列标记(当时的别名,没有就「列 n」),下面一行是 `谁 · 时间`;工作单元叫什么从它的 worklet 段上取(点按 spanId 找段)。
+ *  写法沿用 work-events.md §7:列的动作和挪工作单元带列标记(当时的别名,没有就「列 n」),下面一行是 `谁 · 时间`;工作单元叫什么从它的 worklet 段上取(点按 spanId 找段)。
  *  agent 的轮次(agent.turn)默认藏起来,不然一轮两行会把别的都挤走;认不出的段 / 点原样显示名字和属性。 */
 export function WorkEvents({ id }: { id: string }) {
   const t = useT();

@@ -48,7 +48,7 @@ work_…2f2f  running   alice    把 v5 做出来
 
 ## work show
 
-一个 work 的全貌:目标 / 状态 / 父 / 建者;工作单元(活没活着、窗地址);现在谁在看(`在看 alice, bob`);收件箱最近几条;manager。`--json` 时是各端点的合集(`users` 是 `{"current": [名字]}`)。
+一个 work 的全貌:目标 / 状态 / 父 / 建者;工作单元(一行一个:id、URI、活没活着、在哪一列,如 `列 c3`;不在任何一列是 `列 -`);现在谁在看(`在看 alice, bob`);收件箱最近几条;manager。`--json` 时是各端点的合集:`work`、`columns`(列清单,从左到右)、`worklets`(每个带 `column` / `position` / `collapsed`)、`users`(`{"current": [名字]}`)、`inbox`(最近 10 条)、`manager`。
 
 ## work set
 
@@ -66,7 +66,7 @@ memory.talk work attach work_…2f2f https://localhost:5173/ --column 3
 
 | 参数 | 说明 |
 |---|---|
-| `--column <n>` | 放进画布哪一列的末尾:列**编号**(`3` 或 `c3`,界面上的「列 3」),不是从左数的位置;不给 = 最左一列 |
+| `--column <n>` | 放进哪一列的末尾:列**编号**(`3` 或 `c3`,界面上的「列 3」),不是从左数的位置;不给 = 最左一列 |
 
 输出:工作单元 id、窗地址(tmuxd 自带的 ttyd,`?arg=<id>`)、把手能力。已归档的 work → exit 1;命令不在 PATH → exit 1 `cmd_not_found`;列不存在 → exit 1(不建现场)。
 

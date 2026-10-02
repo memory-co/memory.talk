@@ -7,7 +7,7 @@
 | `router.ts` | hash 路由:`Route{page, work, filter, layer, path, file, dir}`,`useRoute()` / `navigate(route)` |
 | `queries.ts` | 常用查询 hook:`useWorks` / `useWork`(15 秒一次,兼作「在看」的心跳)/ `useUsers` / `useServers` / `useSystem` / `useLayers` / `useTrace`(`['trace', id]`,一个 work 的轨迹,5 秒刷新) |
 | `query.tsx` | `queryClient`(4xx 不重试)和 `AppProviders` |
-| `types.ts` | 后端模型的 TS 形状(`Work`(带 `viewers`)/ `Worklet` / `Canvas` / `User` / `Layer` / `TreeView` / `RecentPage` / `SearchResult` …;轨迹是 OTLP/JSON 的 `WorkTrace` / `TraceSpan` / `TraceLogRecord` / `KeyValue`)和几个工具函数(`statusLabel` / `layerLabel` / `workletLabel` / `dateLabel` / `flattenWorks`;`attrValue` 从 OTLP 属性里取值,`intValue` 转成 number) |
+| `types.ts` | 后端模型的 TS 形状(`Work`(带 `viewers`)/ `Worklet`(带 `column` / `position` / `collapsed`)/ `Column` / `User` / `Layer` / `TreeView` / `RecentPage` / `SearchResult` …;轨迹是 OTLP/JSON 的 `WorkTrace` / `TraceSpan` / `TraceLogRecord` / `KeyValue`)和几个工具函数(`statusLabel` / `layerLabel` / `workletLabel` / `dateLabel` / `flattenWorks`;`attrValue` 从 OTLP 属性里取值,`intValue` 转成 number) |
 | `i18n.ts` | 多语言:`en` 是源字典(`Key = keyof typeof en`),`zh` 逐键对照;`useT()` hook、模块级 `t()`、`localeTag()` |
 | `protocol.ts` | 层协议工具:`FieldSpec` / `FileKind` / `Protocol` 类型;`splitFile` / `joinFile`(frontmatter ⇄ 字段 + 正文)、`toRegExp`(`(?P<name>` → JS 命名组)、`kindOf(protocol, rel)`、`instantiate(kind, name)`、`emptyValue` / `normalize`(表单值 ⇄ 写进 frontmatter 的值) |
 | `utils.ts` | `cn()`(clsx + tailwind-merge) |

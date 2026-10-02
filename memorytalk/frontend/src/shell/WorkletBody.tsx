@@ -13,7 +13,7 @@ import { localeTag, useT } from '@/lib/i18n';
 import type { Round, Worklet, Work } from '@/lib/types';
 import { Empty, ErrorState, Loading, Markdown, safeWindowUrl } from '@/components/Shared';
 
-export function PanelView({ work, worklet }: { work: Work; worklet: Worklet }) {
+export function WorkletBody({ work, worklet }: { work: Work; worklet: Worklet }) {
   const t = useT();
   const locale = usePreferences(s => s.locale);
   const focus = useDialogFocus();
@@ -35,7 +35,7 @@ export function PanelView({ work, worklet }: { work: Work; worklet: Worklet }) {
   });
   const remove = useMutation({ mutationFn: () => api(`${base}`, { method: 'DELETE' }), onSuccess: () => {
     for (const key of ['live', 'rounds']) queryClient.removeQueries({ queryKey: [key, work.id, worklet.id] });
-    for (const key of ['worklets', 'canvas', 'trace']) void queryClient.invalidateQueries({ queryKey: [key, work.id] });
+    for (const key of ['worklets', 'trace']) void queryClient.invalidateQueries({ queryKey: [key, work.id] });
     setConfirm(false); toast.success(t('worklet.closed'));
   }, onError: (error: Error) => toast.error(error.message) });
   const copy = async () => {

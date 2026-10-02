@@ -10,12 +10,12 @@ export interface Work {
 export interface Worklet {
   id: string; uri: string; scheme: string; cwd: string | null; alive: boolean;
   created_at: string; last_attached: string;
+  column: string | null; position: number | null; collapsed: boolean;   // 在哪一列(`c3`)、列里从上往下第几个(从 0 起);收起只管显示
   window?: { url: string | null; embed: string | null } | null;
   handle?: { kind: string; capabilities: string[] } | null;
 }
-export interface Panel { worklet: string; collapsed: boolean }
-export interface Column { id: string; alias: string; panels: Panel[]; collapsed: boolean }
-export interface Canvas { version: number; next_column: number; columns: Column[] }
+/** 列(GET /works/{id}/columns,按 position 从左到右,从 0 起):固定编号的 id(`c3`)+ 别名,可收起。列只承载弱编排。 */
+export interface Column { id: string; alias: string; collapsed: boolean; position: number }
 export interface Round { id: string; timestamp: string | null; role: string; text: string }
 export interface User {
   name: string; display_name: string; email: string; created_at: string; role: 'admin' | 'member';

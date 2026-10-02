@@ -41,9 +41,9 @@
 
 | 库 | 表 | 一行是 |
 |---|---|---|
-| `works.db` | `works` | 一个 work:`parent` 就是树;`manager`(这棵子树的变动打给谁,空 = 父 work)、`viewers`(现在谁在看,心跳算出来整份写,重启清空)、计数器 `next_worklet` / `next_column` / `canvas_version` |
-| | `work_columns` | 画布的一列,主键 (`work_id`, `number`),`position` 从左到右 0..n-1 |
-| | `worklets` | 一个工作单元:登记 + 摆在哪(`column_number` / `position` / `collapsed`) |
+| `works.db` | `works` | 一个 work:`parent` 就是树;`manager`(这棵子树的变动打给谁,空 = 父 work)、`viewers`(现在谁在看,心跳算出来整份写,重启清空)、计数器 `next_worklet` / `next_column` |
+| | `work_columns` | 一列,主键 (`work_id`, `number`),`position` 从左到右 0..n-1 |
+| | `worklets` | 一个工作单元:登记 + 摆在哪一列第几个(`column_number` / `position` / `collapsed`) |
 | | `inbox` | 一条打过来的变动;`work_id` 为空 = 没人管 |
 | `worktrace.db` | `spans` | 一个段(`work` / `worklet` / `agent.turn`),终点为空 = 还开着 |
 | | `points` | 一个点(`column.*` / `worklet.moved` / `worklet.closed` / `work.renamed`),只追加 |
@@ -51,7 +51,7 @@
 
 - **一个动作一个事务**:一个动作在 `works.db` 里的读-改-写在一个事务里做完;建 / 销毁现场不在事务里;最后写 `worktrace.db`。两个库之间没有原子提交,轨迹写失败只记日志,不回滚 work。
 - **单写者**:服务进程是唯一写者,每个库一个 provider 实例、一把进程内锁;CLI 和 agent 都走 HTTP。
-- **work 归档不删记录**:现场(tmux 会话)销毁,登记和画布留着,可回去看痕迹。
+- **work 归档不删记录**:现场(tmux 会话)销毁,登记和列(连同每个工作单元摆在哪)留着,可回去看痕迹。
 - users / auth 仍按 `MEMORY_TALK_STORE`:`fs` 时是上面的 `users/` / `auth/tokens/`,`sqlite` 时在 `memory.sqlite`(`MEMORY_TALK_SQLITE` 可改路径)的 `users` / `auth_tokens` 表里,业务层不感知(见 [designs provider.md](../../designs/v5/provider.md))。
 
 ## 运行时(不落盘)

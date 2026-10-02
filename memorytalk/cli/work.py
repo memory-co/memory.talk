@@ -20,13 +20,14 @@ def w_list(api, a):
 def w_show(api, a):
     w = api.call("GET", f"/api/works/{a.work_id}")
     if a.json:
-        return out({"work": w, "worklets": api.call("GET", f"/api/works/{a.work_id}/worklets"),
+        return out({"work": w, "columns": api.call("GET", f"/api/works/{a.work_id}/columns"),
+                    "worklets": api.call("GET", f"/api/works/{a.work_id}/worklets"),
                     "users": api.call("GET", f"/api/works/{a.work_id}/users"),
                     "inbox": api.call("GET", f"/api/works/{a.work_id}/inbox")[-10:],
                     "manager": api.call("GET", f"/api/works/{a.work_id}/manager")}, True)
     print(f"{w['id']}  {w['status']}  建者 {w.get('created_by') or '-'}  父 {w.get('parent') or '-'}\n  {w['goal']}")
     for s in api.call("GET", f"/api/works/{a.work_id}/worklets"):
-        print(f"  工作单元 {s['id']}  {s['uri']}  {'活着' if s['alive'] else '死了'}")
+        print(f"  工作单元 {s['id']}  {s['uri']}  {'活着' if s['alive'] else '死了'}  列 {s.get('column') or '-'}")
     print(f"  在看 {', '.join(api.call('GET', f'/api/works/{a.work_id}/users')['current']) or '-'}")
     print(f"  manager {api.call('GET', f'/api/works/{a.work_id}/manager')['work'] or '-'}")
     for i in api.call("GET", f"/api/works/{a.work_id}/inbox")[-5:]:

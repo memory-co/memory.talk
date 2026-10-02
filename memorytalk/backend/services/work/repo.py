@@ -1,7 +1,7 @@
 """work 的仓储:两个 sqlite——works.db 管现在,worktrace.db 管经过(docs/designs/v5/work-store.md)。
 
 一张表一种东西,一行一个实体,要查、要单独改的都是真的列。这里每个方法就是一两条语句;
-一个动作要改的几处,由上面的 helper(tree / canvas / worklets / inbox)包在一个 `tx()` 里。不写 SQL,走 provider 的链式查询。
+一个动作要改的几处,由上面的 helper(tree / columns / worklets / inbox)包在一个 `tx()` 里。不写 SQL,走 provider 的链式查询。
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from memorytalk.backend.providers.db import JSON
 # ================================================================ works.db:现在
 
 class WorkRepo:
-    """works(节点 + 计数器 + 谁在看)/ work_columns(画布的列)/ worklets(登记 + 摆在哪)/ inbox(收件箱)。"""
+    """works(节点 + 计数器 + 谁在看)/ work_columns(列)/ worklets(登记 + 摆在哪一列哪个位置)/ inbox(收件箱)。"""
 
     def __init__(self, db: DatabaseProvider) -> None:
         self.db = db
@@ -23,7 +23,7 @@ class WorkRepo:
             Column("id", str, primary=True), Column("parent", str, index=True), Column("goal", str), Column("status", str),
             Column("created_by", str, index=True), Column("created_at", str), Column("archived_at", str),
             Column("manager", str), Column("viewers", JSON),
-            Column("next_worklet", int), Column("next_column", int), Column("canvas_version", int))
+            Column("next_worklet", int), Column("next_column", int))
         self.work_columns = db.table(
             "work_columns",
             Column("work_id", str), Column("number", int), Column("alias", str), Column("collapsed", bool), Column("position", int),
@@ -60,9 +60,9 @@ class WorkRepo:
         return self.db.select(self.works).where(self.works.c.parent == work_id).order_by(self.works.c.id.asc()).all()
 
     def insert_work(self, row: dict) -> None:
-        """新 work:节点一行 + 第一列(编号 1);计数器从头开始。建 work 不算画布动作,version 还是 0。"""
+        """新 work:节点一行 + 第一列(编号 1);计数器从头开始。"""
         with self.tx():
-            self.db.insert(self.works).values(**row, manager=None, viewers=[], next_worklet=1, next_column=2, canvas_version=0).run()
+            self.db.insert(self.works).values(**row, manager=None, viewers=[], next_worklet=1, next_column=2).run()
             self.db.insert(self.work_columns).values(work_id=row["id"], number=1, alias="", collapsed=False, position=0).run()
 
     def update_work(self, work_id: str, **changes) -> None:
@@ -82,9 +82,6 @@ class WorkRepo:
     def take_column_number(self, work_id: str) -> int:
         return self._take(work_id, "next_column")
 
-    def bump_canvas(self, work_id: str) -> None:
-        self.db.update(self.works).where(self.works.c.id == work_id).set(canvas_version=self.works.c.canvas_version + 1).run()
-
     def set_viewers(self, work_id: str, names: list[str]) -> None:
         """viewers 只整份写(由内存里的心跳表算出来),不读出来追加。"""
         self.db.update(self.works).where(self.works.c.id == work_id).set(viewers=names).run()
@@ -96,7 +93,7 @@ class WorkRepo:
                 if w["viewers"]:
                     self.set_viewers(w["id"], [])
 
-    # ---- work_columns:画布的列,position 从左到右 0..n-1 ----
+    # ---- work_columns:列,position 从左到右 0..n-1 ----
 
     def list_columns(self, work_id: str) -> list[dict]:
         t = self.work_columns
@@ -122,7 +119,7 @@ class WorkRepo:
         t = self.work_columns
         self.db.update(t).where(t.c.work_id == work_id, t.c.position >= from_position).set(position=t.c.position + delta).run()
 
-    # ---- worklets:登记 + 摆在哪(column_number 为空 = 没摆上画布)----
+    # ---- worklets:登记 + 摆在哪(column_number 为空 = 不在任何一列)----
 
     def list_worklets(self, work_id: str) -> list[dict]:
         """按开的先后(编号)排。"""
@@ -132,11 +129,6 @@ class WorkRepo:
     def get_worklet(self, work_id: str, worklet_id: str) -> dict | None:
         t = self.worklets
         return self.db.select(t).where(t.c.id == worklet_id, t.c.work_id == work_id).one()
-
-    def placed_worklets(self, work_id: str) -> list[dict]:
-        t = self.worklets
-        return (self.db.select(t).where(t.c.work_id == work_id, t.c.column_number.is_not_null())
-                .order_by(t.c.column_number.asc(), t.c.position.asc()).all())
 
     def column_worklets(self, work_id: str, number: int) -> list[dict]:
         t = self.worklets

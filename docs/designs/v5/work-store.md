@@ -5,13 +5,13 @@
 > - **`works.db`**:work 的全部信息,也就是它**现在**是什么样;
 > - **`worktrace.db`**:work 的全部轨迹,也就是它**怎么走到现在**的。
 >
-> work 这一半不再有文件系统那套,仓储只剩一份实现,用的是同一种 provider(`SQLite`)。本篇讲清楚每样记录在哪个库、哪张表,重点是**列布局存在哪**、**轨迹(原来的 events)存在哪**。
+> work 这一半不再有文件系统那套,仓储只剩一份实现,用的是同一种 provider(`SQLite`)。本篇讲清楚每样记录在哪个库、哪张表,重点是**列和工作单元的位置存在哪**、**轨迹(原来的 events)存在哪**。
 
 相关:
 - provider 的两族基类: [provider.md](provider.md)。work 这一半以后只用数据库型
 - 轨迹的模型(段 / 点、OTel 字段): [work-trace.md](work-trace.md);agent 的记录由节点推进来: [work-node.md](work-node.md)
-- 画布是显示层;快照和轨迹各存各的: [work.md](work.md) / [work-events.md](work-events.md)
-- worklet 的身份脱离布局(登记和画布分开存): [worklet.md](worklet.md)
+- 列只承载弱编排;现在和经过各存各的: [work.md](work.md) / [work-events.md](work-events.md)
+- worklet 的身份不挂在位置上(挪到别的列还是它): [worklet.md](worklet.md)
 - 认知层在 git 里,不在本篇: [metas/store.md](metas/store.md)
 
 ---
@@ -20,15 +20,15 @@
 
 **不要文件那套了。** 上一版为了两种形态,仓储写了两份(`FsWorkRepo` / `DbWorkRepo`),测试也按 fs、sqlite 各跑一遍;为了让两边长得一样,db 那边只能迁就文件的形状:一张 `work_docs` 装所有 JSON doc,一张 `work_logs` 装所有流。只留 sqlite 以后:
 
-- **仓储只有一份**,表可以按业务来设计。登记是一行一个工作单元(连同它摆在哪),画布的每一列也是一行,不再把一整个数组塞进一个 JSON;要查的字段都是真的列。
-- **一个动作可以是一个事务**。「在列 3 打开终端」要改登记、计数器、画布三处,以前是三次独立的写,现在在 `works.db` 里一次提交(§6)。
+- **仓储只有一份**,表可以按业务来设计。登记是一行一个工作单元(连同它摆在哪),每一列也是一行,不再把一整个数组塞进一个 JSON;要查的字段都是真的列。
+- **一个动作可以是一个事务**。「在列 3 打开终端」要改计数器、登记、列里的位置三处,以前是三次独立的写,现在在 `works.db` 里一次提交(§6)。
 - **没有目录扫描**。按父列子 work、按建的人筛,都走索引。
 
 **为什么是两个库,不是一个:** 现在的状态和经过的轨迹,性质完全不一样。
 
 | | `works.db`(现在) | `worktrace.db`(经过) |
 |---|---|---|
-| 装什么 | work 节点(含当前谁在看)、画布(列 / 格子)、登记、manager、收件箱 | 段、点(work-trace.md;agent 的会话、轮次、工具调用和消息也在这里) |
+| 装什么 | work 节点(含当前谁在看)、列、登记(连同每个工作单元在哪一列第几个)、manager、收件箱 | 段、点(work-trace.md;agent 的会话、轮次、工具调用和消息也在这里) |
 | 读写 | 读多写少,每次动作读-改-写几行 | 几乎只追加,量随时间一直涨 |
 | 体量 | 小,和 work 数、工作单元数成正比 | 大,和发生过多少事成正比;agent 的消息正文尤其大 |
 | 丢了会怎样 | 丢了就丢了 work | 丢了只是少了历史,work 照样能干活 |
@@ -51,9 +51,9 @@
 
 ## 3. works.db 有哪些表
 
-**原则:一张表一种东西,一行一个实体,要查、要单独改的都是真的列。** 这条不是「不许存 JSON」。它来自写代码时的实际感受:如果一份嵌套的 JSON 里装着好几个有身份、会被不同动作分别改动的东西(原来画布里的列和格子就是这样),那么每个动作都得 load 整份、在内存里找到要改的那一处、改完再 dump 回去。读的地方要 load,查的地方要拍平,并发时还得靠一把锁防止互相覆盖,代码到处都是 load / dump,越写越乱。拆成行以后,每个动作就是改几行,查询就是 SQL。
+**原则:一张表一种东西,一行一个实体,要查、要单独改的都是真的列。** 这条不是「不许存 JSON」。它来自写代码时的实际感受:如果一份嵌套的 JSON 里装着好几个有身份、会被不同动作分别改动的东西(原来整份存成一个 JSON 的列和列里的工作单元就是这样),那么每个动作都得 load 整份、在内存里找到要改的那一处、改完再 dump 回去。读的地方要 load,查的地方要拍平,并发时还得靠一把锁防止互相覆盖,代码到处都是 load / dump,越写越乱。拆成行以后,每个动作就是改几行,查询就是 SQL。
 
-所以画布没有自己的表:列是 `work_columns`,工作单元摆在哪是 `worklets` 自己的几列;收件箱的字段也是列。反过来,一个没有内部身份、只会整份写、平时也不按内容查的小东西,放在一个字段里就好,比如 `works.viewers` 这个数组。
+所以列是 `work_columns` 的行,工作单元摆在哪是 `worklets` 自己的几列;收件箱的字段也是列。反过来,一个没有内部身份、只会整份写、平时也不按内容查的小东西,放在一个字段里就好,比如 `works.viewers` 这个数组。
 
 ```
 works ──┬──< works          (parent:子 work)
@@ -64,16 +64,16 @@ works ──┬──< works          (parent:子 work)
 
 | 表 | 一行是 | 主键 | 其余列 |
 |---|---|---|---|
-| `works` | 一个 work | `id` | `parent`(索引)、`goal`、`status`、`created_by`(索引)、`created_at`、`archived_at`、`manager`、`viewers`、`next_worklet`、`next_column`、`canvas_version` |
-| `work_columns` | 画布上的一列 | (`work_id`, `number`) | `alias`、`collapsed`、`position`;索引 (`work_id`, `position`) |
+| `works` | 一个 work | `id` | `parent`(索引)、`goal`、`status`、`created_by`(索引)、`created_at`、`archived_at`、`manager`、`viewers`、`next_worklet`、`next_column` |
+| `work_columns` | 一列 | (`work_id`, `number`) | `alias`、`collapsed`、`position`;索引 (`work_id`, `position`) |
 | `worklets` | 一个工作单元 | `id` | `work_id`(索引)、`number`、`uri`、`scheme`、`server`、`cwd`、`created_at`、`last_attached`,**加上位置**:`column_number`、`position`、`collapsed`;索引 (`work_id`, `column_number`, `position`) |
 | `inbox` | 一条打过来的变动 | `seq`(自增) | `work_id`(索引,空 = 没人管)、`ts`、`layer`、`path`、`subject`、`sha`、`by`、`routed_by` |
 
 各表说明:
 
-- **`works`**:树就是 `parent` 列。`manager` 是这棵子树的变动打给谁(空 = 用父 work 的)。三个计数器:`next_worklet` 是下一个工作单元编号,`next_column` 是下一列编号,两个都单调递增、不复用;`canvas_version` 是画布版本号,每个画布动作 +1。
+- **`works`**:树就是 `parent` 列。`manager` 是这棵子树的变动打给谁(空 = 用父 work 的)。两个计数器:`next_worklet` 是下一个工作单元编号,`next_column` 是下一列编号,都单调递增、不复用。
 - **`work_columns`**:一列一行,见 §4。
-- **`worklets`**:一个工作单元一行,既是登记,也记着它摆在画布的哪里。`number` 就是 id 里 `-w<n>` 的 n,单独存一列方便排序。位置那三列见 §4。
+- **`worklets`**:一个工作单元一行,既是登记,也记着它摆在哪一列第几个。`number` 就是 id 里 `-w<n>` 的 n,单独存一列方便排序。位置那三列见 §4。
 - **`works.viewers`:现在谁在看这个 work。** 一个字段,值是当前在看的人名(`["alice","bob"]`,按名字排);没人看就是空数组。只记「现在」,一个人离开,就把他从这个字段里拿掉。
   - **怎么算在看**:前端开着这个 work 时定时发心跳(沿用现在的 touch,120 秒一个窗口)。心跳时间只放在进程内存里(work → 人 → 最后一次心跳),**不进库**;超过窗口没心跳的人,由服务定时清出 `viewers`。前端关页面时主动发一次「离开」,就不用等超时。服务重启时把所有 work 的 `viewers` 清空:重启那一刻,谁也没在看。
   - **不再有「谁动过」的历史名单。** 以前的 `work_users`(谁动过、第一次 / 最后一次、动了几次)去掉。这个问题交给轨迹回答:每个段、每个点都带 `user_id`(§5),「谁在这个 work 上做过什么、最近一次是什么时候」就是 `worktrace.db` 里按 `work_id` 查、按 `user_id` 聚合。
@@ -81,9 +81,9 @@ works ──┬──< works          (parent:子 work)
 - **`inbox`**:字段就是 `InboxItem` 的字段。原来的 `unmanaged.jsonl` 就是 `work_id` 为空的那些行。它放在 `works.db` 而不是 `worktrace.db`:收件箱是别的地方打给这个 work、等着处理的消息,属于「现在」;轨迹记的是这个 work 自己做过什么。
 - **以后**:[work-trace.md §7](work-trace.md) 的计划会给 `works` 加 `plan_start` / `plan_due` 两列;依赖另开一张 `work_deps`(`work_id`, `depends_on`),主键是这两列的组合。
 
-## 4. 列布局存在哪:work_columns + worklets 上的位置
+## 4. 列:弱编排——work_columns + worklets 上的位置
 
-**画布 = `work_columns`(有哪些列、什么顺序)+ `worklets` 的 `column_number` / `position` / `collapsed`(每个工作单元摆在哪一列第几个)+ `works` 上的 `next_column` 和 `canvas_version`。** 画布没有单独的表,格子(panel)也没有:一个工作单元最多占一格,格子和工作单元是一对一的,格子的属性就直接是工作单元的列。
+**一个 work 有几列(有序、可起别名、可收起),每个工作单元摆在某一列的某个位置——编排就这么多,没有别的布局对象。** 存下来的是三样:`work_columns`(有哪些列、什么顺序)、`worklets` 自己的 `column_number` / `position` / `collapsed`(每个工作单元在哪一列第几个、收没收起)、`works.next_column`(下一列的编号)。工作单元的位置不另立一个东西:一个工作单元只在一个位置,位置的属性就直接是工作单元那一行的列。怎么铺开、多宽多高,是前端的事。
 
 ```
 work_columns
@@ -99,13 +99,13 @@ worklets(只列和位置有关的列)
 ```
 
 - **列的身份是 (`work_id`, `number`)**。对外的 id `c<number>` 是拼出来的,不存;只认这一种写法(`c(\d+)` 整串匹配,`c01` 这种也不算),别的一律 404。`number` 由 `works.next_column` 发,永不改、不复用([work-events.md §3](work-events.md))。
-- **位置是工作单元可以改的属性,不是它的身份。** [worklet.md §2](worklet.md) 要的是「换个格子还是它」:挪到别的列,改的是这一行的 `column_number` / `position`,`id` 不动,轨迹和出处都不断。把位置放在同一行,并不违背身份脱离布局。
-- **`column_number` 为空 = 登记了、但没摆在画布上**(worklet.md §3 允许这种情况)。正常流程是打开就摆上、关闭就连行一起删掉,所以平时不会为空。
-- **一个工作单元只能在一格里**:这是结构本身决定的,一行只有一组位置。worklet.md §7 留着的「一个工作单元能不能被多个格子装」(同一个终端在画布上镜像两份),到这里就定成了**不能**。真要镜像,再单开一张表。
+- **位置是工作单元可以改的属性,不是它的身份。** [worklet.md §2](worklet.md) 要的是「换个位置还是它」:挪到别的列,改的是这一行的 `column_number` / `position`,`id` 不动,轨迹和出处都不断。位置放在同一行,身份照样不挂在位置上。
+- **`column_number` 为空 = 登记了、但不在任何一列**(worklet.md §3 允许这种情况;对外 `column` / `position` 是 `null`,前端把它摆在最左一列)。正常流程是打开就放进一列、关闭就连行一起删掉,所以平时不会为空;挪、收起这样一个工作单元 → 404。
+- **一个工作单元只在一个位置**:这是结构本身决定的,一行只有一组位置。worklet.md §7 留着的「一个工作单元能不能同时摆在两处」(同一个终端镜像两份),到这里就定成了**不能**。真要镜像,再单开一张表。
 - **顺序用 `position`**:列从左到右是 0、1、2……;同一列的工作单元从上到下也是 0、1、2……。**同一个 work 的列、同一列的工作单元,position 始终是连续的**(没有空洞、不重复)。每个动作在同一个事务里把受影响的那几行挪一下,保持这一点。行数很少,每次挪几行没有负担;换来的是「第几个」就是 `position`,查询不用再算。
 - **至少一列**:新 work 建的时候就插一列 `number = 1`,不再靠「读的时候补」。
 
-每个动作在一个事务里做完,并且都把 `works.canvas_version` +1(什么都没改的改别名、原地挪也算;关掉一个没摆上画布的工作单元不算):
+每个动作在一个事务里做完。列的动作交回动完的列清单(和动作在同一个事务里读),挪 / 收起工作单元交回工作单元清单,打开交回这个工作单元(带它在哪一列第几个);没有版本号,前端拿交回的清单直接替换本地的:
 
 | 动作 | 改哪些行 |
 |---|---|
@@ -138,7 +138,7 @@ SELECT w.id FROM worklets w JOIN work_columns c
  WHERE c.alias = '测试' AND w.scheme = 'bash';
 ```
 
-对外的接口形状不变:`GET /works/{id}/canvas` 仍然返回 `{version, next_column, columns: [{id, alias, collapsed, panels: [{worklet, collapsed}]}]}`,由两次查询拼出来(列按 `position` 排,工作单元按 `column_number, position` 排)。`panels` 从此只是接口里的叫法,库里没有这个东西。画布仍然是快照:不从轨迹重放出来,也不从它 diff 出轨迹。
+对外就是两份清单,各一次查询,不再拼成一份:`GET /works/{id}/columns` 是列(`{id: "c<number>", alias, collapsed, position}`,按 `position` 从左到右);`GET /works/{id}/worklets` 是工作单元(按编号,也就是开的先后),每个带 `column`(`c<column_number>`,不在任何一列 = `null`)/ `position` / `collapsed`。列和位置是「现在是什么样子」:不从轨迹重放出来,也不从它 diff 出轨迹。
 
 ## 5. worktrace.db:work 的全部轨迹
 
@@ -168,8 +168,8 @@ SELECT w.id FROM worklets w JOIN work_columns c
 1. 先验:work 没归档(归档了 409),列在不在(查 `work_columns`;不在直接 404,不建现场),URI 解析得出协议(解析不了 400,号也不取)
 2. **`works.db` 一个短事务:取号**。`works.next_worklet` 取出 n 并 +1,工作单元 id = `<work_id>-w<n>`,`created_at` = 此刻。现场要拿这个 id 当名字(tmux 会话名),所以号得在建现场之前取
 3. **建现场**(tmuxd,id 就是上一步的 id,`since_mtime` = `created_at` 的 Unix 秒);建不起来到此为止,除了那个号什么都没写——**号不还**,下一个工作单元接着往后发(编号本来就允许有空洞)
-4. **`works.db` 一个事务**:先再看一眼 work 有没有在建现场的这会儿被归档(归档了就 409,现场销毁掉,什么都不写;不然归档时还没登记的它躲过了冻结,会在归档的 work 里留一个活的现场);`worklets` 插一行(`uri` 是原样的 uri,`cwd` 取现场报回来的),顺带定好位置(`column_number = 3`,`position` = 列 3 现有的个数;没给列就放 `position` 为 0 的那列);`works.canvas_version + 1`
-5. **`worktrace.db`**:`spans` 插一行 `worklet` 段(开着,父是这个 work 最新的 `work` 段;带 uri / scheme / server 和放进的列)。失败只记日志,工作单元照样开好
+4. **`works.db` 一个事务**:先再看一眼 work 有没有在建现场的这会儿被归档(归档了就 409,现场销毁掉,什么都不写;不然归档时还没登记的它躲过了冻结,会在归档的 work 里留一个活的现场);`worklets` 插一行(`uri` 是原样的 uri,`cwd` 取现场报回来的),顺带定好位置(`column_number = 3`,`position` = 列 3 现有的个数;没给列就放 `position` 为 0 的那列)
+5. **`worktrace.db`**:`spans` 插一行 `worklet` 段(开着,父是这个 work 最新的 `work` 段;带 uri / scheme / server 和放进的列)。失败只记日志,工作单元照样开好;交回的工作单元带 `column` / `position`(`c3`,列 3 原来的个数)
 
 两步写要注意:
 
@@ -183,7 +183,7 @@ SELECT w.id FROM worklets w JOIN work_columns c
 
 provider 补上的能力(provider.md):**组合主键**(`db.table(..., primary_key=("work_id", "number"))`,`work_columns`)和**多列索引**(`indexes=[("work_id", "column_number", "position")]`,`worklets`);另外 `is_not_null()`、bool 列读回 Python 的 bool、`ORDER BY` 多列、`SET col = col + n`(挪位置、计数器取号)。position 上**不加** UNIQUE 索引:sqlite 在 `position = position + 1` 的过程中逐行查重,会撞上还没挪的那一行。外键不加,由单写者和事务保证。
 
-已经删掉的东西:`FsWorkRepo`、`DbWorkRepo` 和 doc / log 的通用写法(`get_doc` / `put_doc` / `append` / `read`)、`MEMORY_TALK_STORE` 对 work 的作用、旧状态值和 `done_at` 的兼容、列的 `name` 别名、画布读时补列 / 重排、扫事件补工作单元编号、`seq` doc、`frozen` 事件。测试的 `home` 仍按 fs / sqlite 双跑,那个开关现在只管 users / auth。同步改了的文档:user.md §3(work 上的 `users` 名单变成只记现在的 `viewers`,历史改从轨迹查;`GET /works/{id}/users` 只剩 `current`)、provider.md(work 不再用文件系统族)、`structure/v5/filesystem.md`(`works/` 目录没了,换成两个 db 文件)、`structure/v5/work.md`、work-trace.md §3(落盘改成 §5 的 `spans` / `points` / `rounds`)。
+已经删掉的东西:`FsWorkRepo`、`DbWorkRepo` 和 doc / log 的通用写法(`get_doc` / `put_doc` / `append` / `read`)、`MEMORY_TALK_STORE` 对 work 的作用、旧状态值和 `done_at` 的兼容、列的 `name` 别名、读列时补列 / 重排、扫事件补工作单元编号、`seq` doc、`frozen` 事件。后来又去掉了原来的画布:`GET /works/{id}/canvas` 那份把列和工作单元拼在一起的读视图、`Canvas` / `Panel` 模型和 `works.canvas_version`(已有的 `works.db` 里这一列还在,不再读写),只剩 §4 的列和位置。测试的 `home` 仍按 fs / sqlite 双跑,那个开关现在只管 users / auth。同步改了的文档:user.md §3(work 上的 `users` 名单变成只记现在的 `viewers`,历史改从轨迹查;`GET /works/{id}/users` 只剩 `current`)、provider.md(work 不再用文件系统族)、`structure/v5/filesystem.md`(`works/` 目录没了,换成两个 db 文件)、`structure/v5/work.md`、work-trace.md §3(落盘改成 §5 的 `spans` / `points` / `rounds`)。
 
 ## 8. 这篇有意不定的事
 

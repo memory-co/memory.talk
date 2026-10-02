@@ -35,27 +35,14 @@ class WorkNode(Work):
     children: list["WorkNode"] = Field(default_factory=list)
 
 
-# ---- 画布:work 的视图,可随时重排 ----
-
-class Panel(BaseModel):
-    worklet: str = Field(description="装的是哪个工作单元;一个工作单元最多出现在一个格子里")
-    collapsed: bool = Field(False, description="收起 = 只剩标题行")
-
+# ---- 列:弱编排。一个 work 有几列(有序、可起别名、可收起),每个工作单元摆在某一列的某个位置;别的布局一概没有 ----
 
 class Column(BaseModel):
     """一列 = 固定编号 + 别名(work-events.md §3):id 写成 c<编号>,服务端发、永不改不复用;别名随便改、可空可重名。"""
     id: str = Field(description="c<编号>;服务端发,永不改、不复用")
     alias: str = Field("", max_length=80, description="别名;空 = 前端显示「列 <编号>」")
-    panels: list[Panel] = Field(default_factory=list, description="从上到下")
     collapsed: bool = Field(False, description="整列收起 = 缩成一条窄边")
-
-
-class Canvas(BaseModel):
-    """布局 = 几列,每列从上到下摆工作单元。至少一列;工作单元开的时候定在哪一列,关了就从格子里拿掉。
-    不再整份覆盖:每个动作一个请求(work-events.md §2)。"""
-    version: int = 0
-    next_column: int = Field(0, description="下一列的编号;单调递增")
-    columns: list[Column] = Field(default_factory=list)
+    position: int = Field(description="从左到右第几列(0 起,连续);清单按它排")
 
 
 class ColumnCreate(BaseModel):
@@ -78,7 +65,7 @@ class WorkletUpdate(BaseModel):
     collapsed: bool
 
 
-# ---- 工作单元:现场,身份脱离布局 ----
+# ---- 工作单元:现场,身份脱离摆放 ----
 
 class Worklet(BaseModel):
     id: str
@@ -97,6 +84,9 @@ class WorkletCreate(BaseModel):
 
 class WorkletView(Worklet):
     server: str = Field("", exclude=True)          # 内部寻址用,不对外
+    column: str | None = Field(None, description="在哪一列(c<编号>);不在任何一列 = null(正常不会有)")
+    position: int | None = Field(None, description="列里从上数第几个(0 起,同一列里连续)")
+    collapsed: bool = Field(False, description="收起 = 只剩标题行")
     alive: bool = False
     window: Window | None = None
     handle: HandleInfo | None = None

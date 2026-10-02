@@ -40,7 +40,7 @@
 
 work 上只记**现在谁在看**:`works.viewers`,当前在看的人名,按名字排([work-store.md §3](work-store.md))。「在看」不是一个存下来的状态位,是心跳现算的投影:
 
-- **什么算心跳**:建 work、打开 work 本身(`GET /works/{id}`,前端开着页面每 15 秒拉一次)、带身份的会动这个 work 的请求(改目标 / 状态、画布动作、开 / 重入 / 关一个 worklet),外加显式的 `POST /works/{id}/users/touch`。
+- **什么算心跳**:建 work、打开 work 本身(`GET /works/{id}`,前端开着页面每 15 秒拉一次)、带身份的会动这个 work 的请求(改目标 / 状态、列上的动作、开 / 重入 / 挪 / 收起 / 关一个 worklet),外加显式的 `POST /works/{id}/users/touch`。
 - **心跳只在服务进程的内存里**(work → 人 → 最后一次心跳),不进库;`viewers` 由它整份算出来再写,从不读出来追加。超过 120 秒没心跳的人被清出去(心跳、离开、读 `GET /works/{id}` / `GET /works/{id}/users` 时顺手清,后台每 30 秒也清一遍;`GET /api/users` 的统计不先清,所以 `active_works` 最多会晚 30 秒);前端关页面 / 切走时发 `POST /works/{id}/users/leave`,立刻拿掉;服务重启时所有 work 的 `viewers` 清空——重启那一刻谁也没在看。
 - **粒度是 work**,不细到 worklet:同一个 tmux 会话多人 attach 本来就是镜像,谁在敲由 tmux 自己解决。
 - **对外**:`Work.viewers`,以及 `GET /works/{id}/users` → `{current: [名字]}`。人不需要登出,不看了就自然掉出去。

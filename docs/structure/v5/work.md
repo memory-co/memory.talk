@@ -1,6 +1,6 @@
-# Work + Canvas + Worklet + Viewers + Round + Trace
+# Work + Column + Worklet + Viewers + Round + Trace
 
-做事层的六个对象,存在两个 sqlite 里:`works.db` 管现在(Work / Canvas / Worklet / Viewers / 收件箱),`worktrace.db` 管经过(Trace 的段和点、Round)。机制见 [`../../designs/v5/work.md`](../../designs/v5/work.md),存储见 [`../../designs/v5/work-store.md`](../../designs/v5/work-store.md)。
+做事层的六个对象,存在两个 sqlite 里:`works.db` 管现在(Work / Column / Worklet / Viewers / 收件箱),`worktrace.db` 管经过(Trace 的段和点、Round)。机制见 [`../../designs/v5/work.md`](../../designs/v5/work.md),存储见 [`../../designs/v5/work-store.md`](../../designs/v5/work-store.md)。
 
 ## Work
 
@@ -40,33 +40,25 @@
 
 **读视图 `WorkNode`** = Work + `children: WorkNode[]`(读时拼出来,不存)。
 
-## Canvas
+## Column
 
-work 的画布:**几列,每列从上到下摆工作单元**,每个工作单元可收起。**至少一列**,新 work 就有一列 `c1`。**只是视图**——重排不改变 work 的工作单元和目的。没有整份写口:加列 / 改别名 / 删列 / 挪 / 收起各是一个请求,服务端在当前画布上做(见 [api works.md](../../api/v5/works.md#get-apiworkswork_idcanvas)、[designs work-events.md](../../designs/v5/work-events.md))。
+work 的一列。**列只承载弱编排**:一个 work 有几列(有序、可起别名、可收起),每个工作单元摆在某一列的某个位置(记在 [Worklet](#worklet) 自己的 `column` / `position` / `collapsed` 上)——就这些,没有别的布局对象。**至少一列**,新 work 就有一列 `c1`。挪动、重排不改变 work 的工作单元和目的。加列 / 改别名 / 删列 / 挪 / 收起各是一个请求,服务端在当前的列和位置上做(见 [api works.md](../../api/v5/works.md#get-apiworkswork_idcolumns)、[designs work-events.md](../../designs/v5/work-events.md))。
 
 ```json
-{
-  "version": 3,
-  "next_column": 4,
-  "columns": [
-    {"id": "c1", "alias": "调研", "panels": [{"worklet": "work_2026…2f2f-w1", "collapsed": false}, {"worklet": "work_2026…2f2f-w2", "collapsed": true}], "collapsed": false},
-    {"id": "c3", "alias": "", "panels": [{"worklet": "work_2026…2f2f-w4", "collapsed": false}], "collapsed": true}
-  ]
-}
+[
+  {"id": "c1", "alias": "调研", "collapsed": false, "position": 0},
+  {"id": "c3", "alias": "", "collapsed": true, "position": 1}
+]
 ```
 
-| 字段 | 说明 |
-|---|---|
-| `version` | 每个动作成功后 +1(工作单元开 / 关时服务端改画布也 +1);客户端不用带,只拿它判断缓存旧没旧 |
-| `next_column` | 下一列的编号;加列时发 `c<next_column>` 再 +1,单调递增 |
-| `columns[].id` | `c<编号>`:列的身份,**服务端发,永不改、不复用**(删过列编号就不连续);端点、事件、CLI 一律用它 |
-| `columns[].alias` | 别名,可空(默认)、可重名,最长 80;改名只改它。前端显示 `列 <编号>` / `列 <编号> · <别名>`,**不按位置叫「第 n 列」** |
-| `columns[].panels[]` | 这一列从上到下的格子 |
-| `columns[].collapsed` | 整列收起 = 缩成一条窄边;列只有空了才能删,最后一列不能删 |
-| `panels[].worklet` | 装的是哪个工作单元;一个工作单元最多出现在一个格子里 |
-| `panels[].collapsed` | 收起 = 只剩标题行 |
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | string | `c<编号>`:列的身份,**服务端发(`works.next_column`),单调递增、永不改、不复用**(删过列编号就不连续,如上例没有 `c2`);只认这一种写法(`c01` 也不算,→ 404);端点、轨迹、CLI 一律用它 |
+| `alias` | string | 别名,可空(默认)、可重名,最长 80;改名只改它。前端有别名就只显示别名(`测试`),没有显示 `列 <编号>`,**不按位置叫「第 n 列」** |
+| `collapsed` | bool | 整列收起 = 缩成一条窄边 |
+| `position` | int | 从左到右第几列,0 起,同一个 work 里始终连续;清单按它排 |
 
-**跟 shellbase 唯一有意不同的地方**:格子的身份不在 `(window, block)` 位置参数里,而在 `worklet`——把工作单元挪到别的列,工作单元不变。开出来的工作单元进指定列末尾(不指定 = 最左一列),关掉的自动从格子里拿掉;画布里没提到的工作单元前端补在第一列。
+列只有空了才能删,最后一列不能删。读视图就是**列清单**(`GET /works/{id}/columns`,按 `position`);列的动作交回动完的列清单。
 
 ## Worklet
 
@@ -93,7 +85,34 @@ work 的一个工作单元 = 一个现场。**在 work 里打开就是它的**,�
 | `created_at` | 工作单元诞生时刻;agent 类 server 用它找「之后新出现的那份会话记录」 |
 | `last_attached` | 最近一次重入 |
 
-**读视图 `WorkletView`** = Worklet + `alive`(问 server 现算)+ `window` / `handle`(attach / reattach 时返回;list 时活着的也带,死了的是 `null`)。
+**读视图 `WorkletView`** = Worklet + 摆在哪(`column` / `position` / `collapsed`)+ `alive`(问 server 现算)+ `window` / `handle`(attach / reattach 时返回;list 时活着的也带,死了的是 `null`)。
+
+```json
+{
+  "id": "work_202609052302072f2f-w1",
+  "uri": "codex:///home/me/memory.talk",
+  "scheme": "codex",
+  "cwd": "/home/me/memory.talk",
+  "created_at": "2026-09-05T23:02:10Z",
+  "last_attached": "2026-09-05T23:40:01Z",
+  "column": "c3",
+  "position": 0,
+  "collapsed": false,
+  "alive": true,
+  "window": {"url": "/surface/tmuxd/?arg=work_202609052302072f2f-w1", "embed": "/surface/tmuxd/?arg=work_202609052302072f2f-w1"},
+  "handle": {"kind": "tmux+transcript", "capabilities": ["send", "rounds"]}
+}
+```
+
+| 字段 | 说明 |
+|---|---|
+| `column` | 在哪一列(`c<编号>`,见 [Column](#column));不在任何一列 = `null`(正常流程不会有:打开就放进一列,关掉连行一起删;前端把它摆在最左一列) |
+| `position` | 列里从上数第几个,0 起,同一列里始终连续;`column` 为 `null` 时也是 `null` |
+| `collapsed` | 收起 = 只剩标题行;收起 / 展开不进轨迹 |
+| `alive` | 现场活没活着,每次问 server |
+| `window` / `handle` | 窗 + 把手([work-server.md](work-server.md));死了的是 `null` |
+
+**位置不是身份**——跟 shellbase 唯一有意不同的地方:shellbase 的块身份在 `(window, block)` 位置参数里,这里工作单元的身份是 `id`,把它挪到别的列、换个位置,工作单元不变。开出来的工作单元进指定列末尾(不指定 = 最左一列,即 `position` 为 0 的那列),关掉的从列里拿掉、下面的往上补;一个工作单元只在一个位置。清单按开的先后(编号)排,不按位置;挪 / 收起交回整份工作单元清单。
 
 一个工作单元只属于一个 work、一个确定节点。要在别的事里用它的结论,走 issue / card,不搬工作单元。
 
@@ -153,12 +172,12 @@ work 的经过:有起止的记成**段**(span),一个时刻的事记成**点**(l
 
 | 库 | 表 | 主键 | 列 |
 |---|---|---|---|
-| `works.db` | `works` | `id` | `parent`(索引)、`goal`、`status`、`created_by`(索引)、`created_at`、`archived_at`、`manager`、`viewers`(JSON 数组)、`next_worklet`、`next_column`、`canvas_version` |
+| `works.db` | `works` | `id` | `parent`(索引)、`goal`、`status`、`created_by`(索引)、`created_at`、`archived_at`、`manager`、`viewers`(JSON 数组)、`next_worklet`、`next_column` |
 | | `work_columns` | (`work_id`, `number`) | `alias`、`collapsed`、`position`;索引 (`work_id`, `position`) |
-| | `worklets` | `id` | `work_id`(索引)、`number`、`uri`、`scheme`、`server`、`cwd`、`created_at`、`last_attached`、`column_number`(空 = 没摆上画布)、`position`、`collapsed`;索引 (`work_id`, `column_number`, `position`) |
+| | `worklets` | `id` | `work_id`(索引)、`number`、`uri`、`scheme`、`server`、`cwd`、`created_at`、`last_attached`、`column_number`(空 = 不在任何一列)、`position`、`collapsed`;索引 (`work_id`, `column_number`, `position`) |
 | | `inbox` | `seq` | `work_id`(索引,空 = 没人管)、`ts`、`layer`、`path`、`subject`、`sha`、`by`、`routed_by` |
 | `worktrace.db` | `spans` | `span_id` | `trace_id` / `work_id` / `worklet_id` / `user_id` / `end_user_id`(都有索引)、`parent_span_id`、`name`、`kind`、`start_time_unix_nano`、`end_time_unix_nano`(空 = 开着)、`status_code`、`attributes` / `links`(OTLP JSON)、`first_round_id`(`agent.turn`) |
 | | `points` | `seq` | `trace_id`、`span_id`(索引)、`work_id`(索引)、`worklet_id`、`column_number`、`user_id`(索引)、`event_name`(索引)、`time_unix_nano`、`attributes` |
 | | `rounds` | `seq` | `work_id`、`worklet_id`(索引)、`round_id`、`timestamp`、`role`、`text` |
 
-画布没有自己的表:`GET /works/{id}/canvas` 由 `work_columns`(按 `position`)和 `worklets` 的位置列(按 `column_number, position`)拼出来。一个动作在 `works.db` 里一个事务,然后写 `worktrace.db`;轨迹写失败不回滚 work。读写纪律:单写者(服务进程)、无缓存直读。**不进 git**——work 记的是过程,git 记的是决定(见 [`../../designs/v5/metas/store.md`](../../designs/v5/metas/store.md) §4)。
+列清单(`GET /works/{id}/columns`)就是 `work_columns` 按 `position` 读;工作单元在哪一列第几个就是 `worklets` 自己的 `column_number` / `position` / `collapsed`,随工作单元清单(`GET /works/{id}/worklets`)一起出去,不另拼一份布局。一个动作在 `works.db` 里一个事务,然后写 `worktrace.db`;轨迹写失败不回滚 work。读写纪律:单写者(服务进程)、无缓存直读。**不进 git**——work 记的是过程,git 记的是决定(见 [`../../designs/v5/metas/store.md`](../../designs/v5/metas/store.md) §4)。

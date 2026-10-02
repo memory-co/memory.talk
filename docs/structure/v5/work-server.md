@@ -45,7 +45,7 @@
 | 字段 | 说明 |
 |---|---|
 | `url` | 人能直接打开的地址;终端类是 tmuxd 自带的 ttyd,挂在主路由 `/surface/tmuxd/?arg=<worklet_id>`(同源相对地址,凭 `mt_surface` cookie 进门);**`null` = 这个现场没有画面**(不给一个连不上的地址) |
-| `embed` | 画布 iframe 该装的地址;通常同 `url`,本地服务时是 `/proxy/<port>/…` |
+| `embed` | 前端 iframe 该装的地址;通常同 `url`,本地服务时是 `/proxy/<port>/…` |
 
 ## HandleInfo
 

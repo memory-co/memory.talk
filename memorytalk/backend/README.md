@@ -33,7 +33,7 @@ work_servers/  每个协议一个 server,把现场建出来              → wor
 
 ## 边界
 
-- 存储三处:work 固定是两个 sqlite——`works.db` 管现在(节点、画布、登记、收件箱),`worktrace.db` 管经过(段、点、round);user / token 的记录走 provider(fs 或 sqlite,测试两种都跑);metas 是一个 git 仓库。服务进程是唯一写者。
+- 存储三处:work 固定是两个 sqlite——`works.db` 管现在(节点、列、登记和摆在哪、收件箱),`worktrace.db` 管经过(段、点、round);user / token 的记录走 provider(fs 或 sqlite,测试两种都跑);metas 是一个 git 仓库。服务进程是唯一写者。
 - 现场(tmux 会话)不由这里持有状态:活没活着每次问 server。
 - 未做:ttyd 反代托管(挂公网时窗要么 0.0.0.0 + token,要么自己反代)、逐 round 标注、二进制 blob 外置、给人手工 `git commit` 用的 hook。
 

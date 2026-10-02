@@ -1,4 +1,4 @@
-"""WorkService:树、画布、工作单元(经 server 建现场)、痕迹、轨迹、谁在看(docs/designs/v5/work.md、work-store.md、work-trace.md)。
+"""WorkService:树、列、工作单元(经 server 建现场)、痕迹、轨迹、谁在看(docs/designs/v5/work.md、work-store.md、work-trace.md)。
 
 一个动作的写法固定:先在 works.db 一个事务里把读-改-写做完;建 / 销毁现场不在事务里;最后写 worktrace.db。
 两个库之间没有原子提交——轨迹写失败只记日志,不让动作失败,也不回滚 work(轨迹丢了不伤 work)。"""
@@ -13,13 +13,13 @@ from typing import Callable
 
 from memorytalk.backend.models.metas import InboxItem
 from memorytalk.backend.models.search import SearchHit
-from memorytalk.backend.models.work import (Canvas, Column, ColumnCreate, ColumnUpdate, Round, Worklet, WorkletMove,
+from memorytalk.backend.models.work import (Column, ColumnCreate, ColumnUpdate, Round, Worklet, WorkletMove,
                                             WorkletUpdate, WorkletView, Work, WorkCreate, WorkTrace, WorkUsers, WorkNode,
                                             WorkUpdate)
 from memorytalk.backend.services.work_servers import WorkServerService
 from memorytalk.backend.services.store import StoreService
 
-from .canvas import CanvasStore, ColumnNotFound, PanelNotFound
+from .columns import ColumnNotFound, Columns
 from .inbox import Inbox
 from .repo import TraceRepo, WorkRepo
 from .rounds import Rounds
@@ -37,7 +37,7 @@ class WorkService:
         self.repo: WorkRepo = store.work_repo
         self.trace_repo: TraceRepo = store.trace_repo
         self.tree = WorkTree(self.repo)
-        self.canvas = CanvasStore(self.repo)
+        self.columns = Columns(self.repo)
         self.worklets = WorkletRegistry(self.repo)
         self.inbox = Inbox(self.repo)
         self.viewers = Viewers(self.repo)                  # 一起来就把所有 work 的 viewers 清空
@@ -160,7 +160,7 @@ class WorkService:
         return work
 
     def _freeze(self, work_id: str, by: str | None = None) -> None:
-        """归档:工作单元冻结——先把 round 收齐,再销毁现场;登记和画布留着(可回去看痕迹,不再是干活的地方)。
+        """归档:工作单元冻结——先把 round 收齐,再销毁现场;登记和摆在哪都留着(可回去看痕迹,不再是干活的地方)。
         轨迹:开着的工作单元段和 work 段一起结束(reason archived)。一个个销毁到结束段之前,列清单不把它们记成 gone。"""
         worklets = self.worklets.list(work_id)
         with self._handling(*(m.id for m in worklets)):
@@ -176,64 +176,68 @@ class WorkService:
     def _column_of(self, work_id: str, worklet_id: str) -> Column | None:
         """段上带的列(它此刻在哪一列)。读不出来就不带——归档已经提交了,不能因为这个让段结束不上 / 开不出来。"""
         try:
-            return self.canvas.column_of(work_id, worklet_id)
+            return self.columns.column_of(work_id, worklet_id)
         except Exception:
             log.exception("没读出工作单元在哪一列:%s", worklet_id)
             return None
 
     def _resume_live(self, work_id: str, by: str | None) -> None:
         """重新打开:现场还活着的工作单元(网页的一直活着,不会有人去重入)接着开新的一段——
-        不然它摆在画布上却没有开着的段,之后关它、挪它都挂不上。tmux 的现场归档时销毁了,等重入再开。"""
+        不然它摆在列里却没有开着的段,之后关它、挪它都挂不上。tmux 的现场归档时销毁了,等重入再开。"""
         for m in self.worklets.list(work_id):
             if self.work_servers.alive(m.server, m.id):
                 self.trace.worklet_started(work_id, m, self._column_of(work_id, m.id), by, resume=True)
 
-    # ---- 画布:每个动作一个方法,动了哪一列就打一个点(work-trace.md §2) ----
+    # ---- 列:每个动作一个方法,动了哪一列就打一个点(work-trace.md §2);交回动完的列清单 ----
 
-    def get_canvas(self, work_id: str) -> Canvas:
+    def list_columns(self, work_id: str) -> list[Column]:
+        """从左到右。"""
         self.tree.get(work_id)
-        return self.canvas.get(work_id)
+        return self.columns.list(work_id)
 
-    def add_column(self, work_id: str, req: ColumnCreate, by: str | None = None) -> Canvas:
+    def add_column(self, work_id: str, req: ColumnCreate, by: str | None = None) -> list[Column]:
         self.tree.get(work_id)
-        cv, col = self.canvas.add_column(work_id, req.alias.strip(), req.beside, req.side)
+        cols, col = self.columns.add(work_id, req.alias.strip(), req.beside, req.side)
         self._record(self.trace.column_changed, work_id, "column.added", col, by)
-        return cv
+        return cols
 
-    def update_column(self, work_id: str, column_id: str, req: ColumnUpdate, by: str | None = None) -> Canvas:
+    def update_column(self, work_id: str, column_id: str, req: ColumnUpdate, by: str | None = None) -> list[Column]:
         self.tree.get(work_id)
         alias = req.alias.strip() if req.alias is not None else None
-        cv, before, after = self.canvas.update_column(work_id, column_id, alias, req.collapsed)
+        cols, before, after = self.columns.update(work_id, column_id, alias, req.collapsed)
         if after.alias != before.alias:                  # 收起 / 展开不记(work-events.md §2)
             self._record(self.trace.column_changed, work_id, "column.renamed", after, by, **{"memorytalk.from": before.alias})
-        return cv
+        return cols
 
-    def remove_column(self, work_id: str, column_id: str, by: str | None = None) -> Canvas:
+    def remove_column(self, work_id: str, column_id: str, by: str | None = None) -> list[Column]:
         self.tree.get(work_id)
-        cv, col = self.canvas.remove_column(work_id, column_id)
+        cols, col = self.columns.remove(work_id, column_id)
         self._record(self.trace.column_changed, work_id, "column.removed", col, by)
-        return cv
+        return cols
 
-    def move_worklet(self, work_id: str, worklet_id: str, req: WorkletMove, by: str | None = None) -> Canvas:
+    # ---- 工作单元摆在哪:挪(打 worklet.moved 点)/ 收起(不记);交回工作单元清单 ----
+
+    def move_worklet(self, work_id: str, worklet_id: str, req: WorkletMove, by: str | None = None) -> list[WorkletView]:
         self.worklets.get(work_id, worklet_id)
-        cv, (src, i), (dst, j) = self.canvas.move(work_id, worklet_id, req.column, req.index)
+        (src, i), (dst, j) = self.columns.move(work_id, worklet_id, req.column, req.index)
         if (src.id, i) != (dst.id, j):
             self._record(self.trace.worklet_moved, work_id, worklet_id, (src, i), (dst, j), by)
-        return cv
+        return self.list_worklets(work_id)
 
-    def update_worklet(self, work_id: str, worklet_id: str, req: WorkletUpdate) -> Canvas:
+    def update_worklet(self, work_id: str, worklet_id: str, req: WorkletUpdate) -> list[WorkletView]:
         self.worklets.get(work_id, worklet_id)
-        return self.canvas.set_collapsed(work_id, worklet_id, req.collapsed)
+        self.columns.set_collapsed(work_id, worklet_id, req.collapsed)
+        return self.list_worklets(work_id)
 
     # ---- 工作单元:在 work 里打开,就是它的 ----
 
     def attach(self, work_id: str, raw_uri: str, column: str | None = None, by: str | None = None) -> WorkletView:
-        """验 → 取号 → 建现场 → 登记并摆上画布(一个事务)→ 开 worklet 段(work-store.md §6)。"""
+        """验 → 取号 → 建现场 → 登记并放进一列(一个事务)→ 开 worklet 段(work-store.md §6)。"""
         work = self.tree.get(work_id)
         if work.status == "archived":
             raise WorkConflict(f"{work_id} 已归档,不再是干活的地方")
         if column:
-            self.canvas.check_column(work_id, column)                   # 列不在就别建现场
+            self.columns.check(work_id, column)                         # 列不在就别建现场
         uri, server = self.work_servers.resolve(raw_uri)
         n, m = self.worklets.reserve(work_id)                           # 现场拿工作单元 id 当名字,先取号;建不起来这个号也不还
         m = m.model_copy(update={"uri": raw_uri, "scheme": uri.scheme, "server": server.name})
@@ -246,12 +250,12 @@ class WorkService:
                     if self.tree.get(work_id).status == "archived":       # 建现场的这会儿被归档了:不登记,现场收掉
                         raise WorkConflict(f"{work_id} 已归档,不再是干活的地方")
                     self.worklets.add(work_id, n, m)
-                    col = self.canvas.place(work_id, m.id, column)      # 开的时候就定列:给了放那列末尾,没给放最左一列
+                    col, pos = self.columns.place(work_id, m.id, column)   # 开的时候就定列:给了放那列末尾,没给放最左一列
             except Exception:
                 self._destroy_quietly(m)                                 # 登记没写进去,现场不能留
                 raise
             self._record(self.trace.worklet_started, work_id, m, col, by)
-        return WorkletView(**m.model_dump(), alive=True, window=live.window, handle=live.handle)
+        return WorkletView(**m.model_dump(), column=col.id, position=pos, alive=True, window=live.window, handle=live.handle)
 
     def reattach(self, work_id: str, worklet_id: str, by: str | None = None) -> WorkletView:
         """重入:同一工作单元再次打开,幂等地取回同一个现场。段已经结束了(现场没了 / 归档后又重新打开)就接着开新的一段。
@@ -263,16 +267,16 @@ class WorkService:
             live, _ = self.work_servers.open(m.id, m.uri, since_mtime=_epoch(m.created_at))
             m = self.worklets.touch(work_id, worklet_id)
             self._record(self.trace.worklet_started, work_id, m, self._column_of(work_id, m.id), by, resume=True)
-        return WorkletView(**m.model_dump(), alive=True, window=live.window, handle=live.handle)
+        return WorkletView(**m.model_dump(), **self.worklets.placement(work_id, m.id), alive=True, window=live.window, handle=live.handle)
 
     def list_worklets(self, work_id: str) -> list[WorkletView]:
-        """清单(按开的先后);现场自己没了、段还开着的,顺手把段结束掉(reason gone)。"""
+        """清单(按开的先后,各自带摆在哪一列哪个位置);现场自己没了、段还开着的,顺手把段结束掉(reason gone)。"""
         self.tree.get(work_id)
         out, gone = [], []
-        for m in self.worklets.list(work_id):
+        for m, at in self.worklets.placed(work_id):
             alive = self.work_servers.alive(m.server, m.id)
             window = self.work_servers.window(m.server, m.id, m.uri) if alive else None      # 清单里就带窗,前端不用再 attach 一次
-            out.append(WorkletView(**m.model_dump(), alive=alive, window=window, handle=self._handle(m).info() if alive else None))
+            out.append(WorkletView(**m.model_dump(), **at, alive=alive, window=window, handle=self._handle(m).info() if alive else None))
             if not alive:
                 gone.append(m)
         for m in gone:
@@ -291,14 +295,14 @@ class WorkService:
             self.trace.worklet_ended(span, "gone", None, self._column_of(work_id, m.id), status=STATUS_UNSET)
 
     def detach(self, work_id: str, worklet_id: str, by: str | None = None) -> None:
-        """关闭即回收:收齐 round → 销毁现场 → 删登记(连同格子,一个事务)→ 结束 worklet 段。"""
+        """关闭即回收:收齐 round → 销毁现场 → 从列里拿掉并删登记(一个事务)→ 结束 worklet 段。"""
         m = self.worklets.get(work_id, worklet_id)
         with self._handling(m.id):
             if self.tree.get(work_id).status != "archived":   # 登记删了就再也拿不到把手了;归档的已经收过最后一次,冻住的不再追加
                 self._final_sync(work_id, m)
             self.work_servers.destroy(m.server, m.id)
             with self.repo.tx():
-                col = self.canvas.remove(work_id, worklet_id)
+                col = self.columns.unplace(work_id, worklet_id)
                 self.worklets.remove(work_id, worklet_id)
             self._record(self._closed, work_id, m, col, by)
 
@@ -354,5 +358,4 @@ def _nanos(iso: str | None) -> int | None:
     return int(_epoch(iso)) * 1_000_000_000 if iso else None
 
 
-__all__ = ["WorkService", "WorkNotFound", "WorkConflict", "WorkletNotFound", "ColumnNotFound", "PanelNotFound",
-           "WorkRepo", "TraceRepo"]
+__all__ = ["WorkService", "WorkNotFound", "WorkConflict", "WorkletNotFound", "ColumnNotFound", "WorkRepo", "TraceRepo"]

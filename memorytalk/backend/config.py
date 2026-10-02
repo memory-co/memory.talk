@@ -12,7 +12,7 @@ class Config:
     home: Path                 # ~/.memory.talk
     git_author_name: str
     git_author_email: str
-    works_db: Path             # work 的现在:节点、画布、登记、收件箱(MEMORY_TALK_WORKS_DB,默认 <home>/works.db)
+    works_db: Path             # work 的现在:节点、列、登记、收件箱(MEMORY_TALK_WORKS_DB,默认 <home>/works.db)
     worktrace_db: Path         # work 的经过:段、点、round(MEMORY_TALK_WORKTRACE_DB,默认 <home>/worktrace.db)
 
     @property

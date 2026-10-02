@@ -202,7 +202,7 @@ def test_archive_reads_where_a_worklet_sits_in_one_go(client, svc, monkeypatch):
     spans, _ = trace(client, w["id"])
     assert [(s["name"], s["memorytalk.end.reason"]) for s in spans] == [("work", "archived"), ("worklet", "archived")]
     assert spans[1]["memorytalk.end.column.id"] == "c2"                # 归档那一刻它在 c2
-    assert [c["id"] for c in client.get(f"/api/works/{w['id']}/canvas").json()["columns"]] == ["c1"]
+    assert [c["id"] for c in client.get(f"/api/works/{w['id']}/columns").json()] == ["c1"]
 
 
 def test_reopen_ends_what_a_failed_archive_trace_left_open(client, svc, monkeypatch, H):
@@ -274,8 +274,7 @@ def test_a_failing_trace_does_not_fail_the_action(client, svc, monkeypatch):
         r = client.post(f"/api/works/{w['id']}/worklets", json={"uri": WEB})
         assert r.status_code == 201
         assert client.post(f"/api/works/{w['id']}/columns", json={}).status_code == 201
-    cv = client.get(f"/api/works/{w['id']}/canvas").json()
-    assert [p["worklet"] for p in cv["columns"][0]["panels"]] == [r.json()["id"]]       # work 照常,只是轨迹少了
+    assert [(m["id"], m["column"]) for m in client.get(f"/api/works/{w['id']}/worklets").json()] == [(r.json()["id"], "c1")]   # work 照常,只是轨迹少了
     assert trace(client, w["id"]) == ([], [])
 
 

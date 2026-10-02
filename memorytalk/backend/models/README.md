@@ -7,7 +7,7 @@ Pydantic 模型:API 的请求 / 响应体,多数也是存储里记录的形状(w
 | `result.py` | `Result[T]` 统一信封 `{data, message, error?}`;`ok(data)` / `fail(error, message)` 两个构造函数,controller 和异常 handler 都用它们 |
 | `auth.py` | `AuthStatus`(要不要 setup、这次 token 是谁)/ `SetupRequest` / `LoginRequest` / `LoginResult{token, user}` / `PasswordChange` |
 | `users.py` | `User`(档案,含 `role`;密码哈希在记录里但不在模型里)/ `UserCreate`(带初始密码)/ `UserUpdate` / `UserView`(+ 派生统计)/ `UserProfile`(+ 建的 / 动过的 work、最近提交) |
-| `work.py` | `Work`(含 `viewers`:现在谁在看)/ `WorkCreate` / `WorkUpdate` / `WorkNode`(带 children);画布 `Canvas{version, next_column, columns[]}` / `Column{id, alias, panels[], collapsed}` / `Panel{worklet, collapsed}` / `ColumnCreate` / `ColumnUpdate` / `WorkletMove` / `WorkletUpdate`;工作单元 `Worklet` / `WorkletCreate` / `WorkletView`(+ alive / window / handle);`Round`;`WorkTrace{traces, logs}`(OTLP/JSON);`WorkUsers{current}` |
+| `work.py` | `Work`(含 `viewers`:现在谁在看)/ `WorkCreate` / `WorkUpdate` / `WorkNode`(带 children);列(弱编排)`Column{id, alias, collapsed, position}` / `ColumnCreate` / `ColumnUpdate` / `WorkletMove` / `WorkletUpdate`;工作单元 `Worklet` / `WorkletCreate` / `WorkletView`(+ column / position / collapsed、alive / window / handle);`Round`;`WorkTrace{traces, logs}`(OTLP/JSON);`WorkUsers{current}` |
 | `work_server.py` | server 那一侧的形状:`ParsedUri` / `Window`(窗)/ `HandleInfo`(把手)/ `Live`(open 之后交回来的东西)/ `WorkServerInfo` / `Handle` Protocol / `WorkServerError` |
 | `metas.py` | `LayerInfo`(含 `protocol` 字典)/ `TreeView` / `TreeItem` / `CheckResult` / `Obj` / `ObjWrite` / `Revision` / `RecentItem` / `RecentPage` / `Manager` / `ManagerPut` / `InboxItem` |
 | `search.py` | `SearchHit{kind, id, title, snippet, …}` / `SearchResult{query, hits, counts}` |

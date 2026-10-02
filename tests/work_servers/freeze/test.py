@@ -11,7 +11,7 @@ def test_archive_destroys_sessions_but_keeps_registry(client, home):
     client.patch(f"/api/works/{w['id']}", json={"status": "archived"})
     worklets = client.get(f"/api/works/{w['id']}/worklets").json()
     assert [x["id"] for x in worklets] == [s["id"]] and worklets[0]["alive"] is False
-    assert [p["worklet"] for p in client.get(f"/api/works/{w['id']}/canvas").json()["columns"][0]["panels"]] == [s["id"]]
+    assert (worklets[0]["column"], worklets[0]["position"]) == ("c1", 0)              # 在哪一列也还在
 
 
 def test_no_reattach_after_archive(client, svc, home, H):
@@ -52,7 +52,6 @@ def test_archived_while_the_site_opens_means_no_worklet(client, svc, home, monke
     assert r.status_code == 409
     assert destroyed == [f"{w['id']}-w1"] and not svc.work_servers.alive("bash", destroyed[0])     # 建起来的现场收掉了
     assert client.get(f"/api/works/{w['id']}/worklets").json() == []
-    assert client.get(f"/api/works/{w['id']}/canvas").json()["columns"][0]["panels"] == []
     assert [s["name"] for s in trace(client, w["id"])[0]] == ["work"]
 
 

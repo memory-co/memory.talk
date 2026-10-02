@@ -18,7 +18,7 @@ class ParsedUri(BaseModel):
 class Window(BaseModel):
     """人能直接打开的那扇窗。url 为 None = 这个现场没有画面(状态不撒谎)。"""
     url: str | None = None
-    embed: str | None = Field(None, description="画布 iframe 该装什么(与 url 可不同,如本地服务经代理)")
+    embed: str | None = Field(None, description="前端嵌的 iframe 该装什么(与 url 可不同,如本地服务经代理)")
 
 
 class HandleInfo(BaseModel):

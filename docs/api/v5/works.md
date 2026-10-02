@@ -1,6 +1,6 @@
 # Works API
 
-work 树、画布、工作单元(现场)、谁在看、痕迹(round)、轨迹(trace)、收件箱 / manager。登录后的请求(身份来自 token,见 [auth.md](auth.md)),凡会动某个 work 的(建、改、画布上的每个动作、开 / 重入 / 关工作单元、打开 work 本身),都算这个人对该 work 的一次心跳(进 `viewers`);进轨迹的动作还把这个人写进段 / 点的 `user.id`(结束段的人是 `memorytalk.end.user.id`)。字段语义见 [`../../structure/v5/work.md`](../../structure/v5/work.md)。
+work 树、列、工作单元(现场)、谁在看、痕迹(round)、轨迹(trace)、收件箱 / manager。登录后的请求(身份来自 token,见 [auth.md](auth.md)),凡会动某个 work 的(建、改、列上的动作、开 / 重入 / 挪 / 收起 / 关工作单元、打开 work 本身),都算这个人对该 work 的一次心跳(进 `viewers`);进轨迹的动作还把这个人写进段 / 点的 `user.id`(结束段的人是 `memorytalk.end.user.id`)。字段语义见 [`../../structure/v5/work.md`](../../structure/v5/work.md)。
 
 ---
 
@@ -170,17 +170,20 @@ work 树(森林)。
 
 ---
 
-## GET /api/works/{work_id}/canvas
+## GET /api/works/{work_id}/columns
+
+列清单,从左到右(按 `position`)。
 
 ```json
-{"version": 3, "next_column": 4,
- "columns": [{"id": "c1", "alias": "调研", "panels": [{"worklet": "work_…-w1", "collapsed": false}, {"worklet": "work_…-w2", "collapsed": true}], "collapsed": false},
-             {"id": "c3", "alias": "", "panels": [{"worklet": "work_…-w4", "collapsed": false}], "collapsed": true}]}
+[{"id": "c1", "alias": "调研", "collapsed": false, "position": 0},
+ {"id": "c3", "alias": "", "collapsed": true, "position": 1}]
 ```
 
-布局 = 几列,每列从上到下摆工作单元;工作单元可收起(只剩标题行),整列也可收起(缩成一条窄边)。**一列 = 固定编号 + 别名**:`id` 是 `c<编号>`,服务端发、单调递增、永不改不复用(删过列编号就不连续,如上例没有 `c2`);`alias` 是别名,可空可重名,改名只改它(空 = 前端显示「列 <编号>」,否则「列 <编号> · <别名>」)。**至少一列**:新 work 的画布就是 `{"version": 0, "next_column": 2, "columns": [{"id": "c1", …}]}`。列 id 只认 `c<编号>` 这一种写法,别的(包括 `c01`)→ 404。
+**列只承载弱编排**:一个 work 有几列(有序、可起别名、可收起),每个工作单元摆在某一列的某个位置——就这些,没有别的布局对象。工作单元在哪一列、第几个、收没收起,看 [`GET …/worklets`](#get-apiworkswork_idworklets) 里每个工作单元的 `column` / `position` / `collapsed`。
 
-**画布没有整份写口**(`PUT …/canvas` 已撤,→ 405):每个动作一个请求,服务端在当前画布上做(`works.db` 一个事务)、`version + 1`、打点,返回新画布。不需要客户端带 `version`(服务端串行,两人各做各的动作都成功);`version` 只用来判断本地缓存旧没旧。**画布是视图**——它不建、不删工作单元;但跟着工作单元走:`POST …/worklets` 开出来的工作单元进指定列末尾,`DELETE` 掉的自动从格子里拿掉,这两处也 `version + 1`。
+**一列 = 固定编号 + 别名**:`id` 是 `c<编号>`,服务端发、单调递增、永不改不复用(删过列编号就不连续,如上例没有 `c2`);`alias` 是别名,可空可重名,改名只改它(空 = 前端显示「列 <编号>」,起了别名就只显示别名,如「测试」);`collapsed` 整列收起 = 缩成一条窄边;`position` 从左到右 0 起、始终连续。**至少一列**:新 work 就是 `[{"id": "c1", "alias": "", "collapsed": false, "position": 0}]`。列 id 只认 `c<编号>` 这一种写法,别的(包括 `c01`)→ 404。work 不存在 → 404。
+
+**每个动作一个请求**:服务端在当前的列和位置上做(`works.db` 一个事务)、打点,交回动完的样子——列的动作(下面三个)交回列清单,工作单元的挪 / 收起交回工作单元清单。没有版本号,客户端不用带什么(服务端串行,两人各做各的动作都成功),拿交回的清单直接替换本地的。列不建、不删工作单元;但工作单元开的时候就放进一列(`POST …/worklets` 的 `column`,不给 = 最左一列),关掉的从列里拿掉。原来的 `GET` / `PUT …/canvas` 撤了(404)。
 
 ## POST /api/works/{work_id}/columns
 
@@ -196,7 +199,7 @@ work 树(森林)。
 | `beside` | 否 | 挨着哪一列加;不给 = 加在最右 |
 | `side` | 否 | `left` / `right`(默认 `right`),相对 `beside` |
 
-**201** 返回新画布;新列 id = `c<next_column>`,`next_column + 1`。点 `column.added`。`beside` 不存在 → 404。
+**201** 返回列清单(同 `GET …/columns`,已含新列);新列 id = `c<n>`,`n` 取自 `works.next_column`(取完 +1)。点 `column.added`。`beside` 不存在 → 404。
 
 ## PATCH /api/works/{work_id}/columns/{column_id}
 
@@ -204,11 +207,11 @@ work 树(森林)。
 {"alias": "测试", "collapsed": true}
 ```
 
-两个字段都可选。`alias` 改别名(编号不动;首尾空白去掉;空串 = 清掉别名),变了才打点 `column.renamed`(带 `memorytalk.from` = 旧别名);`collapsed` 收起 / 展开整列,不记。返回新画布。列不存在 → 404。
+两个字段都可选。`alias` 改别名(编号不动;首尾空白去掉;空串 = 清掉别名),变了才打点 `column.renamed`(带 `memorytalk.from` = 旧别名);`collapsed` 收起 / 展开整列,不记。返回列清单。列不存在 → 404。
 
 ## DELETE /api/works/{work_id}/columns/{column_id}
 
-删一列,返回新画布,点 `column.removed`。删掉的编号不再发。
+删一列,返回列清单(右边的列 `position` 往左补),点 `column.removed`。删掉的编号不再发。
 
 | 错误 | 状态 |
 |---|---|
@@ -222,14 +225,21 @@ work 树(森林)。
 
 ```json
 [{"id": "work_…-w1", "uri": "codex:///w", "scheme": "codex", "cwd": "/w",
-  "created_at": "…", "last_attached": "…", "alive": true, "window": null, "handle": null}]
+  "created_at": "…", "last_attached": "…",
+  "column": "c1", "position": 0, "collapsed": false,
+  "alive": true, "window": {"url": "/surface/tmuxd/?arg=work_…-w1", "embed": "/surface/tmuxd/?arg=work_…-w1"},
+  "handle": {"kind": "tmux+transcript", "capabilities": ["send", "rounds"]}},
+ {"id": "work_…-w4", "uri": "bash:///w", "scheme": "bash", "cwd": "/w",
+  "created_at": "…", "last_attached": "…",
+  "column": "c3", "position": 0, "collapsed": true,
+  "alive": false, "window": null, "handle": null}]
 ```
 
-按开的先后(编号)排。`alive` 现算(问 server);活着的带 `window` / `handle`。现场自己没了、`worklet` 段还开着的,顺手把段结束成 `gone`(status Unset)。
+按开的先后(编号)排,不按位置。每个带摆在哪:`column`(在哪一列,`c<编号>`)、`position`(列里从上数第几个,0 起,同一列里连续)、`collapsed`(收起 = 只剩标题行);不在任何一列的(正常不会有)`column` / `position` 是 `null`,前端摆在最左一列。`alive` 现算(问 server);活着的带 `window` / `handle`,死了的是 `null`。现场自己没了、`worklet` 段还开着的,顺手把段结束成 `gone`(status Unset)。work 不存在 → 404。
 
 ## POST /api/works/{work_id}/worklets
 
-在 work 里打开一个块:先验(work 没归档、列存在、URI 有协议;拿协议去 server 那里寻址,声明了的 server,否则 default)→ 取号(`works.next_worklet`)→ 建现场 → 登记工作单元并摆上画布(`works.db` 一个事务,`version + 1`)→ 开 `worklet` 段 → 交回窗 + 把手。建现场失败则什么都不写、不留登记(号不还);登记那一步失败(列刚好被删了、work 刚好被归档了 → 409),刚建的现场销毁掉。轨迹写失败只记日志,照样 201。
+在 work 里打开一个块:先验(work 没归档、列存在、URI 有协议;拿协议去 server 那里寻址,声明了的 server,否则 default)→ 取号(`works.next_worklet`)→ 建现场 → 登记工作单元并放进一列(`works.db` 一个事务)→ 开 `worklet` 段 → 交回窗 + 把手,连同它在哪一列第几个。建现场失败则什么都不写、不留登记(号不还);登记那一步失败(列刚好被删了 → 404 `not_found`;work 刚好被归档了 → 409 `conflict`),刚建的现场销毁掉。轨迹写失败只记日志,照样 201。
 
 ```json
 {"uri": "codex:///w/memory.talk", "column": "c3"}
@@ -245,27 +255,31 @@ work 树(森林)。
 ```json
 {"id": "work_…-w1", "uri": "codex:///w/memory.talk", "scheme": "codex",
  "cwd": "/w/memory.talk", "created_at": "…", "last_attached": "…",
+ "column": "c3", "position": 2, "collapsed": false,
  "alive": true,
- "window": {"url": "http://127.0.0.1:43179/?arg=work_…-w1", "embed": "http://127.0.0.1:43179/?arg=work_…-w1"},
+ "window": {"url": "/surface/tmuxd/?arg=work_…-w1", "embed": "/surface/tmuxd/?arg=work_…-w1"},
  "handle": {"kind": "tmux+transcript", "capabilities": ["send", "rounds"]}}
 ```
 
 - 由哪个 server 建的不对外——`https://` 走 http server、`vim://` 走 default,调用方不感知。
-- `window.url` 是 tmuxd 自带的 ttyd 地址(`http://<host>:<port>/?arg=<worklet_id>`);http 工作单元是 URL 本身。
+- `column` / `position`:放进了哪一列、列里第几个(那一列原来有几个,就是第几个)。
+- `window.url` 是 tmuxd 自带的 ttyd,挂在主路由 `/surface/tmuxd/?arg=<worklet_id>`(同源相对地址,见 [structure work-server.md](../../structure/v5/work-server.md));http 工作单元是 URL 本身。
 - id `<work_id>-w<n>` 在 work 内单调递增、不复用:关掉 `-w1` 再开一个是 `-w2`(计数是 `works.next_worklet`)。
-- 副作用:`worklets` 插一行(连同摆在哪);终端类起一个 tmux 会话(名 = 工作单元 id);进画布那一列末尾;开一个 `worklet` 段(带 uri / scheme / server 和放进的列)。
+- 副作用:`worklets` 插一行(连同摆在哪);终端类起一个 tmux 会话(名 = 工作单元 id);放进那一列末尾;开一个 `worklet` 段(带 uri / scheme / server 和放进的列)。
 
 | 错误 | 状态 |
 |---|---|
 | work 已归档 | 409 `conflict` |
 | `column` 不存在(先验,不建现场、不留登记) | 404 `not_found` |
+| 建现场的这会儿列被删了(现场销毁、不留登记) | 404 `not_found` |
+| 建现场的这会儿 work 被归档了(现场销毁、不留登记) | 409 `conflict` |
 | URI 没协议 | 400 `bad_uri` |
 | 要跑的命令不在 PATH(如 `vim://` 走 default 但没装 vim) | 400 `cmd_not_found` |
 | tmux 起不来 | 502 `platform` |
 
 ## POST /api/works/{work_id}/worklets/{worklet_id}/attach
 
-重入:同一工作单元再次打开,幂等取回同一现场(tmux 会话还在就直接 attach,没了就按原 URI 重建)。返回同上,`last_attached` 更新。这个工作单元没有开着的 `worklet` 段(现场没了 / 归档后又重新打开)就开新的一段。
+重入:同一工作单元再次打开,幂等取回同一现场(tmux 会话还在就直接 attach,没了就按原 URI 重建)。返回同上(带它现在在哪一列第几个),`last_attached` 更新。这个工作单元没有开着的 `worklet` 段(现场没了 / 归档后又重新打开)就开新的一段。
 
 | 错误 | 状态 |
 |---|---|
@@ -274,7 +288,7 @@ work 树(森林)。
 
 ## DELETE /api/works/{work_id}/worklets/{worklet_id}
 
-关闭即回收:先最后收一次 round(agent 类,尽力而为;work 已归档就不收,归档时收过了)→ 销毁现场(tmuxd `session.kill()`)→ 删登记、从格子里拿掉(一个事务)→ 结束 `worklet` 段(`memorytalk.end.reason = detached`,带结束时所在的列和关它的人;开着的 `agent.turn` 跟着结束)。已经没有开着的段(现场没了 / 归档过、重新打开后没重入)就不动段,打一个 `worklet.closed` 点(带当时的列和关它的人)。**200**,`data: null`。
+关闭即回收:先最后收一次 round(agent 类,尽力而为;work 已归档就不收,归档时收过了)→ 销毁现场(tmuxd `session.kill()`)→ 从列里拿掉(同一列下面的往上补)、删登记(一个事务)→ 结束 `worklet` 段(`memorytalk.end.reason = detached`,带结束时所在的列和关它的人;开着的 `agent.turn` 跟着结束)。已经没有开着的段(现场没了 / 归档过、重新打开后没重入)就不动段,打一个 `worklet.closed` 点(带当时的列和关它的人)。**200**,`data: null`。
 
 ## POST /api/works/{work_id}/worklets/{worklet_id}/move
 
@@ -289,11 +303,11 @@ work 树(森林)。
 | `column` | 是 | 挪到哪一列(`c<编号>`) |
 | `index` | 否 | 列里从上数第几个(从 0 起,超出按末尾算;负数 → 422);不给 = 末尾 |
 
-返回新画布。位置真变了才打点 `worklet.moved`(去哪:`memorytalk.column.*` + `memorytalk.index`;从哪:`memorytalk.from.column.*` + `memorytalk.from.index`)。工作单元不存在或不在画布上、目标列不存在 → 404。
+返回工作单元清单(同 `GET …/worklets`,挪完的位置都在里面)。`index` 按「先从原列拿掉」之后数,原列下面的往上补、目标列 `≥ index` 的往下让。位置真变了才打点 `worklet.moved`(去哪:`memorytalk.column.*` + `memorytalk.index`;从哪:`memorytalk.from.column.*` + `memorytalk.from.index`)。工作单元不存在或不在任何一列、目标列不存在 → 404。
 
 ## PATCH /api/works/{work_id}/worklets/{worklet_id}
 
-`{"collapsed": true}` 收起 / 展开这个工作单元的格子。返回新画布,不进轨迹。工作单元不存在或不在画布上 → 404。
+`{"collapsed": true}` 收起 / 展开这个工作单元(只剩标题行)。返回工作单元清单,不进轨迹。工作单元不存在或不在任何一列 → 404。
 
 ## GET /api/works/{work_id}/worklets/{worklet_id}/rounds
 

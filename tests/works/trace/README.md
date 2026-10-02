@@ -18,7 +18,7 @@
 - 轨迹写失败不让动作失败(works.db 照常提交)。
 
 ## 不在这测什么
-- 画布动作各打什么点 → `works/canvas`
+- 列和挪动各打什么点 → `works/columns`
 - agent 的轮次(`agent.turn`)和 round → `adapters/claude_code`、`adapters/turns`
 
 ## fixture 来源

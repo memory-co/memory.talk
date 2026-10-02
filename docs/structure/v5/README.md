@@ -9,8 +9,8 @@ v5 的三层:**work**(做事,两个 sqlite:`works.db` 管现在、`worktrace.db`
 | 对象 | 形态 | 存哪 | 文档 |
 |---|---|---|---|
 | Work | 树上一个节点:目标、父、状态(没有 project) | `works.db` 的 `works` 表 | [work.md](work.md) |
-| Canvas / Panel | work 的画布:几列,每列从上到下摆工作单元;**视图,可随时重排** | `works.db` 的 `work_columns` 表 + `worklets` 的位置列 | [work.md](work.md#canvas) |
-| Worklet | work 的工作单元 = 一个现场:URI + 建它的 server;**身份脱离布局** | `works.db` 的 `worklets` 表 | [work.md](work.md#worklet) |
+| Column | work 的一列:编号 + 别名、有序、可收起;**只承载弱编排**,工作单元在哪一列第几个记在 Worklet 上,没有别的布局对象 | `works.db` 的 `work_columns` 表 | [work.md](work.md#column) |
+| Worklet | work 的工作单元 = 一个现场:URI + 建它的 server + 摆在哪一列第几个;**身份脱离位置** | `works.db` 的 `worklets` 表 | [work.md](work.md#worklet) |
 | **User** | 注册的实体,和 work 平级:名字 / 显示名 / 邮箱 / 注册时间 / 角色(admin 只有一个);密码哈希存在记录里不出接口 | `users/<name>.json`(或 `users` 表) | [api users.md](../../api/v5/users.md) |
 | Token | 登录态:JWT(HS256,`<home>/jwt.key` 签);登记的是 jti 的 sha256 → 谁的、何时发、何时过期;logout / 改密码即删 | `auth/tokens/<sha256>.json`(或 `auth_tokens` 表) | [api auth.md](../../api/v5/auth.md) |
 | Viewers | 现在谁在看这个 work;只做可见性,心跳算出来、重启清空;work 另有 `created_by` 归属(指向一个注册的 User) | `works.viewers` 列 | [work.md](work.md#viewersusers) |
@@ -28,10 +28,10 @@ v5 的三层:**work**(做事,两个 sqlite:`works.db` 管现在、`worktrace.db`
 |---|---|---|
 | Work | `work_<UTC 时间戳 14 位><4 hex>` | `work_202609052302072f2f` |
 | Worklet | `<work_id>-w<n>`,work 内顺序编号;**同时是 tmux 会话名** | `work_2026…2f2f-w1` |
+| Column | `c<n>`,work 内服务端发、单调递增、不复用(删过列编号就不连续) | `c3` |
 | Issue | `iss_<UTC 时间戳 14 位><4 hex>` | `iss_202609052246183f6a` |
 | Position / Argument | issue 内顺序编号 `p<n>` / 立场内顺序编号 `a<n>` | `p2`、`a1`;跨对象引用写 `<issue_id>#p2` |
 | Card | **仓库内相对路径**(不含 `.md`),目录即分类 | `memory.talk/配置只来自环境变量` |
-| Panel | 前端自定,画布内唯一 | `p1` |
 
 前缀 = 类型。card 没有前缀:它就是一条路径,像维基的词条名。
 
@@ -71,7 +71,7 @@ Card  ──(links)──▶ Card                             ← 内链
 | Issue 的 manager_work / card / links | 能改(换绑、写卡、连边) | git log |
 | Position / Argument | **只增不改不删** | git log(每条一个 commit) |
 | Work 的 goal / status | 能改 | 轨迹(`work.renamed` 点;归档 / 重新打开 = `work` 段的结束 / 新的一段) |
-| Canvas | 能改(一个动作一个请求,`version` +1) | 轨迹里的点(`column.*` / `worklet.moved`);收起不留 |
+| Column / 工作单元的位置 | 能改(一个动作一个请求) | 轨迹里的点(`column.*` / `worklet.moved`);收起不留 |
 | Worklet | 建 / 删;`last_attached` 会更新 | 轨迹(`worklet` 段的开始 / 结束) |
 | Round / 点 | **只追加** | 自身就是时间线 |
 

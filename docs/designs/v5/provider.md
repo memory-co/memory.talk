@@ -96,16 +96,16 @@ db.update(works).where(works.c.id == wid, works.c.version == expect).set(status=
 
 ## 4. 仓储层:业务概念住在这里,按族各写一份
 
-> **work 已经只留 db 版**([work-store.md](work-store.md)):`WorkRepo`(works.db:节点、画布的列、工作单元登记、收件箱)+ `TraceRepo`(worktrace.db:段、点、agent 的对话),各用一个 `SQLite` provider,不看 `MEMORY_TALK_STORE`。现在按族各一份实现的只剩 user / auth(`UserRepo` / `TokenRepo`)。
+> **work 已经只留 db 版**([work-store.md](work-store.md)):`WorkRepo`(works.db:节点、列、工作单元登记(连同摆在哪)、收件箱)+ `TraceRepo`(worktrace.db:段、点、agent 的对话),各用一个 `SQLite` provider,不看 `MEMORY_TALK_STORE`。现在按族各一份实现的只剩 user / auth(`UserRepo` / `TokenRepo`)。
 
-work / user 的记录(work 节点、画布、工作单元登记、收件箱、轨迹(含 agent 的对话);user 的档案、登录态)是**业务**。业务层需要的操作定成一个接口——它长什么样是业务层的事,provider 不管;然后**按族各实现一份**(work 那几行只有 db 版):
+work / user 的记录(work 节点、列、工作单元登记、收件箱、轨迹(含 agent 的对话);user 的档案、登录态)是**业务**。业务层需要的操作定成一个接口——它长什么样是业务层的事,provider 不管;然后**按族各实现一份**(work 那几行只有 db 版):
 
 | | fs 版仓储(用 `FileSystemProvider`) | db 版仓储(用 `DatabaseProvider`) |
 |---|---|---|
 | user 档案 | `users/<name>.json` | `users` 表,一行 |
 | 登录态(token 登记) | `auth/tokens/<sha256>.json` | `auth_tokens` 表,一行 |
 | work 节点 / manager / 谁在看 / 计数器 | —(上一版是 `works/<id>/work.json` 等文件,已删) | `works` 表,一行 |
-| 画布 | —(上一版是 `canvas.json`) | `work_columns` 表 + `worklets` 的位置列,版本在 `works.canvas_version` |
+| 列和位置 | —(上一版整份存在一个 JSON 文件里) | `work_columns` 表 + `worklets` 的位置列 |
 | 工作单元登记 | —(上一版是 `worklets.json`) | `worklets` 表,一行 |
 | 收件箱 | —(上一版是 JSONL) | `inbox` 表,自增 `seq` |
 | 轨迹(含 agent 的对话) | —(上一版是 `events` / `rounds` 的 JSONL) | worktrace.db 的 `spans` / `points` 表(现在另有 `rounds` 表,按 [work-node.md](work-node.md) 改完并进 `points`) |
