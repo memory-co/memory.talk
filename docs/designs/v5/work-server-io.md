@@ -24,7 +24,7 @@
 
 **结论先说:方向是对的,但只有这两句还不完整。** 按 §8 的清单逐条过,缺下面五样,本篇和 work-node.md 逐一补上:
 
-1. **output 不能是「有人读才拉」**。原来 round 只在有人 `GET …/rounds`、或关掉 / 归档前才同步进 trace;没人看,输出就不往上走。改成节点一读到就推(§3.1、[work-node.md](work-node.md))。
+1. **output 不能是「有人读才拉」**。原来 agent 的记录只在有人打开「对话记录」、或关掉 / 归档前才同步进 trace;没人看,输出就不往上走。改成节点一读到就推(§3.1、[work-node.md](work-node.md))。
 2. **input 要能知道「现在能不能送」**。往一个正在跑的 Claude Code 里打字,会插进它这一轮;要有**状态**(空闲 / 忙 / 等人确认),状态来自 agent 自己的 hooks 和记录里的收尾标记(§5)。
 3. **input 自己也要进 trace,并且和它引起的那一轮连上**。不然只看得到「agent 跑了一轮」,看不到「是谁、从哪送进来的哪句话触发的」(§4.3)。
 4. **input 不只一种形状**。一句话、按一个键(Esc、Ctrl-C)、一段多行文字,在终端里是三件事;多行要用粘贴,tmuxd 现在没有(§4.2)。
@@ -52,7 +52,7 @@ http 第一版什么都没有(换成 webmuxd 后有 CDP:点击、填表、读 DO
 
 ### 3.1 「复用 trace」具体是什么
 
-output 需要的东西全在 trace 里,没有单独的 round 表,也没有单独的 output 存储([work-trace.md §2](work-trace.md)):
+output 需要的东西全在 trace 里,没有单独的表,也没有单独的 output 存储([work-trace.md §2](work-trace.md)):
 
 | output 的什么 | 在 trace 里是 |
 |---|---|
@@ -173,7 +173,7 @@ http 现在没有把手;等它换成 webmuxd,input 是 CDP 的点击 / 输入,ou
 | `GET` | `/api/works/{id}/worklets/{w}/output` | `?after=&wait=`(§3.2) |
 | `GET` | `/api/works/{id}/worklets/{w}/state` | `{state, since}`;worklets 清单里也带一份 |
 
-`HandleInfo.capabilities` 改成 §2 那几个名字(现在的 `send` / `rounds` 换成 `input.*` / `output.messages`)。看对话的 `GET …/messages`(取代 `GET …/rounds`)见 [work-trace.md §6](work-trace.md)。
+`HandleInfo.capabilities` 用 §2 那几个名字。看对话的 `GET …/messages` 见 [work-trace.md §6](work-trace.md)。
 
 CLI:
 

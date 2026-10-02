@@ -2,7 +2,7 @@
 
 > **状态:部分实施。** 已经有了:落盘(`worktrace.db`)、`work` / `worklet` 两种段和 §2 的动作点(`plan.changed` 除外)、`GET /works/{id}/trace`(§6)、右侧「动态」列表(§6 的第 3 种视图)。代码在 `services/work/trace.py`。
 >
-> **agent 那一层按 [work-node.md](work-node.md) 改,还没做。** 现在是中心去拉:有人看的时候读会话记录、追加进 `rounds` 表,再从 round 里切出 `agent.turn`(`services/work/turns.py`)。改完是现场所在机器上的节点读会话记录、收 hooks,把**会话 / 轮次 / 工具调用**推成段、把**每条消息**推成点;`rounds` 表和 `first_round_id` 都去掉,不再有 round 这个单独的概念。§2–§6 写的是改完的样子,和现在不一样的地方都标了「现在」。另外还没做的:瀑布图 / 甘特图(§6 的 1、2)、计划(§7)、往外导出和直推(§8 的 2、3)。
+> **agent 那一层还没做**:节点、会话 / 轮次 / 工具段、消息点和写入口(`POST …/trace`)都按 [work-node.md](work-node.md) 来;现在的代码还是中心去拉、单独存一份 round,实施时去掉(§9)。另外还没做的:瀑布图 / 甘特图(§6 的 1、2)、计划(§7)、往外导出和直推(§8 的 2、3)。
 >
 > 本篇把 work 的时间线从「一串事件」换成 **trace**:有起止的东西记成**段(span)**,瞬间发生的事记成**点(event)**,落盘格式就是 OpenTelemetry 的 **OTLP/JSON**,一行一条。这样做有三个目的:
 >
@@ -47,8 +47,6 @@ trace 模型本来就有这些:span 有起点和终点;父子关系决定层级;
 | `agent.turn` | 人发出的一条输入 | agent 收完这一轮(Claude Code 的 `Stop` / `stop_reason = end_turn`、Codex 的 `task_complete`、Kimi 的 `turn.ended`);被打断也结束(Esc、`turn_aborted`、`turn.cancel`);会话段先结束了就跟着结束 | 所在会话段 | 节点 |
 | `agent.tool` | agent 发起一次工具调用 | 拿到这次调用的结果(按调用 id 配对);轮次先结束了就跟着结束 | 所在轮次段 | 节点 |
 
-> 现在:没有 `agent.session` / `agent.tool`;`agent.turn` 由中心在同步 round 时切出来,直接挂在 worklet 段下,要到下一条人的输入才结束(§5)。
-
 **点(event)= 一个时刻发生的事。** 点没有长度,但它总挂在某个 span 上,意思是「在这段时间里的某一刻发生了这件事」。点分两类。
 
 **动作点**:中心写,人做动作的那一刻。
@@ -72,7 +70,7 @@ trace 模型本来就有这些:span 有起点和终点;父子关系决定层级;
 | `agent.state` | 会话段 | — | `memorytalk.state`(`idle` / `busy` / `blocked`,[work-server-io.md §5](work-server-io.md)) |
 
 - **正文只在点的 `body` 里**,段上只放结构和计数,不放大块内容。人的输入是它那一轮的第一个点。
-- **子 agent**(Claude Code 用 Task 工具派出去的):它的消息和工具调用挂在派它的那个工具段下面——子 agent 的一轮就是那个工具段下的一段 `agent.turn`。现在的适配器直接丢掉子 agent 的记录。
+- **子 agent**(Claude Code 用 Task 工具派出去的):它的消息和工具调用挂在派它的那个工具段下面——子 agent 的一轮就是那个工具段下的一段 `agent.turn`。
 
 原来 `events` 里的每一种都有着落,原来的 round 也一样:
 
@@ -192,8 +190,6 @@ agent 的点多一个 `body`;`timeUnixNano` 是 agent 记录里的时刻,`observ
 
 **正文会让 `points` 大很多。** 列表和图的查询不取 `body`(§6);真拖慢了,再把 agent 点拆到单独的表或库(§10)。
 
-> 现在:还有一张 `rounds` 表(agent 的 round,`agent.turn` 从这里切,`spans.first_round_id` 引用它);`points` 没有 `body` / `uid` / `observed_time_unix_nano`;没有 `trace_cursors`。
-
 ## 4. id:一棵 work 树是一条 trace
 
 - **trace id = 根 work**:`traceId = sha256("memorytalk/trace/" + 根 work id)` 的前 16 字节。一棵 work 树从根到叶都在同一条 trace 里,所以不管在瀑布图还是甘特图上,一次就能看到整件事。子 work 不单独开 trace。
@@ -205,15 +201,11 @@ agent 的点多一个 `body`;`timeUnixNano` 是 agent 记录里的时刻,`observ
   - `agent.tool`:`"memorytalk/span/tool/" + worklet id + "/" + 调用 id`(Claude Code 的 `tool_use.id`、Codex 的 `call_id`、Kimi 的 `toolCallId`),节点算。
 
   算得出来就不用查:子 work 知道自己的父 span id,打开工作单元时也知道它该挂在哪个 work span 下面;节点不用问中心就能算出它推的每一段的 id。同一段推两次还是同一个 id,中心按 id 幂等收([work-node.md §6](work-node.md))。
-
-  > 现在:`agent.turn` 的 id 用它第一条 round 的 id 算(`spans.first_round_id` 存着),中心每次重切时按它幂等改。
 - **`log.record.uid` = 点的身份**:节点推的点都带,`<worklet id>:<来源里的消息 id>`;一条记录里有几块内容(一条助手消息里几段文字、几个工具调用)时再加 `:<第几块>`。来源里的消息 id 是 Claude Code 的 `uuid`、Codex 的 `<rollout 文件名>:<行号>`、Kimi 的事件 `uuid`。中心按它去重;认知层引用某一条消息(issue 的出处、card 的出处)也用它。中心自己写的动作点没有 uid,只追加。
 - **link = 依赖**:span 的 `links[]` 用来表示「这件事等着那件事」(§7 的依赖),以及「重新打开的这一段接的是上一段」(work 重新打开、会话 `/resume`)。link 写在 `spans` 表那一行的 `links` 列里(OTLP 的 `{traceId, spanId, attributes}`),导出时随整条一起写出。现在只有 work 重新打开时写,开段那一刻一起写;依赖的 link 等 §7。
 - **不能挪树**:trace id 取决于根,所以 work 不能换父(现在本来也不能:`PATCH /works/{id}` 只改目标和状态)。
 
 **agent 那几层对上 OTel GenAI 语义约定。** 会话段带 `gen_ai.conversation.id`(agent 自己的会话 id);轮次段带 `gen_ai.operation.name = invoke_agent` 和这一轮的 token 数(`gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens`:Claude Code 每条助手消息带 `usage`,Codex 有 `token_count`,Kimi 有 `usage.record`,节点加总);工具段带 `gen_ai.operation.name = execute_tool`、`gen_ai.tool.name`、`gen_ai.tool.call.id`;三层都带 `gen_ai.system`(`anthropic` / `openai` / `moonshot`)。这样可观测那边现成的 LLM 看板能直接用。GenAI 规范还在变,具体用哪一版的名字,实施时对一遍。
-
-> 现在:只有 `agent.turn` 带 `gen_ai.system`,读不到 token 数。
 
 ## 5. 写:谁在什么时候开段、关段、打点
 
@@ -246,15 +238,9 @@ point(work_id, span_id, event_name, attributes, *, user, worklet_id, column_numb
 - **`agent.tool`**(节点):起点是工具调用那条记录的时刻,终点是对应结果那条记录的时刻;结果标了出错(Claude Code 的 `is_error` 之类)status 记 Error——这是唯一用到 Error 的地方;轮次先结束了(被打断)就跟着结束,reason `cancelled`。
 - **时间**:节点按各家格式换算成 Unix 纳秒(Claude Code / Codex 是 ISO 串,Kimi 是**毫秒**数);解不出来的沿用前面最近一条。agent 点的 `timeUnixNano` 是记录里的时刻,`observedTimeUnixNano` 是中心收到的时刻;中心自己写的点两个一样。
 
-> 现在:`agent.turn` 不是节点推的,而是中心**同步 round 的时候切出来**的(`GET …/rounds` 拉到新 round,或关掉 / 归档前最后一次):人的一条输入起、到下一条人的输入之前算一轮,每次整体重切,按 `first_round_id` 幂等改,结束了的轮次终点还会被后来的 round 往后挪;Kimi 的毫秒被当成了秒。这些改完都没了。
-
 **现场自己没了的 span**:worklet span 开着,可是 tmux 会话已经不在了(命令跑完了、机器重启了)。这由节点发现——它一直盯着本机的 tmux 会话——报 `gone`:把 span 结束掉,记 `memorytalk.end.reason = "gone"`,不记结束的人;终点取它最后一次确认还活着的时刻,span 的 `status` 保持 Unset,不当成 Error;里面开着的会话 / 轮次 / 工具段跟着结束。正在关掉 / 归档 / 重入的工作单元不判 `gone`(现场销毁了、段还没结束的那一会儿,段由那个动作自己结束或接着用)。正常关掉的,`memorytalk.end.reason = "detached"`,`status` 为 OK。
 
-> 现在:只在列清单(`GET …/worklets`)时发现现场没了,终点取的是发现的时刻。
-
 **重启**:`spans` 表里终点为空的行,重启后还是开着的。work span 本来就该一直开着;其余的靠对账:中心重启,节点重连后先对一遍([work-node.md §7](work-node.md))再接着推;节点重启,从中心问游标接着读。
-
-> 现在:还没有对账,中心重启后要等下一次列清单才把没了的现场结束成 `gone`。
 
 ## 6. 读:一份数据,三种视图
 
@@ -262,7 +248,7 @@ point(work_id, span_id, event_name, attributes, *, user, worklet_id, column_numb
 
 **写也是这个路径**:`POST /works/{id}/trace` 收同一个形状(§5、[work-node.md §6](work-node.md))——`GET` 出来的文档原样 `POST` 回去,意思不变。`worklet=` 只看一个工作单元;`fields=cursors` 只要推到哪了(节点重连时用)。
 
-agent 点会很多(一条消息一个),所以默认只给段和动作点;`agent=1` 才带 agent 点,而且**不带正文**。要看一个工作单元的对话,走 `GET /works/{id}/worklets/{w}/messages`:按会话 / 轮次取 agent 点,带正文,游标分页(取代现在的 `GET …/rounds`)。前端画图只用 `/trace`,看对话只用 `/messages`。
+agent 点会很多(一条消息一个),所以默认只给段和动作点;`agent=1` 才带 agent 点,而且**不带正文**。要看一个工作单元的对话,走 `GET /works/{id}/worklets/{w}/messages`:按会话 / 轮次取 agent 点,带正文,游标分页。前端画图只用 `/trace`,看对话只用 `/messages`。
 
 **1)瀑布图(类似 Chrome DevTools 的 Network)**
 

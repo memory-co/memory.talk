@@ -108,7 +108,7 @@ work / user 的记录(work 节点、列、工作单元登记、收件箱、轨�
 | 列和位置 | —(上一版整份存在一个 JSON 文件里) | `work_columns` 表 + `worklets` 的位置列 |
 | 工作单元登记 | —(上一版是 `worklets.json`) | `worklets` 表,一行 |
 | 收件箱 | —(上一版是 JSONL) | `inbox` 表,自增 `seq` |
-| 轨迹(含 agent 的对话) | —(上一版是 `events` / `rounds` 的 JSONL) | worktrace.db 的 `spans` / `points` 表(现在另有 `rounds` 表,按 [work-node.md](work-node.md) 改完并进 `points`) |
+| 轨迹(含 agent 的对话) | —(上一版是 `events` / `rounds` 的 JSONL) | worktrace.db 的 `spans` / `points` / `trace_cursors` 表 |
 | 「按父列子」「按 created_by 列」 | —(上一版是 `list` 前缀 + 读每个 `work.json` 在内存里过滤) | `select(works).where(works.c.parent == pid)`,走索引 |
 | 把路径交给外部进程(agent 读自己的对话) | `local_path`(LocalFS 有;S3 没有 → 退回 `read`) | 没有路径;通过仓储读(agent 的对话就是这样:从平台记录文件读出来进 `worktrace.db`,接口从表里读) |
 

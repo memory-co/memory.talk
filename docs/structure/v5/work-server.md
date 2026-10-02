@@ -31,10 +31,10 @@
 
 | server | 响应 | 现场 | 窗 | 把手 |
 |---|---|---|---|---|
-| `claude` / `codex` / `kimi` | 各自同名 | tmuxd session 跑该 CLI | tmuxd 的 ttyd | `send` `rounds` |
-| `bash` | `bash` | tmuxd session | tmuxd 的 ttyd | `send` |
+| `claude` / `codex` / `kimi` | 各自同名 | tmuxd session 跑该 CLI | tmuxd 的 ttyd | `input.*` `output.messages` `state` |
+| `bash` | `bash` | tmuxd session | tmuxd 的 ttyd | `input.text` `input.keys` `state` |
 | `http` | `http` `https` | 无(纯 iframe) | URL 本身 | 无 |
-| `default` | 没人声明的 | tmuxd session 里跑「协议名」命令(`vim://` → `vim`) | tmuxd 的 ttyd | `send` |
+| `default` | 没人声明的 | tmuxd session 里跑「协议名」命令(`vim://` → `vim`) | tmuxd 的 ttyd | `input.text` `input.keys` `state` |
 
 ## Window
 
@@ -50,16 +50,16 @@
 ## HandleInfo
 
 ```json
-{"kind": "tmux+transcript", "capabilities": ["send", "rounds"]}
+{"kind": "tmux+transcript", "capabilities": ["input.text", "input.keys", "input.paste", "output.messages", "state"]}
 ```
 
 | `kind` | 谁 | `capabilities` |
 |---|---|---|
-| `tmux` | bash / default | `send`(发键,只在进程内;tmuxd 只写不读,没有抓屏) |
-| `tmux+transcript` | claude / codex / kimi | 上面一项 + `rounds`(读平台的会话记录) |
+| `tmux` | bash / default | `input.text` / `input.keys`(往终端里打字、按键;tmuxd 只写不读,没有抓屏)、`state`(只有在 / 不在) |
+| `tmux+transcript` | claude / codex / kimi | 上面几项 + `input.paste`、`output.messages`(节点读会话记录、收 hooks,推成会话 / 轮次 / 工具段和消息点)、`state`(空闲 / 忙 / 等确认 / 不在) |
 | `none` | http | 空 |
 
-把手本体是 Python 对象;API 只报 `HandleInfo`。`send` 不暴露 API。
+把手本体是 Python 对象;API 只报 `HandleInfo`。往现场里送字走 `POST …/input`([designs work-server-io.md](../../designs/v5/work-server-io.md))。
 
 ## Live
 
@@ -69,7 +69,7 @@
 {
   "worklet_id": "work_…-w1", "server": "codex",   // server 只在内部流转,API 视图不带
   "window": {"url": "http://127.0.0.1:43179/?arg=work_…-w1", "embed": "http://127.0.0.1:43179/?arg=work_…-w1"},
-  "handle": {"kind": "tmux+transcript", "capabilities": ["send", "rounds"]},
+  "handle": {"kind": "tmux+transcript", "capabilities": ["input.text", "input.keys", "input.paste", "output.messages", "state"]},
   "cwd": "/home/me/memory.talk", "command": ["codex"]
 }
 ```

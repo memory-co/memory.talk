@@ -21,7 +21,7 @@
 ├── tmuxd/                            ← tmuxd 的 state(会话记录、ttyd 记录、tmux.conf、ttyd.sock——窗经它挂到 /surface/tmuxd);tmux 会话本身不落盘
 ├── credentials.json                  ← CLI 的登录态(客户端的事,按服务地址分开;memory.talk login 写)
 ├── works.db                          ← work 的现在(sqlite,+ -wal / -shm):works / work_columns / worklets / inbox 四张表
-├── worktrace.db                      ← work 的经过(sqlite,+ -wal / -shm):spans / points / rounds 三张表
+├── worktrace.db                      ← work 的经过(sqlite,+ -wal / -shm):spans / points / trace_cursors 三张表
 └── memory.sqlite                     ← users / auth(只在 MEMORY_TALK_STORE=sqlite 时)
 ```
 
@@ -45,9 +45,9 @@
 | | `work_columns` | 一列,主键 (`work_id`, `number`),`position` 从左到右 0..n-1 |
 | | `worklets` | 一个工作单元:登记 + 摆在哪一列第几个(`column_number` / `position` / `collapsed`) |
 | | `inbox` | 一条打过来的变动;`work_id` 为空 = 没人管 |
-| `worktrace.db` | `spans` | 一个段(`work` / `worklet` / `agent.turn`),终点为空 = 还开着 |
-| | `points` | 一个点(`column.*` / `worklet.moved` / `worklet.closed` / `work.renamed`),只追加 |
-| | `rounds` | agent 工作单元的一条 round,只追加,按 (`worklet_id`, `round_id`) 去重 |
+| `worktrace.db` | `spans` | 一个段(`work` / `worklet` / `agent.session` / `agent.turn` / `agent.tool`),终点为空 = 还开着 |
+| | `points` | 一个点:人的动作(`column.*` / `worklet.*` / `work.renamed`),或 agent 的一条消息 / 状态(`agent.*`,正文在 `body`);只追加,带 `uid` 的按它去重 |
+| | `trace_cursors` | 一个工作单元一份来源推到哪了;和推上来的数据同一个事务写 |
 
 - **一个动作一个事务**:一个动作在 `works.db` 里的读-改-写在一个事务里做完;建 / 销毁现场不在事务里;最后写 `worktrace.db`。两个库之间没有原子提交,轨迹写失败只记日志,不回滚 work。
 - **单写者**:服务进程是唯一写者,每个库一个 provider 实例、一把进程内锁;CLI 和 agent 都走 HTTP。
@@ -69,7 +69,7 @@
 | `MEMORY_TALK_STORE` | `fs` | users / auth 记录的介质:`fs` / `sqlite`(work 不看它) |
 | `MEMORY_TALK_SQLITE` | `<HOME>/memory.sqlite` | users / auth 的 sqlite 文件路径 |
 | `MEMORY_TALK_WORKS_DB` | `<HOME>/works.db` | work 的现在 |
-| `MEMORY_TALK_WORKTRACE_DB` | `<HOME>/worktrace.db` | work 的经过(段、点、round) |
+| `MEMORY_TALK_WORKTRACE_DB` | `<HOME>/worktrace.db` | work 的经过(段、点) |
 | `MEMORY_TALK_AUTHOR` / `MEMORY_TALK_EMAIL` | `memory.talk` / `memory.talk@localhost` | git author |
 | `MEMORY_TALK_WORKSPACE` | `~/workspace` | 终端类 URI 省略 path 时的 cwd |
 | `MEMORY_TALK_TMUX_SOCKET` | `memorytalk` | tmuxd 的 socket 名(实际 tmux socket 是 `tmuxd-<名>`),和你自己的 tmux 隔离 |

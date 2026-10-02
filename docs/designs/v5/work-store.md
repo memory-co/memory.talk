@@ -146,16 +146,16 @@ SELECT w.id FROM worklets w JOIN work_columns c
 
 | 表 | 主键 | 列 | 说明 |
 |---|---|---|---|
-| `spans` | `span_id` | `trace_id`(索引)、`parent_span_id`、`work_id`(索引)、`worklet_id`(索引)、`user_id`(索引,开段的人)、`end_user_id`(索引,结束它的人)、`name`、`kind`、`start_time_unix_nano`、`end_time_unix_nano`、`status_code`、`attributes`(JSON)、`links`(JSON)、`first_round_id`(只有 `agent.turn` 有) | 段:`work` / `worklet` / `agent.turn`。**`end_time_unix_nano` 为空 = 还开着**。结束 = 在同一行填上终点和结束时的属性;`agent.turn` 按 `first_round_id` 幂等改(work-trace.md §2) |
-| `points` | `seq`(自增) | `trace_id`、`span_id`(索引)、`work_id`(索引)、`worklet_id`、`column_number`、`user_id`(索引)、`event_name`(索引)、`time_unix_nano`、`attributes`(JSON) | 点:`column.*`、`worklet.moved`、`worklet.closed`、`work.renamed`(以后还有 `plan.changed`),只追加 |
-| `rounds` | `seq`(自增) | `work_id`、`worklet_id`(索引)、`round_id`、`timestamp`、`role`、`text` | agent 工作单元的 round(原来的 `rounds.jsonl`),按 (`worklet_id`, `round_id`) 去重(进程内一把锁),按 `seq` 读。`agent.turn` 段通过 round id 引用它(现在;改完去掉,见下) |
+| `spans` | `span_id` | `trace_id`(索引)、`parent_span_id`、`work_id`(索引)、`worklet_id`(索引)、`user_id`(索引,开段的人)、`end_user_id`(索引,结束它的人)、`name`、`kind`、`start_time_unix_nano`、`end_time_unix_nano`、`status_code`、`attributes`(JSON)、`links`(JSON) | 段:`work` / `worklet`(中心写)和 `agent.session` / `agent.turn` / `agent.tool`(节点推)。**`end_time_unix_nano` 为空 = 还开着**;按 `span_id` 幂等写,结束即定稿(work-trace.md §5) |
+| `points` | `seq`(自增) | `uid`(唯一)、`trace_id`、`span_id`(索引)、`work_id`(索引)、`worklet_id`(和 `seq` 一起索引)、`column_number`、`user_id`(索引)、`event_name`(索引)、`time_unix_nano`、`observed_time_unix_nano`、`body`、`attributes`(JSON) | 点:人的动作(`column.*`、`worklet.moved` / `.closed` / `.input`、`work.renamed`,以后还有 `plan.changed`)和 agent 的每条消息、状态(`agent.*`,正文在 `body`)。只追加,带 `uid` 的按它去重 |
+| `trace_cursors` | (`worklet_id`, `source`) | `position`、`updated_at` | 每个工作单元每份来源推到哪了,和推上来的数据同一个事务写(work-node.md §6) |
 
-> **按 [work-node.md](work-node.md) 改完的样子(未实施)**:`rounds` 表和 `spans.first_round_id` 去掉——agent 的每条消息是一个点(`agent.message` / `agent.tool.input` / `agent.tool.output`),正文进 `points.body`,带 `uid`(按它去重)和 `observed_time_unix_nano`;段多了 `agent.session` / `agent.tool`,`agent.*` 都由节点经 `POST /api/works/{id}/trace` 推、结束即定稿;另加一张 `trace_cursors`(每个工作单元每份来源推到哪了)。逐列见 [structure worktrace.md](../../structure/v5/worktrace.md)。
+逐列见 [structure worktrace.md](../../structure/v5/worktrace.md)。代码还没跟上:现在库里还有一张 `rounds` 表和 `spans.first_round_id`,按 [work-node.md](work-node.md) 实施时去掉,不迁移。
 
 几条规则:
 
 - **常用的属性提成列,完整的属性另存一份。** OTel 的属性是开放的键值,每种段、每种点带的都不一样,没法全部变成固定的列;所以 `attributes` 保留完整的 OTLP `KeyValue` 列表,只用来导出和拼回 OTLP,查询不碰它。平时要筛的维度(哪个工作单元、谁、哪一列、什么事件)都提成真的列:`worklet_id`、`user_id`、`column_number`、`event_name`。以后再冒出常查的属性,就再提一列。
-- **开着的段就是一行没有终点的记录。** work-trace.md §3 为这个问题另外开了一份 `spans` doc(因为 jsonl 只能追加一整条);到了表里,「开着」只是一列为空,不用再单独存一份状态。**只追加的是 `points` 和 `rounds`;`work` / `worklet` 段每行最多改一次**,就是结束那次;`agent.turn` 段随着新 round 同步进来原地改(最后一条 round、条数、终点)——这是现在;按 work-node.md 改完,`agent.*` 段由节点按收尾标记结束,结束即定稿。
+- **开着的段就是一行没有终点的记录。** work-trace.md §3 为这个问题另外开了一份 `spans` doc(因为 jsonl 只能追加一整条);到了表里,「开着」只是一列为空,不用再单独存一份状态。**只追加的是 `points`;段开着的时候可以合并属性,结束那次补上终点,之后不再改**(结束即定稿)。
 - **user 的统计也从这里来**:「动过哪些 work、最近一次什么时候」= `spans.user_id` / `spans.end_user_id` / `points.user_id` 按人查(都有索引),见 user.md §3。
 - **一个 work 的轨迹** = `work_id = ?` 的段和点;**一棵树的轨迹** = 同一个 `trace_id`(work-trace.md §4)。两个都有索引。
 - **agent 的对话放在这里**,是因为它和段、点的性质一样:只追加、量大、是「经过」。放进 `works.db` 会让状态库越长越大,备份也越来越慢。
