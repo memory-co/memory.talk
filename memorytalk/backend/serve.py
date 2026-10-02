@@ -5,11 +5,13 @@
 
 两个 uvicorn Server 跑在一个事件循环里;信号自己接,一起停(uvicorn 自己接信号的话,停完会把信号再抛一次,
 后面收尾的代码就跑不到了)。lifespan(起停 tmuxd 的 ttyd、清 viewers)只在 TCP 那个上跑一次。
+日志配置是全局的:只让 TCP 那个配(节点那个再配一次会把级别改掉);节点推的请求不进访问日志。
 """
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import signal
 
 import uvicorn
@@ -25,6 +27,13 @@ class _Server(uvicorn.Server):
         return contextlib.nullcontext()
 
 
+class _NodeAccess(logging.Filter):
+    """从 unix socket 上来的(没有客户端地址,就是节点在推)不记访问日志:一个 agent 干活时一秒一两条,会把别的淹掉。"""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not (isinstance(record.args, tuple) and record.args and record.args[0] == "")
+
+
 def serve(host: str, port: int) -> None:
     asyncio.run(_serve(host, port))
 
@@ -33,7 +42,8 @@ async def _serve(host: str, port: int) -> None:
     app = create_app()
     path = app.state.runtime.center_socket
     main = _Server(uvicorn.Config(app, host=host, port=port, log_level="info"))
-    side = _Server(uvicorn.Config(NodeSocket(app), lifespan="off", log_level="warning"))
+    side = _Server(uvicorn.Config(NodeSocket(app), lifespan="off", log_config=None, log_level=None))
+    logging.getLogger("uvicorn.access").addFilter(_NodeAccess())
     sock = bind_unix(path)
 
     def stop() -> None:
