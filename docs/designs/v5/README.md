@@ -2,7 +2,7 @@
 
 > **状态:定位稿,未实施。** 这篇只回答三件事:memory.talk 是什么、它由哪几层抽象组成、这几层怎么咬合。字段、表、命令、端点一概不在这里——那些等定位敲定后再分篇立(同 [v4](../v4/README.md) 的 works / cli / api / structure 四目录分工)。
 >
-> 分篇:[work.md](work.md)(做事层:work 树)、**[metas/](metas/README.md)**(认知层:容器、层协议、存储、issue、card、origin、manager 全在这个目录)——[issue.md](metas/issue.md)(议事层:树上节点管、派活取证)、[card.md](metas/card.md)(记事层:维基式事实条目,issue 是它的讨论页)、[metas/store.md](metas/store.md)(存储:git 存 card / issue,裸文件存 work,没有数据库;work 那一半后来改成两个 sqlite,见 work-store.md)、[work-server.md](work-server.md)(每个协议背后把现场建出来的 server)、[worklet.md](worklet.md)(work 里的一个现场:身份脱离布局)、[work-trace.md](work-trace.md)(部分实施:events 换成 OTel 格式的 trace,分段和点,`GET /works/{id}/trace`;瀑布图和甘特图是同一份数据,图还没做)、[work-store.md](work-store.md)(已实施:work 只用 sqlite,works.db 管现在、worktrace.db 管经过;列布局在 work_columns 表加 worklets 的位置列、轨迹在 spans / points 表)、[work-events.md](work-events.md)(画布上的每个动作一个请求、进时间线,带列标记和操作人;列 = 固定编号 + 别名;撤掉整份覆盖的 PUT canvas)、[user.md](user.md)(人:work 谁建的、现在谁在看、谁做过什么,metas 的提交是谁做的)、[auth.md](auth.md)(门:没有 admin 先 setup,之后登录换 token,每个请求都带;权限只有 admin 管账号这一档)、[provider.md](provider.md)(存储介质的两族基类:文件系统型 LocalFS / OSS / S3、数据库型 SQLite / MySQL / PostgreSQL;业务仓储按族各一份)、[metas/README.md](metas/README.md)(认知层的容器:collectbase 仓库,issue / card 各是一层,layer 由 schema 定义、可自定义)、[metas/layer.md](metas/layer.md)(怎么设计一个自己的层:四个问题、两个文件、系统替你做什么 / 不做什么)、[origin.md](metas/origin.md)(最底层:外部来的、未消化的原文,上层改不动的地板)、[manager.md](metas/manager.md)(目录下的 manager.json 把变动打给绑定的 work,work 干活往下推;取代 issue 上的 manager_work 字段)。
+> 分篇:[work.md](work.md)(做事层:work 树)、**[metas/](metas/README.md)**(认知层:容器、层协议、存储、issue、card、origin、manager 全在这个目录)——[issue.md](metas/issue.md)(议事层:树上节点管、派活取证)、[card.md](metas/card.md)(记事层:维基式事实条目,issue 是它的讨论页)、[metas/store.md](metas/store.md)(存储:git 存 card / issue,裸文件存 work,没有数据库;work 那一半后来改成两个 sqlite,见 work-store.md)、[work-server.md](work-server.md)(每个协议背后把现场建出来的 server)、[work-server-io.md](work-server-io.md)(每个 server 一对口子:input 各自实现,output 走 trace;能力声明、状态门控、input 进 trace 并连上它引起的那一轮)、[worklet.md](worklet.md)(work 里的一个现场:身份脱离位置)、[work-trace.md](work-trace.md)(部分实施:events 换成 OTel 格式的 trace,分段和点,`GET /works/{id}/trace`;瀑布图和甘特图是同一份数据,图还没做)、[work-store.md](work-store.md)(已实施:work 只用 sqlite,works.db 管现在、worktrace.db 管经过;列在 work_columns 表、工作单元在哪一列第几个是 worklets 自己的列,轨迹在 spans / points 表)、[work-events.md](work-events.md)(列和工作单元上的每个动作一个请求、进时间线,带列标记和操作人;列 = 固定编号 + 别名;撤掉整份覆盖)、[user.md](user.md)(人:work 谁建的、现在谁在看、谁做过什么,metas 的提交是谁做的)、[auth.md](auth.md)(门:没有 admin 先 setup,之后登录换 token,每个请求都带;权限只有 admin 管账号这一档)、[provider.md](provider.md)(存储介质的两族基类:文件系统型 LocalFS / OSS / S3、数据库型 SQLite / MySQL / PostgreSQL;业务仓储按族各一份)、[metas/README.md](metas/README.md)(认知层的容器:collectbase 仓库,issue / card 各是一层,layer 由 schema 定义、可自定义)、[metas/layer.md](metas/layer.md)(怎么设计一个自己的层:四个问题、两个文件、系统替你做什么 / 不做什么)、[origin.md](metas/origin.md)(最底层:外部来的、未消化的原文,上层改不动的地板)、[manager.md](metas/manager.md)(目录下的 manager.json 把变动打给绑定的 work,work 干活往下推;取代 issue 上的 manager_work 字段)。
 >
 > 读法:先 §1 看定位怎么变,再 §2 看三层各是什么,§3 看它们之间的循环。§4 是跟 v3 / v4 / shellbase 的继承关系,§5 是留待后续分篇敲定的问题。
 
@@ -46,12 +46,12 @@ v5 把主语换掉:**memory.talk 是一个工作台,工作在它里面发生**�
 
 > 这一层原叫 task,改名 work 的理由见 [work.md §0](work.md):对标 Codex work;task 在 agent 生态里指「一次调用」,而这里是「一件事」,可以跨天、可以是一棵树。
 
-work 是 v5 的顶层对象,**取代 v1–v4 的 session 成为 memory.talk 的入口**。一个 work 就是 shellbase 里那个 window 的原生版本:一块可分割的画布,每个块由一个虚拟 URI 定位(`claude:///workspace/proj`、`codex:///workspace/proj`、`bash://`、`file://`、`https://`),块背后是 tmux 里活着的一个进程,断线重入现场无损。
+work 是 v5 的顶层对象,**取代 v1–v4 的 session 成为 memory.talk 的入口**。一个 work 就是 shellbase 里那个 window 的原生版本,但不带它的布局:里面是一个个块,摆在几列里(列只承载弱编排),每个块由一个虚拟 URI 定位(`claude:///workspace/proj`、`codex:///workspace/proj`、`bash://`、`file://`、`https://`),块背后是 tmux 里活着的一个进程,断线重入现场无损。
 
 - **work 里的每个 agent 块 = 一个 code agent worklet**。shellbase 那套「块即 URI、后端是状态唯一权威、无中生有 + 重入」的底层逻辑在 memory.talk 里**原生实现、完全一致**;shellbase 作为独立项目到此为止,memory.talk 不重新发明 agent 运行时,只是把这个运行时收进自己家。
 - **worklet 从「事后导入的对象」变成「在 work 里原生发生的对象」**。v3 的 sync(从平台目录抄工作单元)退成兼容路径——work 里跑的 worklet,memory.talk 本来就看得见。
 - **work 承接 v3/v4 的 explore**。explore 原本是「一个目录 + 一条时间分割线」的抽卡工作区;v5 里每个 work 天然就是这样一个工作区:work 里的 worklet 是它的先验素材,之后的 work 是它的后验证据。explore 不再单独存在。
-- **复杂的事是一棵 work 树**。work 可以有子 work:根是「把 X 做出来」,叶子是真正坐下来干的一件小事。拆分、顺序、状态——执行的结构全部落在 work 上;树上每个节点都可以有自己的画布。
+- **复杂的事是一棵 work 树**。work 可以有子 work:根是「把 X 做出来」,叶子是真正坐下来干的一件小事。拆分、顺序、状态——执行的结构全部落在 work 上;树上每个节点都可以开自己的现场。
 - work 有目标、有状态、有始终、有父子,但**没有 project**——project 会把 work 割裂,隐藏的共性靠 issue 串、父子靠树,不需要第三种分组。work 不做认知——它只负责让工作发生并把过程留下来。
 
 ### 2.2 issue:IBIS 结构的议事层
@@ -94,7 +94,7 @@ work、issue、card 说的都是**事**;user 说的是**人**,和它们平级,�
    │      work        │      │      issue       │      │      card        │
    │  code agent      │ 标注  │  问题            │ 写卡  │  维基式事实条目  │
    │  worklet × N     │─────▶│  + position × N  │─────▶│  一个事实一张卡  │
-   │  (原生画布)       │ #问题 │  + argument      │ 讨论页 │  (召回单元)       │
+   │  (原生现场)       │ #问题 │  + argument      │ 讨论页 │  (召回单元)       │
    └──────────────────┘      └──────────────────┘      └──────────────────┘
             ▲                         ▲                          │
             │                         │ 后验 work 回流论证          │
@@ -105,7 +105,7 @@ work、issue、card 说的都是**事**;user 说的是**人**,和它们平级,�
 
 顺着走一遍:
 
-1. **work 里干活**:若干 agent worklet 在 work 的画布上跑,过程按 round 留下。
+1. **work 里干活**:若干 agent worklet 在 work 里跑,过程按 round 留下。
 2. **work → issue**:对 worklet 逐 round 标注(以写代读),标注里 `#` 出来的问题经检索判定——新问题建 issue,老问题挂到既有 issue;标注里给出的回答落成 position,后续证据落成 argument。
 3. **issue → card**:争出结果的 issue 写成 / 改一张 card;没什么可争的事实直接写卡。
 4. **card → work**:下一个 work 开工,recall 拿语境撞 card,把命中的卡注入 agent 的上下文。
@@ -123,7 +123,7 @@ work、issue、card 说的都是**事**;user 说的是**人**,和它们平级,�
 
 | | 来源 | v5 怎么处理 |
 |---|---|---|
-| 画布 / 块即 URI / 终端 attach / window 状态 | shellbase v1 | **在 memory.talk 里原生实现,底层逻辑完全一致**;shellbase 不再作为独立项目继续,它的设计文档是 work 运行时的蓝本 |
+| 块即 URI / 终端 attach / window 状态 | shellbase v1 | **在 memory.talk 里原生实现,底层逻辑完全一致**;window 的布局不跟过来,work 只留列这一层弱编排([work.md §3](work.md));shellbase 不再作为独立项目继续,它的设计文档是 work 运行时的蓝本 |
 | session / round(append-only)、file-canonical | v3 | round 沿用,session 变成 work 里的 worklet;file-canonical 延伸成「git 是 canonical(含历史)」;worklet 的上游从 sync 变成 work |
 | SQLite(派生索引 + 运行态计数)、searchbase(向量 + FTS)、events.jsonl、migration 框架 | v3 / v4 | **全部去掉**:运行态在 v5 不存在;召回改成目录 + 链接 + grep,不建索引;历史归 git(见 [metas/store.md](metas/store.md));存储只有 git 和裸文件,没有派生物(work 后来改存两个 sqlite,轨迹换成 OTel 的段和点,见 [work-store.md](work-store.md)) |
 | explore(先验 / 后验工作区) | v3 设计 | **并入 work**,不再独立 |
@@ -142,7 +142,7 @@ work、issue、card 说的都是**事**;user 说的是**人**,和它们平级,�
 这些都会各自分篇,本稿只列出来,不在这里定:
 
 - **issue 与 card 的边界**:[card.md §2](metas/card.md) 定为词条 / 讨论页——还在争的待 issue,争完的写卡;写卡是编辑动作,不是阈值触发。
-- **work 的边界**:一个 work = 一个 window(画布),还是一个 window 里可以有多个 work。这取决于「一件事」和「屏幕布局」要不要绑死。
+- **work 的边界**:一个 work = 一个 window,还是一个 window 里可以有多个 work。这取决于「一件事」和「屏幕上怎么摆」要不要绑死。
 - **work 的归档语义**:work 归档之后 worklet 是否冻结、标注是否还能追加、后验回流从哪一刻开始算。
 - **多平台**:work 里的 agent worklet 目前只考虑 tmux 里跑的 CLI agent(claude / codex);外部平台(网页版 Codex、别的机器)的工作单元是否还走 sync 兼容路径进 work。
 - **命名**:「本地论」这个提法在文档里怎么落——目前落成「事实陈述自带语境」([card.md §3](metas/card.md)),不单立字段。
