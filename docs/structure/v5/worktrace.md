@@ -231,8 +231,8 @@ CREATE INDEX idx_points_work_id     ON points(work_id);
 CREATE INDEX idx_points_user_id     ON points(user_id);
 CREATE INDEX idx_points_event_name  ON points(event_name);
 
--- 推到哪了:中心说了算,节点重连时来问
-CREATE TABLE ingest_cursors (
+-- 推到哪了:中心说了算。随 POST …/trace 的 cursors 一栏和数据同一个事务写,节点重连时用 GET …/trace?fields=cursors 读回
+CREATE TABLE trace_cursors (
   worklet_id TEXT,
   source     TEXT,     -- 哪一份来源:agent 的会话 id,或 hooks
   position   TEXT,     -- 读到哪了:文件偏移或最后一条的 id,由节点解释
@@ -243,8 +243,8 @@ CREATE TABLE ingest_cursors (
 -- rounds:删掉
 ```
 
-- **两个写的人**:`work` / `worklet` 段和动作点只由中心写(人做动作时);`agent.*` 段和点、`agent.state`、`worklet` 段的 `gone` 结束只由节点推(`POST /api/ingest`,一批一个事务)。
-- **幂等**:段按 `span_id` 插,有了就跳过;结束只在还开着时生效;点按 `uid` 插(`INSERT … ON CONFLICT(uid) DO NOTHING`)。所以节点「至少一次」投递就够。
+- **两个写的人**:`work` / `worklet` 段和动作点只由中心写(人做动作时);`agent.*` 段和点、`agent.state`、`worklet` 段的 `gone` 结束只由节点推(`POST /api/works/{id}/trace`:和读的 `GET` 同一个路径、同一个 OTLP/JSON 形状,一次请求一个事务);中心自己的动作走同一个写入函数,只是不经过 HTTP。
+- **幂等**:段按 `span_id`——没有就插;开着的收到带终点的就补上终点,收到开着的就只合并属性;已经结束的跳过。点按 `uid` 插(`INSERT … ON CONFLICT(uid) DO NOTHING`)。所以节点「至少一次」投递就够。
 - **所有段结束即定稿**,包括 `agent.turn`(节点按 agent 的收尾标记结束,不再被后来的记录往后挪)。
 - **新的点**:`agent.message` / `agent.tool.input` / `agent.tool.output`(带正文)、`agent.state`(空闲 / 忙 / 等确认)、`worklet.input`(谁送了什么,不存原文);列都是现成的。
 - **读**:列表和图(`GET …/trace`)不取 `body`;看对话(`GET …/worklets/{w}/messages`、`…/output`)按 (`worklet_id`, `seq`) 往后读,一轮内按 `span_id` 取。
@@ -258,7 +258,7 @@ CREATE TABLE ingest_cursors (
 | `rounds.timestamp` 存原样文本,切轮次时才猜格式,Kimi 的毫秒被当成秒 | 节点按各家格式换算好,`time_unix_nano` 是整数;另有 `observed_time_unix_nano` 记收到的时刻 |
 | `agent.turn` 结束后还会被改(终点往后挪、属性整份换) | 按收尾标记结束,结束即定稿;中途插话是这一轮里的一个点 |
 | round 不知道来自哪份会话(一个工作单元一生可以有几份) | 每条消息挂在它那一轮下面,轮次挂在 `agent.session` 段下面,会话段带 `gen_ai.conversation.id` |
-| 推的模式没有游标 | `ingest_cursors`,中心说了算 |
+| 推的模式没有游标 | `trace_cursors`,和数据同一个事务写,中心说了算 |
 | `idx_points_span_id` / `idx_points_event_name` 没有查询用到 | 一轮 / 一次工具调用下的点按 `span_id` 取;按类型筛 agent 点用 `event_name`。`idx_spans_trace_id` 仍留给按整棵树查 |
 
 ### 6.3 还开着的

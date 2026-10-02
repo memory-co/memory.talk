@@ -74,23 +74,40 @@ agent 的记录现在这样进 trace:有人打开「对话记录」(前端每 4 
 - 开的时候定的会话 id 记在登记上(`works.db` 的 `worklets` 加一列),重入、节点重连时拿它对。
 - **hooks 不走网络。** hook 命令只把事件追加到这个工作单元在节点状态目录里的事件文件(`<节点目录>/worklets/<id>/hooks.jsonl`),上报任务连同会话记录一起读。不用发 token,agent 的环境里没有任何凭证。
 
-## 6. 推:中心的接收口
+## 6. 推:写 trace 的接口就是读它的那个
 
 ```
-POST /api/ingest            节点 → 中心,一批
-{"node": "…", "items": [
-   {"op": "span.start", "worklet_id": "…", "span": {OTLP 形状的段,id 由节点算}},
-   {"op": "span.end",   "worklet_id": "…", "span_id": "…", "end": …, "status": …, "attributes": […]},
-   {"op": "point",      "worklet_id": "…", "uid": "…", "record": {OTLP 形状的 log record,含 body}}],
- "cursors": [{"worklet_id": "…", "source": "<会话 id 或 hooks>", "position": "…"}]}
-→ {"cursors": [...收下的位置...]}
+GET  /api/works/{work_id}/trace     读:{"traces": TracesData, "logs": LogsData}(work-trace.md §6)
+POST /api/works/{work_id}/trace     写:同一个形状,多一栏可选的 "cursors"
 ```
 
-- **幂等**:`span.start` 按段 id 插,有了就跳过;`span.end` 只在段还开着时生效(先到的算);点按 `uid` 插,有了就跳过。所以投递只要「至少一次」。
-- **一批一个事务**:这一批的段、点和游标一起提交;交回的游标就是中心确认收下的位置。
-- **推到哪了,中心说了算。** 节点连上(或重连)时先问 `GET /api/ingest/cursors?worklet=…`,从那里接着读、接着推。**会话记录本身就是缓冲**:中心停多久,节点就停多久,回来一条不丢,节点不用自己攒队列。只有 hooks 事件不在会话记录里,所以先落本地文件再推。
-- **节点能写什么是有边界的**:只写它负责的工作单元的 `agent.*` 段和点、状态点、worklet 段的 `gone` 结束;`work` / `worklet` 段的开和其余结束、动作点都只由中心写。
-- **格式**:自己定的这个小接口(要带游标、确认、幂等键),里面的段和点是 OTLP 的形状;OTLP 本身留给往外导出(work-trace.md §8)。
+节点推上来的就是 OTLP/JSON:段放在 `traces.resourceSpans` 里,点放在 `logs.resourceLogs` 里,和 `GET` 读出来的一个样:
+
+```json
+{"traces": {"resourceSpans": [{"resource": {…}, "scopeSpans": [{"scope": {…}, "spans": [
+    {"traceId": "…", "spanId": "…", "parentSpanId": "…", "name": "agent.turn", "kind": 1,
+     "startTimeUnixNano": "…", "attributes": [{"key": "memorytalk.worklet.id", "value": {"stringValue": "…-w4"}}, …],
+     "status": {"code": 0}}]}]}]},
+ "logs":   {"resourceLogs": [{"resource": {…}, "scopeLogs": [{"scope": {…}, "logRecords": [
+    {"timeUnixNano": "…", "eventName": "agent.message", "traceId": "…", "spanId": "…",
+     "body": {"stringValue": "…"}, "attributes": [{"key": "log.record.uid", "value": {"stringValue": "…"}}, …]}]}]}]},
+ "cursors": [{"worklet_id": "…-w4", "source": "<会话 id 或 hooks>", "position": "…"}]}
+→ 200 {"spans": {"inserted": 3, "ended": 1, "merged": 0, "ignored": 0}, "points": {"inserted": 12, "duplicate": 0}}
+```
+
+- **读写一个形状,一条写路径。** `GET` 出去的文档原样 `POST` 回来,意思不变;中心解析 OTLP/JSON 的代码只有一份。中心自己的动作(人建 work、开工作单元、挪列……)也走同一个写入函数,只是不经过 HTTP——`worktrace.db` 只有一条写路径,两边的规则不会分叉。
+- **段怎么收**(按 `spanId`;开着还是结束,只看有没有 `endTimeUnixNano`,和读的时候一样):
+  - 库里没有 → 插进去;没有终点就是开着(读的时候它带 `memorytalk.open = true`,写的时候不用带)。
+  - 库里有、还开着,收到的带终点 → 补上终点、status 和结束的属性(同名以新的为准);两处同时结束,先到的算数。
+  - 库里有、还开着,收到的也开着 → 只合并属性(比如这一轮的消息数在涨)。
+  - 库里有、已经结束 → 跳过。**结束即定稿。**
+- **点怎么收**:按 `log.record.uid` 插,有了就跳过;节点推的点必须带 uid,没有就 422。`observedTimeUnixNano` 由中心填收到的时刻,请求里带的不算。
+- **一次请求一个事务**:段、点和 `cursors` 一起提交或一起不提交。所以投递只要「至少一次」:没收到回应就整批重推,重复的被跳过。
+- **能写什么有边界**:节点只能写它负责的工作单元的 `agent.*` 段和点(`agent.message` / `agent.tool.*` / `agent.state`),以及给 `worklet` 段补一个 `gone` 结束;`work` / `worklet` 段的开、其余的结束、动作点,都只由中心自己写。超出边界整批 403;记录里的 `memorytalk.worklet.id` 不属于路径上这个 work 的,422。路径上只有一个 work,所以一个节点手里几个 work 的记录分几次请求推。
+- **父段不强求先到**:乱序也收;读的时候找不到父的段,先挂在它的工作单元下面。
+- **推到哪了,中心说了算。** `cursors` 和数据在同一个事务里存进 `trace_cursors` 表;节点连上(或重连)时用 `GET /api/works/{id}/trace?worklet=…&fields=cursors` 读回来,从那里接着读、接着推。**会话记录本身就是缓冲**:中心停多久,节点就停多久,回来一条不丢,节点不用自己攒队列。只有 hooks 事件不在会话记录里,所以先落本地文件,推成功了再往前挪。
+- **鉴权**:节点经本机 unix socket 连中心,用的是同一套 API,从 socket 上来的请求身份就是节点;登录的人(JWT)能 `GET`、不能 `POST`。跨机器的节点以后用节点 token(§8)。
+- **为什么不直接用 OTLP/HTTP 的 `/v1/traces` + `/v1/logs`**:那是两个端点、两次请求,段和点进不了一个事务,也没处放游标;标准 OTLP 里也没有「开着的段」。所以用同样的编码、一个请求装两种信号,和 `GET` 对称;往外导出时仍是标准 OTLP(work-trace.md §8)。
 
 ## 7. 控制:中心 → 节点
 
@@ -123,7 +140,7 @@ POST /api/ingest            节点 → 中心,一批
 ## 11. 分步(每一步都能单独上线)
 
 1. **修格式、用真实记录做测试样例**:Claude 的目录名编码、Codex 的新格式、Kimi 的 `cwd` 和毫秒;从本机真实会话里截一段脱敏做 fixture。跟架构无关,先做。
-2. **中心开接收口 + 节点 v0**:`/api/ingest` 和游标表;节点只做上报,本机进程,跟 `server start` 一起起;去掉中心「去拉」的那些路径(`_sync`、`turns.py`、`rounds` 表)。tmuxd 先留在中心。
+2. **中心开写入口 + 节点 v0**:`POST /api/works/{id}/trace`(和读同一个形状)和 `trace_cursors` 表;节点只做上报,本机进程,跟 `server start` 一起起;去掉中心「去拉」的那些路径(`_sync`、`turns.py`、`rounds` 表)。tmuxd 先留在中心。
 3. **开现场时定身份**:Claude 用 `--session-id`;Codex / Kimi 先认领后钉住。
 4. **Claude hooks** 写事件文件:轮次的起止、在等确认、换会话。
 5. **中心到浏览器的 SSE**。

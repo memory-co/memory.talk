@@ -150,7 +150,7 @@ SELECT w.id FROM worklets w JOIN work_columns c
 | `points` | `seq`(自增) | `trace_id`、`span_id`(索引)、`work_id`(索引)、`worklet_id`、`column_number`、`user_id`(索引)、`event_name`(索引)、`time_unix_nano`、`attributes`(JSON) | 点:`column.*`、`worklet.moved`、`worklet.closed`、`work.renamed`(以后还有 `plan.changed`),只追加 |
 | `rounds` | `seq`(自增) | `work_id`、`worklet_id`(索引)、`round_id`、`timestamp`、`role`、`text` | agent 工作单元的 round(原来的 `rounds.jsonl`),按 (`worklet_id`, `round_id`) 去重(进程内一把锁),按 `seq` 读。`agent.turn` 段通过 round id 引用它(现在;改完去掉,见下) |
 
-> **按 [work-node.md](work-node.md) 改完的样子(未实施)**:`rounds` 表和 `spans.first_round_id` 去掉——agent 的每条消息是一个点(`agent.message` / `agent.tool.input` / `agent.tool.output`),正文进 `points.body`,带 `uid`(按它去重)和 `observed_time_unix_nano`;段多了 `agent.session` / `agent.tool`,`agent.*` 都由节点推、结束即定稿;另加一张 `ingest_cursors`(每个工作单元每份来源推到哪了)。逐列见 [structure worktrace.md](../../structure/v5/worktrace.md)。
+> **按 [work-node.md](work-node.md) 改完的样子(未实施)**:`rounds` 表和 `spans.first_round_id` 去掉——agent 的每条消息是一个点(`agent.message` / `agent.tool.input` / `agent.tool.output`),正文进 `points.body`,带 `uid`(按它去重)和 `observed_time_unix_nano`;段多了 `agent.session` / `agent.tool`,`agent.*` 都由节点经 `POST /api/works/{id}/trace` 推、结束即定稿;另加一张 `trace_cursors`(每个工作单元每份来源推到哪了)。逐列见 [structure worktrace.md](../../structure/v5/worktrace.md)。
 
 几条规则:
 

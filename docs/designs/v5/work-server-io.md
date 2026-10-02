@@ -15,7 +15,7 @@
 
 ```
               input(各 server 自己实现)                          output(统一走 trace)
- 调用方 ──▶ POST …/input ──▶ 中心 ──▶ server.input() ──▶ 现场      现场 ──▶ 节点读会话记录、收 hooks ──▶ 中心 /api/ingest ──▶ worktrace.db ──▶ 调用方
+ 调用方 ──▶ POST …/input ──▶ 中心 ──▶ server.input() ──▶ 现场      现场 ──▶ 节点读会话记录、收 hooks ──▶ 中心 POST …/trace ──▶ worktrace.db ──▶ 调用方
             (人、CLI、别的 agent)       claude: tmuxd send                                                 会话 / 轮次 / 工具段,消息点           GET …/output · …/trace
 ```
 
