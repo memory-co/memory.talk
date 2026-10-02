@@ -100,7 +100,7 @@ work 的一个工作单元 = 一个现场。**在 work 里打开就是它的**,�
   "collapsed": false,
   "alive": true,
   "window": {"url": "/surface/tmuxd/?arg=work_202609052302072f2f-w1", "embed": "/surface/tmuxd/?arg=work_202609052302072f2f-w1"},
-  "handle": {"kind": "tmux+transcript", "capabilities": ["input.text", "input.keys", "input.paste", "output.messages", "state"]}
+  "handle": {"kind": "tmux+transcript", "capabilities": ["input.text", "input.keys", "input.paste", "trace.agent"]}
 }
 ```
 
@@ -130,28 +130,31 @@ work 的一个工作单元 = 一个现场。**在 work 里打开就是它的**,�
 
 agent 对话里的一条:人的输入、助手的回复、工具调用的参数和结果。**不是单独的对象,是 [Trace](#trace) 里的一个点**——由节点从 agent 的会话记录读出来推上来([designs work-node.md](../../designs/v5/work-node.md)),正文在点的 `body` 里;它属于哪一轮、哪次工具调用,看它挂在哪一段。逐列见 [worktrace.md](worktrace.md)。
 
-看一个工作单元的对话(`GET /works/{id}/worklets/{w}/messages`,按游标往后读),一条长这样:
+读对话就是读 trace:`GET /works/{id}/trace?worklet=<w>&agent=1&bodies=1&after=<seq>&wait=30`([designs work-trace.md §6](../../designs/v5/work-trace.md));没有单独的消息接口。一条消息就是返回的 `logs` 里的一个 log record:
 
 ```json
-{"uid": "work_2026…2f2f-w4:8b1e…", "kind": "agent.message", "role": "user", "time_unix_nano": "1790598012345000000",
- "session": "<会话段 id>", "turn": "<轮次段 id>", "tool": null, "seq": 1042, "body": "把配置改成环境变量"}
+{"timeUnixNano": "1790598012345000000", "observedTimeUnixNano": "1790598013002000000",
+ "eventName": "agent.message", "traceId": "4bf9…", "spanId": "<这一轮的段 id>",
+ "body": {"stringValue": "把配置改成环境变量"},
+ "attributes": [{"key": "log.record.uid", "value": {"stringValue": "work_2026…2f2f-w4:8b1e…"}},
+                {"key": "memorytalk.message.role", "value": {"stringValue": "user"}},
+                {"key": "memorytalk.message.kind", "value": {"stringValue": "text"}}]}
 ```
 
 | 字段 | 说明 |
 |---|---|
-| `uid` | 稳定的身份:`<worklet id>:<来源里的消息 id>`(Claude Code 的 `uuid`、Codex 的 `<rollout 文件名>:<行号>`、Kimi 的事件 `uuid`;一条记录里有几块内容时再加 `:<第几块>`)。推重复了按它去重;认知层引用一条消息也用它 |
-| `kind` | `agent.message`(说的话、思考)/ `agent.tool.input`(工具调用的参数)/ `agent.tool.output`(工具的结果) |
-| `role` | `user` / `assistant` / `system`;工具的参数和结果不带 |
-| `time_unix_nano` | 记录里的时刻(节点按各家格式换算好,对外是十进制字符串) |
-| `session` / `turn` / `tool` | 它所在的会话段、轮次段、工具段的 id;没有的为 `null` |
-| `seq` | 中心写入的先后,读的游标 |
+| 属性 `log.record.uid` | 稳定的身份:`<worklet id>:<来源里的消息 id>`(Claude Code 的 `uuid`、Codex 的 `<rollout 文件名>:<行号>`、Kimi 的事件 `uuid`;一条记录里有几块内容时再加 `:<第几块>`)。推重复了按它去重;认知层引用一条消息也用它 |
+| `eventName` | `agent.message`(说的话、思考)/ `agent.tool.input`(工具调用的参数)/ `agent.tool.output`(工具的结果) |
+| 属性 `memorytalk.message.role` / `.kind` | `user` / `assistant` / `system`;`text` / `thinking`。工具的参数和结果不带,带 `gen_ai.tool.name` / `gen_ai.tool.call.id` |
+| `timeUnixNano` / `observedTimeUnixNano` | 记录里的时刻(节点按各家格式换算好)/ 中心收到的时刻 |
+| `spanId` | 挂在哪一段:消息挂它那一轮,工具的参数和结果挂那次工具调用;顺着段的父子就是轮次 → 会话 → 工作单元 |
 | `body` | 正文:消息的文字、工具的参数(JSON 文本)或结果 |
 
 消息是 issue 的原料(逐条消息标注、`#问题`),不是检索单元。
 
 ## Trace
 
-work 的经过:有起止的记成**段**(span),一个时刻的事记成**点**(log record),字段和 OTel 一对一,存在 `worktrace.db` 的 `spans` / `points` 表(逐列的表设计见 [worktrace.md](worktrace.md))。读写同一个路径、同一个形状:`GET /works/{id}/trace` 拼成 OTLP/JSON(`{"traces": TracesData, "logs": LogsData}`),节点用 `POST /works/{id}/trace` 推同一个形状。机制见 [designs work-trace.md](../../designs/v5/work-trace.md)、[work-node.md](../../designs/v5/work-node.md)。
+work 的经过:有起止的记成**段**(span),一个时刻的事记成**点**(log record),字段和 OTel 一对一,存在 `worktrace.db` 的 `spans` / `points` 表(逐列的表设计见 [worktrace.md](worktrace.md))。读写同一个路径、同一个形状:`GET /works/{id}/trace` 拼成 OTLP/JSON(`{"traces": TracesData, "logs": LogsData, "seq": …}`),节点用 `POST /works/{id}/trace` 推同一个形状。读的时候用 `worklet` / `agent` / `bodies` / `after` / `wait` 挑范围、接着读——现场的 output 就是它,没有单独的 output / 消息 / 状态接口。机制见 [designs work-trace.md](../../designs/v5/work-trace.md)、[work-node.md](../../designs/v5/work-node.md)。
 
 - **trace id** = `sha256("memorytalk/trace/" + 根 work id)` 前 16 字节:一棵 work 树一条 trace。
 - **span id** 由身份算,取 sha256 前 8 字节:`work` = `memorytalk/span/work/<work id>/<第几段>`(第几段 = 这个 work 已有几段,第一段是 0;重新打开一次多一段);`worklet` 同理用 worklet id;`agent.session` = `…/session/<worklet id>/<会话 id>/<这一段第一条记录的 uid>`;`agent.turn` = `…/turn/<worklet id>/<这一轮人那条输入的 uid>`;`agent.tool` = `…/tool/<worklet id>/<调用 id>`。前两种中心算,后三种节点算。
@@ -195,8 +198,8 @@ agent 点(节点写;都带 `log.record.uid`,正文在 `body`,见 [消息](#消�
 | | `work_columns` | (`work_id`, `number`) | `alias`、`collapsed`、`position`;索引 (`work_id`, `position`) |
 | | `worklets` | `id` | `work_id`(索引)、`number`、`uri`、`scheme`、`server`、`cwd`、`created_at`、`last_attached`、`column_number`(空 = 不在任何一列)、`position`、`collapsed`;索引 (`work_id`, `column_number`, `position`) |
 | | `inbox` | `seq` | `work_id`(索引,空 = 没人管)、`ts`、`layer`、`path`、`subject`、`sha`、`by`、`routed_by` |
-| `worktrace.db` | `spans` | `span_id` | `trace_id` / `work_id` / `worklet_id` / `user_id` / `end_user_id`(都有索引)、`parent_span_id`、`name`、`kind`、`start_time_unix_nano`、`end_time_unix_nano`(空 = 开着)、`status_code`、`attributes` / `links`(OTLP JSON) |
-| | `points` | `seq` | `uid`(唯一)、`trace_id`、`span_id`(索引)、`work_id`(索引)、`worklet_id`(和 `seq` 一起索引)、`column_number`、`user_id`(索引)、`event_name`(索引)、`time_unix_nano`、`observed_time_unix_nano`、`body`、`attributes` |
+| `worktrace.db` | `spans` | `span_id` | `trace_id` / `work_id` / `worklet_id` / `user_id` / `end_user_id`(都有索引)、`parent_span_id`、`name`、`kind`、`start_time_unix_nano`、`end_time_unix_nano`(空 = 开着)、`status_code`、`attributes` / `links`(OTLP JSON)、`seq`(最后一次改动的变更序号,和 `work_id` 一起索引) |
+| | `points` | `seq`(变更序号,和 `spans` 共用) | `uid`(唯一)、`trace_id`、`span_id`(索引)、`work_id`(和 `seq` 一起索引)、`worklet_id`(和 `seq` 一起索引)、`column_number`、`user_id`(索引)、`event_name`(索引)、`time_unix_nano`、`observed_time_unix_nano`、`body`、`attributes` |
 | | `trace_cursors` | (`worklet_id`, `source`) | `position`、`updated_at` |
 
 列清单(`GET /works/{id}/columns`)就是 `work_columns` 按 `position` 读;工作单元在哪一列第几个就是 `worklets` 自己的 `column_number` / `position` / `collapsed`,随工作单元清单(`GET /works/{id}/worklets`)一起出去,不另拼一份布局。一个动作在 `works.db` 里一个事务,然后写 `worktrace.db`;轨迹写失败不回滚 work。读写纪律:单写者(服务进程)、无缓存直读。**不进 git**——work 记的是过程,git 记的是决定(见 [`../../designs/v5/metas/store.md`](../../designs/v5/metas/store.md) §4)。

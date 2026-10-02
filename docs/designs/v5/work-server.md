@@ -71,7 +71,7 @@ server **不做**的事同样重要:它**不记 work**——哪个块属于哪�
 | server | 响应的协议 | 现场 | 窗 | 把手 | 实现面 |
 |---|---|---|---|---|---|
 | **bash** | `bash` | tmux 会话里的 bash | ttyd(tmuxd 自带)挂到 tmux 会话 | `send` | **tmuxd** |
-| **claude / codex / kimi** | 各自同名 | 同 bash——就是一个跑着 agent 的 tmux 会话 | 同上 | `send`;开现场时另外定下会话 id、注入 hooks,由节点读会话记录、推成会话 / 轮次 / 工具段和消息点(`output.messages`) | **tmuxd** + 节点里的 adapter |
+| **claude / codex / kimi** | 各自同名 | 同 bash——就是一个跑着 agent 的 tmux 会话 | 同上 | `send`;开现场时另外定下会话 id、注入 hooks,由节点读会话记录、写进 trace(`trace.agent`:会话 / 轮次 / 工具段和消息点,这就是它的 output) | **tmuxd** + 节点里的 adapter |
 | **http** | `http`、`https` | 无(纯 iframe);将来换成真浏览器实例 | URL 本身 | 现在为空;换成 webmuxd 后有 CDP | 将来 **webmuxd**(先不做) |
 | **default** | (不声明)没人要的都来 | tmux 会话里跑「协议名」这个命令 | 同 bash | 同 bash | **tmuxd** |
 

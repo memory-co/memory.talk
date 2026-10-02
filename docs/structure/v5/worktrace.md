@@ -18,8 +18,8 @@ work_id / worklet_id ──▶ works.db 的 works.id / worklets.id(跨库,不设
 
 | 表 | 一行是 | 写法 |
 |---|---|---|
-| `spans` | 一个段:`work` / `worklet` / `agent.session` / `agent.turn` / `agent.tool` | 按 `span_id`:没有就插(终点为空 = 开着);开着的收到终点就补上,收到开着的就合并属性;结束了的不再动 |
-| `points` | 一个点:动作点(`work.renamed` / `column.*` / `worklet.moved` / `worklet.closed` / `worklet.input`)或 agent 点(`agent.message` / `agent.tool.input` / `agent.tool.output` / `agent.state`) | 只追加;带 `uid` 的按它去重 |
+| `spans` | 一个段:`work` / `worklet` / `agent.session` / `agent.turn` / `agent.tool` | 按 `span_id`:没有就插(终点为空 = 开着);开着的收到终点就补上,收到开着的就合并属性;结束了的不再动。每次开、改都取新的 `seq` |
+| `points` | 一个点:动作点(`work.renamed` / `column.*` / `worklet.moved` / `worklet.closed` / `worklet.input`)或 agent 点(`agent.message` / `agent.tool.input` / `agent.tool.output` / `agent.state`) | 只追加;带 `uid` 的按它去重。写入时取新的 `seq` |
 | `trace_cursors` | 一个工作单元的一份来源推到哪了 | 和推上来的数据同一个事务写 |
 
 **一条写路径。** 只有一个写入函数,收 OTLP/JSON 的段和点——和 `GET /api/works/{id}/trace` 读出来的是同一个形状。中心自己的动作(人建 work、开工作单元、挪列……)直接调它;节点经 `POST /api/works/{id}/trace` 调它([work-node.md §6](../../designs/v5/work-node.md))。哪些记录归中心写、哪些归节点写,见 [designs work-trace.md §5](../../designs/v5/work-trace.md)。
@@ -31,6 +31,7 @@ work_id / worklet_id ──▶ works.db 的 works.id / worklets.id(跨库,不设
 - **`attributes` / `links` 是 OTLP 的 JSON**,存成文本:`attributes` 是 KeyValue 列表 `[{"key": …, "value": {"stringValue" | "intValue"(十进制串)| "boolValue" | "doubleValue": …}}]`,值为空的键不写;`links` 是 `[{"traceId", "spanId", "attributes": []}]`。`body` 存正文文本(对外是 `{"stringValue": …}`)。
 - **提升列**:要拿来查的值从属性里提出来另存一列(`user_id`、`end_user_id`、`worklet_id`、`column_number`、`uid`),JSON 里照样留着;对外只用 JSON。`work_id` 是存储用的列,不一定在属性里。
 - **没有外键**:`work_id` / `worklet_id` 指向 `works.db`,跨库约束不了;工作单元关掉后 `worklets` 里那一行删了,轨迹里的 id 照样留着——经过比现在活得久。
+- **一个变更序号,两张表共用**:`spans.seq` 和 `points.seq` 取自同一个序号——写入函数在同一个事务里取「两张表现有的最大值 + 1」(只有中心这一个写者,不会撞)。段记它最后一次改动(开、合并、结束)的序号,点记写入时的序号。`GET …/trace?after=<seq>` 就靠它接住所有变化:读 output、看对话、界面等变化,都是这一个游标。
 - **不删**:三张表都没有删除路径。
 
 ---
@@ -52,10 +53,11 @@ CREATE TABLE spans (
   end_time_unix_nano   INTEGER,   -- 空 = 还开着
   status_code          INTEGER,
   attributes           TEXT,      -- OTLP KeyValue 列表(JSON)
-  links                TEXT       -- OTLP Link 列表(JSON)
+  links                TEXT,      -- OTLP Link 列表(JSON)
+  seq                  INTEGER    -- 最后一次改动的变更序号(和 points 共用一个序号)
 );
 CREATE INDEX idx_spans_trace_id    ON spans(trace_id);
-CREATE INDEX idx_spans_work_id     ON spans(work_id);
+CREATE INDEX idx_spans_work_seq    ON spans(work_id, seq);
 CREATE INDEX idx_spans_worklet_id  ON spans(worklet_id);
 CREATE INDEX idx_spans_user_id     ON spans(user_id);
 CREATE INDEX idx_spans_end_user_id ON spans(end_user_id);
@@ -77,6 +79,7 @@ CREATE INDEX idx_spans_end_user_id ON spans(end_user_id);
 | `status_code` | 否 | `status.code` | 开 / 结束 | 0 = Unset(开着;`gone` 结束的段和跟着它结束的子段也保持 0);1 = OK(正常结束);2 = Error(只有结果标了出错的工具调用) |
 | `attributes` | 否 | `attributes` | 开;开着时合并;结束时合并 | 开着的段收到新的开着版本,同名的键以新的为准(比如这一轮的消息数在涨);结束时并进结束的属性(`memorytalk.end.reason`、`memorytalk.end.user.id`,`worklet` 段另有 `memorytalk.end.column.id` / `.alias`)。各段有哪些键见 [designs work-trace.md §2、§4、§5](../../designs/v5/work-trace.md) |
 | `links` | 否 | `links` | 开 | 重新打开的 `work` 段指向上一段;`/resume` 回来的 `agent.session` 段指向这个会话的上一段;其余是 `[]` |
+| `seq` | 否 | — | 开 / 合并 / 结束 | 最后一次改动的变更序号(§1);`GET …/trace?after=` 靠它找出改过的段 |
 
 按 `name` 看哪些列有值:
 
@@ -102,7 +105,7 @@ CREATE INDEX idx_spans_end_user_id ON spans(end_user_id);
 
 ```sql
 CREATE TABLE points (
-  seq                     INTEGER PRIMARY KEY AUTOINCREMENT,
+  seq                     INTEGER PRIMARY KEY,   -- 变更序号,和 spans 共用(§1),由写入函数发
   uid                     TEXT UNIQUE,
   trace_id                TEXT,
   span_id                 TEXT,
@@ -118,14 +121,14 @@ CREATE TABLE points (
 );
 CREATE INDEX idx_points_span_id     ON points(span_id);
 CREATE INDEX idx_points_worklet_seq ON points(worklet_id, seq);
-CREATE INDEX idx_points_work_id     ON points(work_id);
+CREATE INDEX idx_points_work_seq    ON points(work_id, seq);
 CREATE INDEX idx_points_user_id     ON points(user_id);
 CREATE INDEX idx_points_event_name  ON points(event_name);
 ```
 
 | 列 | 空 | OTLP | 说明 |
 |---|---|---|---|
-| `seq` | 否 | — | 写入的先后,自增不复用;读按它排,看对话时就是游标 |
+| `seq` | 否 | — | 写入时的变更序号,和 `spans.seq` 共用一个序号(§1);读按它排,`after=` 的游标 |
 | `uid` | 是 | 属性 `log.record.uid` | 节点推的点都有:`<worklet id>:<来源里的消息 id>`,一条记录里有几块内容时再加 `:<第几块>`(来源里的消息 id:Claude Code 的 `uuid`、Codex 的 `<rollout 文件名>:<行号>`、Kimi 的事件 `uuid`)。唯一,有了就跳过;认知层引用一条消息也用它。中心写的动作点为空(sqlite 的 `UNIQUE` 允许多个空) |
 | `trace_id` | 否 | `traceId` | 所在 work 树的 trace |
 | `span_id` | 是 | `spanId` | 挂在哪一段:`work.renamed` / `column.*` 挂 work 最新的 `work` 段;`worklet.moved` / `worklet.closed` / `worklet.input` 挂这个工作单元最新的 `worklet` 段;`agent.message` 挂它那一轮(第一条人的输入之前的挂会话段);`agent.tool.*` 挂那次调用的工具段;`agent.state` 挂会话段。那一段不存在时为空 |
@@ -177,11 +180,11 @@ CREATE TABLE trace_cursors (
 |---|---|---|---|
 | 按 id 找段 | 写入时合并 / 结束 | `span_id = ?` | 主键 |
 | 按 uid 去重 | 写入时插点 | `uid` 冲突就跳过 | `uid` 的唯一索引 |
-| 一个 work 的 `work` 段 | 算第几段、找最新的 `work` 段 | `work_id = ? AND name = 'work'`,按 (`start_time_unix_nano`, `span_id`) | `idx_spans_work_id` |
-| 一个 work 开着的段 | 归档、重新打开 | `work_id = ? AND name = ? AND end_time_unix_nano IS NULL` | `idx_spans_work_id` |
+| 一个 work 的 `work` 段 | 算第几段、找最新的 `work` 段 | `work_id = ? AND name = 'work'`,按 (`start_time_unix_nano`, `span_id`) | `idx_spans_work_seq`(用前缀 `work_id`) |
+| 一个 work 开着的段 | 归档、重新打开 | `work_id = ? AND name = ? AND end_time_unix_nano IS NULL` | `idx_spans_work_seq`(用前缀 `work_id`) |
 | 一个工作单元的段 | 找最新的 `worklet` 段、重入;它的会话 / 轮次 / 工具 | `worklet_id = ? AND name = ?` | `idx_spans_worklet_id` |
-| 一组 work 的段和点 | `GET …/trace`(`subtree` 时是全部子孙 work);默认不给 agent 点,给的时候也不取 `body` | `work_id IN (…)`;段按开始时间,点按时间再按 `seq` | `idx_spans_work_id`、`idx_points_work_id` |
-| 一个工作单元的对话 | `GET …/worklets/{w}/messages`、`…/output` | `worklet_id = ? AND seq > ?`,按 `seq` | `idx_points_worklet_seq` |
+| 一组 work 的段和点 | `GET …/trace`(`subtree` 时是全部子孙 work);默认不给 agent 点、不取 `body` | `work_id IN (…)`;段按开始时间,点按时间再按 `seq` | `idx_spans_work_seq`、`idx_points_work_seq` |
+| 读变化(output、看对话、界面等变化) | `GET …/trace?…&after=<seq>&wait=`,可加 `worklet=` / `agent=1` / `bodies=1` | `work_id IN (…)`(或 `worklet_id = ?`)`AND seq > ?`,按 `seq` | `idx_spans_work_seq`、`idx_points_work_seq`、`idx_points_worklet_seq` |
 | 一段下面的点 | 一轮的消息、一次工具调用的参数和结果 | `span_id = ?` | `idx_points_span_id` |
 | 按类型筛 | 时间线里藏 / 显 agent 点 | `event_name` | `idx_points_event_name` |
 | 某人出现过的 work | 用户页「动过哪些 work」 | `spans.user_id = ?`、`spans.end_user_id = ?`、`points.user_id = ?` | 三个 `user_id` 索引 |

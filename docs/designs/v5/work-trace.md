@@ -182,11 +182,13 @@ agent 的点多一个 `body`;`timeUnixNano` 是 agent 记录里的时刻,`observ
 
 | 表 | 装什么 |
 |---|---|
-| `spans` | 一行一个段,列和 OTLP span 一对一;**`end_time_unix_nano` 为空 = 还开着**,结束时在同一行补上终点。开着的段不用再另存一份状态 |
-| `points` | 一行一个点,列和 OTLP log record 一对一(含 `body`、`observed_time_unix_nano`),只追加;节点推来的点带 `uid`(= `log.record.uid`),按它去重 |
+| `spans` | 一行一个段,列和 OTLP span 一对一;**`end_time_unix_nano` 为空 = 还开着**,结束时在同一行补上终点。开着的段不用再另存一份状态。另存它最后一次改动的变更序号 `seq` |
+| `points` | 一行一个点,列和 OTLP log record 一对一(含 `body`、`observed_time_unix_nano`),只追加;节点推来的点带 `uid`(= `log.record.uid`),按它去重。`seq` 是它写入时的变更序号 |
 | `trace_cursors` | 每个工作单元每份来源推到哪了:随 `POST …/trace` 一起写,节点重连时用 `GET …/trace?fields=cursors` 读回([work-node.md §6](work-node.md)),中心说了算 |
 
 每行带 `work_id`(属于哪个 work)和 `trace_id`(属于哪棵树):一个 work 的轨迹按 `work_id` 查,整棵树按 `trace_id` 查。
+
+**一个变更序号管两张表。** 段的每次开、改(结束、合并属性),点的每次写入,都在同一个事务里取下一个 `seq`;段记它最后一次改动的序号。读的时候 `after=<seq>` 就接得住所有变化——新的消息、新开的轮次、刚结束的轮次、状态的变化——这是读 output、刷新界面用的**唯一的游标**(§6)。
 
 **正文会让 `points` 大很多。** 列表和图的查询不取 `body`(§6);真拖慢了,再把 agent 点拆到单独的表或库(§10)。
 
@@ -214,11 +216,13 @@ agent 的点多一个 `body`;`timeUnixNano` 是 agent 记录里的时刻,`observ
 - **中心**:人做的动作——`work` / `worklet` 段、动作点。
 - **节点**:agent 的记录——`agent.*` 段和点、`agent.state`、worklet 段的 `gone` 结束。经 **`POST /api/works/{id}/trace`** 推上来:和 `GET` 同一个路径、同一个 OTLP/JSON 形状,一次请求一个事务([work-node.md §6](work-node.md));**中心不解析任何 agent 的格式,也不切轮次**。
 
-**一条写路径。** 两边进的是同一个写入函数:收 OTLP/JSON 的段和点(段按 `spanId`:没有就插,开着的收到终点就补上、收到开着的就合并属性,结束了就跳过;点按 `log.record.uid`,有了就跳过),落成下面三个动作。中心自己的动作只是不经过 HTTP。
+**一条写路径。** 两边进的是同一个写入函数:收 OTLP/JSON 的段和点(段按 `spanId`:没有就插,开着的收到终点就补上、收到开着的就合并属性,结束了就跳过;点按 `log.record.uid`,有了就跳过),落成下面四个动作,每个真写了的都取下一个变更序号(§3)。中心自己的动作只是不经过 HTTP。
 
 ```
 start(work_id, name, span_id, parent_span_id, attributes, *, user, worklet_id, links, at)
     → spans 表插一行:终点为空,status Unset;trace id 由根 work 算;同一个 span id 已经有了就跳过
+merge(span_id, attributes)
+    → 开着的段合并属性,同名的以新的为准;结束了的不动
 end(span_id, attributes, *, status=OK, user, at)
     → 同一行补上终点、status、end_user_id,结束时的属性并进 attributes;已经结束的不再动(两处同时结束,只算先到的)
 point(work_id, span_id, event_name, attributes, *, user, worklet_id, column_number, body, uid, at)
@@ -244,11 +248,21 @@ point(work_id, span_id, event_name, attributes, *, user, worklet_id, column_numb
 
 ## 6. 读:一份数据,三种视图
 
-接口是 `GET /works/{id}/trace`,返回 `{"traces": TracesData, "logs": LogsData}`(OTLP/JSON,各一个 resource、一个 scope):结束的段、开着的段(没有 `endTimeUnixNano`,另带 `memorytalk.open = true`)、点;段按开始时间(再按 span id)排,点按时间(再按写入的先后)排。段带 `traceId` / `spanId` / `parentSpanId`(根段没有)/ `name` / `kind` / `startTimeUnixNano` / `endTimeUnixNano` / `attributes` / `links` / `status`;点带 `timeUnixNano` / `observedTimeUnixNano`(agent 点两个不一样,§5)/ `eventName` / `traceId` / `spanId` / `attributes`。`subtree` 默认 `false`,`true` 连同所有子孙 work。
+接口是 `GET /works/{id}/trace`,返回 `{"traces": TracesData, "logs": LogsData, "seq": "<这次读到的最大变更序号>"}`(OTLP/JSON,各一个 resource、一个 scope):结束的段、开着的段(没有 `endTimeUnixNano`,另带 `memorytalk.open = true`)、点;段按开始时间(再按 span id)排,点按时间(再按写入的先后)排。段带 `traceId` / `spanId` / `parentSpanId`(根段没有)/ `name` / `kind` / `startTimeUnixNano` / `endTimeUnixNano` / `attributes` / `links` / `status`;点带 `timeUnixNano` / `observedTimeUnixNano`(agent 点两个不一样,§5)/ `eventName` / `traceId` / `spanId` / `attributes`。参数:
 
-**写也是这个路径**:`POST /works/{id}/trace` 收同一个形状(§5、[work-node.md §6](work-node.md))——`GET` 出来的文档原样 `POST` 回去,意思不变。`worklet=` 只看一个工作单元;`fields=cursors` 只要推到哪了(节点重连时用)。
+| 参数 | 意思 |
+|---|---|
+| `subtree` | 默认 `false`;`true` 连同所有子孙 work |
+| `worklet=<id>` | 只看一个工作单元 |
+| `agent=1` | 带上 agent 那几层的段和点(默认只给 `work` / `worklet` 段和动作点——agent 的一条消息一个点,太多) |
+| `bodies=1` | 带正文(默认不带,正文大) |
+| `after=<seq>` | 只要这个变更序号之后新写的或改过的段和点(§3) |
+| `wait=<秒>` | 配合 `after`:什么都没变就等着,有变化或超时才返回(长轮询) |
+| `fields=cursors` | 只要推到哪了(节点重连时用,[work-node.md §6](work-node.md)) |
 
-agent 点会很多(一条消息一个),所以默认只给段和动作点;`agent=1` 才带 agent 点,而且**不带正文**。要看一个工作单元的对话,走 `GET /works/{id}/worklets/{w}/messages`:按会话 / 轮次取 agent 点,带正文,游标分页。前端画图只用 `/trace`,看对话只用 `/messages`。
+**这一个接口就是全部的读。** 人看的时间线和图(默认)、看一个工作单元的对话(`worklet` + `agent` + `bodies`)、界面等变化和程序接着读(再加 `after` + `wait`)。[work-server-io.md](work-server-io.md) 说的 output 就是它——没有单独的 output、messages、state 接口;状态就是 trace 里最新的 `agent.state` 点。
+
+**写也是这个路径**:`POST /works/{id}/trace` 收同一个形状(§5、[work-node.md §6](work-node.md))——`GET` 出来的文档原样 `POST` 回去,意思不变。
 
 **1)瀑布图(类似 Chrome DevTools 的 Network)**
 
@@ -274,7 +288,7 @@ agent 点会很多(一条消息一个),所以默认只给段和动作点;`agent=
 
 **3)动态(时间线列表)**
 
-右侧原来的「动态」变成 trace 的一个列表视图(已实施,`shell/WorkEvents.tsx`,5 秒拉一次):段的开始、段的结束(开着的只有开始)、点各一行,按时间排(纳秒比大小用 BigInt,同一时刻开始 < 点 < 结束),新的在上;写成人话,写法沿用 work-events.md §7。工作单元叫什么从它的 worklet 段上取(点按 `spanId` 找段);结束按 `memorytalk.end.reason` 写成关掉 / 归档 / 现场没了三种(`worklet.closed` 点也写成关掉);谁做的取 `user.id`,结束的取 `memorytalk.end.user.id`(没有再用 `user.id`),现场没了的不写人。`agent.*` 默认藏起来(会话、轮次、工具和消息太多,会把别的挤走),点一下展开。旧的 `GET /works/{id}/events` 撤了。
+右侧原来的「动态」变成 trace 的一个列表视图(已实施,`shell/WorkEvents.tsx`;现在 5 秒整份拉一次,改成 `after` + `wait` 之后有变化才刷新):段的开始、段的结束(开着的只有开始)、点各一行,按时间排(纳秒比大小用 BigInt,同一时刻开始 < 点 < 结束),新的在上;写成人话,写法沿用 work-events.md §7。工作单元叫什么从它的 worklet 段上取(点按 `spanId` 找段);结束按 `memorytalk.end.reason` 写成关掉 / 归档 / 现场没了三种(`worklet.closed` 点也写成关掉);谁做的取 `user.id`,结束的取 `memorytalk.end.user.id`(没有再用 `user.id`),现场没了的不写人。`agent.*` 默认藏起来(会话、轮次、工具和消息太多,会把别的挤走),点一下展开。旧的 `GET /works/{id}/events` 撤了。
 
 ## 7. 计划:让甘特图有东西可比
 
