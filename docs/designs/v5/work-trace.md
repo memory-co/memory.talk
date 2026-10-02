@@ -1,6 +1,6 @@
 # work-trace —— 把 events 换成 trace:OTel 格式,分点和段,一张图从可观测走到甘特(v5 设计)
 
-> **状态:部分实施。** 已经有了:落盘(`worktrace.db`)、`work` / `worklet` 两种段和 §2 的动作点(`plan.changed` 除外)、`GET /works/{id}/trace`(§6)、右侧「动态」列表(§6 的第 3 种视图)。代码在 `services/work/trace.py`。
+> **状态:部分实施。** 已经有了:落盘(`worktrace.db`)、`work` / `worklet` 两种段和 §2 的动作点(`plan.changed` 除外)、一条写路径和变更序号(§3、§5)、`GET` / `POST /works/{id}/trace` 和 §6 的全部参数、右侧「动态」列表(§6 的第 3 种视图);agent 那几层目前只有 Claude Code 由节点推(Codex / Kimi 的轮次还从 round 切)。代码在 `services/work/trace.py`、`memorytalk/node/`。
 >
 > **agent 那一层还没做**:节点、会话 / 轮次 / 工具段、消息点和写入口(`POST …/trace`)都按 [work-node.md](work-node.md) 来;现在的代码还是中心去拉、单独存一份 round,实施时去掉(§9)。另外还没做的:瀑布图 / 甘特图(§6 的 1、2)、计划(§7)、往外导出和直推(§8 的 2、3)。
 >

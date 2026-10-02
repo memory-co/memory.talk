@@ -1,6 +1,6 @@
 # Works API
 
-work 树、列、工作单元(现场)、谁在看、痕迹(round)、轨迹(trace)、收件箱 / manager。登录后的请求(身份来自 token,见 [auth.md](auth.md)),凡会动某个 work 的(建、改、列上的动作、开 / 重入 / 挪 / 收起 / 关工作单元、打开 work 本身),都算这个人对该 work 的一次心跳(进 `viewers`);进轨迹的动作还把这个人写进段 / 点的 `user.id`(结束段的人是 `memorytalk.end.user.id`)。字段语义见 [`../../structure/v5/work.md`](../../structure/v5/work.md)。
+work 树、列、工作单元(现场)、谁在看、轨迹(trace:读写一个接口;agent 的对话也在里面)、痕迹(round,旧路径)、收件箱 / manager。登录后的请求(身份来自 token,见 [auth.md](auth.md)),凡会动某个 work 的(建、改、列上的动作、开 / 重入 / 挪 / 收起 / 关工作单元、打开 work 本身),都算这个人对该 work 的一次心跳(进 `viewers`);进轨迹的动作还把这个人写进段 / 点的 `user.id`(结束段的人是 `memorytalk.end.user.id`)。字段语义见 [`../../structure/v5/work.md`](../../structure/v5/work.md)。
 
 ---
 
@@ -69,19 +69,27 @@ work 树(森林)。
 | 目标 | 规则 | 副作用 |
 |---|---|---|
 | `running` | 无(可从 `archived` 改回) | `archived_at` 清空;从 `archived` 改回 = 新的一段 `work` 段(`links` 指向上一段),现场还活着的工作单元(网页的)也各开新的一段 `worklet` 段 |
-| `archived` | 无——**不看子 work**,父子各自归档 | `archived_at`(已归档则保留);**冻结**:先最后收一次 round,再把工作单元现场全部销毁(登记留着);开着的 `worklet` 段和 `work` 段结束(`memorytalk.end.reason = archived`) |
+| `archived` | 无——**不看子 work**,父子各自归档 | `archived_at`(已归档则保留);**冻结**:先让节点把 agent 的记录推完(`flush`,开着的会话 / 轮次 / 工具段按 `archived` 结束;Codex / Kimi 还是最后收一次 round),再把工作单元现场全部销毁(登记留着);开着的 `worklet` 段和 `work` 段结束(`memorytalk.end.reason = archived`) |
 
 `goal` 变了打一个 `work.renamed` 点(带旧目标);状态变了投给管它的 work 的收件箱。
 
-归档后:`POST …/worklets` → 409(建现场的半中间被归档了也是 409,刚建的现场销毁掉);`rounds` 不再从把手同步,关掉工作单元也不再收。
+归档后:`POST …/worklets` → 409(建现场的半中间被归档了也是 409,刚建的现场销毁掉);关掉工作单元不再让节点 flush(归档时做过了),`rounds` 不再从把手同步。
 
 ## GET /api/works/{work_id}/trace
 
-轨迹:这个 work 的段和点,OTLP/JSON([designs work-trace.md](../../designs/v5/work-trace.md))。原来的 `GET …/events` 撤了(404)。
+轨迹:这个 work 的段和点,OTLP/JSON([designs work-trace.md](../../designs/v5/work-trace.md)),外加 `seq`。**agent 的 output 就是它**:一个工作单元的对话、状态都在这里读,没有单独的 output / messages / state 接口。原来的 `GET …/events` 撤了(404)。
 
 | 参数 | 说明 |
 |---|---|
 | `subtree` | 可选,默认 `false`;`true` = 连同所有子孙 work |
+| `worklet` | 只看这一个工作单元(它的 `worklet` 段和下面的一切) |
+| `agent` | 默认 `false`;`1` = 带上 agent 那几层(`agent.session` / `agent.turn` / `agent.tool` 段,`agent.message` / `agent.tool.input` / `agent.tool.output` / `agent.state` 点)。默认只给 `work` / `worklet` 段和人的动作点 |
+| `bodies` | 默认 `false`;`1` = 点带正文(`body`:消息原文、工具参数、工具结果) |
+| `after` | 变更序号:只要这之后写的或改过的段和点(段开、合并属性、结束都算改) |
+| `wait` | 秒,配合 `after`:这次读会读到的东西还没有就挂着,有了或超时(最多 60)才回来。长轮询 |
+| `fields` | `cursors` = 只要节点推到哪了(要带 `worklet`;节点重连时用),返回 `{"cursors": [{worklet_id, source, position, updated_at}]}` |
+
+看一个工作单元的对话:`?worklet=<w>&agent=1&bodies=1`,拿回来的 `seq` 下次带成 `&after=<seq>&wait=25`。
 
 ```json
 {"traces": {"resourceSpans": [{
@@ -121,14 +129,55 @@ work 树(森林)。
                      {"key": "memorytalk.index", "value": {"intValue": "1"}},
                      {"key": "memorytalk.from.column.id", "value": {"stringValue": "c3"}},
                      {"key": "memorytalk.from.column.alias", "value": {"stringValue": "测试"}},
-                     {"key": "memorytalk.from.index", "value": {"intValue": "0"}}]}]}]}]}}
+                     {"key": "memorytalk.from.index", "value": {"intValue": "0"}}]}]}]}]},
+ "seq": "42"}
 ```
 
-- 编码按 OTLP/JSON:字段名 lowerCamelCase,id 是十六进制,时间(Unix 纳秒)和 `intValue` 是十进制字符串,`kind` / `status.code` 是整数(1 = OK,0 = Unset)。
-- 段:`work` / `worklet` / `agent.turn`;**开着的段没有 `endTimeUnixNano`**,另带 `memorytalk.open = true`。根段没有 `parentSpanId`;`links` 总在(没有就是空数组),重新打开的 `work` 段指向上一段。段按开始时间(再按 `spanId`)排,点按写入先后排;点的 `observedTimeUnixNano` 和 `timeUnixNano` 是同一个值。
-- id 由身份算出来,同一份数据再读还是同样的 id:`traceId` 由根 work 算,一棵树一条;段 id 由「work / worklet + 第几段」或「worklet + 这一轮第一条 round」算(见 [designs work-trace.md §4](../../designs/v5/work-trace.md))。
+带 `agent=1&bodies=1` 时,agent 的一条消息长这样(`timeUnixNano` 是 agent 记录里的时刻,`observedTimeUnixNano` 是中心收到的时刻):
+
+```json
+{"timeUnixNano": "1790598012345000000", "observedTimeUnixNano": "1790598012702000000", "eventName": "agent.message",
+ "traceId": "4bf9…", "spanId": "<这一轮的段 id>", "body": {"stringValue": "把配置改成环境变量"},
+ "attributes": [{"key": "log.record.uid", "value": {"stringValue": "work_…2f2f-w4:8b1e…"}},
+                {"key": "memorytalk.worklet.id", "value": {"stringValue": "work_…2f2f-w4"}},
+                {"key": "memorytalk.message.role", "value": {"stringValue": "user"}},
+                {"key": "memorytalk.message.kind", "value": {"stringValue": "text"}}]}
+```
+
+- 编码按 OTLP/JSON:字段名 lowerCamelCase,id 是十六进制,时间(Unix 纳秒)和 `intValue` 是十进制字符串,`kind` / `status.code` 是整数(1 = OK,0 = Unset,2 = Error——只有出错的工具调用)。
+- 段:`work` / `worklet`,带 `agent=1` 再有 `agent.session` / `agent.turn` / `agent.tool`;**开着的段没有 `endTimeUnixNano`**,另带 `memorytalk.open = true`。根段没有 `parentSpanId`;`links` 总在(没有就是空数组),重新打开的 `work` 段指向上一段。段按开始时间(再按 `spanId`)排,点按时间(再按写入先后)排;中心自己写的点 `observedTimeUnixNano` 和 `timeUnixNano` 是同一个值,节点推的不一样。
+- `seq`:读的这一刻这几个 work 最大的变更序号(十进制字符串);段的每次开 / 改、点的每次写都取下一个。
+- id 由身份算出来,同一份数据再读还是同样的 id:`traceId` 由根 work 算,一棵树一条;`work` / `worklet` 段由「work / worklet + 第几段」算,agent 那几层由节点按会话 / 这一轮人那条输入 / 工具调用 id 算(见 [designs work-trace.md §4](../../designs/v5/work-trace.md))。
 - 各段、各点带哪些属性,见 [structure work.md#trace](../../structure/v5/work.md#trace)。读和心跳不进轨迹;收起 / 展开不记。
-- work 不存在 → 404。
+- work 不存在 → 404;`fields=cursors` 不带 `worklet` → 422。
+
+## POST /api/works/{work_id}/trace
+
+写轨迹:节点把 agent 的记录推上来([designs work-node.md §6](../../designs/v5/work-node.md))。**和 GET 同一个形状**——`traces` + `logs`,外加可选的 `cursors`;GET 出来的文档原样 POST 回去,意思不变。
+
+**只有节点能写**:节点经中心的 unix socket(`<home>/center.sock`,0600)连上来,从那里上来的请求身份就是节点,只能碰 `/api/works/{id}/trace`;登录的人(JWT)POST → 403。
+
+```json
+{"traces": {"resourceSpans": [{"scopeSpans": [{"spans": [
+    {"traceId": "4bf9…", "spanId": "9c1d7e0b5a2f4c33", "parentSpanId": "<会话段>", "name": "agent.turn", "kind": 1,
+     "startTimeUnixNano": "1790598012345000000",
+     "attributes": [{"key": "memorytalk.worklet.id", "value": {"stringValue": "work_…2f2f-w4"}}, …], "status": {"code": 0}}]}]}]},
+ "logs": {"resourceLogs": [{"scopeLogs": [{"logRecords": [
+    {"timeUnixNano": "1790598012345000000", "eventName": "agent.message", "traceId": "4bf9…", "spanId": "9c1d7e0b5a2f4c33",
+     "body": {"stringValue": "把配置改成环境变量"},
+     "attributes": [{"key": "log.record.uid", "value": {"stringValue": "work_…2f2f-w4:8b1e…"}},
+                    {"key": "memorytalk.worklet.id", "value": {"stringValue": "work_…2f2f-w4"}}, …]}]}]}]},
+ "cursors": [{"worklet_id": "work_…2f2f-w4", "source": "hooks", "position": "1830"}]}
+```
+
+→ **200** `{"spans": {"inserted": 1, "ended": 0, "merged": 0, "ignored": 0}, "points": {"inserted": 1, "duplicate": 0}}`
+
+- **段按 `spanId` 收**:没有就插(没有 `endTimeUnixNano` = 开着);有、还开着,带终点就结束(补终点、status、结束的属性),不带就合并属性(同名以新的为准);已经结束 → `ignored`(结束即定稿)。读出来的 `memorytalk.open` 写回来不算数。
+- **点按 `log.record.uid` 收**:有了就 `duplicate`。`observedTimeUnixNano` 由中心填收到的时刻。
+- **一次请求一个事务**:段、点、`cursors` 一起写或一起不写。`cursors` 存进 `trace_cursors`(同一个工作单元同一个 `source` 覆盖),用 `GET …/trace?worklet=<w>&fields=cursors` 读回。
+- **能写什么**:`agent.session` / `agent.turn` / `agent.tool` 段,`agent.message` / `agent.tool.input` / `agent.tool.output` / `agent.state` 点,以及给 `worklet` 段补一个 `memorytalk.end.reason = gone` 的结束;别的(`work` 段、开 `worklet` 段、别的结束原因、人的动作点)→ 整批 **403**。`gone` 遇上正在关 / 归档 / 重入的,或者现场其实还活着的 → 这一条 `ignored`;收的话中心补上结束那一刻在哪一列。
+- **整批 422**:点没有 `log.record.uid`;段 / 点没有 `memorytalk.worklet.id`,或它不是这个 work 的工作单元;`traceId` 不是这棵树的;`spanId` 不是 16 位十六进制;时间不是纳秒;`status.code` 不是 0 / 1 / 2。
+- 父段不强求先到;`worklet` 段结束时,里面还开着的 agent 段跟着结束(原因、status 同它,终点取各自最后一次动静)。
 
 ## GET /api/works/{work_id}/inbox
 
@@ -266,6 +315,7 @@ work 树(森林)。
 - `window.url` 是 tmuxd 自带的 ttyd,挂在主路由 `/surface/tmuxd/?arg=<worklet_id>`(同源相对地址,见 [structure work-server.md](../../structure/v5/work-server.md));http 工作单元是 URL 本身。
 - id `<work_id>-w<n>` 在 work 内单调递增、不复用:关掉 `-w1` 再开一个是 `-w2`(计数是 `works.next_worklet`)。
 - 副作用:`worklets` 插一行(连同摆在哪);终端类起一个 tmux 会话(名 = 工作单元 id);放进那一列末尾;开一个 `worklet` 段(带 uri / scheme / server 和放进的列)。
+- `claude://`:起的是 `claude --session-id <新发的 uuid> --settings <注入 hooks 的文件>`,会话 id 记在登记上(不对外);开起来就让本机节点盯着这个工作单元(节点没起来只记日志,不挡开),它的对话从此由节点推进 trace,`handle.capabilities` 是 `["send", "trace.agent"]`。
 
 | 错误 | 状态 |
 |---|---|
@@ -288,7 +338,7 @@ work 树(森林)。
 
 ## DELETE /api/works/{work_id}/worklets/{worklet_id}
 
-关闭即回收:先最后收一次 round(agent 类,尽力而为;work 已归档就不收,归档时收过了)→ 销毁现场(tmuxd `session.kill()`)→ 从列里拿掉(同一列下面的往上补)、删登记(一个事务)→ 结束 `worklet` 段(`memorytalk.end.reason = detached`,带结束时所在的列和关它的人;开着的 `agent.turn` 跟着结束)。已经没有开着的段(现场没了 / 归档过、重新打开后没重入)就不动段,打一个 `worklet.closed` 点(带当时的列和关它的人)。**200**,`data: null`。
+关闭即回收:先让节点把这个工作单元的记录读到头、推完,开着的会话 / 轮次 / 工具段按 `detached` 结束(`flush`;Codex / Kimi 还是最后收一次 round;尽力而为,等不到就不等;work 已归档就不做,归档时做过了)→ 销毁现场(tmuxd `session.kill()`)→ 从列里拿掉(同一列下面的往上补)、删登记(一个事务)→ 结束 `worklet` 段(`memorytalk.end.reason = detached`,带结束时所在的列和关它的人;节点没来得及结束的 agent 段跟着结束)。已经没有开着的段(现场没了 / 归档过、重新打开后没重入)就不动段,打一个 `worklet.closed` 点(带当时的列和关它的人)。**200**,`data: null`。
 
 ## POST /api/works/{work_id}/worklets/{worklet_id}/move
 
@@ -311,7 +361,9 @@ work 树(森林)。
 
 ## GET /api/works/{work_id}/worklets/{worklet_id}/rounds
 
-agent 工作单元的工作单元痕迹。work 运行中时先从把手同步:按 cwd + 工作单元创建时间定位平台记录文件,新 round 追加进 `worktrace.db` 的 `rounds` 表(按 `id` 去重),有新的就重切一遍 `agent.turn` 段;然后按追加的先后返回全部。
+**旧路径,只剩 Codex / Kimi**:它们的记录还是中心去拉,等节点能解析它们就撤掉这个接口。`claude://` 的对话在 trace 里(`GET …/trace?worklet=<w>&agent=1&bodies=1`),这里返回 `[]`。
+
+work 运行中时先从把手同步:按 cwd + 工作单元创建时间定位平台记录文件,新 round 追加进 `worktrace.db` 的 `rounds` 表(按 `id` 去重),有新的就重切一遍 `agent.turn` 段;然后按追加的先后返回全部。
 
 ```json
 [{"id": "u1", "timestamp": "2026-09-05T10:00:00Z", "role": "human", "text": "把配置改成环境变量"},

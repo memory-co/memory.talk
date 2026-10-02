@@ -46,6 +46,12 @@ class WorkServerService:
     def alive(self, server_name: str, worklet_id: str) -> bool:
         return self.registry.by_name(server_name).alive(worklet_id)
 
+    def watch_spec(self, server_name: str, worklet_id: str) -> dict | None:
+        """走推的 server(agent 的 output 由节点读了推进 trace):节点盯它要知道的那几样(hooks 文件、会话记录根、tmux socket)。
+        不走推的(终端、网页,还有还在旧路径上的 Codex / Kimi)交回 None。"""
+        s = self.registry.by_name(server_name)
+        return s.watch_spec(worklet_id) if hasattr(s, "watch_spec") else None
+
     def window(self, server_name: str, worklet_id: str, raw_uri: str):
         return self.registry.by_name(server_name).window(worklet_id, parse_uri(raw_uri))
 

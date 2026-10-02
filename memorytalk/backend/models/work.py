@@ -73,6 +73,7 @@ class Worklet(BaseModel):
     scheme: str
     server: str = Field(description="建它的 server(https → http,vim → default)")
     cwd: str | None = None
+    session_id: str | None = Field(None, description="agent 的会话 id:开现场时定(claude --session-id),节点据此认会话记录")
     created_at: str
     last_attached: str
 
@@ -84,6 +85,7 @@ class WorkletCreate(BaseModel):
 
 class WorkletView(Worklet):
     server: str = Field("", exclude=True)          # 内部寻址用,不对外
+    session_id: str | None = Field(None, exclude=True)
     column: str | None = Field(None, description="在哪一列(c<编号>);不在任何一列 = null(正常不会有)")
     position: int | None = Field(None, description="列里从上数第几个(0 起,同一列里连续)")
     collapsed: bool = Field(False, description="收起 = 只剩标题行")
@@ -102,9 +104,25 @@ class Round(BaseModel):
 
 
 class WorkTrace(BaseModel):
-    """轨迹(work-trace.md §6):OTLP/JSON 的 TracesData(段,开着的没有终点、带 memorytalk.open)+ LogsData(点)。"""
-    traces: dict = Field(description='{"resourceSpans": [...]}')
-    logs: dict = Field(description='{"resourceLogs": [...]}')
+    """轨迹(work-trace.md §6):OTLP/JSON 的 TracesData(段,开着的没有终点、带 memorytalk.open)+ LogsData(点),
+    seq = 读的这一刻最大的变更序号(下次 after=它 接着读)。fields=cursors 时只有 cursors(节点推到哪了)。"""
+    traces: dict | None = Field(None, description='{"resourceSpans": [...]}')
+    logs: dict | None = Field(None, description='{"resourceLogs": [...]}')
+    seq: str | None = Field(None, description="变更序号(十进制字符串)")
+    cursors: list[dict] | None = Field(None, description="[{worklet_id, source, position, updated_at}]")
+
+
+class TraceCursor(BaseModel):
+    worklet_id: str
+    source: str = Field(description="哪份来源:会话 id、hooks……(节点自己定)")
+    position: str = Field(description="推到哪了(节点自己的格式,中心原样存、原样还)")
+
+
+class TracePush(BaseModel):
+    """POST /works/{id}/trace:和 GET 读出来的一个形状(work-node.md §6),多一栏可选的 cursors,同一个事务里存。"""
+    traces: dict = Field(default_factory=dict, description='{"resourceSpans": [...]}')
+    logs: dict = Field(default_factory=dict, description='{"resourceLogs": [...]}')
+    cursors: list[TraceCursor] = Field(default_factory=list)
 
 
 WorkNode.model_rebuild()

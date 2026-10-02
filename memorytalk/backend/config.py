@@ -50,14 +50,23 @@ class RuntimeConfig:
     claude_projects: Path      # Claude Code 会话记录根
     codex_sessions: Path       # Codex 会话记录根
     kimi_sessions: Path        # Kimi Code 会话记录根
+    node_dir: Path             # 节点的状态目录:node.sock(中心 → 节点)、worklets/<id>/(hooks 事件、盯着谁)(work-node.md)
+    center_socket: Path        # 中心给节点开的 unix socket(节点 → 中心;从它上来的请求身份就是节点)
+
+    @property
+    def node_socket(self) -> Path:
+        return self.node_dir / "node.sock"
 
 
 def load_runtime_config() -> RuntimeConfig:
+    home = Path(os.environ.get("MEMORY_TALK_HOME", "~/.memory.talk")).expanduser()
     return RuntimeConfig(
         workspace=Path(_env("MEMORY_TALK_WORKSPACE", "~/workspace")).expanduser(),
         tmux_socket=_env("MEMORY_TALK_TMUX_SOCKET", "memorytalk"),
-        tmuxd_state=Path(os.environ.get("MEMORY_TALK_HOME", "~/.memory.talk")).expanduser() / "tmuxd",
+        tmuxd_state=home / "tmuxd",
         claude_projects=Path(_env("MEMORY_TALK_CLAUDE_PROJECTS", "~/.claude/projects")).expanduser(),
         codex_sessions=Path(_env("MEMORY_TALK_CODEX_SESSIONS", "~/.codex/sessions")).expanduser(),
         kimi_sessions=Path(_env("MEMORY_TALK_KIMI_SESSIONS", "~/.kimi-code/sessions")).expanduser(),
+        node_dir=home / "node",
+        center_socket=home / "center.sock",
     )

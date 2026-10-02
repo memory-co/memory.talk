@@ -1,15 +1,18 @@
-"""/api/works —— 树、列、工作单元(attach = 经 server 建现场)、痕迹(round)、轨迹(trace)、谁在看。"""
+"""/api/works —— 树、列、工作单元(attach = 经 server 建现场)、痕迹(round,旧路径)、轨迹(trace:读写一个接口)、谁在看。"""
 from __future__ import annotations
 
 from memorytalk.backend.models.result import Result, ok
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
+from starlette.concurrency import run_in_threadpool
 
 from memorytalk.backend.models.metas import InboxItem
 from memorytalk.backend.models.work_server import WorkServerInfo
-from memorytalk.backend.models.work import (Column, ColumnCreate, ColumnUpdate, Round, WorkletCreate, WorkletMove,
+from memorytalk.backend.models.work import (Column, ColumnCreate, ColumnUpdate, Round, TracePush, WorkletCreate, WorkletMove,
                          WorkletUpdate, WorkletView, Work, WorkCreate, WorkNode, WorkTrace, WorkUpdate, WorkUsers)
 from memorytalk.backend.services.metas import MetasService
-from memorytalk.backend.services.work import WorkService
+from memorytalk.backend.services.work import TraceRejected, WorkService
+
+WAIT_MAX = 60.0                # 长轮询最多挂这么久(秒)
 
 router = APIRouter(prefix="/api/works", tags=["works"])
 
@@ -56,10 +59,30 @@ def update(work_id: str, req: WorkUpdate, svc: WorkService = Depends(works), who
     return ok(svc.update(work_id, req, by=who))
 
 
-@router.get("/{work_id}/trace", response_model=Result[WorkTrace],
-            summary="轨迹:OTLP/JSON 的段(开着的没有终点、带 memorytalk.open)+ 点;subtree = 连同所有子 work")
-def trace(work_id: str, subtree: bool = False, svc: WorkService = Depends(works)):
-    return ok(svc.trace_of(work_id, subtree))
+@router.get("/{work_id}/trace", response_model=Result[WorkTrace], response_model_exclude_none=True,
+            summary="轨迹:OTLP/JSON 的段(开着的没有终点、带 memorytalk.open)+ 点 + seq(变更序号)。"
+                    "agent 的 output 就是它:worklet + agent=1 + bodies=1 是一个工作单元的对话,after + wait 等变化")
+async def trace(work_id: str, request: Request, subtree: bool = False,
+                worklet: str | None = Query(None, description="只看一个工作单元"),
+                agent: bool = Query(False, description="带上 agent 那几层(会话 / 轮次 / 工具段,消息 / 状态点)"),
+                bodies: bool = Query(False, description="带正文(点的 body)"),
+                after: int | None = Query(None, ge=0, description="只要这个变更序号之后写的或改过的"),
+                wait: float = Query(0, ge=0, description="配合 after:没变化就等着,最多这么多秒(长轮询)"),
+                fields: str | None = Query(None, description="cursors = 只要节点推到哪了(要带 worklet)"),
+                svc: WorkService = Depends(works)):
+    if fields == "cursors":
+        return ok(await run_in_threadpool(svc.cursors, work_id, worklet))
+    if after is not None and wait > 0:
+        await svc.wait_trace(work_id, after, min(wait, WAIT_MAX), subtree=subtree, worklet=worklet, agent=agent)
+    return ok(await run_in_threadpool(lambda: svc.trace_of(work_id, subtree, worklet=worklet, agent=agent, bodies=bodies, after=after)))
+
+
+@router.post("/{work_id}/trace", response_model=Result[dict],
+             summary="写轨迹:节点推上来的一批(和读同一个形状,外加 cursors);只有节点能写,登录的人只能读")
+def push_trace(work_id: str, req: TracePush, request: Request, svc: WorkService = Depends(works)):
+    if not getattr(request.state, "node", False):
+        raise TraceRejected(403, "trace 只由节点写(经中心的 unix socket);登录的人只能读")
+    return ok(svc.write_trace(work_id, req.model_dump(include={"traces", "logs"}), [c.model_dump() for c in req.cursors]))
 
 
 @router.get("/{work_id}/inbox", response_model=Result[list[InboxItem]],
@@ -159,6 +182,7 @@ def update_worklet(work_id: str, worklet_id: str, req: WorkletUpdate, svc: WorkS
 
 
 @router.get("/{work_id}/worklets/{worklet_id}/rounds", response_model=Result[list[Round]],
-            summary="痕迹:agent 工作单元的 round(先从把手同步新 round,再按顺序读 worktrace.db 的 rounds)")
+            summary="痕迹(旧路径,只剩 Codex / Kimi):先从把手同步新 round,再按顺序读 worktrace.db 的 rounds;"
+                    "claude 的对话在 trace 里,这里是空的")
 def rounds(work_id: str, worklet_id: str, svc: WorkService = Depends(works)):
     return ok(svc.rounds(work_id, worklet_id))

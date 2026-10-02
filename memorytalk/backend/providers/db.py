@@ -22,6 +22,7 @@ class Column:
     type: type | str = str
     primary: bool = False
     index: bool = False
+    unique: bool = False           # 唯一索引(sqlite 里 NULL 不算重复:没有值的行不受限)
     nullable: bool = True
     autoincrement: bool = False
 
@@ -33,6 +34,7 @@ class Column:
     def __gt__(self, v):  return Cond(self.name, ">", v)
     def __ge__(self, v):  return Cond(self.name, ">=", v)
     def in_(self, vs):    return Cond(self.name, "IN", list(vs))
+    def not_in(self, vs): return Cond(self.name, "NOT IN", list(vs))
     def is_null(self):    return Cond(self.name, "IS NULL", None)
     def is_not_null(self): return Cond(self.name, "IS NOT NULL", None)
     def asc(self):        return Order(self.name, "ASC")
@@ -177,13 +179,13 @@ class DatabaseProvider:
         for c in conds:
             if c.op in ("IS NULL", "IS NOT NULL"):
                 parts.append(f"{c.col} {c.op}")
-            elif c.op == "IN":
+            elif c.op in ("IN", "NOT IN"):
                 if not c.value:
-                    parts.append("1 = 0")
+                    parts.append("1 = 0" if c.op == "IN" else "1 = 1")
                     continue
                 ph = ", ".join(self._placeholder(len(params) + i + 1) for i in range(len(c.value)))
                 params.extend(c.value)
-                parts.append(f"{c.col} IN ({ph})")
+                parts.append(f"{c.col} {c.op} ({ph})")
             else:
                 params.append(c.value)
                 parts.append(f"{c.col} {c.op} {self._placeholder(len(params))}")
@@ -274,8 +276,15 @@ class SQLite(DatabaseProvider):
         indexes = [(c.name,) for c in t.columns if c.index and not c.primary] + t.indexes
         with self._lock:
             self._conn.execute(f"CREATE TABLE IF NOT EXISTS {t.name} ({', '.join(defs)})")
+            have = {r["name"] for r in self._conn.execute(f"PRAGMA table_info({t.name})")}
+            for c in t.columns:                         # 表早就建过、后来加的列:补上(只能是可空、非主键的列)
+                if c.name not in have:
+                    self._conn.execute(f"ALTER TABLE {t.name} ADD COLUMN {c.name} {self._type(c)}")
             for cols in indexes:
                 self._conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{t.name}_{'_'.join(cols)} ON {t.name}({', '.join(cols)})")
+            for c in t.columns:
+                if c.unique:
+                    self._conn.execute(f"CREATE UNIQUE INDEX IF NOT EXISTS uq_{t.name}_{c.name} ON {t.name}({c.name})")
 
     @contextmanager
     def transaction(self) -> Iterator[None]:

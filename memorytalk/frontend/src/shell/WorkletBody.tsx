@@ -10,8 +10,9 @@ import { api } from '@/lib/api';
 import { queryClient } from '@/lib/query';
 import { usePreferences } from '@/lib/store';
 import { localeTag, useT } from '@/lib/i18n';
-import type { Round, Worklet, Work } from '@/lib/types';
+import { pushedSchemes, type Round, type Worklet, type Work } from '@/lib/types';
 import { Empty, ErrorState, Loading, Markdown, safeWindowUrl } from '@/components/Shared';
+import { AgentLog } from './AgentLog';
 
 export function WorkletBody({ work, worklet }: { work: Work; worklet: Worklet }) {
   const t = useT();
@@ -24,6 +25,7 @@ export function WorkletBody({ work, worklet }: { work: Work; worklet: Worklet })
   const ended = work.status === 'archived';
   const web = ['http', 'https'].includes(worklet.scheme);
   const agent = ['codex', 'claude', 'kimi'].includes(worklet.scheme);
+  const pushed = pushedSchemes.includes(worklet.scheme);              // 对话在 trace 里(节点推);其余 agent 还走旧的 rounds
   const live = useQuery<Worklet>({ queryKey: ['live', work.id, worklet.id], enabled: false });
   const connect = useMutation({ mutationFn: () => api<Worklet>(`${base}/attach`, { method: 'POST' }),
     onSuccess: data => { queryClient.setQueryData(['live', work.id, worklet.id], data); for (const key of ['worklets', 'trace']) void queryClient.invalidateQueries({ queryKey: [key, work.id] }); },   // 重入可能开了新的一段
@@ -31,7 +33,7 @@ export function WorkletBody({ work, worklet }: { work: Work; worklet: Worklet })
   });
   const url = safeWindowUrl(web ? worklet.uri : live.data?.window?.embed || worklet.window?.embed || null);   // 窗:tmuxd 自带的 ttyd 地址
   const rounds = useQuery({ queryKey: ['rounds', work.id, worklet.id], queryFn: ({ signal }) => api<Round[]>(`${base}/rounds`, { signal }),
-    enabled: agent && (mode === 'rounds' || ended), refetchInterval: ended ? false : 4_000,
+    enabled: agent && !pushed && (mode === 'rounds' || ended), refetchInterval: ended ? false : 4_000,
   });
   const remove = useMutation({ mutationFn: () => api(`${base}`, { method: 'DELETE' }), onSuccess: () => {
     for (const key of ['live', 'rounds']) queryClient.removeQueries({ queryKey: [key, work.id, worklet.id] });
@@ -53,7 +55,8 @@ export function WorkletBody({ work, worklet }: { work: Work; worklet: Worklet })
       </div>
     </div>
     <TabsContent value={ended && agent ? 'rounds' : mode} className="mt-0 flex min-h-0 flex-1 flex-col">
-      {showRounds ? <div className="min-h-0 flex-1 overflow-auto">
+      {showRounds && pushed ? <AgentLog work={work} worklet={worklet} />
+      : showRounds ? <div className="min-h-0 flex-1 overflow-auto">
         <div className="mx-auto flex max-w-3xl flex-col gap-4 p-4">
           <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground"><FileText className="size-3.5" />{ended ? t('worklet.transcriptEnded') : t('worklet.transcriptLive')}</p>
           {rounds.isPending ? <Loading /> : rounds.isError ? <ErrorState error={rounds.error} retry={() => { void rounds.refetch(); }} /> : rounds.data?.length ? rounds.data.map(round =>

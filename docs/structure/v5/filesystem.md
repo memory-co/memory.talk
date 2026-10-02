@@ -19,6 +19,9 @@
 ├── jwt.key                           ← 签 JWT 的密钥(首次启动生成,0600;换掉 = 全员重新登录)
 ├── auth/tokens/<sha256>.json         ← 登录态登记:JWT 里 jti 的哈希 → {user, created_at, exp}(logout / 改密码即删)
 ├── tmuxd/                            ← tmuxd 的 state(会话记录、ttyd 记录、tmux.conf、ttyd.sock——窗经它挂到 /surface/tmuxd);tmux 会话本身不落盘
+├── center.sock                       ← 中心给本机节点开的口子(0600;从这里上来的请求身份是节点,只能读写 trace)
+├── node/                             ← 本机节点(memory.talk node):node.sock(中心 → 节点)、node.json、node.log
+│   └── worklets/<worklet id>/        ←   盯着的工作单元:watch.json(盯它的说明)、settings.json(claude 的 hooks)、hooks.jsonl(hook 事件)
 ├── credentials.json                  ← CLI 的登录态(客户端的事,按服务地址分开;memory.talk login 写)
 ├── works.db                          ← work 的现在(sqlite,+ -wal / -shm):works / work_columns / worklets / inbox 四张表
 ├── worktrace.db                      ← work 的经过(sqlite,+ -wal / -shm):spans / points / trace_cursors 三张表
@@ -59,7 +62,7 @@
 | 东西 | 在哪 | 谁管 |
 |---|---|---|
 | tmux 会话(终端 / agent 现场) | tmuxd 的 tmux server,socket `tmuxd-<MEMORY_TALK_TMUX_SOCKET>`;ttyd 是 memory.talk 的子进程 | server 层经 tmuxd 建 / 杀;会话名 = 工作单元 id;state 在 `<home>/tmuxd/` |
-| 各平台的会话记录(agent 把手读的原文) | `~/.claude/projects/` `~/.codex/sessions/` `~/.kimi-code/sessions/` | 各平台自己写;memory.talk 只读,按 cwd + 工作单元创建时间定位 |
+| 各平台的会话记录(agent 的原文) | `~/.claude/projects/` `~/.codex/sessions/` `~/.kimi-code/sessions/` | 各平台自己写;memory.talk 只读。Claude Code 由节点按开现场时钉住的会话 id 找(`*/<会话 id>.jsonl`),读了推进 trace;Codex / Kimi 还是中心按 cwd + 工作单元创建时间定位(旧路径) |
 
 ## 环境变量
 

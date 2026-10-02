@@ -59,11 +59,17 @@ export interface TraceSpan {
 }
 export interface TraceLogRecord {
   timeUnixNano: string; observedTimeUnixNano?: string; eventName: string; traceId?: string; spanId?: string; attributes?: KeyValue[];
+  body?: AnyValue;                                                  // 正文(bodies=1 才带):agent 的消息、工具的参数和结果
 }
 export interface WorkTrace {
   traces: { resourceSpans?: { scopeSpans?: { spans?: TraceSpan[] }[] }[] };
   logs: { resourceLogs?: { scopeLogs?: { logRecords?: TraceLogRecord[] }[] }[] };
+  seq?: string;                                                     // 读的这一刻最大的变更序号:下次 after=它 接着读
 }
+export const traceSpans = (trace: WorkTrace) => (trace.traces.resourceSpans ?? []).flatMap(r => r.scopeSpans ?? []).flatMap(s => s.spans ?? []);
+export const traceRecords = (trace: WorkTrace) => (trace.logs.resourceLogs ?? []).flatMap(r => r.scopeLogs ?? []).flatMap(s => s.logRecords ?? []);
+/** 哪些工作单元的 output 由节点推进 trace(对话在 trace 里);其余 agent 还走旧的 rounds。 */
+export const pushedSchemes = ['claude'];
 export interface InboxItem { ts: string; layer: string; path: string; subject: string; by: string | null }
 export const workStatuses: WorkStatus[] = ['running', 'archived'];
 export const statusLabel = (t: T, status: WorkStatus) => t(`status.${status}`);

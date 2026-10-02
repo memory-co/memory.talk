@@ -1,9 +1,12 @@
 """WorkService:树、列、工作单元(经 server 建现场)、痕迹、轨迹、谁在看(docs/designs/v5/work.md、work-store.md、work-trace.md)。
 
 一个动作的写法固定:先在 works.db 一个事务里把读-改-写做完;建 / 销毁现场不在事务里;最后写 worktrace.db。
-两个库之间没有原子提交——轨迹写失败只记日志,不让动作失败,也不回滚 work(轨迹丢了不伤 work)。"""
+两个库之间没有原子提交——轨迹写失败只记日志,不让动作失败,也不回滚 work(轨迹丢了不伤 work)。
+agent 的 output 就是 trace:走推的 server(claude)开起来就让节点盯着(watch),关掉 / 归档之前先让节点推完(flush),
+节点推上来的经 write_trace 进同一条写路径(work-node.md)。Codex / Kimi 还是这里去拉 round(旧路径,_sync)。"""
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 from collections import Counter
@@ -21,9 +24,10 @@ from memorytalk.backend.services.store import StoreService
 
 from .columns import ColumnNotFound, Columns
 from .inbox import Inbox
+from .node import NodeClient
 from .repo import TraceRepo, WorkRepo
 from .rounds import Rounds
-from .trace import STATUS_UNSET, Trace
+from .trace import STATUS_UNSET, Trace, TraceRejected
 from .tree import WorkConflict, WorkNotFound, WorkTree, now
 from .viewers import Viewers
 from .worklets import WorkletNotFound, WorkletRegistry
@@ -32,8 +36,9 @@ log = logging.getLogger(__name__)
 
 
 class WorkService:
-    def __init__(self, store: StoreService, servers: WorkServerService) -> None:
+    def __init__(self, store: StoreService, servers: WorkServerService, nodes: NodeClient | None = None) -> None:
         self.work_servers = servers
+        self.nodes = nodes or NodeClient(servers.rt.node_socket)   # 本机的节点(work-node.md §7)
         self.repo: WorkRepo = store.work_repo
         self.trace_repo: TraceRepo = store.trace_repo
         self.tree = WorkTree(self.repo)
@@ -160,12 +165,12 @@ class WorkService:
         return work
 
     def _freeze(self, work_id: str, by: str | None = None) -> None:
-        """归档:工作单元冻结——先把 round 收齐,再销毁现场;登记和摆在哪都留着(可回去看痕迹,不再是干活的地方)。
+        """归档:工作单元冻结——先让节点把记录推完(旧路径:把 round 收齐),再销毁现场;登记和摆在哪都留着(可回去看痕迹,不再是干活的地方)。
         轨迹:开着的工作单元段和 work 段一起结束(reason archived)。一个个销毁到结束段之前,列清单不把它们记成 gone。"""
         worklets = self.worklets.list(work_id)
         with self._handling(*(m.id for m in worklets)):
             for m in worklets:
-                self._final_sync(work_id, m)
+                self._final(work_id, m, "archived")
                 try:
                     self.work_servers.destroy(m.server, m.id)
                 except Exception:
@@ -242,8 +247,7 @@ class WorkService:
         n, m = self.worklets.reserve(work_id)                           # 现场拿工作单元 id 当名字,先取号;建不起来这个号也不还
         m = m.model_copy(update={"uri": raw_uri, "scheme": uri.scheme, "server": server.name})
         live, _ = self.work_servers.open(m.id, raw_uri, since_mtime=_epoch(m.created_at))   # 建不起来到此为止,什么都没写
-        if live.cwd:
-            m = m.model_copy(update={"cwd": live.cwd})
+        m = m.model_copy(update={"cwd": live.cwd or m.cwd, "session_id": live.session_id})   # agent 的会话 id 开的时候就定了
         with self._lifecycle(work_id):              # 登记到开段一口气:归档要么在登记之前(这里看到已归档),要么等段开好了一起结束
             try:
                 with self.repo.tx():
@@ -255,6 +259,7 @@ class WorkService:
                 self._destroy_quietly(m)                                 # 登记没写进去,现场不能留
                 raise
             self._record(self.trace.worklet_started, work_id, m, col, by)
+            self._watch(work_id, m)
         return WorkletView(**m.model_dump(), column=col.id, position=pos, alive=True, window=live.window, handle=live.handle)
 
     def reattach(self, work_id: str, worklet_id: str, by: str | None = None) -> WorkletView:
@@ -265,8 +270,9 @@ class WorkService:
             if self.tree.get(work_id).status == "archived":     # 在锁里看:等着归档做完的重入,醒来看到的就是已归档
                 raise WorkConflict(f"{work_id} 已归档,不再是干活的地方")
             live, _ = self.work_servers.open(m.id, m.uri, since_mtime=_epoch(m.created_at))
-            m = self.worklets.touch(work_id, worklet_id)
+            m = self.worklets.touch(work_id, worklet_id, session_id=live.session_id)   # 现场重开了:新的会话 id
             self._record(self.trace.worklet_started, work_id, m, self._column_of(work_id, m.id), by, resume=True)
+            self._watch(work_id, m)
         return WorkletView(**m.model_dump(), **self.worklets.placement(work_id, m.id), alive=True, window=live.window, handle=live.handle)
 
     def list_worklets(self, work_id: str) -> list[WorkletView]:
@@ -295,11 +301,11 @@ class WorkService:
             self.trace.worklet_ended(span, "gone", None, self._column_of(work_id, m.id), status=STATUS_UNSET)
 
     def detach(self, work_id: str, worklet_id: str, by: str | None = None) -> None:
-        """关闭即回收:收齐 round → 销毁现场 → 从列里拿掉并删登记(一个事务)→ 结束 worklet 段。"""
+        """关闭即回收:让节点推完(旧路径:收齐 round)→ 销毁现场 → 从列里拿掉并删登记(一个事务)→ 结束 worklet 段。"""
         m = self.worklets.get(work_id, worklet_id)
         with self._handling(m.id):
-            if self.tree.get(work_id).status != "archived":   # 登记删了就再也拿不到把手了;归档的已经收过最后一次,冻住的不再追加
-                self._final_sync(work_id, m)
+            if self.tree.get(work_id).status != "archived":   # 归档的已经推过最后一次,冻住的不再追加
+                self._final(work_id, m, "detached")
             self.work_servers.destroy(m.server, m.id)
             with self.repo.tx():
                 col = self.columns.unplace(work_id, worklet_id)
@@ -321,7 +327,10 @@ class WorkService:
     # ---- 痕迹 ----
 
     def rounds(self, work_id: str, worklet_id: str) -> list[Round]:
+        """旧的拉取路径(Codex / Kimi)。走推的(claude)没有 round:它的对话在 trace 里。"""
         m = self.worklets.get(work_id, worklet_id)
+        if self.work_servers.watch_spec(m.server, m.id) is not None:
+            return []
         if self.tree.get(work_id).status != "archived":
             self._sync(work_id, m)
         return self.round_log.read(worklet_id)
@@ -332,22 +341,103 @@ class WorkService:
         if hasattr(h, "rounds") and self.round_log.sync(work_id, m.id, h.rounds()):
             self._record(self.trace.turns, work_id, m.id)
 
-    def _final_sync(self, work_id: str, m: Worklet) -> None:
-        """关掉 / 归档之前最后收一次 round:尽力而为,失败不挡动作。"""
+    def _final(self, work_id: str, m: Worklet, reason: str) -> None:
+        """关掉 / 归档之前:走推的让节点读到头、推完、结束开着的 agent 段;旧路径最后收一次 round。尽力而为,失败不挡动作。"""
+        if self.work_servers.watch_spec(m.server, m.id) is not None:
+            self.nodes.flush(m.id, reason)
+            return
         try:
             self._sync(work_id, m)
         except Exception:
             log.exception("最后一次收 round 失败:%s", m.id)
 
+    # ---- 节点:agent 的 output 由它推进 trace ----
+
+    def _watch(self, work_id: str, m: Worklet) -> None:
+        """走推的 server 开起来(打开 / 重入)就让节点盯着:从这个工作单元开着的 worklet 段往下挂。节点没起来只记日志。"""
+        spec = self.work_servers.watch_spec(m.server, m.id)
+        if spec is None:
+            return
+        try:
+            parent = self.trace.open_worklet_span(m.id)
+            if parent is None:                                  # 段没开起来(轨迹写失败了):agent 的段没地方挂
+                return
+            self.nodes.watch({**spec, "work_id": work_id, "worklet_id": m.id, "server": m.server, "parent": parent,
+                              "trace_id": self.trace.trace_id(work_id), "session_id": m.session_id, "cwd": m.cwd,
+                              "since": _nanos(m.created_at)})
+        except Exception:
+            log.exception("没让节点盯上:%s", m.id)
+
+    def reconcile(self) -> int:
+        """中心起来时对一遍(work-node.md §7):登记了、现场活着、走推的,都让节点盯着(幂等)。交回说了几个。"""
+        n = 0
+        for w in self.tree.all():
+            if w.status == "archived":
+                continue
+            for m in self.worklets.list(w.id):
+                if self.work_servers.watch_spec(m.server, m.id) is not None and self.work_servers.alive(m.server, m.id):
+                    self._watch(w.id, m)
+                    n += 1
+        return n
+
     def _handle(self, m: Worklet):
         return self.work_servers.handle(m.server, m.id, m.uri, m.cwd, _epoch(m.created_at))
 
-    # ---- 轨迹 ----
+    # ---- 轨迹:读写一个接口(GET / POST /works/{id}/trace) ----
 
-    def trace_of(self, work_id: str, subtree: bool = False) -> WorkTrace:
-        """这个 work(subtree = 连同所有子孙)的段和点,OTLP/JSON。"""
+    def trace_of(self, work_id: str, subtree: bool = False, *, worklet: str | None = None, agent: bool = False,
+                 bodies: bool = False, after: int | None = None) -> WorkTrace:
+        """这个 work(subtree = 连同所有子孙)的段和点,OTLP/JSON;默认不带 agent 那几层、不带正文。"""
         self.tree.get(work_id)
-        return WorkTrace(**self.trace.read(self.tree.subtree(work_id) if subtree else [work_id]))
+        return WorkTrace(**self.trace.read(self._scope(work_id, subtree), worklet=worklet, agent=agent, bodies=bodies, after=after))
+
+    def _scope(self, work_id: str, subtree: bool) -> list[str]:
+        return self.tree.subtree(work_id) if subtree else [work_id]
+
+    async def wait_trace(self, work_id: str, after: int, timeout: float, *, subtree: bool = False,
+                         worklet: str | None = None, agent: bool = False) -> None:
+        """长轮询:after 之后这次读会读到的东西有了就回来,没有就等到 timeout。先拿票再查,查和等之间写进来的也叫得醒。"""
+        from starlette.concurrency import run_in_threadpool
+        works = await run_in_threadpool(self._scope, work_id, subtree)
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        while True:
+            ticket = self.trace.changes.ticket()
+            if await run_in_threadpool(self.trace.changed_since, works, after, worklet=worklet, agent=agent):
+                ticket.close()
+                return
+            left = deadline - loop.time()
+            if left <= 0:
+                ticket.close()
+                return
+            await ticket.wait(left)
+
+    def write_trace(self, work_id: str, doc: dict, cursors: list[dict]) -> dict:
+        """节点推上来的一批:进同一条写路径(Trace.ingest)。worklet 段的 gone:正在关 / 归档 / 重入的、现场其实还活着的不收
+        (同 _gone);收的话记下结束那一刻它在哪一列。"""
+        self.tree.get(work_id)
+
+        def gone(worklet_id: str) -> dict | None:
+            with self._busy_lock:
+                if self._busy[worklet_id]:
+                    return None
+            try:
+                m = self.worklets.get(work_id, worklet_id)
+            except WorkletNotFound:
+                return {}
+            if self.work_servers.alive(m.server, m.id):
+                return None
+            col = self._column_of(work_id, worklet_id)
+            return {"memorytalk.end.column.id": col.id, "memorytalk.end.column.alias": col.alias} if col else {}
+
+        return self.trace.ingest(work_id, doc, cursors, gone=gone)
+
+    def cursors(self, work_id: str, worklet_id: str | None) -> WorkTrace:
+        """节点推到哪了(fields=cursors;节点重连时从这里接着读)。"""
+        self.tree.get(work_id)
+        if not worklet_id:
+            raise TraceRejected(422, "fields=cursors 要带 worklet=")
+        return WorkTrace(cursors=self.trace.cursors(worklet_id))
 
 
 def _epoch(iso: str) -> float:
@@ -358,4 +448,5 @@ def _nanos(iso: str | None) -> int | None:
     return int(_epoch(iso)) * 1_000_000_000 if iso else None
 
 
-__all__ = ["WorkService", "WorkNotFound", "WorkConflict", "WorkletNotFound", "ColumnNotFound", "WorkRepo", "TraceRepo"]
+__all__ = ["WorkService", "WorkNotFound", "WorkConflict", "WorkletNotFound", "ColumnNotFound", "WorkRepo", "TraceRepo",
+           "TraceRejected"]

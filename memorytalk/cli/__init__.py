@@ -2,6 +2,7 @@
 
     memory.talk version                                                    → 版本号
     memory.talk server      start | stop | restart | status | daemon        → cli/server.py
+    memory.talk node        start | stop | status | daemon                  → cli/node.py(本机节点)
     memory.talk work        create | list | show | set | attach | …          → cli/work.py
     memory.talk user        add | list | show | set | whoami                 → cli/user.py
     memory.talk meta  layers | tree | recent | read | write | edit | rm | log → cli/meta.py(别名 col)
@@ -16,7 +17,7 @@ import os
 
 from memorytalk import __version__
 
-from . import auth, meta, search, server, user, work
+from . import auth, meta, node, search, server, user, work
 from ._common import DEFAULT_SERVER, Api
 
 
@@ -30,7 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("-V", "--version", action="version", version=f"memory.talk {__version__}")
     top = ap.add_subparsers(dest="cmd", required=True)
     top.add_parser("version", help="版本号").set_defaults(local=lambda a: print(f"memory.talk {__version__}"))
-    for group in (server, auth, work, user, meta, search):
+    for group in (server, node, auth, work, user, meta, search):
         group.register(top)
     return ap
 

@@ -24,7 +24,7 @@ class Window(BaseModel):
 class HandleInfo(BaseModel):
     """把手长什么样(给 API 报出来的描述;真正的把手是 Python 对象)。"""
     kind: str                                   # tmux / none / files
-    capabilities: list[str] = Field(default_factory=list)   # capture / send / rounds / …
+    capabilities: list[str] = Field(default_factory=list)   # send / trace.agent / rounds(旧的拉取路径)/ …
 
 
 class Live(BaseModel):
@@ -35,6 +35,7 @@ class Live(BaseModel):
     handle: HandleInfo
     cwd: str | None = None
     command: list[str] | None = None
+    session_id: str | None = None   # agent 这次新起的会话 id(claude --session-id);取回已有的现场时为空
 
 
 class WorkServerInfo(BaseModel):

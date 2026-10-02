@@ -1,30 +1,37 @@
 import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Archive, ArchiveRestore, ArrowRightLeft, Bot, CircleOff, CirclePlus, Columns3, History, MessageSquare, Pencil, SquareArrowOutUpRight, SquareX, Trash2, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { localeTag, useT, type T } from '@/lib/i18n';
+import { api } from '@/lib/api';
 import { useTrace } from '@/lib/queries';
 import { usePreferences } from '@/lib/store';
-import { attrValue, columnLabel, columnNumber, workletLabel, type KeyValue, type TraceLogRecord, type TraceSpan, type WorkTrace } from '@/lib/types';
+import { attrValue, columnLabel, columnNumber, traceRecords, traceSpans, workletLabel, type KeyValue, type TraceLogRecord, type TraceSpan, type WorkTrace } from '@/lib/types';
 import { Empty, ErrorState, Loading } from '@/components/Shared';
 import { cn } from '@/lib/utils';
 
 /** 右侧面板「动态」= 这个 work 轨迹的列表视图(GET /works/{id}/trace,docs/designs/v5/work-trace.md §6),新的在上。
  *  一行是一个段的开始、一个段的结束(开着的段只有开始)或一个点;按时间排(纳秒超出 Number 的精度,用 BigInt 比),同一时刻开始 < 点 < 结束,再按接口给的先后。
  *  写法沿用 work-events.md §7:列的动作和挪工作单元带列标记(当时的别名,没有就「列 n」),下面一行是 `谁 · 时间`;工作单元叫什么从它的 worklet 段上取(点按 spanId 找段)。
- *  agent 的轮次(agent.turn)默认藏起来,不然一轮两行会把别的都挤走;认不出的段 / 点原样显示名字和属性。 */
+ *  agent 那几层默认不读(接口默认不带,一轮两行、一条消息一个点,会把别的都挤走):有 agent 工作单元才给开关,点开再带 agent=1 读,
+ *  只取其中的轮次段;认不出的段 / 点原样显示名字和属性。 */
 export function WorkEvents({ id }: { id: string }) {
   const t = useT();
   const locale = usePreferences(s => s.locale);
   const trace = useTrace(id);
   const [turns, setTurns] = useState(false);
-  const timeline = useMemo(() => (trace.data ? build(trace.data) : null), [trace.data]);
+  const agentTrace = useQuery({ queryKey: ['trace', id, 'agent'], queryFn: ({ signal }) => api<WorkTrace>(`/works/${encodeURIComponent(id)}/trace?agent=1`, { signal }),
+    enabled: turns, refetchInterval: 5_000 });
+  const source = turns && agentTrace.data ? agentTrace.data : trace.data;
+  const timeline = useMemo(() => (source ? build(source) : null), [source]);
   if (trace.isPending) return <Loading />;
   if (trace.isError) return <div className="p-4"><ErrorState error={trace.error} retry={() => { void trace.refetch(); }} /></div>;
   if (!timeline) return null;
+  const hasAgent = timeline.spans.some(s => s.name === 'worklet' && ['claude', 'codex', 'kimi'].includes(text(s.attributes, 'memorytalk.worklet.scheme')));
   const turnCount = timeline.spans.filter(s => s.name === TURN).length;
   const rows = turns ? timeline.rows : timeline.rows.filter(r => r.span?.name !== TURN);
-  const toggle = turnCount > 0 && <Button variant="ghost" size="sm" className="mb-3 h-7 gap-1.5 px-2 text-xs font-normal text-muted-foreground" aria-pressed={turns} onClick={() => setTurns(v => !v)}>
-    <Bot className="size-3.5" />{turns ? t('events.hideTurns') : t('events.showTurns', { n: turnCount })}
+  const toggle = hasAgent && <Button variant="ghost" size="sm" className="mb-3 h-7 gap-1.5 px-2 text-xs font-normal text-muted-foreground" aria-pressed={turns} onClick={() => setTurns(v => !v)}>
+    <Bot className="size-3.5" />{turns ? t('events.hideTurns') : agentTrace.data ? t('events.showTurns', { n: turnCount }) : t('events.showAgentTurns')}
   </Button>;
   if (!rows.length) return <div className="flex flex-1 flex-col p-4">{toggle}<Empty icon={<History className="size-5" />} title={t('events.empty')} /></div>;
   const time = (date: Date) => date.toLocaleString(localeTag(locale), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -53,8 +60,8 @@ interface Timeline { rows: Row[]; spans: TraceSpan[]; byId: Map<string, TraceSpa
 const nanos = (value: string | undefined) => { try { return BigInt(value || 0); } catch { return 0n; } };
 
 function build(trace: WorkTrace): Timeline {
-  const spans = (trace.traces.resourceSpans ?? []).flatMap(r => r.scopeSpans ?? []).flatMap(s => s.spans ?? []);
-  const points = (trace.logs.resourceLogs ?? []).flatMap(r => r.scopeLogs ?? []).flatMap(s => s.logRecords ?? []);
+  const spans = traceSpans(trace).filter(s => !s.name.startsWith('agent.') || s.name === TURN);         // agent 那几层只要轮次
+  const points = traceRecords(trace).filter(p => !p.eventName.startsWith('agent.'));
   const rows: Row[] = [];
   spans.forEach((span, seq) => {
     rows.push({ at: nanos(span.startTimeUnixNano), edge: 'start', seq, key: `${span.spanId}:start`, span });
@@ -132,7 +139,7 @@ function describe(t: T, row: Row, { byId, uris }: Timeline): Described {
     }
     case TURN: {
       const uri = uriOf(a, span.parentSpanId ? byId.get(span.parentSpanId) : undefined), name = nameOf(uri, a);
-      return end ? { icon: Bot, title: t('events.turnEnded', { name, n: Number(attrValue(a, 'memorytalk.round.count') ?? 0) }) }
+      return end ? { icon: Bot, title: t('events.turnEnded', { name, n: Number(attrValue(a, 'memorytalk.message.count') ?? attrValue(a, 'memorytalk.round.count') ?? 0) }) }
         : { icon: MessageSquare, title: t('events.turnStarted', { name }) };    // 轮次不记是谁(user.id 为空)
     }
     default: return { icon: History, title: t(end ? 'events.ended' : 'events.started', { name: span.name }), detail: raw(a), by };

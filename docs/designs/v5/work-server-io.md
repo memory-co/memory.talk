@@ -1,6 +1,6 @@
 # work-server-io —— 每个 work server 一对口子:input 各自实现,output 就是 trace(v5 设计)
 
-> **状态:设计稿,未实施。** 「每个 server 一个 input 口、一个 output 口」:input 由各 server 自己实现(比如 claude 用 tmuxd 的 `send` 把字符串打进去);**output 不是另一个接口,它就是 trace**——现场所在机器上的节点把现场吐出来的东西写进 trace(`POST /works/{id}/trace`),谁要看就从 trace 读(`GET /works/{id}/trace`)。本篇定 input 的契约、output 在 trace 里长什么样、两边怎么连上;节点见 [work-node.md](work-node.md),trace 的模型和读法见 [work-trace.md](work-trace.md)。字段落地后进 [`../../structure/v5/worktrace.md`](../../structure/v5/worktrace.md) 和 [`../../structure/v5/work.md`](../../structure/v5/work.md),端点进 [`../../api/v5/works.md`](../../api/v5/works.md)。
+> **状态:output 部分实施,input 未实施。** output = trace 已经接上 Claude Code(节点推;对话在「对话记录」里从 trace 读,`after` + `wait` 等变化),Codex / Kimi 还走旧的 rounds;input 的契约(§4)还没做。「每个 server 一个 input 口、一个 output 口」:input 由各 server 自己实现(比如 claude 用 tmuxd 的 `send` 把字符串打进去);**output 不是另一个接口,它就是 trace**——现场所在机器上的节点把现场吐出来的东西写进 trace(`POST /works/{id}/trace`),谁要看就从 trace 读(`GET /works/{id}/trace`)。本篇定 input 的契约、output 在 trace 里长什么样、两边怎么连上;节点见 [work-node.md](work-node.md),trace 的模型和读法见 [work-trace.md](work-trace.md)。字段落地后进 [`../../structure/v5/worktrace.md`](../../structure/v5/worktrace.md) 和 [`../../structure/v5/work.md`](../../structure/v5/work.md),端点进 [`../../api/v5/works.md`](../../api/v5/works.md)。
 
 相关:
 - server 是什么、把手是什么(`send` 在把手上有、API 不露,§8 留的门就是本篇): [work-server.md](work-server.md)

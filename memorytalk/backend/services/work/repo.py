@@ -31,7 +31,7 @@ class WorkRepo:
         self.worklets = db.table(
             "worklets",
             Column("id", str, primary=True), Column("work_id", str, index=True), Column("number", int),
-            Column("uri", str), Column("scheme", str), Column("server", str), Column("cwd", str),
+            Column("uri", str), Column("scheme", str), Column("server", str), Column("cwd", str), Column("session_id", str),
             Column("created_at", str), Column("last_attached", str),
             Column("column_number", int), Column("position", int), Column("collapsed", bool),
             indexes=[("work_id", "column_number", "position")])       # 不做 UNIQUE:sqlite 在 position + 1 的过程中逐行查重
@@ -172,8 +172,13 @@ def _item(row: dict) -> dict:
 # ================================================================ worktrace.db:经过
 
 class TraceRepo:
-    """spans(段;end_time_unix_nano 为空 = 还开着)/ points(点,只追加)/ rounds(agent 的 round,只追加)。
-    列和 OTLP 字段一对一:id 是十六进制串,时间是 Unix 纳秒整数,attributes / links 是 OTLP 的 JSON。"""
+    """spans(段;end_time_unix_nano 为空 = 还开着)/ points(点,只追加)/ trace_cursors(节点推到哪了)。
+    列和 OTLP 字段一对一:id 是十六进制串,时间是 Unix 纳秒整数,attributes / links 是 OTLP 的 JSON。
+    一个变更序号(seq)管两张表:段的每次开、改,点的每次写入,都在写它的事务里取下一个(next_seq);读的游标就是它。
+    rounds 表和 spans.first_round_id 只给还没走节点的 Codex / Kimi 用(旧的拉取路径),它们改成推以后删掉。"""
+
+    AGENT_SPANS = ("agent.session", "agent.turn", "agent.tool")
+    AGENT_POINTS = ("agent.message", "agent.tool.input", "agent.tool.output", "agent.state")
 
     def __init__(self, db: DatabaseProvider) -> None:
         self.db = db
@@ -184,13 +189,20 @@ class TraceRepo:
             Column("user_id", str, index=True), Column("end_user_id", str, index=True),
             Column("name", str), Column("kind", int),
             Column("start_time_unix_nano", int), Column("end_time_unix_nano", int), Column("status_code", int),
-            Column("attributes", JSON), Column("links", JSON), Column("first_round_id", str))
+            Column("attributes", JSON), Column("links", JSON), Column("seq", int), Column("first_round_id", str),
+            indexes=[("work_id", "seq"), ("seq",)])
         self.points = db.table(
             "points",
-            Column("seq", int, primary=True, autoincrement=True), Column("trace_id", str), Column("span_id", str, index=True),
+            Column("seq", int, primary=True, autoincrement=True), Column("uid", str, unique=True),
+            Column("trace_id", str), Column("span_id", str, index=True),
             Column("work_id", str, index=True), Column("worklet_id", str), Column("column_number", int),
             Column("user_id", str, index=True), Column("event_name", str, index=True),
-            Column("time_unix_nano", int), Column("attributes", JSON))
+            Column("time_unix_nano", int), Column("observed_time_unix_nano", int), Column("body", str), Column("attributes", JSON),
+            indexes=[("worklet_id", "seq"), ("work_id", "seq")])
+        self.cursors = db.table(
+            "trace_cursors",
+            Column("worklet_id", str), Column("source", str), Column("position", str), Column("updated_at", int),
+            primary_key=("worklet_id", "source"))
         self.rounds = db.table(
             "rounds",
             Column("seq", int, primary=True, autoincrement=True), Column("work_id", str), Column("worklet_id", str, index=True),
@@ -198,6 +210,13 @@ class TraceRepo:
 
     def tx(self):
         return self.db.transaction()
+
+    def next_seq(self) -> int:
+        """下一个变更序号 = 两张表里最大的 + 1。只在写它的事务里调(单写者,持着锁)。"""
+        s, p = self.spans, self.points
+        top_s = self.db.select(s).where(s.c.seq.is_not_null()).order_by(s.c.seq.desc()).one()
+        top_p = self.db.select(p).order_by(p.c.seq.desc()).one()
+        return max(top_s["seq"] if top_s else 0, top_p["seq"] if top_p else 0) + 1
 
     # ---- spans ----
 
@@ -222,24 +241,84 @@ class TraceRepo:
         return self._ordered(self.spans.c.worklet_id == worklet_id, self.spans.c.name == "worklet")
 
     def turn_spans(self, worklet_id: str) -> list[dict]:
-        """一个工作单元的 agent 轮次(各段 first_round_id 不同,按它幂等写)。"""
+        """一个工作单元的 agent 轮次(旧的拉取路径:各段 first_round_id 不同,按它幂等写)。"""
         return self._ordered(self.spans.c.worklet_id == worklet_id, self.spans.c.name == "agent.turn")
 
     def open_spans(self, work_id: str, name: str) -> list[dict]:
         t = self.spans
         return self._ordered(t.c.work_id == work_id, t.c.name == name, t.c.end_time_unix_nano.is_null())
 
-    def spans_of(self, work_ids: Sequence[str]) -> list[dict]:
-        return self._ordered(self.spans.c.work_id.in_(work_ids))
+    def open_agent_spans(self, worklet_id: str) -> list[dict]:
+        t = self.spans
+        return self._ordered(t.c.worklet_id == worklet_id, t.c.name.in_(self.AGENT_SPANS), t.c.end_time_unix_nano.is_null())
+
+    def last_point_time(self, span_id: str) -> int | None:
+        t = self.points
+        row = self.db.select(t).where(t.c.span_id == span_id).order_by(t.c.time_unix_nano.desc()).one()
+        return row["time_unix_nano"] if row else None
+
+    def children(self, worklet_id: str, span_id: str) -> list[dict]:
+        t = self.spans
+        return self.db.select(t).where(t.c.worklet_id == worklet_id, t.c.parent_span_id == span_id).all()
+
+    def spans_of(self, work_ids: Sequence[str], *, worklet: str | None = None, agent: bool = True,
+                 after: int | None = None, limit: int | None = None) -> list[dict]:
+        t = self.spans
+        conds = [t.c.work_id.in_(work_ids)]
+        if worklet:
+            conds.append(t.c.worklet_id == worklet)
+        if not agent:
+            conds.append(t.c.name.not_in(self.AGENT_SPANS))
+        if after is not None:
+            conds.append(t.c.seq > after)
+        if limit is not None:
+            return self.db.select(t).where(*conds).limit(limit).all()
+        return self._ordered(*conds)
 
     # ---- points ----
 
     def insert_point(self, row: dict) -> int:
         return self.db.insert(self.points).values(**row).run()
 
-    def points_of(self, work_ids: Sequence[str]) -> list[dict]:
+    def has_point(self, uid: str) -> bool:
+        return self.db.select(self.points).where(self.points.c.uid == uid).one() is not None
+
+    def points_of(self, work_ids: Sequence[str], *, worklet: str | None = None, agent: bool = True,
+                  after: int | None = None, limit: int | None = None) -> list[dict]:
         t = self.points
-        return self.db.select(t).where(t.c.work_id.in_(work_ids)).order_by(t.c.seq.asc()).all()
+        conds = [t.c.work_id.in_(work_ids)]
+        if worklet:
+            conds.append(t.c.worklet_id == worklet)
+        if not agent:
+            conds.append(t.c.event_name.not_in(self.AGENT_POINTS))
+        if after is not None:
+            conds.append(t.c.seq > after)
+        if limit is not None:
+            return self.db.select(t).where(*conds).limit(limit).all()
+        return self.db.select(t).where(*conds).order_by(t.c.time_unix_nano.asc(), t.c.seq.asc()).all()
+
+    def max_seq(self, work_ids: Sequence[str]) -> int:
+        """这几个 work 的段和点里最大的变更序号(没有 = 0)。"""
+        best = 0
+        for t in (self.spans, self.points):
+            for w in work_ids:                                  # 一个 work 一次,走 (work_id, seq) 索引
+                row = self.db.select(t).where(t.c.work_id == w, t.c.seq.is_not_null()).order_by(t.c.seq.desc()).one()
+                if row:
+                    best = max(best, row["seq"])
+        return best
+
+    # ---- 节点推到哪了 ----
+
+    def cursors_of(self, worklet_id: str) -> list[dict]:
+        t = self.cursors
+        return self.db.select(t).where(t.c.worklet_id == worklet_id).order_by(t.c.source.asc()).all()
+
+    def put_cursor(self, worklet_id: str, source: str, position: str, at: int) -> None:
+        t = self.cursors
+        if self.db.select(t).where(t.c.worklet_id == worklet_id, t.c.source == source).one():
+            self.db.update(t).where(t.c.worklet_id == worklet_id, t.c.source == source).set(position=position, updated_at=at).run()
+        else:
+            self.db.insert(t).values(worklet_id=worklet_id, source=source, position=position, updated_at=at).run()
 
     # ---- 某人在轨迹里出现过的地方:开过段、关过段、打过点(按 user 走索引)----
 
@@ -260,7 +339,7 @@ class TraceRepo:
             seen(r["work_id"], r["time_unix_nano"])
         return out
 
-    # ---- rounds ----
+    # ---- rounds(旧的拉取路径,只剩 Codex / Kimi)----
 
     def read_rounds(self, worklet_id: str) -> list[dict]:
         t = self.rounds

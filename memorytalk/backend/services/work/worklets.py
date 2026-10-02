@@ -59,10 +59,12 @@ class WorkletRegistry:
                                   "column_number": None, "position": None, "collapsed": False})
         return m
 
-    def touch(self, work_id: str, worklet_id: str) -> Worklet:
+    def touch(self, work_id: str, worklet_id: str, session_id: str | None = None) -> Worklet:
+        """重入:记下这次的时刻;现场重开了(agent 新起的会话)顺带换上新的会话 id。"""
         with self.repo.tx():
             self.get(work_id, worklet_id)
-            self.repo.update_worklet(worklet_id, last_attached=now())
+            changes = {"last_attached": now(), **({"session_id": session_id} if session_id else {})}
+            self.repo.update_worklet(worklet_id, **changes)
             return self.get(work_id, worklet_id)
 
     def remove(self, work_id: str, worklet_id: str) -> None:

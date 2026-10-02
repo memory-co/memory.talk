@@ -196,7 +196,7 @@ agent 点(节点写;都带 `log.record.uid`,正文在 `body`,见 [消息](#消�
 |---|---|---|---|
 | `works.db` | `works` | `id` | `parent`(索引)、`goal`、`status`、`created_by`(索引)、`created_at`、`archived_at`、`manager`、`viewers`(JSON 数组)、`next_worklet`、`next_column` |
 | | `work_columns` | (`work_id`, `number`) | `alias`、`collapsed`、`position`;索引 (`work_id`, `position`) |
-| | `worklets` | `id` | `work_id`(索引)、`number`、`uri`、`scheme`、`server`、`cwd`、`created_at`、`last_attached`、`column_number`(空 = 不在任何一列)、`position`、`collapsed`;索引 (`work_id`, `column_number`, `position`) |
+| | `worklets` | `id` | `work_id`(索引)、`number`、`uri`、`scheme`、`server`、`cwd`、`session_id`(agent 的会话 id,开现场时定;不对外)、`created_at`、`last_attached`、`column_number`(空 = 不在任何一列)、`position`、`collapsed`;索引 (`work_id`, `column_number`, `position`) |
 | | `inbox` | `seq` | `work_id`(索引,空 = 没人管)、`ts`、`layer`、`path`、`subject`、`sha`、`by`、`routed_by` |
 | `worktrace.db` | `spans` | `span_id` | `trace_id` / `work_id` / `worklet_id` / `user_id` / `end_user_id`(都有索引)、`parent_span_id`、`name`、`kind`、`start_time_unix_nano`、`end_time_unix_nano`(空 = 开着)、`status_code`、`attributes` / `links`(OTLP JSON)、`seq`(最后一次改动的变更序号,和 `work_id` 一起索引) |
 | | `points` | `seq`(变更序号,和 `spans` 共用) | `uid`(唯一)、`trace_id`、`span_id`(索引)、`work_id`(和 `seq` 一起索引)、`worklet_id`(和 `seq` 一起索引)、`column_number`、`user_id`(索引)、`event_name`(索引)、`time_unix_nano`、`observed_time_unix_nano`、`body`、`attributes` |

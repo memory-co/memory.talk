@@ -46,6 +46,8 @@ def _health(url: str) -> bool:
 
 
 def server_start(a) -> None:
+    from .node import node_start
+    node_start(quiet=True)                      # 节点先起来(已经在跑就不动);中心起来以后会让它盯着活着的 agent 现场
     inst = _read_instance()
     if inst and _alive(inst["pid"]) and _health(inst["url"]):
         print(f"memory.talk 已在跑(pid {inst['pid']}) {inst['url']}")
@@ -71,7 +73,7 @@ def server_start(a) -> None:
     else:
         raise Fail("10 秒内没就绪,看 " + str(home / "server.log"), 1)
     print(f"memory.talk 已启动(pid {proc.pid})\n  地址    {url}\n  文档    {url}/docs\n  存储    {inst['store']}  {home}\n"
-          f"  日志    {home / 'server.log'}\n  停止    memory.talk server stop")
+          f"  日志    {home / 'server.log'}\n  节点    memory.talk node status\n  停止    memory.talk server stop")
 
 
 def server_stop(a) -> None:
@@ -120,8 +122,8 @@ def server_status(a) -> None:
 
 
 def server_daemon(a) -> None:
-    import uvicorn
-    uvicorn.run("memorytalk.backend.main:create_app", factory=True, host=a.host, port=a.port, log_level="info")
+    from memorytalk.backend.serve import serve
+    serve(a.host, a.port)            # TCP 给人和浏览器,<home>/center.sock 给节点
 
 
 

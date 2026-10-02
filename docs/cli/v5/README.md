@@ -10,6 +10,7 @@
 memory.talk
 ├── version                                             # 版本号(也可 -V / --version)
 ├── server   start | stop | restart | status          # 本地 API 服务(后台守护)
+├── node     start | stop | status | daemon            # 本机节点:读 agent 的会话记录和 hooks,推进 trace
 ├── setup | login [<name>] | logout                   # 门:首次建 admin;密码换 token 存本地;退出
 ├── work     create | list | show | set               # work 树
 │            attach | worklets | detach | rounds   # 工作单元(现场)
@@ -26,7 +27,7 @@ memory.talk
 
 **命令组名用单数**(`work` / `meta`),像 `docker container`;它们操作的是 API 里的复数资源(`/api/works` / `/api/metas`)。`metas` 是 `meta` 的别名。
 
-分页面:[server.md](server.md) · [work.md](work.md) · [user.md](user.md) · [meta.md](meta.md) · [search.md](search.md)
+分页面:[server.md](server.md) · [node.md](node.md) · [work.md](work.md) · [user.md](user.md) · [meta.md](meta.md) · [search.md](search.md)
 
 ## 二、全局约定
 

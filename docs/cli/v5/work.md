@@ -78,7 +78,7 @@ memory.talk work attach work_…2f2f https://localhost:5173/ --column 3
 |---|---|
 | `worklets <id>` | 工作单元清单:id、URI、活没活着、最近重入 |
 | `detach <id> <wid>` | 关闭即回收:销毁现场 + 删登记 |
-| `rounds <id> <wid>` | agent 工作单元的 round(先从记录文件同步再读);`--json` 给逐 round 标注用 |
+| `rounds <id> <wid>` | 旧路径,只剩 Codex / Kimi:agent 工作单元的 round(先从记录文件同步再读);`claude://` 的对话在 trace 里(`GET …/trace?worklet=<wid>&agent=1&bodies=1`),这里是空的 |
 
 ## work inbox
 

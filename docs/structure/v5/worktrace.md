@@ -2,7 +2,7 @@
 
 `<HOME>/worktrace.db`(`MEMORY_TALK_WORKTRACE_DB` 可改),sqlite,WAL。装 work 的**经过**:有起止的是**段**(work、工作单元,agent 的会话 / 轮次 / 工具调用),一个时刻的事是**点**(人的动作、agent 的每条消息、状态变化)。**没有 round 这个单独的东西**:一条消息就是一个点,正文在点的 `body` 里。**现在**(work、列、工作单元登记)在 `works.db`,见 [work.md](work.md#存储)。模型和为什么见 [designs work-trace.md](../../designs/v5/work-trace.md);谁往里写、怎么推见 [designs work-node.md](../../designs/v5/work-node.md);读和写都走 `/api/works/{id}/trace`。
 
-> **状态:定下来的表设计,代码还没跟上。** 现在库里还多一张 `rounds` 表、`spans` 多一列 `first_round_id`,`points` 还没有 `uid` / `observed_time_unix_nano` / `body`,也还没有 `trace_cursors`;按 [work-node.md §11](../../designs/v5/work-node.md) 第 2 步实施时一起改,不迁移(§6)。
+> **状态:已实施,多两样旧东西。** 三张表照本篇建好了(老库起来时自动补上新加的列,不迁移数据)。还多一张 `rounds` 表和 `spans.first_round_id`:Codex / Kimi 还走中心去拉的旧路径,它们改成节点推([work-node.md §11](../../designs/v5/work-node.md))以后删。
 
 ---
 
@@ -197,4 +197,4 @@ CREATE TABLE trace_cursors (
 
 - **正文会让 `points` 大很多**。拖慢了列表和图的查询,就把 agent 点拆到单独的表或库,列不变([designs work-trace.md §10](../../designs/v5/work-trace.md))。
 - **只增不减**:三张表没有清理路径,`worktrace.db` 会一直长;按时间切库还是导出后删,和 [designs work-store.md §8](../../designs/v5/work-store.md) 一起定。
-- **实施时不迁移**:现在代码里的 `rounds` 表和 `spans.first_round_id` 直接删,已有的 round 不转成点,已有的 `agent.turn` 段留着不动。
+- **不迁移**:`rounds` 表和 `spans.first_round_id` 等 Codex / Kimi 改成推以后直接删,已有的 round 不转成点,已有的 `agent.turn` 段留着不动。

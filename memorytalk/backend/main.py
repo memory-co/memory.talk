@@ -20,7 +20,8 @@ from memorytalk.backend.services.search import SearchService
 from memorytalk.backend.services.work_servers import WorkServerService
 from memorytalk.backend.services.store import StoreService
 from memorytalk.backend.services.users import UserExists, UserNotFound, UserService
-from memorytalk.backend.services.work import ColumnNotFound, WorkletNotFound, WorkConflict, WorkNotFound, WorkService
+from memorytalk.backend.services.work import (ColumnNotFound, TraceRejected, WorkletNotFound, WorkConflict, WorkNotFound,
+                                              WorkService)
 from memorytalk.backend.services.work.viewers import SWEEP_EVERY, Viewers
 
 log = logging.getLogger(__name__)
@@ -36,13 +37,26 @@ async def _sweep_viewers(viewers: Viewers) -> None:
             log.exception("清 viewers 失败")
 
 
+async def _reconcile(works: WorkService) -> None:
+    """起来以后对一遍(work-node.md §7);等一下再做,让中心先把节点要推进来的那个口子开好。"""
+    await asyncio.sleep(1)
+    try:
+        n = await asyncio.to_thread(works.reconcile)
+        if n:
+            log.info("让节点接着盯 %d 个工作单元", n)
+    except Exception:
+        log.exception("和节点对账失败")
+
+
 def create_app(config: Config | None = None, runtime: RuntimeConfig | None = None) -> FastAPI:
     config = config or load_config()
     runtime = runtime or load_runtime_config()
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         sweeper = asyncio.create_task(_sweep_viewers(app.state.works.viewers))
+        reconcile = asyncio.create_task(_reconcile(app.state.works))     # 中心起来了:活着的 agent 现场都让节点盯着
         yield
+        reconcile.cancel()
         sweeper.cancel()
         with suppress(asyncio.CancelledError):
             await sweeper
@@ -82,6 +96,10 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
     @app.exception_handler(AuthError)
     async def _auth(_: Request, exc: AuthError):
         return JSONResponse(fail(exc.code, str(exc)), status_code=exc.status)
+
+    @app.exception_handler(TraceRejected)
+    async def _trace(_: Request, exc: TraceRejected):
+        return JSONResponse(fail("forbidden" if exc.status == 403 else "invalid", str(exc)), status_code=exc.status)
 
     @app.exception_handler(MetasError)
     async def _collect(_: Request, exc: MetasError):
