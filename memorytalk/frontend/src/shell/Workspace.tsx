@@ -12,7 +12,7 @@ import { usePreferences } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { columnLabel, columnNumber, workletLabel, type Column, type Worklet } from '@/lib/types';
 import { Empty, ErrorState, Loading, Modal } from '@/components/Shared';
-import { WorkletBody } from './WorkletBody';
+import { WorkletActions, WorkletBody } from './WorkletBody';
 
 /** 一列和放在这一列里的工作单元(从上到下)。 */
 type Lane = Column & { worklets: Worklet[] };
@@ -163,6 +163,7 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
               <span className="text-sm font-medium">{workletLabel(t, worklet.scheme)}</span><span className="text-xs text-muted-foreground">{index}</span>
               <span className={cn('size-1.5 shrink-0 rounded-full', worklet.alive ? 'bg-emerald-500' : 'bg-muted-foreground/40')} title={worklet.alive ? t('worklet.alive') : t('worklet.dead')} />
               <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground" title={worklet.uri}>{worklet.cwd || worklet.uri}</span>
+              <WorkletActions work={work.data} worklet={worklet} />
               <button type="button" draggable className="flex size-7 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing" aria-label={t('work.moveHandle')} title={t('work.moveHandle')}
                 onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', worklet.id); const card = e.currentTarget.closest('[data-worklet]'); if (card) e.dataTransfer.setDragImage(card, 24, 16); setDrag(worklet.id); }}
                 onDragEnd={endDrag}
