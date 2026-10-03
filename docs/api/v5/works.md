@@ -316,7 +316,7 @@ work 树(森林)。
 - id `<work_id>-w<n>` 在 work 内单调递增、不复用:关掉 `-w1` 再开一个是 `-w2`(计数是 `works.next_worklet`)。
 - 副作用:`worklets` 插一行(连同摆在哪);终端类起一个 tmux 会话(名 = 工作单元 id);放进那一列末尾;开一个 `worklet` 段(带 uri / scheme / server 和放进的列)。
 - `claude://`:起的是 `claude --session-id <新发的 uuid> --settings <注入 hooks 的文件>`,会话 id 记在登记上(不对外);开起来就让本机节点盯着这个工作单元(节点没起来只记日志,不挡开),它的对话从此由节点推进 trace,`handle.capabilities` 是 `["input.text", "input.keys", "trace.agent"]`。
-- `handle.capabilities`:`input.text` / `input.keys` = 能经 [`POST …/input`](#post-apiworkswork_idworkletsworklet_idinput) 往里送字、按键(终端和 agent 都有);`trace.agent` = 它的「记录」在 trace 里(claude 的对话;bash 的每条命令,一条一轮——`bash://<目录>` 起的 bash 带着记命令的钩子,跑脚本的没有);`rounds` = 旧的拉取路径(Codex / Kimi);网页什么都没有。
+- `handle.capabilities`:`input.text` / `input.keys` = 能经 [`POST …/input`](#post-apiworkswork_idworkletsworklet_idinput) 往里送字、按键(终端和 agent 都有);`trace.agent` = 它干的事在 trace 里(界面上的「轨迹」;claude 的对话;bash 的每条命令,一条一轮——`bash://<目录>` 起的 bash 带着记命令的钩子,跑脚本的没有);`rounds` = 旧的拉取路径(Codex / Kimi);网页什么都没有。
 
 | 错误 | 状态 |
 |---|---|

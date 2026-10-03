@@ -102,9 +102,9 @@ function pretty(input: string) {
 
 type Refused = 'busy' | 'blocked' | 'gone';
 
-/** 记录下面的输入框:经 POST …/input 送进现场(work-server-io.md §4,claude 就是往它的 tmux 里打字再按回车)。
+/** 轨迹下面的输入框:经 POST …/input 送进现场(work-server-io.md §4,claude 就是往它的 tmux 里打字再按回车)。
  *  agent 正在干活 / 在等确认时服务端默认不送(409 busy / blocked):正在干活可以「仍然发送」(排在这一轮后面);
- *  在等确认时打的字会被当成回答,不在这里送,去终端处理。送出去的话由节点读回来,出现在上面的记录里。 */
+ *  在等确认时打的字会被当成回答,不在这里送,去终端处理。送出去的话由节点读回来,出现在上面的轨迹里。 */
 function Composer({ work, worklet, state, onTerminal }: { work: Work; worklet: Worklet; state: string; onTerminal?: () => void }) {
   const t = useT();
   const shell = worklet.scheme === 'bash';                           // 终端:送的是命令,忙 = 有命令在跑
