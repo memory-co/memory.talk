@@ -50,7 +50,9 @@ export function WorkletBody({ work, worklet }: { work: Work; worklet: Worklet })
   const ended = work.status === 'archived';
   const web = ['http', 'https'].includes(worklet.scheme);
   const agent = ['codex', 'claude', 'kimi'].includes(worklet.scheme);
-  const pushed = pushedSchemes.includes(worklet.scheme);              // 对话在 trace 里(节点推);其余 agent 还走旧的 rounds
+  // 记录在 trace 里(节点推):claude 的对话、bash 的每条命令。活着的看把手有没有 trace.agent(跑脚本的、装钩子之前起的 bash 没有)
+  const pushed = pushedSchemes.includes(worklet.scheme) && (worklet.handle ? worklet.handle.capabilities.includes('trace.agent') : true);
+  const logged = agent || pushed;                                      // 有「记录」这一页
   const live = useQuery<Worklet>({ queryKey: ['live', work.id, worklet.id], enabled: false });
   const connect = useMutation({ mutationFn: () => api<Worklet>(`${base}/attach`, { method: 'POST' }),
     onSuccess: data => { queryClient.setQueryData(['live', work.id, worklet.id], data); for (const key of ['worklets', 'trace']) void queryClient.invalidateQueries({ queryKey: [key, work.id] }); },   // 重入可能开了新的一段
@@ -60,12 +62,12 @@ export function WorkletBody({ work, worklet }: { work: Work; worklet: Worklet })
   const rounds = useQuery({ queryKey: ['rounds', work.id, worklet.id], queryFn: ({ signal }) => api<Round[]>(`${base}/rounds`, { signal }),
     enabled: agent && !pushed && (mode === 'rounds' || ended), refetchInterval: ended ? false : 4_000,
   });
-  const showRounds = (mode === 'rounds' || ended) && agent;
-  return <Tabs value={ended && agent ? 'rounds' : mode} onValueChange={value => setMode(value as 'terminal' | 'rounds')} className="flex min-h-0 flex-1 flex-col" aria-label={t('worklet.current')}>
-    {agent && !ended && <div className="flex items-center justify-end border-b px-2 py-1">   {/* 只有 agent 才有这一行:终端 / 对话记录;打开 / 移除在标题行上 */}
+  const showRounds = (mode === 'rounds' || ended) && logged;
+  return <Tabs value={ended && logged ? 'rounds' : mode} onValueChange={value => setMode(value as 'terminal' | 'rounds')} className="flex min-h-0 flex-1 flex-col" aria-label={t('worklet.current')}>
+    {logged && !ended && <div className="flex items-center justify-end border-b px-2 py-1">   {/* 有记录的才有这一行:终端 / 记录;打开 / 移除在标题行上 */}
       <TabsList className="h-8" aria-label={t('worklet.view')}><TabsTrigger value="terminal" className="text-xs">{t('worklet.terminal')}</TabsTrigger><TabsTrigger value="rounds" className="text-xs">{t('worklet.transcript')}</TabsTrigger></TabsList>
     </div>}
-    <TabsContent value={ended && agent ? 'rounds' : mode} className="mt-0 flex min-h-0 flex-1 flex-col">
+    <TabsContent value={ended && logged ? 'rounds' : mode} className="mt-0 flex min-h-0 flex-1 flex-col">
       {showRounds && pushed ? <AgentLog work={work} worklet={worklet} onTerminal={() => setMode('terminal')} />
       : showRounds ? <div className="min-h-0 flex-1 overflow-auto">
         <div className="mx-auto flex max-w-3xl flex-col gap-4 p-4">

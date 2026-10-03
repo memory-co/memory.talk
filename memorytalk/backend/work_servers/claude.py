@@ -50,7 +50,7 @@ class ClaudeServer:
     def handle(self, worklet_id: str, uri: ParsedUri, cwd: Path, since_mtime: float) -> ClaudeHandle:
         return ClaudeHandle(self.tmuxd, worklet_id)
 
-    def watch_spec(self, worklet_id: str) -> dict:
+    def watch_spec(self, worklet_id: str, uri: ParsedUri | None = None) -> dict:
         """节点盯这个工作单元要知道的:hooks 事件文件、会话记录根、tmux socket(看现场活没活着)。"""
         return {"hooks": str(layout.hooks_file(self.node_dir, worklet_id)), "transcripts": str(self.projects),
                 "tmux_socket": self.tmuxd.tmux_socket}

@@ -64,12 +64,13 @@ trace 模型本来就有这些:span 有起点和终点;父子关系决定层级;
 
 | 点 `event.name` | 挂在 | `body` | 属性 |
 |---|---|---|---|
-| `agent.message` | 所在轮次段;第一条人的输入之前的(系统提示之类)挂会话段 | 这条消息的正文(扁平文本) | `memorytalk.message.role`(`user` / `assistant` / `system`)、`memorytalk.message.kind`(`text` / `thinking`)、`log.record.uid` |
+| `agent.message` | 所在轮次段;第一条人的输入之前的(系统提示之类)挂会话段 | 这条消息的正文(扁平文本) | `memorytalk.message.role`(`user` / `assistant` / `system`)、`memorytalk.message.kind`(`text` / `thinking`;bash 的输出是 `output`)、`log.record.uid` |
 | `agent.tool.input` | 那次调用的工具段 | 调用参数(JSON 文本) | `gen_ai.tool.name`、`gen_ai.tool.call.id`、`log.record.uid` |
 | `agent.tool.output` | 那次调用的工具段 | 结果正文 | `gen_ai.tool.call.id`、`memorytalk.tool.error`(结果标了出错时为 `true`)、`log.record.uid` |
 | `agent.state` | 会话段 | — | `memorytalk.state`(`idle` / `busy` / `blocked`,[work-server-io.md §5](work-server-io.md)) |
 
 - **正文只在点的 `body` 里**,段上只放结构和计数,不放大块内容。人的输入是它那一轮的第一个点。
+- **bash 也是这几层**([work-server-io.md §6](work-server-io.md)):会话段 = 这个 bash 进程(`memorytalk.agent = bash`、`process.pid`),一条命令 = 一轮(人那句 = 命令原文,回复 = 它的输出,`kind = output`;退出码在轮次段的 `process.exit.code`,Ctrl-C 记成 `cancelled`),没有工具段。前面加了空格的命令只留一轮空的(`memorytalk.message.hidden = true`)。
 - **子 agent**(Claude Code 用 Task 工具派出去的):它的消息和工具调用挂在派它的那个工具段下面——子 agent 的一轮就是那个工具段下的一段 `agent.turn`。
 
 原来 `events` 里的每一种都有着落,原来的 round 也一样:

@@ -19,13 +19,15 @@ from pathlib import Path
 from typing import Protocol
 
 from . import layout, otlp
-from .claude import Batch, ClaudeReader, Spec, restore
+from .base import Batch, Spec
+from .bash import BashReader
+from .claude import ClaudeReader
 
 log = logging.getLogger(__name__)
 
 STEPS_PER_POLL = 8             # 一轮里一个工作单元最多推几批(大的会话记录分几轮追上,别的工作单元不用等)
 RETRY_AFTER = 3.0              # 秒;中心连不上时隔多久再试
-READERS = {"claude": ClaudeReader}
+READERS = {"claude": ClaudeReader, "bash": BashReader}
 
 
 class Rejected(Exception):
@@ -45,7 +47,7 @@ class Center(Protocol):
 class Watch:
     def __init__(self, spec: Spec) -> None:
         self.spec = spec
-        self.reader: ClaudeReader | None = None          # 从中心读回游标之后才有
+        self.reader = None                                 # 从中心读回游标之后才有(ClaudeReader / BashReader)
         self.last_alive = time.time_ns()
 
 
@@ -140,7 +142,7 @@ class Node:
     def _step(self, w: Watch, finish: tuple[str, int] | None = None, extra: list[dict] = ()) -> bool:
         """读一步、推一批;交回「还有没读完的」。推不成功就抛出去,游标不动。"""
         if w.reader is None:
-            w.reader = READERS[w.spec.server](w.spec, restore(w.spec, self.center.cursors(w.spec.work_id, w.spec.worklet_id)))
+            w.reader = READERS[w.spec.server].restored(w.spec, self.center.cursors(w.spec.work_id, w.spec.worklet_id))
         batch = w.reader.step(finish)
         for s in extra:
             batch.spans[s["spanId"]] = s

@@ -368,7 +368,7 @@ class WorkService:
     def rounds(self, work_id: str, worklet_id: str) -> list[Round]:
         """旧的拉取路径(Codex / Kimi)。走推的(claude)没有 round:它的对话在 trace 里。"""
         m = self.worklets.get(work_id, worklet_id)
-        if self.work_servers.watch_spec(m.server, m.id) is not None:
+        if self.work_servers.watch_spec(m.server, m.id, m.uri) is not None:
             return []
         if self.tree.get(work_id).status != "archived":
             self._sync(work_id, m)
@@ -382,7 +382,7 @@ class WorkService:
 
     def _final(self, work_id: str, m: Worklet, reason: str) -> None:
         """关掉 / 归档之前:走推的让节点读到头、推完、结束开着的 agent 段;旧路径最后收一次 round。尽力而为,失败不挡动作。"""
-        if self.work_servers.watch_spec(m.server, m.id) is not None:
+        if self.work_servers.watch_spec(m.server, m.id, m.uri) is not None:
             self.nodes.flush(m.id, reason)
             return
         try:
@@ -394,7 +394,7 @@ class WorkService:
 
     def _watch(self, work_id: str, m: Worklet) -> None:
         """走推的 server 开起来(打开 / 重入)就让节点盯着:从这个工作单元开着的 worklet 段往下挂。节点没起来只记日志。"""
-        spec = self.work_servers.watch_spec(m.server, m.id)
+        spec = self.work_servers.watch_spec(m.server, m.id, m.uri)
         if spec is None:
             return
         try:
@@ -414,7 +414,7 @@ class WorkService:
             if w.status == "archived":
                 continue
             for m in self.worklets.list(w.id):
-                if self.work_servers.watch_spec(m.server, m.id) is not None and self.work_servers.alive(m.server, m.id):
+                if self.work_servers.watch_spec(m.server, m.id, m.uri) is not None and self.work_servers.alive(m.server, m.id):
                     self._watch(w.id, m)
                     n += 1
         return n

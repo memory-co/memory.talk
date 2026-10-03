@@ -68,8 +68,8 @@ export interface WorkTrace {
 }
 export const traceSpans = (trace: WorkTrace) => (trace.traces.resourceSpans ?? []).flatMap(r => r.scopeSpans ?? []).flatMap(s => s.spans ?? []);
 export const traceRecords = (trace: WorkTrace) => (trace.logs.resourceLogs ?? []).flatMap(r => r.scopeLogs ?? []).flatMap(s => s.logRecords ?? []);
-/** 哪些工作单元的 output 由节点推进 trace(对话在 trace 里);其余 agent 还走旧的 rounds。 */
-export const pushedSchemes = ['claude'];
+/** 哪些工作单元的 output 由节点推进 trace(「记录」在 trace 里):claude 的对话、bash 的每条命令;其余 agent 还走旧的 rounds。 */
+export const pushedSchemes = ['claude', 'bash'];
 export interface InboxItem { ts: string; layer: string; path: string; subject: string; by: string | null }
 export const workStatuses: WorkStatus[] = ['running', 'archived'];
 export const statusLabel = (t: T, status: WorkStatus) => t(`status.${status}`);

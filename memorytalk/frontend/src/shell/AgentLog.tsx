@@ -80,8 +80,12 @@ function build(spans: TraceSpan[], points: TraceLogRecord[]) {
 }
 
 const compact = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k` : String(n));
+/** 耗时:一秒以内写毫秒(终端的命令大多很快),十秒以内一位小数,再长写分秒。 */
 function duration(t: T, ns: bigint) {
-  const s = Number(ns / 1_000_000_000n);
+  const ms = Number(ns / 1_000_000n);
+  if (ms < 1000) return t('agent.millis', { ms });
+  if (ms < 10_000) return t('agent.seconds', { s: (ms / 1000).toFixed(1) });
+  const s = Math.round(ms / 1000);
   return s < 60 ? t('agent.seconds', { s }) : t('agent.minutes', { m: Math.floor(s / 60), s: s % 60 });
 }
 /** 工具调用一行里的那句提示:命令、文件、搜的东西……没有就不写。 */
@@ -103,6 +107,7 @@ type Refused = 'busy' | 'blocked' | 'gone';
  *  在等确认时打的字会被当成回答,不在这里送,去终端处理。送出去的话由节点读回来,出现在上面的记录里。 */
 function Composer({ work, worklet, state, onTerminal }: { work: Work; worklet: Worklet; state: string; onTerminal?: () => void }) {
   const t = useT();
+  const shell = worklet.scheme === 'bash';                           // 终端:送的是命令,忙 = 有命令在跑
   const [text, setText] = useState('');
   const [refused, setRefused] = useState<Refused | null>(null);
   useEffect(() => { setRefused(null); }, [state]);                    // 状态变了,上一次的拒绝就不算数了
@@ -118,11 +123,12 @@ function Composer({ work, worklet, state, onTerminal }: { work: Work; worklet: W
     },
   });
   const submit = (force = false) => { if (text.trim() && !send.isPending) send.mutate(force); };
-  const placeholder = state === 'busy' ? t('agent.placeholderBusy', { name }) : state === 'blocked' ? t('agent.placeholderBlocked', { name }) : t('agent.placeholder', { name });
+  const placeholder = state === 'busy' ? t(shell ? 'agent.shellPlaceholderBusy' : 'agent.placeholderBusy', { name })
+    : state === 'blocked' ? t('agent.placeholderBlocked', { name }) : t(shell ? 'agent.shellPlaceholder' : 'agent.placeholder', { name });
   return <div className="shrink-0 border-t bg-background px-4 py-3">
     <div className="mx-auto max-w-3xl">
       {refused && <div className={cn('mb-2 flex flex-wrap items-center gap-2 text-xs', refused === 'busy' ? 'text-muted-foreground' : 'text-amber-600 dark:text-amber-400')}>
-        <span>{refused === 'busy' ? t('agent.refusedBusy', { name }) : refused === 'blocked' ? t('agent.refusedBlocked', { name }) : t('agent.refusedGone')}</span>
+        <span>{refused === 'busy' ? t(shell ? 'agent.shellRefusedBusy' : 'agent.refusedBusy', { name }) : refused === 'blocked' ? t('agent.refusedBlocked', { name }) : t('agent.refusedGone')}</span>
         {refused === 'busy' && <Button variant="outline" size="sm" className="h-6 px-2 text-xs" disabled={send.isPending} onClick={() => submit(true)}>{t('agent.sendAnyway')}</Button>}
         {refused === 'blocked' && onTerminal && <Button variant="outline" size="sm" className="h-6 gap-1 px-2 text-xs" onClick={onTerminal}><Terminal className="size-3" />{t('agent.toTerminal')}</Button>}
       </div>}
@@ -154,12 +160,13 @@ export function AgentLog({ work, worklet, onTerminal }: { work: Work; worklet: W
   }, [items.length]);
   const time = (at: bigint) => new Date(Number(at / 1_000_000n)).toLocaleTimeString(localeTag(locale), { hour: '2-digit', minute: '2-digit' });
   const agentName = workletLabel(t, worklet.scheme);
+  const shell = worklet.scheme === 'bash';                           // 终端:人那句是命令、回复是输出、一轮收尾写退出码
   return <div className="flex min-h-0 flex-1 flex-col">
     <div ref={scroller} className="min-h-0 flex-1 overflow-auto" onScroll={e => { const el = e.currentTarget; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}>
     <div className="mx-auto flex max-w-3xl flex-col gap-4 p-4">
       <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground"><FileText className="size-3.5" />{live ? t('agent.live') : t('worklet.transcriptEnded')}</p>
       {live && state && <p className={cn('flex items-center justify-center gap-1.5 text-xs', state === 'blocked' ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
-        <span className={cn('size-1.5 rounded-full', state === 'busy' ? 'animate-pulse bg-emerald-500' : state === 'blocked' ? 'bg-amber-500' : 'bg-muted-foreground/50')} />{t(`agent.${state}` as 'agent.busy')}
+        <span className={cn('size-1.5 rounded-full', state === 'busy' ? 'animate-pulse bg-emerald-500' : state === 'blocked' ? 'bg-amber-500' : 'bg-muted-foreground/50')} />{t((shell ? `agent.shell.${state}` : `agent.${state}`) as 'agent.busy')}
       </p>}
       {!loaded ? (error ? <ErrorState error={error} /> : <Loading />)
         : !items.length ? <Empty icon={<FileText className="size-5" />} title={t('worklet.noTranscript')}><p>{t('worklet.noTranscriptText')}</p></Empty>
@@ -169,9 +176,13 @@ export function AgentLog({ work, worklet, onTerminal }: { work: Work; worklet: W
             return <p key={item.key} className="flex items-center gap-3 text-xs text-muted-foreground before:h-px before:flex-1 before:bg-border after:h-px after:flex-1 after:bg-border">{source ? t('agent.newSessionFrom', { source }) : t('agent.newSession')}</p>;
           }
           if (item.kind === 'turn') {
-            const s = item.span, reason = text(s, 'memorytalk.end.reason');
+            const s = item.span, reason = text(s, 'memorytalk.end.reason'), took = duration(t, nanos(s.endTimeUnixNano) - nanos(s.startTimeUnixNano));
+            const code = attrValue(s.attributes, 'process.exit.code');
+            if (typeof code === 'number')                              // 终端的一条命令:退出码 + 耗时
+              return <p key={item.key} className={cn('text-center text-xs', code === 0 ? 'text-muted-foreground' : 'text-destructive')}>
+                {[reason === 'cancelled' ? t('agent.shellCancelled') : code === 0 ? t('agent.exitOk') : t('agent.exitCode', { code }), took].join(' · ')}</p>;
             const input = attrValue(s.attributes, 'gen_ai.usage.input_tokens'), output = attrValue(s.attributes, 'gen_ai.usage.output_tokens');
-            const parts = [reason === 'cancelled' ? t('agent.turnCancelled') : t('agent.turnDone'), duration(t, nanos(s.endTimeUnixNano) - nanos(s.startTimeUnixNano))];
+            const parts = [reason === 'cancelled' ? t('agent.turnCancelled') : t('agent.turnDone'), took];
             if (typeof input === 'number' && typeof output === 'number') parts.push(t('agent.tokens', { input: compact(input), output: compact(output) }));
             return <p key={item.key} className="text-center text-xs text-muted-foreground">{parts.join(' · ')}</p>;
           }
@@ -191,10 +202,13 @@ export function AgentLog({ work, worklet, onTerminal }: { work: Work; worklet: W
           const p = item.point, role = text(p, 'memorytalk.message.role'), thinking = text(p, 'memorytalk.message.kind') === 'thinking';
           if (role === 'system') return <details key={item.key} className="text-xs text-muted-foreground"><summary className="cursor-pointer truncate">{body(p).replace(/<[^>]+>/g, ' ').trim().slice(0, 120) || t('agent.system')}</summary><pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 font-mono">{body(p)}</pre></details>;
           if (thinking) return <details key={item.key} className="mr-8 text-sm text-muted-foreground sm:mr-16"><summary className="cursor-pointer text-xs">{t('agent.thinking')}</summary><p className="mt-1 whitespace-pre-wrap text-xs">{body(p)}</p></details>;
-          const human = role === 'user';
-          return <article key={item.key} className={cn('rounded-lg text-sm', human ? 'ml-8 border bg-muted/50 p-4 sm:ml-16' : 'mr-8 p-4 sm:mr-16')}>
+          const human = role === 'user', output = text(p, 'memorytalk.message.kind') === 'output';
+          return <article key={item.key} className={cn('min-w-0 rounded-lg text-sm', human ? 'ml-8 border bg-muted/50 p-4 sm:ml-16' : 'mr-8 p-4 sm:mr-16')}>
             <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground"><span className="font-medium text-foreground">{human ? t('worklet.you') : agentName}</span><time>{time(item.at)}</time></div>
-            <Markdown text={body(p)} />
+            {attrValue(p.attributes, 'memorytalk.message.hidden') === true ? <p className="text-xs italic text-muted-foreground">{t('agent.shellHidden')}</p>
+              : human && shell ? <pre className="overflow-x-auto whitespace-pre-wrap break-all font-mono text-sm"><span className="select-none text-muted-foreground">$ </span>{body(p)}</pre>
+              : output ? <pre className="max-h-96 overflow-auto overscroll-x-contain whitespace-pre-wrap break-all rounded bg-muted p-3 font-mono text-xs leading-5">{body(p)}</pre>
+              : <Markdown text={body(p)} />}
           </article>;
         })}
     </div>

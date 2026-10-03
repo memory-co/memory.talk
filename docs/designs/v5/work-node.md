@@ -1,6 +1,6 @@
 # work-node —— 节点:现场和采集住在边上,往中心推(v5 设计)
 
-> **状态:部分实施——Claude Code 已经走这条路**(§11 第 2 ~ 5 步里 Claude 的部分:写入口和 `trace_cursors`、节点 v0(`memorytalk/node/`,`memory.talk node`)、`--session-id` 定身份、hooks、前端等变化)。Codex / Kimi 还是中心去拉;tmuxd 还在中心;远程节点没做。本篇定 agent 的记录(以后还有现场本身)怎么从「中心去拉」改成「边上往中心推」:**每台机器一个节点进程**,读本机 agent 的会话记录、收 agent 的 hooks、看现场活没活,把这些变成 trace 推给中心;**中心只管存、查和做决定**。推上来的是什么(会话 / 轮次 / 工具段,消息点)见 [work-trace.md §2](work-trace.md),落在哪几张表见 [structure worktrace.md](../../structure/v5/worktrace.md)。
+> **状态:部分实施——Claude Code 和 bash 已经走这条路**(§11 第 2 ~ 5 步里 Claude 的部分:写入口和 `trace_cursors`、节点 v0(`memorytalk/node/`,`memory.talk node`)、`--session-id` 定身份、hooks、前端等变化)。Codex / Kimi 还是中心去拉;tmuxd 还在中心;远程节点没做。本篇定 agent 的记录(以后还有现场本身)怎么从「中心去拉」改成「边上往中心推」:**每台机器一个节点进程**,读本机 agent 的会话记录、收 agent 的 hooks、看现场活没活,把这些变成 trace 推给中心;**中心只管存、查和做决定**。推上来的是什么(会话 / 轮次 / 工具段,消息点)见 [work-trace.md §2](work-trace.md),落在哪几张表见 [structure worktrace.md](../../structure/v5/worktrace.md)。
 
 相关:
 - server 怎么把现场建出来(窗 + 把手): [work-server.md](work-server.md)
@@ -56,7 +56,8 @@ agent 的记录现在这样进 trace:有人打开「对话记录」(前端每 4 
   | 工作单元 | 读什么 | 推什么 |
   |---|---|---|
   | agent(claude / codex / kimi) | 会话记录(只读新增的部分:先 stat,大小或修改时间变了才读)、hooks 事件文件、tmux 会话在不在 | 会话 / 轮次 / 工具段,消息点,状态点;现场没了就报 `gone` |
-  | 终端(bash / default) | tmux 会话在不在 | 现场没了就报 `gone`(带最后确认活着的时刻) |
+  | bash | 命令事件文件(rcfile 装的钩子写的)、每条命令的输出文件、tmux 会话在不在 | 一条命令一轮(人那句 = 命令,回复 = 输出,退出码),状态点;现场没了就报 `gone`([work-server-io.md §6](work-server-io.md)) |
+  | default | tmux 会话在不在 | 现场没了就报 `gone`(带最后确认活着的时刻;现在还没盯它,中心列清单时兜底) |
   | http | — | 没有(等 webmuxd) |
 
 - **一个后台循环轮着看所有工作单元**,不是一个工作单元一个线程;只 stat,变了才读。

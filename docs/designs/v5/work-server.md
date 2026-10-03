@@ -91,7 +91,7 @@ server 这个概念**不新造一套规范**,它的形状就是 shellbase 已经
 「形状是 `*muxd` 规范」这句话只有一种兑现方式:**server 的实现面就是一个 `*muxd` 库**。自己再写一遍 `tmux new-session` / `has-session` / `kill-session`,然后说「照 tmuxd 的规范」,是空话——规范里的每一条(id 幂等、ttyd 那扇窗、活得比连接久、不碰用户自己的 tmux、失败说清楚)都是库里已经做完的事,自己实现一遍只会做出一个更差的、没被验证过的 tmuxd。所以:
 
 - **终端这一族(bash / claude / codex / kimi / default)全部跑在 [tmuxd](https://github.com/memory-co/tmuxd)(pip `tmuxd`)上。** memory.talk 进程里持有一个 `Tmuxd` 实例(自己的 socket、自己的 ttyd、自己的 state 目录,都在 `~/.memory.talk/tmuxd/` 下),每个终端类 server 拿着它:建 / 取现场 = `t.session(id=worklet_id, cwd=…, cmd=…)`;窗 = `s.url`(ttyd 跟着 tmuxd 自带,**不再需要自己配一个 ttyd**);把手 = `s`(`alive` / `send` / `send_key` / `kill`)。server 自己只剩两件事:**决定 cwd 和命令**(协议名当命令名、path 当工作目录),以及 agent 类**开现场时多做一点**——定下会话 id、注入 hooks(读记录的是节点,不是 server)。
-- **tmuxd 只写不读,所以 server 也只写不读。** 原来的 `capture`(抓屏)去掉:读终端归人(打开那扇窗),不归 API。agent 的对话不是抓屏,是读平台自己落的记录文件和 hooks,那是节点的事。
+- **tmuxd 只写不读,所以 server 也只写不读。** 原来的 `capture`(抓屏)去掉:读终端归人(打开那扇窗),不归 API。agent 的对话不是抓屏,是读平台自己落的记录文件和 hooks,那是节点的事;bash 的记录也不是谁去读屏幕,是 shell 在自己的钩子里报每条命令的边界、取自己那一段([work-server-io.md §6](work-server-io.md))。
 - **http server 将来跑在 webmuxd 上。** 浏览器那一块比终端复杂(真浏览器实例、CDP 把手),先不做;现在的 http server 就是最薄的那个——窗 = URL,把手为空。换成 webmuxd 时协议不变,work 层无感。
 
 所以 v5 里「server」和「`*muxd` 组件」的关系是:`*muxd` 库是**实现面**,server 是包在外面的**契约面**——多说一句它响应哪些协议、在 memory.talk 里怎么被请求到,再多一点 memory.talk 自己关心的事(开现场时定下 agent 的身份,让节点读得准)。

@@ -1,6 +1,6 @@
 # work-server-io —— 每个 work server 一对口子:input 各自实现,output 就是 trace(v5 设计)
 
-> **状态:大部分实施。** output = trace 已经接上 Claude Code(节点推;界面的「记录」从 trace 读,`after` + `wait` 等变化),Codex / Kimi 还走旧的 rounds。input:`POST …/input` 的 `text` / `keys`、§5 的门控、`worklet.input` 点、轮次带 `memorytalk.input.id` 都做了,界面「记录」下面能直接发,CLI 有 `work send` / `work key`;还没有:`input.paste`(等 tmuxd)、轮次指回 input 的 link、`work tail`。「每个 server 一个 input 口、一个 output 口」:input 由各 server 自己实现(比如 claude 用 tmuxd 的 `send` 把字符串打进去);**output 不是另一个接口,它就是 trace**——现场所在机器上的节点把现场吐出来的东西写进 trace(`POST /works/{id}/trace`),谁要看就从 trace 读(`GET /works/{id}/trace`)。本篇定 input 的契约、output 在 trace 里长什么样、两边怎么连上;节点见 [work-node.md](work-node.md),trace 的模型和读法见 [work-trace.md](work-trace.md)。字段落地后进 [`../../structure/v5/worktrace.md`](../../structure/v5/worktrace.md) 和 [`../../structure/v5/work.md`](../../structure/v5/work.md),端点进 [`../../api/v5/works.md`](../../api/v5/works.md)。
+> **状态:大部分实施。** output = trace 已经接上 Claude Code 和 bash(节点推;界面的「记录」从 trace 读,`after` + `wait` 等变化;bash 一条命令一轮,§6),Codex / Kimi 还走旧的 rounds。input:`POST …/input` 的 `text` / `keys`、§5 的门控、`worklet.input` 点、轮次带 `memorytalk.input.id` 都做了,界面「记录」下面能直接发,CLI 有 `work send` / `work key`;还没有:`input.paste`(等 tmuxd)、轮次指回 input 的 link、`work tail`。「每个 server 一个 input 口、一个 output 口」:input 由各 server 自己实现(比如 claude 用 tmuxd 的 `send` 把字符串打进去);**output 不是另一个接口,它就是 trace**——现场所在机器上的节点把现场吐出来的东西写进 trace(`POST /works/{id}/trace`),谁要看就从 trace 读(`GET /works/{id}/trace`)。本篇定 input 的契约、output 在 trace 里长什么样、两边怎么连上;节点见 [work-node.md](work-node.md),trace 的模型和读法见 [work-trace.md](work-trace.md)。字段落地后进 [`../../structure/v5/worktrace.md`](../../structure/v5/worktrace.md) 和 [`../../structure/v5/work.md`](../../structure/v5/work.md),端点进 [`../../api/v5/works.md`](../../api/v5/works.md)。
 
 相关:
 - server 是什么、把手是什么(`send` 在把手上有、API 不露,§8 留的门就是本篇): [work-server.md](work-server.md)
@@ -33,7 +33,7 @@
 2. **input 要能知道「现在能不能送」**。往一个正在跑的 Claude Code 里打字,会插进它这一轮;要有**状态**(空闲 / 忙 / 等人确认)。状态也是 trace 里的点,来自 agent 自己的 hooks 和记录里的收尾标记(§5)。
 3. **input 自己也要进 trace,并且和它引起的那一轮连上**。不然只看得到「agent 跑了一轮」,看不到「是谁、从哪送进来的哪句话触发的」(§4.3)。
 4. **input 不只一种形状**。一句话、按一个键(Esc、Ctrl-C)、一段多行文字,在终端里是三件事;多行要用粘贴,tmuxd 现在没有(§4.2)。
-5. **不是每个现场都有对话可记**。bash / default 背后是 tmuxd,**只写不读**;http 现在连把手都没有。它们在 trace 里只有工作单元那一段,要能如实说「我没有」(§2、§6)。
+5. **不是每个现场都有对话可记**。default 背后是 tmuxd,**只写不读**;http 现在连把手都没有。它们在 trace 里只有工作单元那一段,要能如实说「我没有」(§2、§6)。bash 例外:它自己报每条命令的边界,一条命令记成一轮(§6)。
 
 ---
 
@@ -46,9 +46,9 @@
 | `input.text` | 打一行字,可选再按回车提交 | bash、default、claude、codex、kimi |
 | `input.keys` | 按键名:`Enter` / `Escape` / `C-c` / `Up` … | 同上 |
 | `input.paste` | 一段多行文字原样进去,不被当成多次回车 | claude、codex、kimi(要 tmuxd 加 `paste`,§4.2) |
-| `trace.agent` | 这个现场的对话会进 trace:节点推会话 / 轮次 / 工具段,消息点和状态点 | claude、codex、kimi |
+| `trace.agent` | 这个现场的「记录」会进 trace:节点推会话 / 轮次 / 工具段,消息点和状态点 | claude、bash(每条命令一轮,§6);codex、kimi 等节点能读它们 |
 
-- **output 这一侧只有一个能力,就是「trace 里有没有 agent 那几层」。** 没有 `trace.agent` 的(bash / default / http),trace 里只有它的 `worklet` 段:开、关、现场没了。
+- **output 这一侧只有一个能力,就是「trace 里有没有 agent 那几层」。** 没有 `trace.agent` 的(default / http,跑脚本的 bash),trace 里只有它的 `worklet` 段:开、关、现场没了。
 - **状态不是单独的能力**:有 `trace.agent` 的,状态就是 trace 里最新的 `agent.state` 点;没有的,只有「在 / 不在」(`worklet` 段开着没有)。
 - http 第一版什么都没有(换成 webmuxd 后有 CDP:点击、填表、读 DOM)。**调用方先看能力再用**,没有的能力调了就是 `409 unsupported`,不假装成功。
 
@@ -152,18 +152,24 @@ agent 的现场有三种需要区分的状态:
 
 **谁读状态**:`POST …/input` 时中心读这一个点来门控——默认只在 `idle` 时送,其余返回 `409 busy` / `409 blocked` / `409 gone`,带当前状态;调用方明确要插话就带 `force: true`(比如要发 `Escape` 打断它——发键的时候默认就是 force)。界面和程序要看状态,也是读 trace(`after` + `wait` 在状态变化时就醒);工作单元清单里带的那份当前状态,是从 trace 现算的,不另存。
 
-终端类(bash / default)没有可信的「忙不忙」——tmuxd 只写不读,也不该去猜屏幕。它们只有在 / 不在,input 不做门控,调用方自己负责。
+bash 的「忙不忙」由 shell 自己报(§6):有命令在跑就是 `busy`,回到提示符就是 `idle`——门控和 agent 一样(在跑的程序会读走送进去的字,要送就带 `force`;按 Ctrl-C 不门控)。default 没有可信的忙不忙(tmuxd 只写不读,也不该去猜屏幕),只有在 / 不在,input 不做门控,调用方自己负责。
 
 ---
 
-## 6. trace 里只有工作单元一段的 server
+## 6. bash:shell 自己报边界,一条命令一轮
 
-bash / default 是 tmuxd 起的,**tmuxd 只写不读**:读终端归人(打开那扇窗)。这条不为本篇破例。所以它们**没有 `trace.agent`**:trace 里只有它们的 `worklet` 段,读它们的 output 就只读得到「开了、关了、现场没了」。
+bash 没有 agent 那样的会话记录,但它能**自己报每条命令的边界**——就是终端常说的「shell 集成」(VS Code、iTerm2 都靠它认出「一条命令从哪开始、到哪结束」)。所以 bash 也有和 claude 一样的「记录」:
 
-想过、没选的:
+- **怎么装**:bash server 新起的 bash 带 `--rcfile`(节点目录里生成,`node/layout.py`):先读用户自己的 `~/.bashrc`(和直接开 bash 一个环境),再装两个钩子——`PS0`(读到一条命令、执行之前,一条命令展开一次)写一行 `cmd`(命令原文、目录),`PROMPT_COMMAND`(回到提示符之前)写一行 `done`(退出码、目录、输出文件)。起来时另写一行 `start`(pid、版本)。事件文件就是这个工作单元的 `hooks.jsonl`,和 claude 的 hooks 一个用法。
+- **输出从哪来**:`done` 时 `tmux capture-pane` 取这条命令开始到结束之间那一段屏幕——**渲染好的文字**,不是字节流:没有控制字符,进度条只剩最后的样子,全屏程序(vim、htop)用的是另一块屏幕,退出后什么都不留。超过 tmux 的回滚上限(tmuxd 是 1 万行)只剩后面那些;进 trace 时再截到 64 KiB(留头留尾)。
+- **怎么记**(节点,`node/bash.py`):`start` 开会话段;`cmd` 开一轮,人那句 = 命令原文,状态 `busy`;`done` 把输出记成回复(`memorytalk.message.kind = output`)、结束这一轮(退出码记在 `process.exit.code`;Ctrl-C 的 130 记成 `cancelled`),状态 `idle`。和 claude 一样:从记录里送进去的命令,轮次带 `memorytalk.input.id`。
+- **隐私**:命令和输出都会进 trace。沿用 bash 的老习惯——**命令前加一个空格,不进历史,也不进记录**:原文和输出都不记,只留一轮空的(谁、何时、退出码)。为了认得出来,这个 bash 里 `HISTCONTROL` 只保留 `ignorespace`(重复的命令照常进历史)。
+- **不记的**:`bash:///<脚本>`(跑一个脚本,跑完现场就没了);装钩子之前就起的老现场(没有 rcfile,不假装有记录);default server(`vim://` 之类,不是 shell)。
 
-- **`tmux pipe-pane` 把终端原始输出写到文件,当 output**。拿到的是带转义序列的字节流,不是内容:进度条、光标移动、全屏程序(vim、htop)都是噪声,也没有「一轮」可言。要做也是另一种能力(比如 `trace.raw`),不混进消息。先不做。
-- **抓屏(`capture-pane`)**。tmuxd 刻意不提供,`capture` 早就去掉了(work-server.md §6)。
+这推翻了原来「终端只写不读」的说法。原来没选的两条,理由对这里都不成立:
+
+- **`tmux pipe-pane` 把原始输出当 output**:拿到的是带转义序列的字节流、没有「一轮」可言——现在边界由 shell 报,内容取渲染结果,两个问题都没有了。
+- **抓屏**:tmuxd 仍然不提供(`capture` 去掉了,work-server.md §6);这里是 shell 在自己的钩子里取**自己那一条命令**的那一段,不是谁随时去读别人的屏幕。
 
 http 现在没有把手;等它换成 webmuxd,input 是 CDP 的点击 / 输入,页面事件照样写进 trace,到时再按本篇的契约接进来。
 

@@ -21,7 +21,7 @@
 ├── tmuxd/                            ← tmuxd 的 state(会话记录、ttyd 记录、tmux.conf、ttyd.sock——窗经它挂到 /surface/tmuxd);tmux 会话本身不落盘
 ├── center.sock                       ← 中心给本机节点开的口子(0600;从这里上来的请求身份是节点,只能读写 trace)
 ├── node/                             ← 本机节点(memory.talk node):node.sock(中心 → 节点)、node.json、node.log
-│   └── worklets/<worklet id>/        ←   盯着的工作单元:watch.json(盯它的说明)、settings.json(claude 的 hooks)、hooks.jsonl(hook 事件)
+│   └── worklets/<worklet id>/        ←   盯着的工作单元:watch.json(盯它的说明)、hooks.jsonl(事件)、settings.json(claude 的 hooks)、bashrc + cur + out/(bash 记命令的钩子、正在跑的那条、每条命令的输出)
 ├── credentials.json                  ← CLI 的登录态(客户端的事,按服务地址分开;memory.talk login 写)
 ├── works.db                          ← work 的现在(sqlite,+ -wal / -shm):works / work_columns / worklets / inbox 四张表
 ├── worktrace.db                      ← work 的经过(sqlite,+ -wal / -shm):spans / points / trace_cursors 三张表

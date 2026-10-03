@@ -32,7 +32,7 @@
 | server | 响应 | 现场 | 窗 | 把手 |
 |---|---|---|---|---|
 | `claude` / `codex` / `kimi` | 各自同名 | tmuxd session 跑该 CLI | tmuxd 的 ttyd | `input.*` `trace.agent` |
-| `bash` | `bash` | tmuxd session | tmuxd 的 ttyd | `input.text` `input.keys` |
+| `bash` | `bash` | tmuxd session 里的 bash,带 `--rcfile`(先读 `~/.bashrc`,再装记命令的钩子) | tmuxd 的 ttyd | `input.text` `input.keys` `trace.agent`(跑脚本的没有) |
 | `http` | `http` `https` | 无(纯 iframe) | URL 本身 | 无 |
 | `default` | 没人声明的 | tmuxd session 里跑「协议名」命令(`vim://` → `vim`) | tmuxd 的 ttyd | `input.text` `input.keys` |
 
@@ -55,7 +55,7 @@
 
 | `kind` | 谁 | `capabilities` |
 |---|---|---|
-| `tmux` | bash / default | `input.text` / `input.keys`(往终端里打字、按键;tmuxd 只写不读,没有抓屏)。trace 里只有它的 `worklet` 段 |
+| `tmux` | bash / default | `input.text` / `input.keys`(往终端里打字、按键;tmuxd 只写不读,没有抓屏)。bash 另有 `trace.agent`:shell 自己报每条命令的边界,一条命令一轮进 trace([designs work-server-io.md §6](../../designs/v5/work-server-io.md));default 在 trace 里只有它的 `worklet` 段 |
 | `tmux+transcript` | claude / codex / kimi | 上面两项 + `trace.agent`(节点读会话记录、收 hooks,把会话 / 轮次 / 工具段、消息点和状态点写进 trace——这就是它的 output;现在只有 claude,Codex / Kimi 还是旧的 `rounds`)。`input.paste` 等 tmuxd 加了 `paste` 再报;Claude Code 用不着它:多行字逐字打进去,输入框把换行当换行、整段一次提交(实测) |
 | `none` | http | 空 |
 

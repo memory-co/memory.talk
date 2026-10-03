@@ -28,11 +28,10 @@ import heapq
 import json
 import os
 import time
-from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from pathlib import Path
 
 from . import otlp
+from .base import Batch, Spec, read_lines, saved_state
 
 SYSTEM = "anthropic"
 READ_BUDGET = 4 << 20          # 一步最多读这么多字节(大的会话记录分几步推完)
@@ -44,29 +43,6 @@ KNOWN = {"user", "assistant", "system", "attachment", "file-history-snapshot", "
 LOCAL = ("<command-name>", "<command-message>", "<local-command-")
 
 
-@dataclass
-class Spec:
-    """中心让节点盯一个工作单元时给的说明(watch)。"""
-    work_id: str
-    worklet_id: str
-    trace_id: str
-    parent: str                         # 这个工作单元现在开着的那段 worklet 段:会话段挂在它下面
-    hooks: str                          # hooks 事件文件
-    transcripts: str                    # 会话记录根(~/.claude/projects)
-    session_id: str | None = None       # 开现场时钉住的会话 id
-    server: str = "claude"
-    cwd: str | None = None
-    tmux_socket: str | None = None      # 看现场活没活着:tmux -L <它>
-    since: int = 0                      # 工作单元打开的时刻(Unix 纳秒)
-
-    @classmethod
-    def of(cls, d: dict) -> "Spec":
-        return cls(**{k: d[k] for k in cls.__dataclass_fields__ if k in d})
-
-    def dump(self) -> dict:
-        return asdict(self)
-
-
 def fresh(spec: Spec) -> dict:
     """还什么都没读过的状态。整个状态是 JSON:随推的那一批存进中心(cursors),重启从中心读回来。"""
     return {"hooks": 0, "files": {}, "current": spec.session_id, "seg": None, "prev": {}, "turn": None, "tools": {},
@@ -75,32 +51,8 @@ def fresh(spec: Spec) -> dict:
 
 def restore(spec: Spec, cursors: list[dict]) -> dict:
     st = fresh(spec)
-    for c in cursors:
-        if c["source"] == "reader":
-            st.update(json.loads(c["position"]))
+    st.update(saved_state(cursors) or {})
     return st
-
-
-@dataclass
-class Batch:
-    spans: dict[str, dict] = field(default_factory=dict)       # span id → 这一步结束时它的样子(开着的合并属性,结束的定稿)
-    records: list[dict] = field(default_factory=list)
-    state: dict = field(default_factory=dict)
-    drained: bool = True                                       # 两份来源都读到头了
-
-    def empty(self) -> bool:
-        return not self.spans and not self.records
-
-    def cursors(self, worklet_id: str) -> list[dict]:
-        """推到哪了:hooks 和每份会话记录各一行(给人看的),reader 一行是整个状态(重启用它)。"""
-        st = self.state
-        rows = [{"worklet_id": worklet_id, "source": "hooks", "position": str(st["hooks"])}]
-        rows += [{"worklet_id": worklet_id, "source": sid, "position": str(f["offset"])} for sid, f in st["files"].items()]
-        rows.append({"worklet_id": worklet_id, "source": "reader", "position": json.dumps(st, ensure_ascii=False)})
-        return rows
-
-    def document(self) -> dict:
-        return otlp.document(list(self.spans.values()), self.records)
 
 
 class ClaudeReader:
@@ -108,6 +60,10 @@ class ClaudeReader:
         self.spec = spec
         self.state = state or fresh(spec)
         self._looked: dict[str, float] = {}                    # 会话记录还没出现:多久找一次(不进状态)
+
+    @classmethod
+    def restored(cls, spec: Spec, cursors: list[dict]) -> "ClaudeReader":
+        return cls(spec, restore(spec, cursors))
 
     def step(self, finish: tuple[str, int] | None = None) -> Batch:
         """读一步。finish = (原因, status):读到头了就把开着的工具 / 轮次 / 会话段按这个原因结束(flush、现场没了)。
@@ -209,30 +165,10 @@ class _Step:
         return out
 
     def _lines(self, path: str, offset: int):
-        """从 offset 读到现在为止完整的行(最后半行不要,下次再读);一次最多 READ_BUDGET 字节,但至少一整行。"""
-        try:
-            with open(path, "rb") as fh:
-                size = os.fstat(fh.fileno()).st_size
-                if size <= offset:
-                    return []
-                fh.seek(offset)
-                data = fh.read(min(size - offset, READ_BUDGET))
-                if b"\n" not in data and offset + len(data) < size:
-                    data += fh.readline()                      # 一行比预算还大:整行读完
-        except FileNotFoundError:
-            return []
-        if offset + len(data) < size:                          # 预算到了,后面还有:这一步没读到头
+        lines, drained = read_lines(path, offset, READ_BUDGET)
+        if not drained:                                        # 预算到了,后面还有:这一步没读到头
             self.batch.drained = False
-        out, pos = [], 0
-        while (nl := data.find(b"\n", pos)) >= 0:
-            raw = data[pos:nl]
-            try:
-                d = json.loads(raw) if raw.strip() else None
-            except ValueError:
-                d = None
-            out.append((offset + pos, offset + nl + 1, d if isinstance(d, dict) else None))
-            pos = nl + 1
-        return out
+        return lines
 
     # ================================================================ hooks
 
@@ -514,4 +450,4 @@ def _text(content) -> str:
     return "\n".join(parts)
 
 
-__all__ = ["ClaudeReader", "Spec", "Batch", "fresh", "restore"]
+__all__ = ["ClaudeReader", "Spec", "Batch", "fresh", "restore"]   # Spec / Batch 住在 base.py,这里转一下手

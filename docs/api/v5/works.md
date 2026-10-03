@@ -316,7 +316,7 @@ work 树(森林)。
 - id `<work_id>-w<n>` 在 work 内单调递增、不复用:关掉 `-w1` 再开一个是 `-w2`(计数是 `works.next_worklet`)。
 - 副作用:`worklets` 插一行(连同摆在哪);终端类起一个 tmux 会话(名 = 工作单元 id);放进那一列末尾;开一个 `worklet` 段(带 uri / scheme / server 和放进的列)。
 - `claude://`:起的是 `claude --session-id <新发的 uuid> --settings <注入 hooks 的文件>`,会话 id 记在登记上(不对外);开起来就让本机节点盯着这个工作单元(节点没起来只记日志,不挡开),它的对话从此由节点推进 trace,`handle.capabilities` 是 `["input.text", "input.keys", "trace.agent"]`。
-- `handle.capabilities`:`input.text` / `input.keys` = 能经 [`POST …/input`](#post-apiworkswork_idworkletsworklet_idinput) 往里送字、按键(终端和 agent 都有);`trace.agent` = 它的对话在 trace 里;`rounds` = 旧的拉取路径(Codex / Kimi);网页什么都没有。
+- `handle.capabilities`:`input.text` / `input.keys` = 能经 [`POST …/input`](#post-apiworkswork_idworkletsworklet_idinput) 往里送字、按键(终端和 agent 都有);`trace.agent` = 它的「记录」在 trace 里(claude 的对话;bash 的每条命令,一条一轮——`bash://<目录>` 起的 bash 带着记命令的钩子,跑脚本的没有);`rounds` = 旧的拉取路径(Codex / Kimi);网页什么都没有。
 
 | 错误 | 状态 |
 |---|---|
@@ -360,7 +360,7 @@ work 树(森林)。
 → **200** `{"input_id": "3f9c0a1b2c3d4e5f", "state": "idle"}`——`state` 是送的时候 agent 的状态(trace 里最新的 `agent.state`;没有 agent 状态的终端是 `null`)。
 
 - **意思只到「交给现场了」**:字交给 tmux 就返回,不等 agent 接住;接没接住看 trace(它引起的那一轮会出现,带 `memorytalk.input.id`)。
-- **门控**:agent 在 `busy` → 409 `busy`,在 `blocked`(等人确认:这时打的字会被当成回答)→ 409 `blocked`,带 `force` 才送;终端没有可信的忙不忙,不门控。
+- **门控**:有 `trace.agent` 的按 trace 里最新的 `agent.state`——在 `busy`(agent 正在干活 / bash 有命令在跑)→ 409 `busy`,在 `blocked`(等人确认:这时打的字会被当成回答)→ 409 `blocked`,带 `force` 才送;没有的(default 之类)不门控。
 - **留痕不留原文**:每次送在这个工作单元最新的 `worklet` 段上打一个 `worklet.input` 点——`user.id`、`memorytalk.input.id` / `.kind` / `.length` / `.sha256`(去掉首尾空白的 sha256)。节点推来新的一轮时,第一句人的话指纹对得上、前后 60 秒内的,轮次段上记同一个 `memorytalk.input.id`;对不上的就是在终端窗里手打的。
 - 现场不在 / work 已归档 → 409 `gone`;这个现场不收这种(网页、bash 的 `paste`)→ 409 `unsupported`;工作单元不存在 → 404。
 
