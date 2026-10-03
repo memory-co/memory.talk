@@ -105,6 +105,8 @@ def bind_unix(path: Path) -> socket.socket:
 def run(node_dir: Path, center_socket: Path) -> None:
     import uvicorn
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    for noisy in ("httpx", "httpcore"):                # 每推一批一行请求日志,agent 干活时会把别的淹掉;出错照样记
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     node = Node(node_dir, HttpCenter(center_socket))
     node.load()
     stop = threading.Event()
