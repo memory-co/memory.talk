@@ -87,7 +87,7 @@ work 树(森林)。
 | `bodies` | 默认 `false`;`1` = 点带正文(`body`:消息原文、工具参数、工具结果) |
 | `after` | 变更序号:只要这之后写的或改过的段和点(段开、合并属性、结束都算改) |
 | `wait` | 秒,配合 `after`:这次读会读到的东西还没有就挂着,有了或超时(最多 60)才回来。长轮询 |
-| `fields` | `cursors` = 只要节点推到哪了(要带 `worklet`;节点重连时用),返回 `{"cursors": [{worklet_id, source, position, updated_at}]}` |
+| `fields` | `cursors` = 只要节点推到哪了(要带 `worklet`;节点重连时用),返回 `{"cursors": [{worklet_id, source, position, updated_at}]}`;`spans` = 只要段、不要点(`logs` 是空的;甘特图 / 火焰图用);别的值 → 422 |
 
 看一个工作单元的对话:`?worklet=<w>&agent=1&bodies=1`,拿回来的 `seq` 下次带成 `&after=<seq>&wait=25`。
 

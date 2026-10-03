@@ -425,10 +425,11 @@ class WorkService:
     # ---- 轨迹:读写一个接口(GET / POST /works/{id}/trace) ----
 
     def trace_of(self, work_id: str, subtree: bool = False, *, worklet: str | None = None, agent: bool = False,
-                 bodies: bool = False, after: int | None = None) -> WorkTrace:
-        """这个 work(subtree = 连同所有子孙)的段和点,OTLP/JSON;默认不带 agent 那几层、不带正文。"""
+                 bodies: bool = False, after: int | None = None, points: bool = True) -> WorkTrace:
+        """这个 work(subtree = 连同所有子孙)的段和点,OTLP/JSON;默认不带 agent 那几层、不带正文。points=False 只要段。"""
         self.tree.get(work_id)
-        return WorkTrace(**self.trace.read(self._scope(work_id, subtree), worklet=worklet, agent=agent, bodies=bodies, after=after))
+        return WorkTrace(**self.trace.read(self._scope(work_id, subtree), worklet=worklet, agent=agent, bodies=bodies, after=after,
+                                           points=points))
 
     def _scope(self, work_id: str, subtree: bool) -> list[str]:
         return self.tree.subtree(work_id) if subtree else [work_id]

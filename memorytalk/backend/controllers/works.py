@@ -69,13 +69,15 @@ async def trace(work_id: str, request: Request, subtree: bool = False,
                 bodies: bool = Query(False, description="带正文(点的 body)"),
                 after: int | None = Query(None, ge=0, description="只要这个变更序号之后写的或改过的"),
                 wait: float = Query(0, ge=0, description="配合 after:没变化就等着,最多这么多秒(长轮询)"),
-                fields: str | None = Query(None, description="cursors = 只要节点推到哪了(要带 worklet)"),
+                fields: str | None = Query(None, pattern="^(cursors|spans)$",
+                                           description="cursors = 只要节点推到哪了(要带 worklet);spans = 只要段、不要点(甘特图 / 火焰图用)"),
                 svc: WorkService = Depends(works)):
     if fields == "cursors":
         return ok(await run_in_threadpool(svc.cursors, work_id, worklet))
     if after is not None and wait > 0:
         await svc.wait_trace(work_id, after, min(wait, WAIT_MAX), subtree=subtree, worklet=worklet, agent=agent)
-    return ok(await run_in_threadpool(lambda: svc.trace_of(work_id, subtree, worklet=worklet, agent=agent, bodies=bodies, after=after)))
+    return ok(await run_in_threadpool(lambda: svc.trace_of(work_id, subtree, worklet=worklet, agent=agent, bodies=bodies, after=after,
+                                                           points=fields != "spans")))
 
 
 @router.post("/{work_id}/trace", response_model=Result[dict],

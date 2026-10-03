@@ -260,10 +260,13 @@ point(work_id, span_id, event_name, attributes, *, user, worklet_id, column_numb
 | `after=<seq>` | 只要这个变更序号之后新写的或改过的段和点(§3) |
 | `wait=<秒>` | 配合 `after`:什么都没变就等着,有变化或超时才返回(长轮询) |
 | `fields=cursors` | 只要推到哪了(节点重连时用,[work-node.md §6](work-node.md)) |
+| `fields=spans` | 只要段、不要点(甘特图 / 火焰图用:一个 agent 会话可以有几千条消息,画图用不着) |
 
 **这一个接口就是全部的读。** 人看的时间线和图(默认)、看一个工作单元的对话(`worklet` + `agent` + `bodies`)、界面等变化和程序接着读(再加 `after` + `wait`)。[work-server-io.md](work-server-io.md) 说的 output 就是它——没有单独的 output、messages、state 接口;状态就是 trace 里最新的 `agent.state` 点。
 
 **写也是这个路径**:`POST /works/{id}/trace` 收同一个形状(§5、[work-node.md §6](work-node.md))——`GET` 出来的文档原样 `POST` 回去,意思不变。
+
+**已实施的是「轨迹分析」页**(`shell/TraceAnalysis.tsx`;右边「轨迹」面板的「分析」打开,左边整块换成它,`?view=analysis`):甘特和火焰图共用一根时间轴——甘特一个工作单元一行(最上面一行是整个工作),点一行在它下面展开火焰图(它的 agent 段按层叠:会话 / 轮次 / 工具,bash 是会话 / 命令);Ctrl / ⌘ + 滚轮缩放、拖动平移、在时间轴上框选放大、点一段放大到它、双击看全貌。甘特用默认读出来的那份,火焰图按工作单元另读 `worklet=…&agent=1&fields=spans`。下面 1)2)是原来的设想,按层级缩进的瀑布、计划条和依赖箭头还没做。
 
 **1)瀑布图(类似 Chrome DevTools 的 Network)**
 

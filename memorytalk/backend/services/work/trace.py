@@ -564,13 +564,13 @@ class Trace:
     # ================================================================ 读:OTLP/JSON
 
     def read(self, work_ids: Sequence[str], *, worklet: str | None = None, agent: bool = False, bodies: bool = False,
-             after: int | None = None) -> dict:
-        """段和点(默认不带 agent 那几层、不带正文);after = 只要这个变更序号之后写的或改过的。
+             after: int | None = None, points: bool = True) -> dict:
+        """段和点(默认不带 agent 那几层、不带正文);after = 只要这个变更序号之后写的或改过的;points=False 只要段。
         seq = 读的这一刻这几个 work 最大的变更序号,下次带着它来接着读。一次读是一个快照(持着库的锁)。"""
         with self.repo.tx():
             seq = self.repo.max_seq(work_ids)
             spans = [self._span(r) for r in self.repo.spans_of(work_ids, worklet=worklet, agent=agent, after=after)]
-            logs = [self._log(r, bodies) for r in self.repo.points_of(work_ids, worklet=worklet, agent=agent, after=after)]
+            logs = [self._log(r, bodies) for r in self.repo.points_of(work_ids, worklet=worklet, agent=agent, after=after)] if points else []
         return {"traces": {"resourceSpans": [{"resource": self.resource, "scopeSpans": [{"scope": SCOPE, "spans": spans}]}]},
                 "logs": {"resourceLogs": [{"resource": self.resource, "scopeLogs": [{"scope": SCOPE, "logRecords": logs}]}]},
                 "seq": str(max(seq, after or 0))}

@@ -13,6 +13,8 @@ import { cn } from '@/lib/utils';
 import { columnLabel, columnNumber, workletLabel, type Column, type Worklet } from '@/lib/types';
 import { Empty, ErrorState, Loading, Modal } from '@/components/Shared';
 import { WorkletActions, WorkletBody } from './WorkletBody';
+import { TraceAnalysis } from './TraceAnalysis';
+import { navigate } from '@/lib/router';
 
 /** 一列和放在这一列里的工作单元(从上到下)。 */
 type Lane = Column & { worklets: Worklet[] };
@@ -79,7 +81,7 @@ function Viewers({ names }: { names: string[] }) {
   </span>;
 }
 
-export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
+export function Workspace({ id, view, onMeta }: { id: string; view?: 'analysis'; onMeta: () => void }) {
   const t = useT();
   const work = useWork(id);
   usePresence(id);
@@ -129,7 +131,11 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
   if (work.isError) return <div className="p-4"><ErrorState error={work.error} retry={() => { void work.refetch(); }} /></div>;
   const ended = work.data.status === 'archived';
   const total = worklets.data?.length ?? 0;
+  const analysis = view === 'analysis';
+  // 轨迹分析换掉的是这一页的内容,不是这个组件:心跳(在看)照常,各列只藏起来不卸载——终端不断线,点「返回」立刻回来
   return <div className="flex min-h-0 flex-1 flex-col">
+    {analysis && <TraceAnalysis work={work.data} onBack={() => navigate({ page: 'work', work: id })} />}
+    <div className={cn('flex min-h-0 flex-1 flex-col', analysis && 'hidden')}>
     <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
       <h1 className="min-w-0 flex-1 truncate text-base font-semibold" title={work.data.goal}>{work.data.goal}</h1>
       <Viewers names={work.data.viewers ?? []} />
@@ -157,17 +163,20 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
           {column.worklets.map((worklet, pi) => { const index = (worklets.data || []).findIndex(s => s.id === worklet.id) + 1; return <Fragment key={worklet.id}>
             {drop?.column === column.id && drop.index === pi && <div className="-my-1.5 h-0.5 shrink-0 rounded-full bg-primary" />}
             <div data-worklet className={cn('flex shrink-0 flex-col overflow-hidden rounded-lg border bg-card', drag === worklet.id && 'opacity-50')}>
-            <div className="flex items-center gap-1 border-b bg-muted/40 px-2 py-1">
+            <div className="group/head flex items-center gap-1 border-b bg-muted/40 px-2 py-1">
               <Button variant="ghost" size="icon" className="size-7" aria-label={worklet.collapsed ? t('work.expand') : t('work.collapse')} aria-expanded={!worklet.collapsed} onClick={() => toggle(worklet)}>{worklet.collapsed ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}</Button>
               {['http', 'https'].includes(worklet.scheme) ? <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" /> : <Terminal className="size-3.5 shrink-0 text-muted-foreground" />}
               <span className="text-sm font-medium">{workletLabel(t, worklet.scheme)}</span><span className="text-xs text-muted-foreground">{index}</span>
               <span className={cn('size-1.5 shrink-0 rounded-full', worklet.alive ? 'bg-emerald-500' : 'bg-muted-foreground/40')} title={worklet.alive ? t('worklet.alive') : t('worklet.dead')} />
               <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground" title={worklet.uri}>{worklet.cwd || worklet.uri}</span>
+              {/* 新窗口打开 / 结束 / 拖动:宽屏上悬停这一行(或键盘聚焦到它们)才出来,窄屏一直在(没有悬停);同侧栏的「⋯」 */}
+              <span className="flex shrink-0 items-center gap-1 transition-opacity md:opacity-0 md:focus-within:opacity-100 md:group-hover/head:opacity-100">
               <WorkletActions work={work.data} worklet={worklet} />
               <button type="button" draggable className="flex size-7 shrink-0 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground active:cursor-grabbing" aria-label={t('work.moveHandle')} title={t('work.moveHandle')}
                 onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', worklet.id); const card = e.currentTarget.closest('[data-worklet]'); if (card) e.dataTransfer.setDragImage(card, 24, 16); setDrag(worklet.id); }}
                 onDragEnd={endDrag}
                 onKeyDown={e => { const dir = ({ ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' } as const)[e.key as 'ArrowLeft']; if (dir) { e.preventDefault(); move(worklet.id, dir); } }}><Move className="size-3.5" /></button>
+              </span>
             </div>
             {!worklet.collapsed && <div className="flex h-[60vh] min-h-64 resize-y flex-col overflow-hidden"><WorkletBody work={work.data} worklet={worklet} /></div>}
           </div></Fragment>; })}
@@ -180,6 +189,7 @@ export function Workspace({ id, onMeta }: { id: string; onMeta: () => void }) {
           </div>
         </section>)}
       </div>}
+    </div>
     <Modal open={adding !== null} onClose={() => setAdding(null)} title={t('attach.title')} description={t('attach.description')}>
       {adding && <NewWorklet id={id} column={adding} onCreated={() => setAdding(null)} />}
     </Modal>

@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from 'react';
 
-/** meta 页:filter = 左边列表在看哪层(all | 某层);layer + path (+ file) = 右边打开的文件;dir = 没打开文件时文件目录视图停在哪个目录(面包屑点中间一段用)。 */
-export type Route = { page: 'home' | 'work' | 'meta' | 'settings'; work?: string; filter?: string; layer?: string; path?: string; file?: string; dir?: string };
+/** meta 页:filter = 左边列表在看哪层(all | 某层);layer + path (+ file) = 右边打开的文件;dir = 没打开文件时文件目录视图停在哪个目录(面包屑点中间一段用)。
+ *  工作页:view = analysis 时左边是轨迹分析(甘特 + 火焰图),不是各列。 */
+export type Route = { page: 'home' | 'work' | 'meta' | 'settings'; work?: string; view?: 'analysis'; filter?: string; layer?: string; path?: string; file?: string; dir?: string };
 const subscribe = (onChange: () => void) => {
   window.addEventListener('hashchange', onChange);
   return () => window.removeEventListener('hashchange', onChange);
@@ -11,7 +12,7 @@ export function useRoute(): Route {
   const [pathname, search] = hash.replace(/^#/, '').split('?');
   const query = new URLSearchParams(search || '');
   if (pathname?.startsWith('/work/')) {
-    try { return { page: 'work', work: decodeURIComponent(pathname.slice(6)) }; }
+    try { return { page: 'work', work: decodeURIComponent(pathname.slice(6)), ...(query.get('view') === 'analysis' ? { view: 'analysis' as const } : {}) }; }
     catch { return { page: 'home' }; }
   }
   if (pathname === '/meta') return { page: 'meta', filter: query.get('filter') || 'all', layer: query.get('layer') || undefined, path: query.get('path') || undefined, file: query.get('file') || undefined, dir: query.get('dir') ?? undefined };
@@ -24,6 +25,6 @@ export function navigate(route: Route) {
   if (route.layer && route.path) { query.set('layer', route.layer); query.set('path', route.path); if (route.file) query.set('file', route.file); }
   if (route.dir !== undefined && !(route.layer && route.path)) query.set('dir', route.dir);
   window.location.hash = route.page === 'home' ? '/' : route.page === 'work'
-    ? `/work/${encodeURIComponent(route.work || '')}`
+    ? `/work/${encodeURIComponent(route.work || '')}${route.view ? `?view=${route.view}` : ''}`
     : `/${route.page}${query.size ? `?${query}` : ''}`;
 }

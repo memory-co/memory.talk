@@ -238,3 +238,13 @@ def test_closing_ends_agent_spans_the_node_left_open(client, node, site, H):
     client.delete(f"/api/works/{work}/worklets/{m}", headers=H("bob"))
     [a] = [x for x in trace(client, work)[0] if x["name"] == "agent.session"]
     assert (a["memorytalk.end.reason"], a["status"], a["end"]) == ("detached", 1, at(site, 1))
+
+
+def test_fields_spans_gives_the_spans_without_any_point(client, node, site):
+    work, m, _ = site
+    s = session(site)
+    push(node, work, doc([s], [message(site, "u1", "你好", s["spanId"])]))
+    body = client.get(f"/api/works/{work}/trace", params={"worklet": m, "agent": 1, "fields": "spans"}).json()
+    assert [x["name"] for x in body["traces"]["resourceSpans"][0]["scopeSpans"][0]["spans"]] == ["worklet", "agent.session"]
+    assert body["logs"]["resourceLogs"][0]["scopeLogs"][0]["logRecords"] == [] and int(body["seq"]) > 0
+    assert client.get(f"/api/works/{work}/trace", params={"fields": "everything"}).status_code == 422

@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, ArrowRightLeft, Bot, CircleOff, CirclePlus, Columns3, History, Keyboard, MessageSquare, Pencil, SendHorizontal, SquareArrowOutUpRight, SquareX, Trash2, type LucideIcon } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowRightLeft, Bot, ChartGantt, CircleOff, CirclePlus, Columns3, History, Keyboard, MessageSquare, Pencil, SendHorizontal, SquareArrowOutUpRight, SquareX, Trash2, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { localeTag, useT, type T } from '@/lib/i18n';
 import { api } from '@/lib/api';
 import { useTrace } from '@/lib/queries';
+import { navigate, useRoute } from '@/lib/router';
 import { usePreferences } from '@/lib/store';
 import { attrValue, columnLabel, columnNumber, traceRecords, traceSpans, workletLabel, type KeyValue, type TraceLogRecord, type TraceSpan, type WorkTrace } from '@/lib/types';
 import { Empty, ErrorState, Loading } from '@/components/Shared';
@@ -19,6 +20,7 @@ export function WorkEvents({ id }: { id: string }) {
   const t = useT();
   const locale = usePreferences(s => s.locale);
   const trace = useTrace(id);
+  const route = useRoute();
   const [turns, setTurns] = useState(false);
   const agentTrace = useQuery({ queryKey: ['trace', id, 'agent'], queryFn: ({ signal }) => api<WorkTrace>(`/works/${encodeURIComponent(id)}/trace?agent=1`, { signal }),
     enabled: turns, refetchInterval: 5_000 });
@@ -30,9 +32,15 @@ export function WorkEvents({ id }: { id: string }) {
   const hasAgent = timeline.spans.some(s => s.name === 'worklet' && ['claude', 'codex', 'kimi'].includes(text(s.attributes, 'memorytalk.worklet.scheme')));
   const turnCount = timeline.spans.filter(s => s.name === TURN).length;
   const rows = turns ? timeline.rows : timeline.rows.filter(r => r.span?.name !== TURN);
-  const toggle = hasAgent && <Button variant="ghost" size="sm" className="mb-3 h-7 gap-1.5 px-2 text-xs font-normal text-muted-foreground" aria-pressed={turns} onClick={() => setTurns(v => !v)}>
-    <Bot className="size-3.5" />{turns ? t('events.hideTurns') : agentTrace.data ? t('events.showTurns', { n: turnCount }) : t('events.showAgentTurns')}
-  </Button>;
+  const analysis = route.view === 'analysis';
+  const toggle = <div className="mb-3 flex items-center gap-1">
+    {hasAgent && <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-xs font-normal text-muted-foreground" aria-pressed={turns} onClick={() => setTurns(v => !v)}>
+      <Bot className="size-3.5" />{turns ? t('events.hideTurns') : agentTrace.data ? t('events.showTurns', { n: turnCount }) : t('events.showAgentTurns')}
+    </Button>}
+    {/* 轨迹分析:左边换成甘特 + 火焰图(再点一下回到各列) */}
+    <Button variant={analysis ? 'secondary' : 'ghost'} size="sm" className="ml-auto h-7 gap-1.5 px-2 text-xs font-normal" aria-pressed={analysis}
+      onClick={() => navigate({ page: 'work', work: id, ...(analysis ? {} : { view: 'analysis' as const }) })}><ChartGantt className="size-3.5" />{t('analysis.open')}</Button>
+  </div>;
   if (!rows.length) return <div className="flex flex-1 flex-col p-4">{toggle}<Empty icon={<History className="size-5" />} title={t('events.empty')} /></div>;
   const time = (date: Date) => date.toLocaleString(localeTag(locale), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   return <div className="min-h-0 flex-1 overflow-auto p-4">

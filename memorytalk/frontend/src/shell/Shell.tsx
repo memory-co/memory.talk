@@ -125,7 +125,7 @@ function Crumbs() {
 
 function Page({ onMeta, selection }: { onMeta: () => void; selection: (s: { filter: string; layer?: string; path?: string; file?: string }) => void }) {
   const route = useRoute();
-  return <Suspense fallback={<Loading />}>{route.page === 'home' ? <Home /> : route.page === 'work' && route.work ? <Workspace key={route.work} id={route.work} onMeta={onMeta} /> : route.page === 'meta' ? <Metas filter={route.filter || 'all'} layer={route.layer} path={route.path} file={route.file} dir={route.dir} onSelect={selection} /> : <Settings />}</Suspense>;
+  return <Suspense fallback={<Loading />}>{route.page === 'home' ? <Home /> : route.page === 'work' && route.work ? <Workspace key={route.work} id={route.work} view={route.view} onMeta={onMeta} /> : route.page === 'meta' ? <Metas filter={route.filter || 'all'} layer={route.layer} path={route.path} file={route.file} dir={route.dir} onSelect={selection} /> : <Settings />}</Suspense>;
 }
 
 function ShellContent() {
