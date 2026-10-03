@@ -1,6 +1,6 @@
 # work-trace —— 把 events 换成 trace:OTel 格式,分点和段,一张图从可观测走到甘特(v5 设计)
 
-> **状态:部分实施。** 已经有了:落盘(`worktrace.db`)、`work` / `worklet` 两种段和 §2 的动作点(`plan.changed` 除外)、一条写路径和变更序号(§3、§5)、`GET` / `POST /works/{id}/trace` 和 §6 的全部参数、右侧「动态」列表(§6 的第 3 种视图);agent 那几层目前只有 Claude Code 由节点推(Codex / Kimi 的轮次还从 round 切)。代码在 `services/work/trace.py`、`memorytalk/node/`。
+> **状态:部分实施。** 已经有了:落盘(`worktrace.db`)、`work` / `worklet` 两种段和 §2 的动作点(`plan.changed` 除外)、一条写路径和变更序号(§3、§5)、`GET` / `POST /works/{id}/trace` 和 §6 的全部参数、右侧「轨迹」面板(§6 的第 3 种视图);agent 那几层目前只有 Claude Code 由节点推(Codex / Kimi 的轮次还从 round 切)。代码在 `services/work/trace.py`、`memorytalk/node/`。
 >
 > **agent 那一层还没做**:节点、会话 / 轮次 / 工具段、消息点和写入口(`POST …/trace`)都按 [work-node.md](work-node.md) 来;现在的代码还是中心去拉、单独存一份 round,实施时去掉(§9)。另外还没做的:瀑布图 / 甘特图(§6 的 1、2)、计划(§7)、往外导出和直推(§8 的 2、3)。
 >
@@ -287,9 +287,9 @@ point(work_id, span_id, event_name, attributes, *, user, worklet_id, column_numb
 
 两种读法之间的切换,只是改一下缩放和行的粒度:甘特默认只显示 work 这一层(子 work 当子任务),worklet 和 agent 那几层折叠起来。放大到某一天,就回到瀑布图,能看到那天开了哪些终端、agent 跑了几轮、每轮多长、卡在哪个工具上。**这是从项目管理一路钻到可观测的那条路**:「这个子任务为什么拖了三天」→ 展开看到 agent 在第二天跑了四十轮都卡在同一个工具调用上 → 点进那一轮看它说了什么。
 
-**3)动态(时间线列表)**
+**3)轨迹面板(时间线列表)**
 
-右侧原来的「动态」变成 trace 的一个列表视图(已实施,`shell/WorkEvents.tsx`;现在 5 秒整份拉一次,改成 `after` + `wait` 之后有变化才刷新):段的开始、段的结束(开着的只有开始)、点各一行,按时间排(纳秒比大小用 BigInt,同一时刻开始 < 点 < 结束),新的在上;写成人话,写法沿用 work-events.md §7。工作单元叫什么从它的 worklet 段上取(点按 `spanId` 找段);结束按 `memorytalk.end.reason` 写成关掉 / 归档 / 现场没了三种(`worklet.closed` 点也写成关掉);谁做的取 `user.id`,结束的取 `memorytalk.end.user.id`(没有再用 `user.id`),现场没了的不写人。`agent.*` 默认藏起来(会话、轮次、工具和消息太多,会把别的挤走),点一下展开。旧的 `GET /works/{id}/events` 撤了。
+右侧面板「轨迹」(原来叫「动态」)是 trace 的一个列表视图(已实施,`shell/WorkEvents.tsx`;现在 5 秒整份拉一次,改成 `after` + `wait` 之后有变化才刷新):段的开始、段的结束(开着的只有开始)、点各一行,按时间排(纳秒比大小用 BigInt,同一时刻开始 < 点 < 结束),新的在上;写成人话,写法沿用 work-events.md §7。工作单元叫什么从它的 worklet 段上取(点按 `spanId` 找段);结束按 `memorytalk.end.reason` 写成关掉 / 归档 / 现场没了三种(`worklet.closed` 点也写成关掉);谁做的取 `user.id`,结束的取 `memorytalk.end.user.id`(没有再用 `user.id`),现场没了的不写人。`agent.*` 默认藏起来(会话、轮次、工具和消息太多,会把别的挤走),点一下展开。旧的 `GET /works/{id}/events` 撤了。
 
 ## 7. 计划:让甘特图有东西可比
 

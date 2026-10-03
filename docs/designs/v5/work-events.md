@@ -1,6 +1,6 @@
 # work-events —— 列和工作单元上的每个动作都进时间线(v5 设计)
 
-> **状态:已实施。** 本篇回答一件事:为什么原来在列上做的事,右侧「动态」里看不到;要看到,列和位置得从「整份覆盖」改成「一个动作一个请求」,每个动作记一条带列标记的事件。字段见 [`../../structure/v5/work.md`](../../structure/v5/work.md#trace),端点见 [`../../api/v5/works.md`](../../api/v5/works.md)。§1 描述的是改之前的样子。
+> **状态:已实施。** 本篇回答一件事:为什么原来在列上做的事,右侧「动态」(现在叫「轨迹」)里看不到;要看到,列和位置得从「整份覆盖」改成「一个动作一个请求」,每个动作记一条带列标记的事件。字段见 [`../../structure/v5/work.md`](../../structure/v5/work.md#trace),端点见 [`../../api/v5/works.md`](../../api/v5/works.md)。§1 描述的是改之前的样子。
 >
 > **存储已换成 trace:** [work-trace.md](work-trace.md) 把事件换成了 OTel 格式的段和点,存在 `worktrace.db`([work-store.md §5](work-store.md)),`events.jsonl` 和 `GET /works/{id}/events` 都撤了,读走 `GET /works/{id}/trace`。本篇的动作表、列标记、`by` 规则保留,对应关系:`created` / 归档 = `work` 段的开始 / 结束(`frozen` 不再单记),`worklet.attached` / `worklet.detached` = `worklet` 段的开始 / 结束(关的时候段已经结束了——现场没了 / 归档过——记成 `worklet.closed` 点),`column.*` / `worklet.moved` 是点,改目标多了一个 `work.renamed` 点;`by` 写成 `user.id`(结束段的人是 `memorytalk.end.user.id`),列标记写成 `memorytalk.column.id` / `.alias`(`from` 那一侧是 `memorytalk.from.*`)。下面 §2–§4 的 JSON 例子是改之前的事件格式。
 >
@@ -108,7 +108,7 @@
 
 ## 7. 界面
 
-右侧「动态」按 §3 的列标记写成人话,`by` 放在每条下面那行、时间前面(`alice · 9月29日 10:02`),例:
+右侧「轨迹」面板按 §3 的列标记写成人话,`by` 放在每条下面那行、时间前面(`alice · 9月29日 10:02`),例:
 
 - `加了 列 3`
 - `把 列 3 的别名改为「测试」`(下一行:`原来是「…」`;清空别名是 `去掉了 列 3 的别名`)

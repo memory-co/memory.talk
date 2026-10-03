@@ -173,7 +173,7 @@ function ShellContent() {
   </>;
 }
 
-/** 竖屏手机:侧栏 | 主内容 | 动态面板 三列横向吸附。 */
+/** 竖屏手机:侧栏 | 主内容 | 轨迹面板 三列横向吸附。 */
 function MobileShell({ onSearch, events, page }: { onSearch: () => void; events: ReactNode; page: ReactNode }) {
   const t = useT();
   const route = useRoute();
