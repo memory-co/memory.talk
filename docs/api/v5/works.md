@@ -277,7 +277,7 @@ work 树(森林)。
   "created_at": "…", "last_attached": "…",
   "column": "c1", "position": 0, "collapsed": false,
   "alive": true, "window": {"url": "/surface/tmuxd/?arg=work_…-w1", "embed": "/surface/tmuxd/?arg=work_…-w1"},
-  "handle": {"kind": "tmux+transcript", "capabilities": ["send", "rounds"]}},
+  "handle": {"kind": "tmux+transcript", "capabilities": ["input.text", "input.keys", "rounds"]}},
  {"id": "work_…-w4", "uri": "bash:///w", "scheme": "bash", "cwd": "/w",
   "created_at": "…", "last_attached": "…",
   "column": "c3", "position": 0, "collapsed": true,
@@ -307,7 +307,7 @@ work 树(森林)。
  "column": "c3", "position": 2, "collapsed": false,
  "alive": true,
  "window": {"url": "/surface/tmuxd/?arg=work_…-w1", "embed": "/surface/tmuxd/?arg=work_…-w1"},
- "handle": {"kind": "tmux+transcript", "capabilities": ["send", "rounds"]}}
+ "handle": {"kind": "tmux+transcript", "capabilities": ["input.text", "input.keys", "rounds"]}}
 ```
 
 - 由哪个 server 建的不对外——`https://` 走 http server、`vim://` 走 default,调用方不感知。
@@ -315,7 +315,8 @@ work 树(森林)。
 - `window.url` 是 tmuxd 自带的 ttyd,挂在主路由 `/surface/tmuxd/?arg=<worklet_id>`(同源相对地址,见 [structure work-server.md](../../structure/v5/work-server.md));http 工作单元是 URL 本身。
 - id `<work_id>-w<n>` 在 work 内单调递增、不复用:关掉 `-w1` 再开一个是 `-w2`(计数是 `works.next_worklet`)。
 - 副作用:`worklets` 插一行(连同摆在哪);终端类起一个 tmux 会话(名 = 工作单元 id);放进那一列末尾;开一个 `worklet` 段(带 uri / scheme / server 和放进的列)。
-- `claude://`:起的是 `claude --session-id <新发的 uuid> --settings <注入 hooks 的文件>`,会话 id 记在登记上(不对外);开起来就让本机节点盯着这个工作单元(节点没起来只记日志,不挡开),它的对话从此由节点推进 trace,`handle.capabilities` 是 `["send", "trace.agent"]`。
+- `claude://`:起的是 `claude --session-id <新发的 uuid> --settings <注入 hooks 的文件>`,会话 id 记在登记上(不对外);开起来就让本机节点盯着这个工作单元(节点没起来只记日志,不挡开),它的对话从此由节点推进 trace,`handle.capabilities` 是 `["input.text", "input.keys", "trace.agent"]`。
+- `handle.capabilities`:`input.text` / `input.keys` = 能经 [`POST …/input`](#post-apiworkswork_idworkletsworklet_idinput) 往里送字、按键(终端和 agent 都有);`trace.agent` = 它的对话在 trace 里;`rounds` = 旧的拉取路径(Codex / Kimi);网页什么都没有。
 
 | 错误 | 状态 |
 |---|---|
@@ -339,6 +340,29 @@ work 树(森林)。
 ## DELETE /api/works/{work_id}/worklets/{worklet_id}
 
 关闭即回收:先让节点把这个工作单元的记录读到头、推完,开着的会话 / 轮次 / 工具段按 `detached` 结束(`flush`;Codex / Kimi 还是最后收一次 round;尽力而为,等不到就不等;work 已归档就不做,归档时做过了)→ 销毁现场(tmuxd `session.kill()`)→ 从列里拿掉(同一列下面的往上补)、删登记(一个事务)→ 结束 `worklet` 段(`memorytalk.end.reason = detached`,带结束时所在的列和关它的人;节点没来得及结束的 agent 段跟着结束)。已经没有开着的段(现场没了 / 归档过、重新打开后没重入)就不动段,打一个 `worklet.closed` 点(带当时的列和关它的人)。**200**,`data: null`。
+
+## POST /api/works/{work_id}/worklets/{worklet_id}/input
+
+往现场里送([designs work-server-io.md §4](../../designs/v5/work-server-io.md)):打字,或者按键。
+
+```json
+{"kind": "text", "text": "把配置改成环境变量", "submit": true, "force": false}
+```
+
+| 字段 | 说明 |
+|---|---|
+| `kind` | `text`(逐字打进去,可以多行)/ `keys`(按键名)/ `paste`(整段粘进去,现场要有 `input.paste`,现在都还没有) |
+| `text` | `text` / `paste` 的内容,最长 64 KiB(超了 → 422) |
+| `submit` | 默认 `true`:打完再按一次回车 |
+| `keys` | `keys` 用:tmux 键名,`Escape` / `C-c` / `Enter` / `Up` … |
+| `force` | agent 正在干活 / 在等确认也照样送;按键默认就是 force(要能发 `Escape` 打断它) |
+
+→ **200** `{"input_id": "3f9c0a1b2c3d4e5f", "state": "idle"}`——`state` 是送的时候 agent 的状态(trace 里最新的 `agent.state`;没有 agent 状态的终端是 `null`)。
+
+- **意思只到「交给现场了」**:字交给 tmux 就返回,不等 agent 接住;接没接住看 trace(它引起的那一轮会出现,带 `memorytalk.input.id`)。
+- **门控**:agent 在 `busy` → 409 `busy`,在 `blocked`(等人确认:这时打的字会被当成回答)→ 409 `blocked`,带 `force` 才送;终端没有可信的忙不忙,不门控。
+- **留痕不留原文**:每次送在这个工作单元最新的 `worklet` 段上打一个 `worklet.input` 点——`user.id`、`memorytalk.input.id` / `.kind` / `.length` / `.sha256`(去掉首尾空白的 sha256)。节点推来新的一轮时,第一句人的话指纹对得上、前后 60 秒内的,轮次段上记同一个 `memorytalk.input.id`;对不上的就是在终端窗里手打的。
+- 现场不在 / work 已归档 → 409 `gone`;这个现场不收这种(网页、bash 的 `paste`)→ 409 `unsupported`;工作单元不存在 → 404。
 
 ## POST /api/works/{work_id}/worklets/{worklet_id}/move
 

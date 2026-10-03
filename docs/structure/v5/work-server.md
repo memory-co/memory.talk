@@ -50,13 +50,13 @@
 ## HandleInfo
 
 ```json
-{"kind": "tmux+transcript", "capabilities": ["input.text", "input.keys", "input.paste", "trace.agent"]}
+{"kind": "tmux+transcript", "capabilities": ["input.text", "input.keys", "trace.agent"]}
 ```
 
 | `kind` | 谁 | `capabilities` |
 |---|---|---|
 | `tmux` | bash / default | `input.text` / `input.keys`(往终端里打字、按键;tmuxd 只写不读,没有抓屏)。trace 里只有它的 `worklet` 段 |
-| `tmux+transcript` | claude / codex / kimi | 上面几项 + `input.paste`、`trace.agent`(节点读会话记录、收 hooks,把会话 / 轮次 / 工具段、消息点和状态点写进 trace——这就是它的 output) |
+| `tmux+transcript` | claude / codex / kimi | 上面两项 + `trace.agent`(节点读会话记录、收 hooks,把会话 / 轮次 / 工具段、消息点和状态点写进 trace——这就是它的 output;现在只有 claude,Codex / Kimi 还是旧的 `rounds`)。`input.paste` 等 tmuxd 加了 `paste` 再报;Claude Code 用不着它:多行字逐字打进去,输入框把换行当换行、整段一次提交(实测) |
 | `none` | http | 空 |
 
 把手本体是 Python 对象;API 只报 `HandleInfo`。往现场里送字走 `POST …/input`([designs work-server-io.md](../../designs/v5/work-server-io.md))。
@@ -69,7 +69,7 @@
 {
   "worklet_id": "work_…-w1", "server": "codex",   // server 只在内部流转,API 视图不带
   "window": {"url": "http://127.0.0.1:43179/?arg=work_…-w1", "embed": "http://127.0.0.1:43179/?arg=work_…-w1"},
-  "handle": {"kind": "tmux+transcript", "capabilities": ["input.text", "input.keys", "input.paste", "trace.agent"]},
+  "handle": {"kind": "tmux+transcript", "capabilities": ["input.text", "input.keys", "trace.agent"]},
   "cwd": "/home/me/memory.talk", "command": ["codex"]
 }
 ```

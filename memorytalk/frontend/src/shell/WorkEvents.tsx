@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, ArrowRightLeft, Bot, CircleOff, CirclePlus, Columns3, History, MessageSquare, Pencil, SquareArrowOutUpRight, SquareX, Trash2, type LucideIcon } from 'lucide-react';
+import { Archive, ArchiveRestore, ArrowRightLeft, Bot, CircleOff, CirclePlus, Columns3, History, Keyboard, MessageSquare, Pencil, SendHorizontal, SquareArrowOutUpRight, SquareX, Trash2, type LucideIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { localeTag, useT, type T } from '@/lib/i18n';
 import { api } from '@/lib/api';
@@ -112,6 +112,11 @@ function describe(t: T, row: Row, { byId, uris }: Timeline): Described {
       case 'worklet.closed': {                                        // 关的时候已经没有开着的段了(现场没了 / 归档过),段不动,单记一个点
         const uri = uriOf(a, p.spanId ? byId.get(p.spanId) : undefined), name = nameOf(uri, a), c = columnOf(a);
         return { icon: SquareX, title: c ? t('events.detachedIn', { name, column: col(c) }) : t('events.detached', { name }), detail: uri || undefined, mono: true, by };
+      }
+      case 'worklet.input': {                                         // 往现场里送了一次:原文不存,只有哪种、多长
+        const name = nameOf(uriOf(a, p.spanId ? byId.get(p.spanId) : undefined), a);
+        return text(a, 'memorytalk.input.kind') === 'keys' ? { icon: Keyboard, title: t('events.keys', { name }), by }
+          : { icon: SendHorizontal, title: t('events.input', { name }), detail: t('events.inputLength', { n: Number(attrValue(a, 'memorytalk.input.length') ?? 0) }), by };
       }
       case 'work.renamed': {
         const from = text(a, 'memorytalk.from');

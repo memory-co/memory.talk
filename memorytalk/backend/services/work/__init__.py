@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+import uuid
 from collections import Counter
 from contextlib import contextmanager
 from datetime import datetime
@@ -16,9 +17,10 @@ from typing import Callable
 
 from memorytalk.backend.models.metas import InboxItem
 from memorytalk.backend.models.search import SearchHit
-from memorytalk.backend.models.work import (Column, ColumnCreate, ColumnUpdate, Round, Worklet, WorkletMove,
-                                            WorkletUpdate, WorkletView, Work, WorkCreate, WorkTrace, WorkUsers, WorkNode,
-                                            WorkUpdate)
+from memorytalk.backend.models.work import (Column, ColumnCreate, ColumnUpdate, InputResult, Round, Worklet, WorkletInput,
+                                            WorkletMove, WorkletUpdate, WorkletView, Work, WorkCreate, WorkTrace, WorkUsers,
+                                            WorkNode, WorkUpdate)
+from memorytalk.backend.models.work_server import WorkServerError
 from memorytalk.backend.services.work_servers import WorkServerService
 from memorytalk.backend.services.store import StoreService
 
@@ -33,6 +35,14 @@ from .viewers import Viewers
 from .worklets import WorkletNotFound, WorkletRegistry
 
 log = logging.getLogger(__name__)
+
+
+class InputRefused(Exception):
+    """送不进去(409):code = gone(现场不在 / work 已归档)/ unsupported(这个现场不收这种)/ busy / blocked(agent 的状态不对)。"""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 class WorkService:
@@ -312,6 +322,35 @@ class WorkService:
                 self.worklets.remove(work_id, worklet_id)
             self._record(self._closed, work_id, m, col, by)
 
+    # ---- input:往现场里送(work-server-io.md §4、§5) ----
+
+    def send_input(self, work_id: str, worklet_id: str, req: WorkletInput, by: str | None = None) -> InputResult:
+        """先门控(现场在不在、收不收这种、agent 忙不忙),再交给现场,最后在 trace 里打一个 worklet.input 点(不存原文)。
+        agent 的状态是 trace 里最新的 agent.state:正在干活 / 在等确认时默认不送,带 force 才送;按键默认就是 force(要能发 Escape 打断它)。"""
+        m = self.worklets.get(work_id, worklet_id)
+        if self.tree.get(work_id).status == "archived":
+            raise InputRefused("gone", f"{work_id} 已归档,现场不在了")
+        if not self.work_servers.alive(m.server, m.id):
+            raise InputRefused("gone", f"{worklet_id} 的现场不在了,先重新连接")
+        h = self._handle(m)
+        caps = h.info().capabilities
+        if f"input.{req.kind}" not in caps or not hasattr(h, "input"):
+            raise InputRefused("unsupported", f"{worklet_id} 不收 {req.kind}")
+        state = self.trace.agent_state(m.id) if "trace.agent" in caps else None
+        if state in ("busy", "blocked") and req.kind != "keys" and not req.force:
+            raise InputRefused(state, "agent 正在干活,要插话就带 force" if state == "busy"
+                               else "agent 在等人确认,这时打的字会被当成回答;要送就带 force")
+        try:
+            h.input(req.kind, req.text, req.submit, req.keys)
+        except WorkServerError as e:
+            if e.code == "gone":
+                raise InputRefused("gone", str(e)) from e
+            raise
+        input_id = uuid.uuid4().hex[:16]
+        payload = " ".join(req.keys) if req.kind == "keys" else req.text
+        self._record(self.trace.worklet_input, work_id, m.id, input_id, req.kind, payload, by)
+        return InputResult(input_id=input_id, state=state)
+
     def _closed(self, work_id: str, m: Worklet, col: Column | None, by: str | None) -> None:
         """结束开着的 worklet 段(detached);已经没有开着的段(现场没了 / 归档过、重新打开后没重入)就打一个点记下谁关的。"""
         span = self.trace.open_worklet_span(m.id)
@@ -449,4 +488,4 @@ def _nanos(iso: str | None) -> int | None:
 
 
 __all__ = ["WorkService", "WorkNotFound", "WorkConflict", "WorkletNotFound", "ColumnNotFound", "WorkRepo", "TraceRepo",
-           "TraceRejected"]
+           "TraceRejected", "InputRefused"]

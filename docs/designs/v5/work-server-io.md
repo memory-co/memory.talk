@@ -1,6 +1,6 @@
 # work-server-io —— 每个 work server 一对口子:input 各自实现,output 就是 trace(v5 设计)
 
-> **状态:output 部分实施,input 未实施。** output = trace 已经接上 Claude Code(节点推;对话在「对话记录」里从 trace 读,`after` + `wait` 等变化),Codex / Kimi 还走旧的 rounds;input 的契约(§4)还没做。「每个 server 一个 input 口、一个 output 口」:input 由各 server 自己实现(比如 claude 用 tmuxd 的 `send` 把字符串打进去);**output 不是另一个接口,它就是 trace**——现场所在机器上的节点把现场吐出来的东西写进 trace(`POST /works/{id}/trace`),谁要看就从 trace 读(`GET /works/{id}/trace`)。本篇定 input 的契约、output 在 trace 里长什么样、两边怎么连上;节点见 [work-node.md](work-node.md),trace 的模型和读法见 [work-trace.md](work-trace.md)。字段落地后进 [`../../structure/v5/worktrace.md`](../../structure/v5/worktrace.md) 和 [`../../structure/v5/work.md`](../../structure/v5/work.md),端点进 [`../../api/v5/works.md`](../../api/v5/works.md)。
+> **状态:大部分实施。** output = trace 已经接上 Claude Code(节点推;界面的「记录」从 trace 读,`after` + `wait` 等变化),Codex / Kimi 还走旧的 rounds。input:`POST …/input` 的 `text` / `keys`、§5 的门控、`worklet.input` 点、轮次带 `memorytalk.input.id` 都做了,界面「记录」下面能直接发,CLI 有 `work send` / `work key`;还没有:`input.paste`(等 tmuxd)、轮次指回 input 的 link、`work tail`。「每个 server 一个 input 口、一个 output 口」:input 由各 server 自己实现(比如 claude 用 tmuxd 的 `send` 把字符串打进去);**output 不是另一个接口,它就是 trace**——现场所在机器上的节点把现场吐出来的东西写进 trace(`POST /works/{id}/trace`),谁要看就从 trace 读(`GET /works/{id}/trace`)。本篇定 input 的契约、output 在 trace 里长什么样、两边怎么连上;节点见 [work-node.md](work-node.md),trace 的模型和读法见 [work-trace.md](work-trace.md)。字段落地后进 [`../../structure/v5/worktrace.md`](../../structure/v5/worktrace.md) 和 [`../../structure/v5/work.md`](../../structure/v5/work.md),端点进 [`../../api/v5/works.md`](../../api/v5/works.md)。
 
 相关:
 - server 是什么、把手是什么(`send` 在把手上有、API 不露,§8 留的门就是本篇): [work-server.md](work-server.md)
@@ -110,7 +110,7 @@ input 由中心收,交给现场所在的那一边去送:现在 tmuxd 还在中�
 | server | text | keys | paste | 备注 |
 |---|---|---|---|---|
 | bash / default | `session.send(text, enter=submit)` | `session.send_key(*keys)` | 不提供 | 多行在 shell 里就是多条命令,本来就该一行行送 |
-| claude | 同上 | 同上 | `session.paste(text)` 再按回车 | 逐字送的换行在 TUI 里可能被当成回车提交,第一行就先发出去了(要实测);括号粘贴让它认出「这是一整段」,不受影响 |
+| claude | 同上 | 同上 | `session.paste(text)` 再按回车 | **实测(2.1.285)不需要 paste**:逐字送的换行在它的输入框里就是换行,紧跟着的回车整段一次提交;几百字的长段也一样 |
 | codex / kimi | 同上 | 同上 | 同上 | 同 claude,各自的 TUI 怎么处理粘贴要逐个验;Codex 还有原生的 `queue`(往已有会话里排一条消息),可以不经过终端 |
 | http | — | — | — | 等 webmuxd |
 
@@ -128,7 +128,7 @@ input 由中心收,交给现场所在的那一边去送:现在 tmuxd 还在中�
 
 **默认不存原文**。往 bash 里送的可能是密码、token;agent 那边原文本来就会作为人的那条 `agent.message` 写进 trace,不用再存一份。
 
-**连上那一轮**:节点写进来一段新的 `agent.turn` 时,写入函数拿它第一条人的消息比一比最近 60 秒内的 `worklet.input`(正文的 sha256 一样;粘贴的去掉首尾空白再比),对得上就在这个轮次段上记 `memorytalk.input.id`,再加一条 link 指向那个点所在的段。这样从 trace 里就能读出:**bob 在 10:02 从 CLI 送进去的这句话,引起了 agent 这一轮,跑了 3 分钟、调了 12 次工具**。对不上的(人直接在终端窗里打的),轮次上就没有这个属性——这本身也是信息:这一轮是在窗里手打的。
+**连上那一轮**:节点写进来一段新的 `agent.turn` 时,写入函数拿它第一条人的消息比一比前后 60 秒内的 `worklet.input`(指纹都是去掉首尾空白的 sha256),对得上就在这个轮次段上记 `memorytalk.input.id`(再加一条 link 指向那个点所在的段——还没做;那一段本来就是这一轮的祖先)。这样从 trace 里就能读出:**bob 在 10:02 从 CLI 送进去的这句话,引起了 agent 这一轮,跑了 3 分钟、调了 12 次工具**。对不上的(人直接在终端窗里打的),轮次上就没有这个属性——这本身也是信息:这一轮是在窗里手打的。
 
 ---
 

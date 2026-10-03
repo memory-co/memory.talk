@@ -24,7 +24,7 @@ class Window(BaseModel):
 class HandleInfo(BaseModel):
     """把手长什么样(给 API 报出来的描述;真正的把手是 Python 对象)。"""
     kind: str                                   # tmux / none / files
-    capabilities: list[str] = Field(default_factory=list)   # send / trace.agent / rounds(旧的拉取路径)/ …
+    capabilities: list[str] = Field(default_factory=list)   # input.text / input.keys / trace.agent / rounds(旧的拉取路径)/ …
 
 
 class Live(BaseModel):

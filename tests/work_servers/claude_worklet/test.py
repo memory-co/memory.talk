@@ -80,7 +80,7 @@ def test_the_session_id_is_kept_in_the_registry_not_in_the_api(client, opened, s
 
 def test_its_output_is_the_trace_not_rounds(client, opened):
     w, m, _ = opened
-    assert m["handle"]["capabilities"] == ["send", "trace.agent"]
+    assert m["handle"]["capabilities"] == ["input.text", "input.keys", "trace.agent"]
     assert client.get(f"/api/works/{w['id']}/worklets/{m['id']}/rounds").json() == []
 
 

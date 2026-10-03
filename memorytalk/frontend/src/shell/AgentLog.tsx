@@ -1,6 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { CircleAlert, FileText, LoaderCircle, Wrench } from 'lucide-react';
-import { api } from '@/lib/api';
+import { useMutation } from '@tanstack/react-query';
+import { ArrowUp, CircleAlert, FileText, LoaderCircle, Terminal, Wrench } from 'lucide-react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { api, ApiError } from '@/lib/api';
 import { localeTag, useT, type T } from '@/lib/i18n';
 import { usePreferences } from '@/lib/store';
 import { attrValue, traceRecords, traceSpans, workletLabel, type TraceLogRecord, type TraceSpan, type Work, type WorkTrace, type Worklet } from '@/lib/types';
@@ -93,7 +96,52 @@ function pretty(input: string) {
   try { return JSON.stringify(JSON.parse(input), null, 2); } catch { return input; }
 }
 
-export function AgentLog({ work, worklet }: { work: Work; worklet: Worklet }) {
+type Refused = 'busy' | 'blocked' | 'gone';
+
+/** 记录下面的输入框:经 POST …/input 送进现场(work-server-io.md §4,claude 就是往它的 tmux 里打字再按回车)。
+ *  agent 正在干活 / 在等确认时服务端默认不送(409 busy / blocked):正在干活可以「仍然发送」(排在这一轮后面);
+ *  在等确认时打的字会被当成回答,不在这里送,去终端处理。送出去的话由节点读回来,出现在上面的记录里。 */
+function Composer({ work, worklet, state, onTerminal }: { work: Work; worklet: Worklet; state: string; onTerminal?: () => void }) {
+  const t = useT();
+  const [text, setText] = useState('');
+  const [refused, setRefused] = useState<Refused | null>(null);
+  useEffect(() => { setRefused(null); }, [state]);                    // 状态变了,上一次的拒绝就不算数了
+  const name = workletLabel(t, worklet.scheme);
+  const send = useMutation({
+    mutationFn: (force: boolean) => api(`/works/${encodeURIComponent(work.id)}/worklets/${encodeURIComponent(worklet.id)}/input`,
+      { method: 'POST', body: { kind: 'text', text, submit: true, force } }),
+    onSuccess: () => { setText(''); setRefused(null); },
+    onError: (error: Error) => {
+      const code = error instanceof ApiError ? error.code : undefined;
+      if (code === 'busy' || code === 'blocked' || code === 'gone') setRefused(code);
+      else toast.error(error.message);
+    },
+  });
+  const submit = (force = false) => { if (text.trim() && !send.isPending) send.mutate(force); };
+  const placeholder = state === 'busy' ? t('agent.placeholderBusy', { name }) : state === 'blocked' ? t('agent.placeholderBlocked', { name }) : t('agent.placeholder', { name });
+  return <div className="shrink-0 border-t bg-background px-4 py-3">
+    <div className="mx-auto max-w-3xl">
+      {refused && <div className={cn('mb-2 flex flex-wrap items-center gap-2 text-xs', refused === 'busy' ? 'text-muted-foreground' : 'text-amber-600 dark:text-amber-400')}>
+        <span>{refused === 'busy' ? t('agent.refusedBusy', { name }) : refused === 'blocked' ? t('agent.refusedBlocked', { name }) : t('agent.refusedGone')}</span>
+        {refused === 'busy' && <Button variant="outline" size="sm" className="h-6 px-2 text-xs" disabled={send.isPending} onClick={() => submit(true)}>{t('agent.sendAnyway')}</Button>}
+        {refused === 'blocked' && onTerminal && <Button variant="outline" size="sm" className="h-6 gap-1 px-2 text-xs" onClick={onTerminal}><Terminal className="size-3" />{t('agent.toTerminal')}</Button>}
+      </div>}
+      <div className="flex items-end gap-2 rounded-lg border bg-background py-1.5 pl-3 pr-1.5 focus-within:ring-1 focus-within:ring-ring">
+        <textarea value={text} rows={Math.min(8, Math.max(1, text.split('\n').length))} placeholder={placeholder} aria-label={t('agent.send')}
+          className="max-h-48 min-w-0 flex-1 resize-none bg-transparent py-1 text-sm leading-6 outline-none placeholder:text-muted-foreground"
+          onChange={e => setText(e.target.value)}
+          onKeyDown={e => {                                              // Enter 发送,Shift+Enter 换行;输入法选词时的 Enter 不算
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.keyCode !== 229) { e.preventDefault(); submit(); }
+          }} />
+        <Button size="icon" className="size-8 shrink-0" disabled={!text.trim() || send.isPending} onClick={() => submit()} aria-label={t('agent.send')} title={t('agent.send')}>
+          {send.isPending ? <LoaderCircle className="animate-spin" /> : <ArrowUp />}
+        </Button>
+      </div>
+    </div>
+  </div>;
+}
+
+export function AgentLog({ work, worklet, onTerminal }: { work: Work; worklet: Worklet; onTerminal?: () => void }) {
   const t = useT();
   const locale = usePreferences(s => s.locale);
   const live = work.status !== 'archived';
@@ -106,9 +154,10 @@ export function AgentLog({ work, worklet }: { work: Work; worklet: Worklet }) {
   }, [items.length]);
   const time = (at: bigint) => new Date(Number(at / 1_000_000n)).toLocaleTimeString(localeTag(locale), { hour: '2-digit', minute: '2-digit' });
   const agentName = workletLabel(t, worklet.scheme);
-  return <div ref={scroller} className="min-h-0 flex-1 overflow-auto" onScroll={e => { const el = e.currentTarget; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}>
+  return <div className="flex min-h-0 flex-1 flex-col">
+    <div ref={scroller} className="min-h-0 flex-1 overflow-auto" onScroll={e => { const el = e.currentTarget; stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}>
     <div className="mx-auto flex max-w-3xl flex-col gap-4 p-4">
-      <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground"><FileText className="size-3.5" />{live ? t('worklet.transcriptLive') : t('worklet.transcriptEnded')}</p>
+      <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground"><FileText className="size-3.5" />{live ? t('agent.live') : t('worklet.transcriptEnded')}</p>
       {live && state && <p className={cn('flex items-center justify-center gap-1.5 text-xs', state === 'blocked' ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')}>
         <span className={cn('size-1.5 rounded-full', state === 'busy' ? 'animate-pulse bg-emerald-500' : state === 'blocked' ? 'bg-amber-500' : 'bg-muted-foreground/50')} />{t(`agent.${state}` as 'agent.busy')}
       </p>}
@@ -149,5 +198,7 @@ export function AgentLog({ work, worklet }: { work: Work; worklet: Worklet }) {
           </article>;
         })}
     </div>
+    </div>
+    {live && worklet.alive && <Composer work={work} worklet={worklet} state={state} onTerminal={onTerminal} />}
   </div>;
 }

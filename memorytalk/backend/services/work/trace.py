@@ -100,6 +100,14 @@ def _number(col: Column | None) -> int | None:
     return int(col.id[1:]) if col is not None else None
 
 
+def digest(text: str) -> str:
+    """input 的指纹:去掉首尾空白的 sha256。送进去的和 agent 记下的人的那句话比这个,不比原文(原文不存)。"""
+    return hashlib.sha256(text.strip().encode()).hexdigest()
+
+
+INPUT_WINDOW = 60 * 1_000_000_000      # 一轮的第一句话和送进去的 input 相差多久以内才算它引起的
+
+
 def attr(attrs: list[dict] | None, key: str):
     """OTLP KeyValue 列表里取一个值(AnyValue 解成 Python 值;intValue 解回 int)。"""
     for kv in attrs or []:
@@ -372,6 +380,7 @@ class Trace:
 
         spans = [self._check_span(work_id, trace_id, s, check_worklet) for s in _items(doc, "traces", "resourceSpans", "scopeSpans", "spans")]
         points = [self._check_point(trace_id, r, check_worklet) for r in _items(doc, "logs", "resourceLogs", "scopeLogs", "logRecords")]
+        self._link_inputs(spans, points)
         for c in cursors:
             check_worklet(c.get("worklet_id"))
             if not isinstance(c.get("source"), str) or not isinstance(c.get("position"), str):
@@ -392,6 +401,23 @@ class Trace:
             for c in cursors:
                 self.repo.put_cursor(c["worklet_id"], c["source"], c["position"], self.clock())
         return out
+
+    def _link_inputs(self, spans: list[dict], points: list[dict]) -> None:
+        """新来的一轮,第一句人的话和最近送进去的某次 input 对得上(指纹一样、前后 60 秒内),就在轮次上记 memorytalk.input.id:
+        从 trace 里读得出「谁从哪送进去的这句话引起了这一轮」;对不上的(在终端窗里手打的)就没有(work-server-io.md §4.3)。"""
+        firsts: dict[str, dict] = {}
+        for p in points:
+            if p["event"] == "agent.message" and p["span_id"] and attr(p["attributes"], "memorytalk.message.role") == "user":
+                firsts.setdefault(p["span_id"], p)
+        for s in spans:
+            first = firsts.get(s["span_id"]) if s["name"] == "agent.turn" else None
+            if not first or not (first["body"] or "").strip() or self.repo.get_span(s["span_id"]) is not None:
+                continue
+            want = digest(first["body"])
+            for r in self.repo.points_between(s["worklet_id"], "worklet.input", s["start"] - INPUT_WINDOW, s["start"] + INPUT_WINDOW):
+                if attr(r["attributes"], "memorytalk.input.sha256") == want:
+                    s["attributes"] = s["attributes"] + kvs({"memorytalk.input.id": attr(r["attributes"], "memorytalk.input.id")})
+                    break
 
     def _check_span(self, work_id: str, trace_id: str, s: dict, check_worklet) -> dict:
         name = s.get("name")
@@ -459,6 +485,11 @@ class Trace:
             self.agent_ended(row["worklet_id"], "gone", status)
         return ended
 
+    def agent_state(self, worklet_id: str) -> str | None:
+        """agent 现在的状态 = 这个工作单元最新的 agent.state 点(work-server-io.md §5);还没有就是 None。"""
+        row = self.repo.latest_point(worklet_id, "agent.state")
+        return attr(row["attributes"], "memorytalk.state") if row else None
+
     def cursors(self, worklet_id: str) -> list[dict]:
         return [{"worklet_id": r["worklet_id"], "source": r["source"], "position": r["position"],
                  "updated_at": str(r["updated_at"])} for r in self.repo.cursors_of(worklet_id)]
@@ -508,6 +539,14 @@ class Trace:
             self.changes.notify()
 
     # ================================================================ 点
+
+    def worklet_input(self, work_id: str, worklet_id: str, input_id: str, kind: str, payload: str, user: str | None) -> None:
+        """往现场里送了一次(work-server-io.md §4.3):挂在它最新的一段 worklet 段上,记谁、什么 id、哪种、多长、指纹;不存原文。"""
+        span = self.worklet_span(worklet_id)
+        self.point(work_id, span["span_id"] if span else self.work_span(work_id), "worklet.input",
+                   {"memorytalk.worklet.id": worklet_id, "memorytalk.input.id": input_id, "memorytalk.input.kind": kind,
+                    "memorytalk.input.length": len(payload), "memorytalk.input.sha256": digest(payload)},
+                   user=user, worklet_id=worklet_id)
 
     def column_changed(self, work_id: str, event: str, column: Column, user: str | None, **extra) -> None:
         """column.added / column.renamed / column.removed,挂在 work 段上。"""

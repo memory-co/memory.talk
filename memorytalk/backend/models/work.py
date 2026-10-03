@@ -83,6 +83,20 @@ class WorkletCreate(BaseModel):
     column: str | None = Field(None, description="放进哪一列(c<编号>);不给 = 最左一列")
 
 
+class WorkletInput(BaseModel):
+    """往现场里送(work-server-io.md §4):text = 逐字打(可以多行),submit 再按一次回车;keys = 按键名;paste = 一段原样粘进去。"""
+    kind: Literal["text", "keys", "paste"] = "text"
+    text: str = Field("", max_length=65536, description="text / paste 的内容,最长 64 KiB")
+    submit: bool = Field(True, description="text / paste 之后要不要再按一次回车")
+    keys: list[str] = Field(default_factory=list, max_length=64, description="keys:tmux 键名(Enter / Escape / C-c / Up …)")
+    force: bool = Field(False, description="agent 正在干活 / 在等确认也照样送(按键默认就是)")
+
+
+class InputResult(BaseModel):
+    input_id: str = Field(description="这次 input 的 id:trace 里 worklet.input 点和它引起的那一轮都带着它")
+    state: str | None = Field(None, description="送的时候 agent 的状态(idle / busy / blocked);没有 agent 状态的为 null")
+
+
 class WorkletView(Worklet):
     server: str = Field("", exclude=True)          # 内部寻址用,不对外
     session_id: str | None = Field(None, exclude=True)

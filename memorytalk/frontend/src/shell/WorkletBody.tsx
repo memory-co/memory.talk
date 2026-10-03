@@ -66,7 +66,7 @@ export function WorkletBody({ work, worklet }: { work: Work; worklet: Worklet })
       <TabsList className="h-8" aria-label={t('worklet.view')}><TabsTrigger value="terminal" className="text-xs">{t('worklet.terminal')}</TabsTrigger><TabsTrigger value="rounds" className="text-xs">{t('worklet.transcript')}</TabsTrigger></TabsList>
     </div>}
     <TabsContent value={ended && agent ? 'rounds' : mode} className="mt-0 flex min-h-0 flex-1 flex-col">
-      {showRounds && pushed ? <AgentLog work={work} worklet={worklet} />
+      {showRounds && pushed ? <AgentLog work={work} worklet={worklet} onTerminal={() => setMode('terminal')} />
       : showRounds ? <div className="min-h-0 flex-1 overflow-auto">
         <div className="mx-auto flex max-w-3xl flex-col gap-4 p-4">
           <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground"><FileText className="size-3.5" />{ended ? t('worklet.transcriptEnded') : t('worklet.transcriptLive')}</p>

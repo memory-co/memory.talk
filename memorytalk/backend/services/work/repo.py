@@ -257,6 +257,17 @@ class TraceRepo:
         row = self.db.select(t).where(t.c.span_id == span_id).order_by(t.c.time_unix_nano.desc()).one()
         return row["time_unix_nano"] if row else None
 
+    def latest_point(self, worklet_id: str, event_name: str) -> dict | None:
+        t = self.points
+        return self.db.select(t).where(t.c.worklet_id == worklet_id, t.c.event_name == event_name) \
+            .order_by(t.c.time_unix_nano.desc(), t.c.seq.desc()).one()
+
+    def points_between(self, worklet_id: str, event_name: str, lo: int, hi: int) -> list[dict]:
+        """一个工作单元某种点里,时刻落在 [lo, hi] 的,新的在前。"""
+        t = self.points
+        return self.db.select(t).where(t.c.worklet_id == worklet_id, t.c.event_name == event_name, t.c.time_unix_nano >= lo,
+                                       t.c.time_unix_nano <= hi).order_by(t.c.time_unix_nano.desc()).all()
+
     def children(self, worklet_id: str, span_id: str) -> list[dict]:
         t = self.spans
         return self.db.select(t).where(t.c.worklet_id == worklet_id, t.c.parent_span_id == span_id).all()

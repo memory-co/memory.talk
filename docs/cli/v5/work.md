@@ -12,6 +12,8 @@ memory.talk work
 ├── attach   <work_id> <uri> [--column <n>]       # 打开一个块:协议 → server 建现场
 ├── worklets <work_id>
 ├── detach   <work_id> <worklet_id>
+├── send     <work_id> <worklet_id> "<text>" [--no-submit] [--paste] [--force]   # 往现场里打一句话
+├── key      <work_id> <worklet_id> Escape [C-c …]                                # 按键
 ├── rounds   <work_id> <worklet_id>
 │
 ├── inbox    <work_id>
@@ -79,6 +81,17 @@ memory.talk work attach work_…2f2f https://localhost:5173/ --column 3
 | `worklets <id>` | 工作单元清单:id、URI、活没活着、最近重入 |
 | `detach <id> <wid>` | 关闭即回收:销毁现场 + 删登记 |
 | `rounds <id> <wid>` | 旧路径,只剩 Codex / Kimi:agent 工作单元的 round(先从记录文件同步再读);`claude://` 的对话在 trace 里(`GET …/trace?worklet=<wid>&agent=1&bodies=1`),这里是空的 |
+
+## work send / key
+
+往现场里送(`POST …/worklets/{wid}/input`,[api works.md](../../api/v5/works.md#post-apiworkswork_idworkletsworklet_idinput)):
+
+| 命令 | 说明 |
+|---|---|
+| `send <id> <wid> "<text>"` | 打一句话再按回车;`--no-submit` 只打不按;`@文件` / `@-` 从文件 / stdin 读;`--force` = agent 正在干活或在等确认也送(不带就 exit 1,`busy` / `blocked`) |
+| `key <id> <wid> Escape …` | 按键(tmux 键名);不门控,能用来打断 agent |
+
+输出 `input_id` 和送的时候 agent 的状态。送出去的话会出现在 trace 里它引起的那一轮(带同一个 `input_id`)。
 
 ## work inbox
 

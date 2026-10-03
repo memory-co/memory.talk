@@ -35,6 +35,12 @@ def w_show(api, a):
 def w_set(api, a):
     body = {k: v for k, v in {"goal": value(a.goal) if a.goal else None, "status": a.status}.items() if v is not None}
     out(api.call("PATCH", f"/api/works/{a.work_id}", json_body=body), a.json)
+def w_send(api, a):
+    """往工作单元里打一句话(默认再按回车);agent 正在干活 / 在等确认时要 --force。"""
+    body = {"kind": "paste" if a.paste else "text", "text": value(a.text), "submit": not a.no_submit, "force": a.force}
+    out(api.call("POST", f"/api/works/{a.work_id}/worklets/{a.worklet_id}/input", json_body=body), a.json)
+def w_key(api, a):
+    out(api.call("POST", f"/api/works/{a.work_id}/worklets/{a.worklet_id}/input", json_body={"kind": "keys", "keys": a.keys}), a.json)
 def _column(c: str | None) -> str | None:
     """--column 3 或 --column c3 都行:列编号,不是位置。"""
     return None if not c else (c if c.startswith("c") else f"c{c}")
@@ -93,6 +99,11 @@ def register(top) -> None:
     wp("worklets", w_worklets)
     wp("detach", w_detach, (["worklet_id"], {}))
     wp("rounds", w_rounds, (["worklet_id"], {}))
+    wp("send", w_send, (["worklet_id"], {}), (["text"], {"help": "要送的话;@文件 / @- 读 stdin"}),
+       (["--no-submit"], {"action": "store_true", "dest": "no_submit", "help": "只打字,不按回车"}),
+       (["--paste"], {"action": "store_true", "help": "整段粘进去(现场要有 input.paste)"}),
+       (["--force"], {"action": "store_true", "help": "agent 正在干活 / 在等确认也送"}))
+    wp("key", w_key, (["worklet_id"], {}), (["keys"], {"nargs": "+", "help": "tmux 键名:Escape / C-c / Enter / Up …"}))
     wp("inbox", w_inbox)
     wp("manager", w_manager, (["--set"], {}), (["--unset"], {"action": "store_true"}))
     wp("users", w_users)

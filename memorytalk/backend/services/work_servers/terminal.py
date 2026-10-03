@@ -10,7 +10,7 @@ import shutil
 from pathlib import Path
 from typing import Protocol
 
-from tmuxd import Session, Tmuxd, TmuxdError
+from tmuxd import NoSuchSession, Session, Tmuxd, TmuxdError
 
 from memorytalk.backend.models.work_server import HandleInfo, Live, ParsedUri, WorkServerError, WorkServerInfo, Window
 
@@ -66,7 +66,7 @@ class TmuxHandle:
         self.tmuxd, self.worklet_id = tmuxd, worklet_id
 
     def info(self) -> HandleInfo:
-        return HandleInfo(kind="tmux", capabilities=["send"])
+        return HandleInfo(kind="tmux", capabilities=["input.text", "input.keys"])
 
     def alive(self) -> bool:
         return self.tmuxd.has(self.worklet_id)
@@ -74,5 +74,15 @@ class TmuxHandle:
     def session(self) -> Session:
         return self.tmuxd.get(self.worklet_id)          # 没了 → NoSuchSession
 
-    def send(self, text: str, enter: bool = True) -> None:
-        self.session().send(text, enter=enter)
+    def input(self, kind: str, text: str = "", submit: bool = True, keys: list[str] = ()) -> None:
+        """往终端里送(work-server-io.md §4):交给 tmux 就返回,不等它处理完、也不保证它收下了。
+        text 逐字打(换行就是一个换行字符;Claude Code 的输入框把它当换行,不当提交),submit 再按一次回车;keys = 按键名。
+        现场没了 → WorkServerError("gone")。"""
+        try:
+            s = self.session()
+            if kind == "keys":
+                s.send_key(*keys)
+            else:
+                s.send(text, enter=submit)
+        except NoSuchSession as e:
+            raise WorkServerError("gone", f"现场不在了:{self.worklet_id}") from e

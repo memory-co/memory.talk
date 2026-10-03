@@ -100,7 +100,7 @@ work 的一个工作单元 = 一个现场。**在 work 里打开就是它的**,�
   "collapsed": false,
   "alive": true,
   "window": {"url": "/surface/tmuxd/?arg=work_202609052302072f2f-w1", "embed": "/surface/tmuxd/?arg=work_202609052302072f2f-w1"},
-  "handle": {"kind": "tmux+transcript", "capabilities": ["input.text", "input.keys", "input.paste", "trace.agent"]}
+  "handle": {"kind": "tmux+transcript", "capabilities": ["input.text", "input.keys", "trace.agent"]}
 }
 ```
 

@@ -57,7 +57,7 @@ trace 模型本来就有这些:span 有起点和终点;父子关系决定层级;
 | `column.added` / `column.renamed` / `column.removed` | work span | `memorytalk.column.id`、`memorytalk.column.alias`(`renamed` 另有 `memorytalk.from`;别名真变了才记) |
 | `worklet.moved` | 这个工作单元最新的一段 worklet span | `memorytalk.worklet.id`,`memorytalk.column.id` / `.alias` 和 `memorytalk.index`(去哪),`memorytalk.from.column.id` / `.alias` 和 `memorytalk.from.index`(从哪);位置真变了才记 |
 | `worklet.closed` | 这个工作单元最新的一段 worklet span | `memorytalk.worklet.id`、`memorytalk.column.id` / `.alias`(关的时候在哪一列);关掉时它已经没有开着的段(现场没了 / 归档过、重新打开后没重入)才记,段不再动 |
-| `worklet.input` | 这个工作单元最新的一段 worklet span | `memorytalk.input.id` / `.kind` / `.length` / `.sha256`;**不存原文**([work-server-io.md §4.3](work-server-io.md),还没做) |
+| `worklet.input` | 这个工作单元最新的一段 worklet span | `memorytalk.input.id` / `.kind` / `.length` / `.sha256`;**不存原文**([work-server-io.md §4.3](work-server-io.md)) |
 | `plan.changed` | work span | `memorytalk.plan.start` / `memorytalk.plan.due`(§7,还没做) |
 
 **agent 点**:节点写,来自会话记录和 hooks。正文放在 log record 的 `body` 里。

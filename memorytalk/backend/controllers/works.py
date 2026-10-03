@@ -7,8 +7,9 @@ from starlette.concurrency import run_in_threadpool
 
 from memorytalk.backend.models.metas import InboxItem
 from memorytalk.backend.models.work_server import WorkServerInfo
-from memorytalk.backend.models.work import (Column, ColumnCreate, ColumnUpdate, Round, TracePush, WorkletCreate, WorkletMove,
-                         WorkletUpdate, WorkletView, Work, WorkCreate, WorkNode, WorkTrace, WorkUpdate, WorkUsers)
+from memorytalk.backend.models.work import (Column, ColumnCreate, ColumnUpdate, InputResult, Round, TracePush, WorkletCreate,
+                         WorkletInput, WorkletMove, WorkletUpdate, WorkletView, Work, WorkCreate, WorkNode, WorkTrace, WorkUpdate,
+                         WorkUsers)
 from memorytalk.backend.services.metas import MetasService
 from memorytalk.backend.services.work import TraceRejected, WorkService
 
@@ -179,6 +180,14 @@ def move_worklet(work_id: str, worklet_id: str, req: WorkletMove, svc: WorkServi
 def update_worklet(work_id: str, worklet_id: str, req: WorkletUpdate, svc: WorkService = Depends(works), who: str | None = Depends(user)):
     svc.touch(work_id, who)
     return ok(svc.update_worklet(work_id, worklet_id, req))
+
+
+@router.post("/{work_id}/worklets/{worklet_id}/input", response_model=Result[InputResult],
+             summary="往现场里送:打字(text,submit 再按回车)/ 按键(keys)。agent 正在干活或在等确认时默认不送"
+                     "(409 busy / blocked),要送带 force;现场不在 409 gone,不收这种 409 unsupported。trace 里记一个 worklet.input 点,不存原文")
+def send_input(work_id: str, worklet_id: str, req: WorkletInput, svc: WorkService = Depends(works), who: str | None = Depends(user)):
+    svc.touch(work_id, who)
+    return ok(svc.send_input(work_id, worklet_id, req, by=who))
 
 
 @router.get("/{work_id}/worklets/{worklet_id}/rounds", response_model=Result[list[Round]],

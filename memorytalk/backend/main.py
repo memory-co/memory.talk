@@ -20,8 +20,8 @@ from memorytalk.backend.services.search import SearchService
 from memorytalk.backend.services.work_servers import WorkServerService
 from memorytalk.backend.services.store import StoreService
 from memorytalk.backend.services.users import UserExists, UserNotFound, UserService
-from memorytalk.backend.services.work import (ColumnNotFound, TraceRejected, WorkletNotFound, WorkConflict, WorkNotFound,
-                                              WorkService)
+from memorytalk.backend.services.work import (ColumnNotFound, InputRefused, TraceRejected, WorkletNotFound, WorkConflict,
+                                              WorkNotFound, WorkService)
 from memorytalk.backend.services.work.viewers import SWEEP_EVERY, Viewers
 
 log = logging.getLogger(__name__)
@@ -96,6 +96,10 @@ def create_app(config: Config | None = None, runtime: RuntimeConfig | None = Non
     @app.exception_handler(AuthError)
     async def _auth(_: Request, exc: AuthError):
         return JSONResponse(fail(exc.code, str(exc)), status_code=exc.status)
+
+    @app.exception_handler(InputRefused)
+    async def _input(_: Request, exc: InputRefused):
+        return JSONResponse(fail(exc.code, str(exc)), status_code=409)
 
     @app.exception_handler(TraceRejected)
     async def _trace(_: Request, exc: TraceRejected):

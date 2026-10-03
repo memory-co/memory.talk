@@ -19,7 +19,7 @@ from memorytalk.node import layout
 
 class ClaudeHandle(TmuxHandle):
     def info(self) -> HandleInfo:
-        return HandleInfo(kind="tmux+transcript", capabilities=["send", "trace.agent"])
+        return HandleInfo(kind="tmux+transcript", capabilities=["input.text", "input.keys", "trace.agent"])
 
 
 class ClaudeServer:

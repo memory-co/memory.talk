@@ -23,7 +23,7 @@ def worklet(client, work, home):
 def test_attach_reports_cwd_and_a_ttyd_window(worklet, home):
     assert worklet["alive"] and worklet["cwd"] == str(home / "ws")
     assert worklet["window"]["url"] == f"/surface/tmuxd/?arg={worklet['id']}"      # tmuxd 自带的 ttyd,挂在主路由 /surface/tmuxd 下
-    assert worklet["handle"]["capabilities"] == ["send"]
+    assert worklet["handle"]["capabilities"] == ["input.text", "input.keys"]
     assert "server" not in worklet                     # 由谁建的不对外
 
 

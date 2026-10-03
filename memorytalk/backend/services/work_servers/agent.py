@@ -18,7 +18,7 @@ class AgentHandle(TmuxHandle):
         self.adapter, self.cwd, self.since_mtime = adapter, cwd, since_mtime
 
     def info(self) -> HandleInfo:
-        return HandleInfo(kind="tmux+transcript", capabilities=["send", "rounds"])
+        return HandleInfo(kind="tmux+transcript", capabilities=["input.text", "input.keys", "rounds"])
 
     def transcript(self) -> Path | None:
         return self.adapter.find(self.cwd, self.since_mtime)

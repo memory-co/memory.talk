@@ -3,7 +3,7 @@
 ## 这个场景在测什么
 `backend/work_servers/claude.py` + 节点(`docs/designs/v5/work-node.md §5、§7`):
 - 新起的 claude 带 `--session-id <uuid>` 和 `--settings <hooks 文件>`(几个 hook 都把事件追加到节点目录里这个工作单元的 hooks.jsonl);
-  会话 id 记在登记上、不对外;把手能力是 `send` + `trace.agent`,旧的 rounds 接口对它是空的;
+  会话 id 记在登记上、不对外;把手能力是 `input.text` + `input.keys` + `trace.agent`,旧的 rounds 接口对它是空的;
 - 取回还活着的现场不重新起 claude;现场死了再重入,新起的 claude 是新的会话 id,登记跟着换;
 - hook 脚本:一个事件一行、带收到的时刻,stdout 什么都不写;
 - 开起来就让节点盯着(挂在这个工作单元开着的 worklet 段下);claude 写的会话记录和 hooks 进了 trace(会话 → 轮次,消息带正文,token);
